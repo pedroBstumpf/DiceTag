@@ -60,7 +60,13 @@
 
     <!-- 5. Névoa de guerra -->
     @if (session.fogEnabled()) {
-      <app-fog-layer [width]="world().w" [height]="world().h" [polygons]="session.visionPolygons()" [player]="session.playerFog()" />
+      <app-fog-layer
+        [width]="world().w"
+        [height]="world().h"
+        [polygons]="session.visionPolygons()"
+        [explored]="session.explored()"
+        [player]="session.playerFog()"
+      />
     }
 
     <!-- 6. Tokens visíveis -->

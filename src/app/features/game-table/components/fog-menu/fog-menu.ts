@@ -1,5 +1,6 @@
 import { Component, inject } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { TableSessionService, WallMode } from '../../services/table-session.service';
 
 /** Modos de parede exibidos no submenu. */
@@ -17,7 +18,7 @@ const WALL_MODES: { id: WallMode; icon: string; label: string; hint: string }[] 
  */
 @Component({
   selector: 'app-fog-menu',
-  imports: [MatIconModule],
+  imports: [MatIconModule, MatTooltipModule],
   host: { class: 'glass block w-64 rounded-xl p-2 shadow-xl shadow-black/40' },
   template: `
     <h4 class="px-2 pb-2 pt-1 font-display text-sm tracking-wide text-star-300">Névoa de guerra</h4>
@@ -36,6 +37,32 @@ const WALL_MODES: { id: WallMode; icon: string; label: string; hint: string }[] 
         <span class="absolute top-0.5 size-4 rounded-full bg-white transition-all" [class]="session.fogEnabled() ? 'left-[18px]' : 'left-0.5'"></span>
       </span>
     </button>
+
+    <!-- Memória: áreas já vistas continuam reveladas (escurecidas) -->
+    <div class="mb-2 flex items-center gap-1">
+      <button
+        type="button"
+        role="switch"
+        class="flex flex-1 items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-xs text-slate-300 hover:bg-white/5 hover:text-white disabled:opacity-40"
+        [attr.aria-checked]="session.fogMemory()"
+        [disabled]="!session.activeScene()"
+        (click)="session.setFogMemory(!session.fogMemory())"
+      >
+        <mat-icon class="!size-5 !text-[20px]" [class.text-astral-300]="session.fogMemory()">
+          {{ session.fogMemory() ? 'check_box' : 'check_box_outline_blank' }}
+        </mat-icon>
+        Lembrar áreas exploradas
+      </button>
+      <button
+        type="button"
+        class="grid size-8 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-white/10 hover:text-white disabled:opacity-40"
+        matTooltip="Esquecer áreas exploradas desta cena"
+        [disabled]="!session.activeScene()"
+        (click)="forget()"
+      >
+        <mat-icon class="!text-[18px]">history_toggle_off</mat-icon>
+      </button>
+    </div>
 
     <!-- Modos de parede -->
     <div class="flex flex-col gap-0.5 border-t border-white/5 pt-2">
@@ -74,5 +101,9 @@ export class FogMenu {
 
   hint(): string {
     return WALL_MODES.find((m) => m.id === this.session.wallMode())?.hint ?? '';
+  }
+
+  forget(): void {
+    if (confirm('Esquecer as áreas já exploradas nesta cena?')) this.session.clearExplored();
   }
 }

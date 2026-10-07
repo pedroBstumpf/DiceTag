@@ -17,8 +17,10 @@ export interface Scene {
   showGrid: boolean;
   /** Tokens colocados nesta cena. Padrão: []. */
   tokens?: TokenPlacement[];
-  /** Névoa de guerra desta cena. Padrão: desligada. */
-  fog?: { enabled: boolean };
+  /** Névoa de guerra desta cena. Padrão: desligada; memory (lembrar áreas exploradas) padrão: ligada. */
+  fog?: { enabled: boolean; memory?: boolean };
+  /** Áreas já vistas pelos tokens (memória da névoa). */
+  explored?: ExploredData;
   /** Paredes que bloqueiam a visão quando a névoa está ativa. Padrão: []. */
   walls?: Wall[];
   /** Desenhos livres (pincel). Padrão: []. */
@@ -64,6 +66,17 @@ export const BRUSH_COLORS = ['#7aa7ff', '#3462d6', '#b6c8f2', '#ffffff', '#ef444
 export const BRUSH_WIDTHS = [4, 8, 16, 32] as const;
 /** Opacidades do pincel. */
 export const BRUSH_OPACITIES = [1, 0.6, 0.3] as const;
+
+/**
+ * Memória da névoa: bitset de células exploradas, em base64.
+ * `cell` = lado da célula em px do mapa; célula (c, r) = bit c + r × cols.
+ */
+export interface ExploredData {
+  cell: number;
+  cols: number;
+  rows: number;
+  data: string;
+}
 
 // --- Paredes -----------------------------------------------------------------
 

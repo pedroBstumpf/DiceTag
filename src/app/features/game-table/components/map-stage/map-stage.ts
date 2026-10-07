@@ -147,10 +147,10 @@ export class MapStage {
   constructor() {
     // Carrega a imagem da cena ativa (ou usa o papel quadriculado)
     effect(async (onCleanup) => {
-      const { blobId } = this.mapKey();
+      const { sceneId, blobId } = this.mapKey();
       if (!blobId) {
         this.src.set(null);
-        this.world.set(EMPTY_WORLD);
+        this.setWorld(sceneId, EMPTY_WORLD);
         queueMicrotask(() => this.fit());
         return;
       }
@@ -179,8 +179,14 @@ export class MapStage {
   // --- Zoom e enquadramento ------------------------------------------------
 
   onImageLoad(img: HTMLImageElement): void {
-    this.world.set({ w: img.naturalWidth, h: img.naturalHeight });
+    this.setWorld(this.mapKey().sceneId, { w: img.naturalWidth, h: img.naturalHeight });
     this.fit();
+  }
+
+  /** Tamanho do mundo (mapa) — também informado à sessão, junto com a cena a que pertence. */
+  private setWorld(sceneId: string | undefined, size: { w: number; h: number }): void {
+    this.world.set(size);
+    this.session.worldSize.set(sceneId ? { sceneId, ...size } : null);
   }
 
   /** Enquadra o mapa inteiro na área livre entre as barras. */

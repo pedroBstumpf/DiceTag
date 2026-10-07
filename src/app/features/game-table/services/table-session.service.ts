@@ -1,4 +1,4 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { Point } from '../../../core/models/geometry.model';
 import {
   BRUSH_COLORS,
@@ -26,6 +26,7 @@ import {
 } from '../../../core/models/table-session.model';
 import { StorageService } from '../../../core/services/storage.service';
 import { newId } from '../../../core/utils/id';
+import { createMask, decodeMask, encodeMask, isExploredAt, markPolygons, maskFits } from '../utils/fog-memory';
 import { computeVisibilityPolygon, doorSeen, pointInPolygon, wallsToSegments } from '../utils/visibility';
 
 /** Barras da mesa que podem ser escondidas. */
@@ -125,7 +126,9 @@ export class TableSessionService {
     const notes = this.notes();
     if (this.role() !== 'player') return notes;
     const polys = this.visionPolygons();
-    return notes.filter((n) => !n.gmOnly && this.isVisible(n, polys));
+    const explored = this.explored();
+    // Anotações em áreas já exploradas continuam visíveis (o jogador lembra o que viu)
+    return notes.filter((n) => !n.gmOnly && (this.isVisible(n, polys) || (explored && isExploredAt(explored, n))));
   });
 
   // --- Névoa de guerra e paredes (cena ativa) ------------------------------
@@ -155,6 +158,24 @@ export class TableSessionService {
     return this.visionSources().map((s) => computeVisibilityPolygon(s, s.range, segments));
   });
 
+  // --- Memória da névoa (áreas exploradas) ---------------------------------
+
+  /**
+   * Tamanho do mapa em px, informado pelo map-stage quando o mapa da cena termina de carregar
+   * (dimensiona a memória da névoa). Guarda a cena a que pertence: enquanto o mapa de outra
+   * cena carrega, a memória não é tocada (senão seria recriada com o tamanho errado).
+   */
+  readonly worldSize = signal<{ sceneId: string; w: number; h: number } | null>(null);
+  /** Lembrar áreas já vistas (padrão: ligado). */
+  readonly fogMemory = computed(() => this.activeScene()?.fog?.memory ?? true);
+  /** Mesma referência enquanto a memória não muda (evita decodificar a cada edição da cena). */
+  private readonly exploredData = computed(() => this.activeScene()?.explored);
+  /** Áreas exploradas da cena ativa (null se a memória estiver desligada ou vazia). */
+  readonly explored = computed(() => {
+    const data = this.exploredData();
+    return this.fogEnabled() && this.fogMemory() && data ? decodeMask(data) : null;
+  });
+
   /** Portas da cena ativa. */
   readonly doors = computed(() => this.walls().filter((w): w is DoorWall => w.kind === 'door'));
 
@@ -163,7 +184,8 @@ export class TableSessionService {
     const doors = this.doors();
     if (!this.playerFog()) return doors;
     const polys = this.visionPolygons();
-    return doors.filter((d) => doorSeen(d.points, polys));
+    const explored = this.explored();
+    return doors.filter((d) => doorSeen(d.points, polys) || (explored && isExploredAt(explored, midpoint(d.points))));
   });
 
   /** Visão de jogador com névoa: a área fora da visão fica escondida. */
@@ -217,6 +239,16 @@ export class TableSessionService {
   readonly hotbar = computed(() =>
     this.entries().filter((e) => e.kind === 'automation' && e.role === this.role()),
   );
+
+  constructor() {
+    // Memória da névoa: tudo o que os tokens enxergam fica marcado como explorado.
+    // (Salvar a máscara não altera a visão, então este efeito não se realimenta.)
+    effect(() => {
+      const polys = this.visionPolygons();
+      const size = this.worldSize();
+      if (polys.length && size && this.fogMemory()) untracked(() => this.markExplored(polys, size));
+    });
+  }
 
   // --- Carregamento --------------------------------------------------------
 
@@ -457,7 +489,7 @@ export class TableSessionService {
   /** Liga/desliga a névoa de guerra na cena ativa. */
   setFog(enabled: boolean): void {
     const scene = this.activeScene();
-    if (scene) this.updateScene(scene.id, { fog: { enabled } });
+    if (scene) this.updateScene(scene.id, { fog: { ...scene.fog, enabled } });
   }
 
   /** Adiciona uma parede à cena ativa. */
@@ -470,6 +502,28 @@ export class TableSessionService {
   updateWall(wall: Wall): void {
     const scene = this.activeScene();
     if (scene) this.updateScene(scene.id, { walls: (scene.walls ?? []).map((w) => (w.id === wall.id ? wall : w)) });
+  }
+
+  /** Liga/desliga a memória da névoa (lembrar áreas exploradas) na cena ativa. */
+  setFogMemory(memory: boolean): void {
+    const scene = this.activeScene();
+    if (scene) this.updateScene(scene.id, { fog: { enabled: scene.fog?.enabled ?? false, memory } });
+  }
+
+  /** Esquece as áreas exploradas da cena ativa. */
+  clearExplored(): void {
+    const scene = this.activeScene();
+    if (scene) this.updateScene(scene.id, { explored: undefined });
+  }
+
+  /** Soma as áreas visíveis à memória da cena (só grava se algo novo foi visto). */
+  private markExplored(polygons: Point[][], size: { sceneId: string; w: number; h: number }): void {
+    const scene = this.activeScene();
+    if (!scene || scene.id !== size.sceneId) return;
+    const current = scene.explored ? decodeMask(scene.explored) : null;
+    // Mapa trocado (outro tamanho): a memória recomeça
+    const mask = current && maskFits(current, size.w, size.h) ? current : createMask(size.w, size.h);
+    if (markPolygons(mask, polygons) || mask !== current) this.updateScene(scene.id, { explored: encodeMask(mask) });
   }
 
   /** Abre ou fecha uma porta (a visão é recalculada automaticamente). */
@@ -628,6 +682,10 @@ function normalizeState(raw: TableState | undefined): TableState {
       e.kind === 'sound' ? { ...e, volume: e.volume ?? DEFAULT_SOUND_VOLUME, loop: e.loop ?? true } : e,
     ),
   };
+}
+
+function midpoint([a, b]: Point[]): Point {
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 }
 
 function clamp01(value: number): number {
