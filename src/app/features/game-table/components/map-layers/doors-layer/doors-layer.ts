@@ -35,7 +35,7 @@ import { DoorWall } from '../../../../../core/models/table-session.model';
         class="absolute"
         [style.left.px]="(door.points[0].x + door.points[1].x) / 2"
         [style.top.px]="(door.points[0].y + door.points[1].y) / 2"
-        [style.transform]="'translate(-50%, -50%) scale(' + 1 / scale() + ')'"
+        [style.transform]="'translate(-50%, -50%) ' + upright() + ' scale(' + 1 / scale() + ')'"
       >
         <button
           type="button"
@@ -56,6 +56,8 @@ export class DoorsLayer {
   readonly scale = input.required<number>();
   /** Botões recebem o ponteiro (ferramenta Selecionar). */
   readonly interactive = input(false);
+  /** Vista isométrica: deixa o botão "em pé" (vazio na 2D). */
+  readonly upright = input('');
 
   /** Pedido para abrir/fechar a porta. */
   readonly toggled = output<string>();

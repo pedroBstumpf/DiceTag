@@ -12,12 +12,13 @@
   (dragover)="onDragOver($event)"
   (drop)="onDrop($event)"
 >
-  <!-- "Mundo": tudo aqui dentro acompanha o zoom e a posição do mapa -->
+  <!-- "Mundo": tudo aqui dentro acompanha o zoom, a posição e a projeção (2D ou isométrica) do mapa -->
   <div
     class="absolute left-0 top-0 origin-top-left"
+    [class]="animating() ? 'transition-transform duration-500 ease-out' : ''"
     [style.width.px]="world().w"
     [style.height.px]="world().h"
-    [style.transform]="'translate(' + view().x + 'px,' + view().y + 'px) scale(' + scale() + ')'"
+    [style.transform]="worldTransform()"
   >
     <!-- 1. Imagem do mapa ou fundo vazio -->
     @if (src(); as url) {
@@ -55,6 +56,7 @@
       [scale]="scale()"
       [interactive]="notesInteractive()"
       [activeId]="openNoteId()"
+      [upright]="upright()"
       (noteDown)="onNoteDown($event)"
     />
 
@@ -76,11 +78,18 @@
       [gridSize]="gridSize()"
       [selectedId]="session.selectedTokenId()"
       [interactive]="selecting()"
+      [upright]="upright()"
       (tokenDown)="onTokenDown($event)"
     />
 
     <!-- 7. Portas (sempre visíveis; o jogador só vê as que algum token enxerga) -->
-    <app-doors-layer [doors]="session.visibleDoors()" [scale]="scale()" [interactive]="selecting()" (toggled)="session.toggleDoor($event)" />
+    <app-doors-layer
+      [doors]="session.visibleDoors()"
+      [scale]="scale()"
+      [interactive]="selecting()"
+      [upright]="upright()"
+      (toggled)="session.toggleDoor($event)"
+    />
 
     <!-- 7. Paredes (durante a ferramenta Névoa ou sempre, para o mestre) -->
     @if (session.wallsVisible() || wallDraft()) {
@@ -100,6 +109,7 @@
         [draft]="fxDraft()"
         [current]="fxCurrent()"
         [scale]="scale()"
+        [upright]="uprightMat()"
         [width]="world().w"
         [height]="world().h"
       />
@@ -120,15 +130,6 @@
         <circle [attr.cx]="r.from.x" [attr.cy]="r.from.y" [attr.r]="5 / scale()" fill="#a9c7ff" />
         <circle [attr.cx]="r.to.x" [attr.cy]="r.to.y" [attr.r]="5 / scale()" fill="#a9c7ff" />
       </svg>
-      <!-- Rótulo com tamanho fixo na tela (escala inversa) -->
-      <div
-        class="pointer-events-none absolute origin-top-left"
-        [style.left.px]="r.to.x"
-        [style.top.px]="r.to.y"
-        [style.transform]="'scale(' + 1 / scale() + ') translate(12px, 12px)'"
-      >
-        <span class="glass whitespace-nowrap rounded-md px-2 py-1 text-xs font-semibold text-star-300">{{ rulerLabel() }}</span>
-      </div>
     }
 
     <!-- 8. Pings -->
@@ -142,6 +143,17 @@
       ></span>
     }
   </div>
+
+  <!-- 9. Interface: rótulo da régua (fora do mundo: sempre reto, na tela) -->
+  @if (rulerLabelPos(); as pos) {
+    <span
+      class="glass pointer-events-none absolute whitespace-nowrap rounded-md px-2 py-1 text-xs font-semibold text-star-300"
+      [style.left.px]="pos.x + 12"
+      [style.top.px]="pos.y + 12"
+    >
+      {{ rulerLabel() }}
+    </span>
+  }
 
   <!-- 9. Interface: edição da anotação aberta -->
   @if (openNote(); as note) {

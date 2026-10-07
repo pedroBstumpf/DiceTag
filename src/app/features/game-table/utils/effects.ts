@@ -60,7 +60,12 @@ export interface FxDrawing {
   parts: FxPart[];
   /** Tempo total (ms) até a última parte terminar. */
   duration: number;
+  /** Na vista isométrica fica "em pé" (coisas que sobem: cura, fumaça, teleporte); os demais ficam no chão. */
+  upright: boolean;
 }
+
+/** Efeitos desenhados de pé na vista isométrica. */
+const UPRIGHT_FX: ReadonlySet<FxKind> = new Set<FxKind>(['heal', 'smoke', 'teleport']);
 
 export interface FxContext {
   /** Prefixo único dos ids de gradiente (um por efeito na tela). */
@@ -100,6 +105,7 @@ export function buildFx(kind: FxKind, color: string, from: Point, to: Point, ctx
     parts: built.parts,
     // Nunca antes de a última parte terminar (senão ela seria cortada ao remover o efeito)
     duration: Math.ceil(Math.max(built.duration, lastEnd(built.parts))),
+    upright: UPRIGHT_FX.has(kind),
   };
 }
 

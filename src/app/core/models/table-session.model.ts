@@ -29,6 +29,8 @@ export interface Scene {
   notes?: MapNote[];
   /** Pasta da barra de cenas (ausente = fora de pastas). */
   folderId?: string;
+  /** Vista isométrica (mapa e tokens como numa mesa vista de lado). Padrão: false. */
+  isometric?: boolean;
 }
 
 /** Pasta da barra de cenas. */

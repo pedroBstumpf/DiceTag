@@ -150,6 +150,9 @@ export class TableSessionService {
   /** Organização da aba Lore nesta mesa (pastas e ajustes locais). */
   readonly lore = computed(() => this.state().lore ?? EMPTY_LORE);
 
+  /** Vista isométrica da cena ativa (mapa e tokens como numa mesa vista de lado). */
+  readonly isometric = computed(() => this.activeScene()?.isometric ?? false);
+
   /** Tokens colocados na cena ativa (mesma referência enquanto não mudam). */
   readonly tokens = computed(() => this.activeScene()?.tokens ?? NO_TOKENS);
   /** Tokens da cena ativa com as configurações efetivas. */
@@ -472,6 +475,12 @@ export class TableSessionService {
       return { ...s, scenes, activeSceneId };
     });
     if (scene?.blobId) this.storage.delete(`blob:${scene.blobId}`);
+  }
+
+  /** Liga/desliga a vista isométrica da cena ativa. */
+  toggleIsometric(): void {
+    const scene = this.activeScene();
+    if (scene) this.updateScene(scene.id, { isometric: !scene.isometric });
   }
 
   // --- Pastas de cenas -----------------------------------------------------

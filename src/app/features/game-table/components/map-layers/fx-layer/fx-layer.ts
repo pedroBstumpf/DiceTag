@@ -4,6 +4,7 @@ import { Point } from '../../../../../core/models/geometry.model';
 import { FxStyle } from '../../../../../core/models/table-session.model';
 import { FxInstance } from '../../../services/table-session.service';
 import { FxPart, fxCss, isRadialFx } from '../../../utils/effects';
+import { Mat2 } from '../../../utils/projection';
 
 /** Efeito sendo mirado (arraste em andamento). */
 export interface FxDraft {
@@ -74,7 +75,7 @@ export class FxPartAttrs {
       </defs>
 
       @for (fx of effects(); track fx.id) {
-        <g [attr.transform]="fx.drawing.transform">
+        <g [attr.transform]="transformOf(fx)">
           @for (p of fx.drawing.parts; track $index) {
             <ng-container *ngTemplateOutlet="part; context: { $implicit: p }" />
           }
@@ -138,6 +139,15 @@ export class FxLayer {
   readonly scale = input.required<number>();
   readonly width = input.required<number>();
   readonly height = input.required<number>();
+  /** Vista isométrica: matriz que deixa efeitos "em pé" (null na 2D). */
+  readonly upright = input<Mat2 | null>(null);
+
+  /** Posição do efeito; os que sobem ficam de pé na vista isométrica. */
+  transformOf(fx: FxInstance): string {
+    const m = this.upright();
+    if (!m || !fx.drawing.upright) return fx.drawing.transform;
+    return `${fx.drawing.transform} matrix(${m[0]} ${m[1]} ${m[2]} ${m[3]} 0 0)`;
+  }
 
   /** A forma atual usa centro + raio (mira em círculo)? */
   readonly radial = computed(() => isRadialFx(this.current().kind));

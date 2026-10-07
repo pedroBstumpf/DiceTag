@@ -10,8 +10,8 @@ import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
 import { TableSessionService } from '../../services/table-session.service';
 
 /**
- * Barra superior da mesa: voltar, nome da mesa, pastas e abas de cenas/mapas
- * e controles de visibilidade das barras (modo imersivo, tela cheia).
+ * Barra superior da mesa: voltar, nome da mesa, pastas e abas de cenas/mapas,
+ * vista isométrica (mestre) e controles de visibilidade das barras (modo imersivo, tela cheia).
  * Cada pasta é um botão que abre a lista das cenas dela; cenas fora de pastas viram abas.
  */
 @Component({
@@ -28,7 +28,7 @@ export class SceneBar {
   /** Pasta onde a próxima cena criada vai entrar (null = fora de pastas). */
   private newSceneFolder: string | null = null;
 
-  /** O mestre organiza as cenas. */
+  /** O mestre organiza as cenas e escolhe a vista. */
   readonly isGm = computed(() => this.session.role() === 'gm');
 
   // --- Pastas --------------------------------------------------------------

@@ -1,13 +1,14 @@
-import { Component, DestroyRef, ElementRef, computed, effect, inject, input, output, signal, viewChild } from '@angular/core';
+import { Component, DestroyRef, ElementRef, computed, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { Point } from '../../../../core/models/geometry.model';
 import { METERS_PER_SQUARE, Wall } from '../../../../core/models/table-session.model';
 import { newId } from '../../../../core/utils/id';
-import { Viewport, fitRect, screenToWorld, worldToScreen, zoomAt } from '../../../../shared/utils/viewport';
+import { Viewport, fitRect, zoomAt } from '../../../../shared/utils/viewport';
 import { TableSessionService } from '../../services/table-session.service';
 import { distanceToPolyline, sizeFromHandle, snapToCorner, snapTokenCenter } from '../../utils/geometry';
 import { isRadialFx } from '../../utils/effects';
+import { IDENTITY, Mat2, apply, invert, isoMatrix, matrixCss, project, projectedBounds, unproject, uprightMatrix, viewCss } from '../../utils/projection';
 import { simplifyPath } from '../../utils/simplify';
 import { distanceToWall, handleAt, moveWallHandle, translateWall } from '../../utils/walls';
 import { DoorsLayer } from '../map-layers/doors-layer/doors-layer';
@@ -63,6 +64,11 @@ const KEY_SPEED_FAST = 2.5;
 /** Clique sem arrastar com Explosão/Onda: raio em quadrados. */
 const FX_CLICK_RADIUS = 1.5;
 
+/** Matriz da vista isométrica (referência fixa: comparada por identidade). */
+const ISO = isoMatrix();
+/** Duração da animação de troca de vista (ms). */
+const VIEW_ANIMATION_MS = 550;
+
 /**
  * Mapa central da mesa — orquestrador das camadas.
  *
@@ -96,6 +102,20 @@ export class MapStage {
   readonly scale = computed(() => this.view().scale);
   readonly src = signal<string | null>(null);
   readonly world = signal(EMPTY_WORLD);
+
+  // --- Projeção (2D ou isométrica) -----------------------------------------
+  /** Matriz da vista: isométrica ou 2D (identidade). */
+  readonly matrix = computed<Mat2>(() => (this.session.isometric() ? ISO : IDENTITY));
+  /** Deixa um elemento do mundo "em pé" (tokens, marcadores, botões): matriz e CSS. */
+  readonly uprightMat = computed(() => uprightMatrix(this.matrix()));
+  readonly upright = computed(() => matrixCss(this.uprightMat()));
+  /** Transição ligada só durante a troca de vista (pan e zoom ficam instantâneos). */
+  readonly animating = signal(false);
+  private animationTimer?: ReturnType<typeof setTimeout>;
+  /** Cena + mapa já enquadrados (recarregar a imagem não reenquadra). */
+  private fittedKey = '';
+  /** Transformação do "mundo": vista + projeção. */
+  readonly worldTransform = computed(() => viewCss(this.view(), this.matrix()));
 
   // --- Interações ----------------------------------------------------------
   readonly panning = signal(false);
@@ -137,7 +157,7 @@ export class MapStage {
   readonly popoverPos = computed(() => {
     const note = this.openNote();
     if (!note) return null;
-    const p = worldToScreen(this.view(), note);
+    const p = project(this.view(), this.matrix(), note);
     const width = this.stage().nativeElement.clientWidth;
     return { left: Math.max(8, Math.min(p.x - POPOVER_WIDTH / 2, width - POPOVER_WIDTH - 8)), top: p.y + 10 };
   });
@@ -148,6 +168,11 @@ export class MapStage {
     if (!r) return '';
     const squares = Math.hypot(r.to.x - r.from.x, r.to.y - r.from.y) / this.gridSize();
     return `${squares.toFixed(1)} quad. · ${(squares * METERS_PER_SQUARE).toFixed(1)} m`;
+  });
+  /** Posição do rótulo da régua na tela (fora do mundo, para ficar sempre reto). */
+  readonly rulerLabelPos = computed(() => {
+    const r = this.ruler();
+    return r ? project(this.view(), this.matrix(), r.to) : null;
   });
 
   /** Cursor conforme a ferramenta ativa. */
@@ -204,13 +229,39 @@ export class MapStage {
       this.wallDraft.set(null);
       this.fxDraft.set(null);
     });
+
+    // Na mesma cena, trocar 2D ↔ isométrica anima e reenquadra
+    let prev = { scene: undefined as string | undefined, iso: false };
+    effect(() => {
+      const next = { scene: this.sceneId(), iso: this.session.isometric() };
+      untracked(() => {
+        if (next.scene === prev.scene && next.iso !== prev.iso) {
+          this.animate();
+          this.fit();
+        }
+        prev = next;
+      });
+    });
   }
 
   // --- Zoom e enquadramento ------------------------------------------------
 
+  /** Mapa carregado: ajusta o tamanho do mundo e enquadra (só na primeira vez de cada cena/mapa). */
   onImageLoad(img: HTMLImageElement): void {
-    this.setWorld(this.mapKey().sceneId, { w: img.naturalWidth, h: img.naturalHeight });
-    this.fit();
+    const { sceneId, blobId } = this.mapKey();
+    this.setWorld(sceneId, { w: img.naturalWidth, h: img.naturalHeight });
+    const key = `${sceneId}:${blobId}`;
+    if (key !== this.fittedKey) {
+      this.fittedKey = key;
+      this.fit();
+    }
+  }
+
+  /** Liga as transições por um instante (troca de vista). */
+  private animate(): void {
+    this.animating.set(true);
+    clearTimeout(this.animationTimer);
+    this.animationTimer = setTimeout(() => this.animating.set(false), VIEW_ANIMATION_MS);
   }
 
   /** Tamanho do mundo (mapa) — também informado à sessão, junto com a cena a que pertence. */
@@ -219,16 +270,18 @@ export class MapStage {
     this.session.worldSize.set(sceneId ? { sceneId, ...size } : null);
   }
 
-  /** Enquadra o mapa inteiro na área livre entre as barras. */
+  /** Enquadra o mapa inteiro (já projetado: na isométrica, o losango) na área livre entre as barras. */
   fit(): void {
     const el = this.stage().nativeElement;
     const i = this.insets();
     const { w, h } = this.world();
     this.view.set(
-      fitRect(
-        { x: 0, y: 0, width: w, height: h },
-        { x: i.left, y: i.top, width: el.clientWidth - i.left - i.right, height: el.clientHeight - i.top - i.bottom },
-      ),
+      fitRect(projectedBounds(this.matrix(), w, h), {
+        x: i.left,
+        y: i.top,
+        width: el.clientWidth - i.left - i.right,
+        height: el.clientHeight - i.top - i.bottom,
+      }),
     );
   }
 
@@ -424,8 +477,7 @@ export class MapStage {
       return moveWallHandle(g.original, g.handle, g.original.kind === 'circle' ? p : this.snapCorner(p, event));
     }
     const grid = this.gridSize();
-    let dx = (event.clientX - g.sx) / this.scale();
-    let dy = (event.clientY - g.sy) / this.scale();
+    let { x: dx, y: dy } = this.screenDelta(event.clientX - g.sx, event.clientY - g.sy);
     if (this.snapOn(event)) {
       dx = Math.round(dx / grid) * grid;
       dy = Math.round(dy / grid) * grid;
@@ -478,8 +530,8 @@ export class MapStage {
     } else if (g.kind === 'ruler') {
       this.ruler.update((r) => (r ? { ...r, to: this.toWorld(event) } : r));
     } else if (g.kind === 'token') {
-      const s = this.scale();
-      let p = { x: g.cx + (event.clientX - g.sx) / s, y: g.cy + (event.clientY - g.sy) / s };
+      const d = this.screenDelta(event.clientX - g.sx, event.clientY - g.sy);
+      let p = { x: g.cx + d.x, y: g.cy + d.y };
       // Snap ao centro do quadrado (Shift ou grade escondida: livre)
       if (this.snapOn(event)) p = snapTokenCenter(p, g.size, this.gridSize());
       const current = this.session.tokens().find((t) => t.id === g.id);
@@ -511,7 +563,10 @@ export class MapStage {
       const dx = event.clientX - g.sx;
       const dy = event.clientY - g.sy;
       if (!g.moved && Math.hypot(dx, dy) > 3) g.moved = true;
-      if (g.moved) this.session.moveNote(g.id, { x: g.nx + dx / this.scale(), y: g.ny + dy / this.scale() });
+      if (g.moved) {
+        const d = this.screenDelta(dx, dy);
+        this.session.moveNote(g.id, { x: g.nx + d.x, y: g.ny + d.y });
+      }
     }
   }
 
@@ -634,12 +689,14 @@ export class MapStage {
       this.keyFrame = 0;
       return;
     }
-    let dx = 0;
-    let dy = 0;
+    let sx = 0;
+    let sy = 0;
     for (const key of this.heldKeys) {
-      dx += MOVE_KEYS[key].x;
-      dy += MOVE_KEYS[key].y;
+      sx += MOVE_KEYS[key].x;
+      sy += MOVE_KEYS[key].y;
     }
+    // Direção na tela → direção no mapa (na isométrica, "W" sobe na tela, não na diagonal)
+    const { x: dx, y: dy } = apply(invert(this.matrix()), { x: sx, y: sy });
     const len = Math.hypot(dx, dy);
     if (len) {
       // Diagonal com a mesma velocidade; no máximo 50ms por quadro (aba em segundo plano)
@@ -697,10 +754,16 @@ export class MapStage {
     this.stage().nativeElement.setPointerCapture(event.pointerId);
   }
 
+  /** Deslocamento do mouse na tela (px) → deslocamento no mapa (desfaz zoom e projeção). */
+  private screenDelta(dx: number, dy: number): Point {
+    const s = this.scale();
+    return apply(invert(this.matrix()), { x: dx / s, y: dy / s });
+  }
+
   /** Converte a posição do mouse para coordenadas do mapa. */
   private toWorld(event: MouseEvent): Point {
     const rect = this.stage().nativeElement.getBoundingClientRect();
-    return screenToWorld(this.view(), event.clientX - rect.left, event.clientY - rect.top);
+    return unproject(this.view(), this.matrix(), event.clientX - rect.left, event.clientY - rect.top);
   }
 
   /**
