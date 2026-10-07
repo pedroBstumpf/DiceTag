@@ -1,0 +1,25 @@
+<div class="flex h-dvh overflow-hidden">
+  <!-- Fundo escurecido da gaveta mobile -->
+  @if (layout.isMobile() && layout.mobileOpen()) {
+    <div class="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm animate-fade-in" (click)="layout.closeMobile()"></div>
+  }
+
+  <app-sidebar />
+
+  <main class="flex min-w-0 flex-1 flex-col">
+    <!-- Barra superior (somente mobile) -->
+    @if (layout.isMobile()) {
+      <header class="flex h-14 shrink-0 items-center gap-2 border-b border-white/5 bg-ink-900/90 px-2 backdrop-blur">
+        <button mat-icon-button aria-label="Abrir menu" (click)="layout.toggleSidebar()">
+          <mat-icon>menu</mat-icon>
+        </button>
+        <a routerLink="/" class="font-display text-lg font-bold text-star-300">DiceTag</a>
+      </header>
+    }
+
+    <!-- Conteúdo da página atual -->
+    <div class="min-h-0 flex-1 overflow-y-auto">
+      <router-outlet />
+    </div>
+  </main>
+</div>

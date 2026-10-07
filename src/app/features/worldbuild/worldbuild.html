@@ -1,0 +1,98 @@
+@if (!auth.isLoggedIn()) {
+  <!-- ===== Visitante: pede login ===== -->
+  <app-empty-state
+    class="h-full"
+    icon="public"
+    title="Construa seu mundo"
+    message="Entre ou crie uma conta para criar linhas do tempo, enviar mapas e escrever a história do seu mundo."
+  >
+    <button mat-flat-button (click)="actions.openAuth('register')">Criar conta</button>
+    <button mat-stroked-button (click)="actions.openAuth('login')">Entrar</button>
+  </app-empty-state>
+} @else {
+  <div class="relative flex h-full">
+    <!-- ===== Explorador (escondível) ===== -->
+    @if (explorerOpen()) {
+      <aside
+        class="z-20 w-72 shrink-0 border-r border-white/5 bg-ink-900/95 backdrop-blur-xl animate-fade-in max-lg:absolute max-lg:inset-y-0 max-lg:left-0 max-lg:shadow-2xl"
+      >
+        <app-explorer
+          (opened)="open($event)"
+          (removed)="windows.closeMany($event)"
+          (hide)="explorerOpen.set(false)"
+        />
+      </aside>
+    }
+
+    <!-- ===== Área de trabalho (janelas flutuantes) ===== -->
+    <section
+      #workspace
+      class="relative isolate min-w-0 flex-1 overflow-hidden bg-ink-950 bg-[radial-gradient(circle,_#ffffff08_1px,_transparent_1px)] bg-[length:24px_24px]"
+    >
+      <!-- Botão para reabrir o explorador -->
+      @if (!explorerOpen()) {
+        <button
+          mat-mini-fab
+          class="!absolute left-3 top-3 z-[9999]"
+          matTooltip="Mostrar explorador"
+          matTooltipPosition="right"
+          (click)="explorerOpen.set(true)"
+        >
+          <mat-icon>left_panel_open</mat-icon>
+        </button>
+      }
+
+      <!-- Janelas abertas -->
+      @for (win of windows.windows(); track win.id) {
+        @if (service.byId().get(win.id); as item) {
+          <app-floating-window
+            [title]="item.name"
+            [icon]="meta[item.type].icon"
+            [iconClass]="meta[item.type].color"
+            [zIndex]="win.z"
+            [active]="windows.activeId() === win.id"
+            [geometry]="win.geometry"
+            (geometryChange)="windows.patch(win.id, { geometry: $event })"
+            [maximized]="win.maximized"
+            (maximizedChange)="windows.patch(win.id, { maximized: $event })"
+            [minimized]="win.minimized"
+            (minimizedChange)="windows.patch(win.id, { minimized: $event })"
+            [pinned]="win.pinned"
+            (pinnedChange)="windows.patch(win.id, { pinned: $event })"
+            (focused)="windows.focus(win.id)"
+            (closed)="windows.close(win.id)"
+          >
+            @switch (item.type) {
+              @case ('document') {
+                <app-document-editor [itemId]="item.id" />
+              }
+              @case ('timeline') {
+                <app-timeline-editor [itemId]="item.id" />
+              }
+              @case ('image') {
+                <app-image-viewer [itemId]="item.id" />
+              }
+            }
+          </app-floating-window>
+        }
+      } @empty {
+        <!-- Nenhuma janela aberta -->
+        <app-empty-state
+          class="h-full"
+          icon="explore"
+          title="Sua mesa de trabalho"
+          message="Abra itens pelo explorador. Cada um vira uma janela que você pode mover, redimensionar e maximizar."
+        >
+          <button mat-stroked-button (click)="createAndOpen('document')">
+            <mat-icon [class]="meta.document.color">{{ meta.document.icon }}</mat-icon>
+            Documento
+          </button>
+          <button mat-stroked-button (click)="createAndOpen('timeline')">
+            <mat-icon [class]="meta.timeline.color">{{ meta.timeline.icon }}</mat-icon>
+            Linha do tempo
+          </button>
+        </app-empty-state>
+      }
+    </section>
+  </div>
+}

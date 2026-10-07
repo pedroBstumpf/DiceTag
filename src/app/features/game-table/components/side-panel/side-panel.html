@@ -1,0 +1,136 @@
+<!-- ===== Abas ===== -->
+<nav class="grid shrink-0 grid-cols-4 gap-1 border-b border-white/5 p-1.5">
+  @for (t of tabs; track t.id) {
+    <button
+      type="button"
+      class="flex flex-col items-center gap-0.5 rounded-lg py-1.5 text-[11px] font-medium transition-colors"
+      [class]="tab() === t.id ? 'bg-astral-500/20 text-astral-300' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'"
+      (click)="tab.set(t.id)"
+    >
+      <mat-icon class="!text-[20px]">{{ t.icon }}</mat-icon>
+      {{ t.label }}
+    </button>
+  }
+</nav>
+
+<!-- ===== Conteúdo da aba ===== -->
+<div class="min-h-0 flex-1 overflow-y-auto p-3">
+  @switch (tab()) {
+    <!-- Fichas: personagens e NPCs -->
+    @case ('sheets') {
+      <ng-container *ngTemplateOutlet="section; context: { title: 'Personagens', kind: 'character', list: characters() }" />
+      <ng-container *ngTemplateOutlet="section; context: { title: 'NPCs', kind: 'npc', list: npcs() }" />
+    }
+
+    <!-- Lore: itens do worldbuild -->
+    @case ('lore') {
+      <label class="mb-3 flex h-9 items-center gap-2 rounded-lg bg-ink-950/70 px-3 text-sm ring-1 ring-white/5 focus-within:ring-astral-400/50">
+        <mat-icon class="!size-[18px] !text-[18px] text-slate-500">search</mat-icon>
+        <input
+          class="min-w-0 flex-1 bg-transparent text-slate-200 outline-none placeholder:text-slate-500"
+          placeholder="Buscar no worldbuild…"
+          [value]="query()"
+          (input)="query.set($any($event.target).value)"
+        />
+      </label>
+
+      @for (item of lore(); track item.id) {
+        <button
+          type="button"
+          class="flex h-9 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-slate-300 transition-colors hover:bg-white/5 hover:text-white"
+          (click)="opened.emit(item.id)"
+        >
+          <mat-icon class="!size-5 shrink-0 !text-[20px]" [class]="loreMeta(item).color">{{ loreMeta(item).icon }}</mat-icon>
+          <span class="truncate">{{ item.name }}</span>
+        </button>
+      } @empty {
+        <p class="px-2 py-6 text-center text-sm text-slate-500">
+          {{ query() ? 'Nada encontrado.' : 'Seu worldbuild está vazio.' }}
+        </p>
+      }
+
+      <a mat-stroked-button routerLink="/worldbuild" class="mt-3 w-full">
+        <mat-icon>public</mat-icon>
+        Abrir Worldbuild
+      </a>
+    }
+
+    <!-- Sons e ambientação -->
+    @case ('sounds') {
+      <ng-container *ngTemplateOutlet="section; context: { title: 'Trilhas e ambientes', kind: 'sound', list: sounds() }" />
+      <button mat-stroked-button class="w-full" (click)="soundInput.click()">
+        <mat-icon>upload</mat-icon>
+        Enviar áudio
+      </button>
+      <input #soundInput type="file" accept="audio/*" multiple hidden (change)="onSoundsPicked(soundInput)" />
+    }
+
+    <!-- Automações -->
+    @case ('automations') {
+      <p class="mb-3 rounded-lg bg-white/5 px-3 py-2 text-xs leading-relaxed text-slate-400">
+        Configure habilidades, ataques e rolagens. Elas aparecem na barra de ações de quem as usa.
+      </p>
+      <ng-container *ngTemplateOutlet="section; context: { title: 'Do mestre', kind: 'automation', role: 'gm', list: gmActions() }" />
+      <ng-container *ngTemplateOutlet="section; context: { title: 'Dos jogadores', kind: 'automation', role: 'player', list: playerActions() }" />
+    }
+  }
+</div>
+
+<!-- ===================================================================== -->
+<!-- Seção com título, botão "+" e lista de arquivos                        -->
+<!-- ===================================================================== -->
+<ng-template #section let-title="title" let-kind="kind" let-role="role" let-list="list">
+  <section class="mb-4">
+    <header class="mb-1 flex items-center justify-between pl-2">
+      <h4 class="text-[11px] font-semibold uppercase tracking-widest text-slate-500">{{ title }}</h4>
+      @if (kind !== 'sound') {
+        <button
+          type="button"
+          class="grid size-7 place-items-center rounded-md text-slate-400 hover:bg-white/10 hover:text-white"
+          [matTooltip]="'Novo: ' + metaOf(kind).label"
+          (click)="create(kind, role)"
+        >
+          <mat-icon class="!text-[18px]">add</mat-icon>
+        </button>
+      }
+    </header>
+
+    @for (entry of list; track entry.id) {
+      <div
+        class="group flex h-9 cursor-pointer items-center gap-2 rounded-lg pl-2 pr-1 text-sm text-slate-300 transition-colors hover:bg-white/5 hover:text-white"
+        (click)="renamingId() !== entry.id && opened.emit(entry.id)"
+        (dblclick)="renamingId.set(entry.id)"
+      >
+        <mat-icon class="!size-5 shrink-0 !text-[20px]" [class]="metaOf(entry.kind).color">
+          {{ entry.icon ?? metaOf(entry.kind).icon }}
+        </mat-icon>
+
+        @if (renamingId() === entry.id) {
+          <input
+            #nameInput
+            appAutoFocus
+            class="h-7 min-w-0 flex-1 rounded bg-ink-950 px-2 text-slate-100 outline-none ring-1 ring-astral-400/60"
+            [value]="entry.name"
+            (click)="$event.stopPropagation()"
+            (keydown.enter)="finishRename(entry, nameInput.value)"
+            (keydown.escape)="renamingId.set(null)"
+            (blur)="finishRename(entry, nameInput.value)"
+          />
+        } @else {
+          <span class="min-w-0 flex-1 truncate">{{ entry.name }}</span>
+        }
+
+        <button
+          type="button"
+          class="grid size-7 shrink-0 place-items-center rounded-md text-slate-500 opacity-0 hover:bg-white/10 hover:text-red-300 group-hover:opacity-100 max-lg:opacity-100"
+          aria-label="Excluir"
+          (click)="$event.stopPropagation(); remove(entry)"
+        >
+          <mat-icon class="!text-[18px]">delete</mat-icon>
+        </button>
+      </div>
+    } @empty {
+      <p class="px-2 py-2 text-xs text-slate-600">Nada aqui ainda.</p>
+    }
+  </section>
+</ng-template>

@@ -1,0 +1,93 @@
+<div class="mx-auto flex max-w-6xl flex-col gap-10 px-4 pb-16 pt-4 sm:px-8 sm:pt-8">
+  <!-- ===== Banner com a logo ===== -->
+  <section class="relative overflow-hidden rounded-3xl ring-1 ring-white/10">
+    <img
+      src="images/dicetag-banner.webp"
+      alt="DiceTag"
+      width="1024"
+      height="572"
+      fetchpriority="high"
+      class="aspect-[1024/572] max-h-[460px] w-full object-cover"
+    />
+    <!-- Degradê para leitura do texto (desktop, onde o texto fica sobre a imagem) -->
+    <div class="pointer-events-none absolute inset-0 hidden bg-gradient-to-t from-ink-950 via-ink-950/20 to-transparent sm:block"></div>
+
+    <!-- Texto e ações: abaixo da imagem no mobile, sobre ela no desktop -->
+    <div class="flex flex-col items-start gap-4 bg-ink-900 p-5 sm:absolute sm:inset-x-0 sm:bottom-0 sm:flex-row sm:items-end sm:justify-between sm:bg-transparent sm:p-8">
+      <p class="max-w-md text-base font-medium text-slate-100 drop-shadow sm:text-lg">{{ greeting() }}</p>
+
+      <div class="flex flex-wrap gap-2">
+        @if (!auth.isLoggedIn()) {
+          <button mat-flat-button class="!h-11 !px-6" (click)="actions.openAuth('register')">
+            <mat-icon>person_add</mat-icon>
+            Criar conta grátis
+          </button>
+          <button mat-stroked-button class="!h-11 !bg-ink-950/50 backdrop-blur" (click)="actions.openAuth('login')">Entrar</button>
+        } @else {
+          <button mat-flat-button class="!h-11 !px-6" (click)="actions.createTable()">
+            <mat-icon>add</mat-icon>
+            Criar mesa
+          </button>
+          <a mat-stroked-button class="!h-11 !bg-ink-950/50 backdrop-blur" routerLink="/worldbuild">
+            <mat-icon>public</mat-icon>
+            Worldbuild
+          </a>
+        }
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Atalhos principais ===== -->
+  <section class="grid gap-4 md:grid-cols-3">
+    @for (card of features(); track card.title) {
+      <article
+        class="group flex flex-col gap-3 rounded-2xl border border-white/5 bg-ink-900 p-6 transition-all hover:-translate-y-0.5 hover:border-astral-500/30 hover:bg-ink-850"
+      >
+        <span class="grid size-11 place-items-center rounded-xl bg-astral-500/15 text-astral-300">
+          <mat-icon>{{ card.icon }}</mat-icon>
+        </span>
+        <h2 class="font-display text-lg text-slate-100">{{ card.title }}</h2>
+        <p class="flex-1 text-sm leading-relaxed text-slate-400">{{ card.text }}</p>
+        <button mat-button class="-ml-3 self-start" (click)="card.run()">
+          {{ card.cta }}
+          <mat-icon iconPositionEnd class="transition-transform group-hover:translate-x-0.5">arrow_forward</mat-icon>
+        </button>
+      </article>
+    }
+  </section>
+
+  <!-- ===== Notícias e anúncios ===== -->
+  <section class="flex flex-col gap-4">
+    <header class="flex items-center gap-3">
+      <mat-icon class="text-star-400">campaign</mat-icon>
+      <h2 class="font-display text-xl text-slate-100">Notícias e anúncios</h2>
+    </header>
+
+    @if (news.posts().length) {
+      <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        @for (post of news.posts(); track post.id) {
+          <article class="overflow-hidden rounded-2xl border border-white/5 bg-ink-900">
+            @if (post.imageUrl) {
+              <img [src]="post.imageUrl" alt="" class="aspect-video w-full object-cover" loading="lazy" />
+            }
+            <div class="flex flex-col gap-2 p-5">
+              <div class="flex items-center gap-2 text-xs">
+                <span class="rounded-full bg-star-500/15 px-2 py-0.5 font-medium text-star-300">{{ post.tag }}</span>
+                <time class="text-slate-500">{{ post.publishedAt | date: 'dd/MM/yyyy' }}</time>
+              </div>
+              <h3 class="font-medium text-slate-100">{{ post.title }}</h3>
+              <p class="text-sm text-slate-400">{{ post.summary }}</p>
+            </div>
+          </article>
+        }
+      </div>
+    } @else {
+      <app-empty-state
+        class="rounded-2xl border border-dashed border-white/10 bg-ink-900/40"
+        icon="newspaper"
+        title="Nenhuma novidade por enquanto"
+        message="Atualizações, eventos e anúncios do DiceTag aparecerão aqui."
+      />
+    }
+  </section>
+</div>

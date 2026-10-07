@@ -1,0 +1,82 @@
+<div class="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 sm:px-8 sm:py-10">
+  <!-- ===== Cabeçalho ===== -->
+  <header class="flex flex-wrap items-end justify-between gap-4">
+    <div>
+      <h1 class="font-display text-3xl text-slate-100">Minhas mesas</h1>
+      <p class="mt-1 text-sm text-slate-400">Campanhas e sessões que você mestra.</p>
+    </div>
+    @if (auth.isLoggedIn()) {
+      <button mat-flat-button class="!h-11" (click)="actions.createTable()">
+        <mat-icon>add</mat-icon>
+        Nova mesa
+      </button>
+    }
+  </header>
+
+  <!-- ===== Conteúdo ===== -->
+  @if (!auth.isLoggedIn()) {
+    <app-empty-state
+      icon="lock"
+      title="Entre para ver suas mesas"
+      message="Crie uma conta gratuita para criar mesas e convidar seus amigos."
+    >
+      <button mat-flat-button (click)="actions.openAuth('register')">Criar conta</button>
+      <button mat-stroked-button (click)="actions.openAuth('login')">Entrar</button>
+    </app-empty-state>
+  } @else if (!service.tables().length) {
+    <app-empty-state
+      icon="casino"
+      title="Nenhuma mesa ainda"
+      message="Toda grande campanha começa com uma mesa. Que tal criar a primeira?"
+    >
+      <button mat-flat-button (click)="actions.createTable()">
+        <mat-icon>add</mat-icon>
+        Criar primeira mesa
+      </button>
+    </app-empty-state>
+  } @else {
+    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      @for (table of service.tables(); track table.id) {
+        <article class="flex flex-col overflow-hidden rounded-2xl border border-white/5 bg-ink-900 animate-fade-in">
+          <!-- Faixa de cor da mesa -->
+          <div class="h-1.5" [style.background]="table.accent"></div>
+
+          <div class="flex flex-1 flex-col gap-3 p-5">
+            <div class="flex items-start gap-2">
+              <div class="min-w-0 flex-1">
+                <h2 class="truncate font-display text-lg text-slate-100">{{ table.name }}</h2>
+                <span class="mt-1 inline-block rounded-full bg-white/5 px-2 py-0.5 text-xs text-slate-300">{{ table.system }}</span>
+              </div>
+              <button mat-icon-button [matMenuTriggerFor]="tableMenu" aria-label="Opções da mesa">
+                <mat-icon>more_vert</mat-icon>
+              </button>
+              <mat-menu #tableMenu="matMenu" xPosition="before">
+                <button mat-menu-item (click)="remove(table)">
+                  <mat-icon class="!text-red-400">delete</mat-icon>
+                  <span>Excluir mesa</span>
+                </button>
+              </mat-menu>
+            </div>
+
+            <p class="line-clamp-3 flex-1 text-sm leading-relaxed text-slate-400">
+              {{ table.description || 'Sem descrição.' }}
+            </p>
+
+            <footer class="flex items-center justify-between gap-2 border-t border-white/5 pt-3 text-xs text-slate-500">
+              <span class="flex items-center gap-1">
+                <mat-icon class="!size-4 !text-base">group</mat-icon>
+                até {{ table.maxPlayers }} jogadores
+              </span>
+              <span>{{ table.createdAt | date: 'dd/MM/yyyy' }}</span>
+            </footer>
+
+            <a mat-flat-button class="w-full" [routerLink]="['/mesa', table.id]">
+              <mat-icon>play_arrow</mat-icon>
+              Abrir mesa
+            </a>
+          </div>
+        </article>
+      }
+    </div>
+  }
+</div>

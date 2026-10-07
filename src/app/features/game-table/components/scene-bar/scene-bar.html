@@ -1,0 +1,128 @@
+<header class="glass flex h-12 items-center gap-2 rounded-b-xl border-t-0 px-2 shadow-xl shadow-black/40">
+  <!-- ===== Voltar + identificação da mesa ===== -->
+  <a mat-icon-button routerLink="/mesas" matTooltip="Voltar para Minhas mesas" aria-label="Voltar">
+    <mat-icon>arrow_back</mat-icon>
+  </a>
+  <div class="hidden min-w-0 max-w-48 shrink-0 flex-col leading-tight md:flex">
+    <span class="truncate font-display text-sm text-star-300">{{ table().name }}</span>
+    <span class="truncate text-[11px] text-slate-500">{{ table().system }}</span>
+  </div>
+
+  <span class="mx-1 hidden h-6 w-px bg-white/10 md:block"></span>
+
+  <!-- ===== Abas de cenas ===== -->
+  <div class="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-1">
+    @for (scene of session.scenes(); track scene.id) {
+      <div
+        class="group flex h-8 shrink-0 items-center gap-1.5 rounded-lg pl-2.5 pr-1 text-sm transition-colors"
+        [class]="
+          session.activeScene()?.id === scene.id
+            ? 'bg-astral-500/20 text-star-300 ring-1 ring-astral-400/40'
+            : 'cursor-pointer text-slate-400 hover:bg-white/5 hover:text-slate-200'
+        "
+        (click)="session.setActiveScene(scene.id)"
+        (dblclick)="renamingId.set(scene.id)"
+      >
+        <mat-icon class="!size-4 !text-[16px]">{{ scene.blobId ? 'map' : 'grid_on' }}</mat-icon>
+
+        @if (renamingId() === scene.id) {
+          <input
+            #nameInput
+            appAutoFocus
+            class="h-6 w-32 rounded bg-ink-950 px-1.5 text-slate-100 outline-none ring-1 ring-astral-400/60"
+            [value]="scene.name"
+            (click)="$event.stopPropagation()"
+            (keydown.enter)="finishRename(scene, nameInput.value)"
+            (keydown.escape)="renamingId.set(null)"
+            (blur)="finishRename(scene, nameInput.value)"
+          />
+        } @else {
+          <span class="max-w-40 truncate">{{ scene.name }}</span>
+        }
+
+        <button
+          type="button"
+          class="grid size-6 place-items-center rounded text-slate-500 opacity-0 hover:bg-white/10 hover:text-slate-200 group-hover:opacity-100"
+          [class.opacity-100]="session.activeScene()?.id === scene.id"
+          aria-label="Opções da cena"
+          [matMenuTriggerFor]="sceneMenu"
+          [matMenuTriggerData]="{ scene: scene }"
+          (click)="$event.stopPropagation()"
+        >
+          <mat-icon class="!size-4 !text-[16px]">expand_more</mat-icon>
+        </button>
+      </div>
+    }
+
+    <!-- Nova cena -->
+    <button mat-icon-button class="shrink-0" matTooltip="Nova cena" [matMenuTriggerFor]="addMenu">
+      <mat-icon>add</mat-icon>
+    </button>
+  </div>
+
+  <!-- ===== Visibilidade das barras ===== -->
+  <div class="flex shrink-0 items-center">
+    <button
+      mat-icon-button
+      class="max-sm:!hidden"
+      [matTooltip]="session.panels().side ? 'Esconder painel lateral' : 'Mostrar painel lateral'"
+      (click)="session.togglePanel('side')"
+    >
+      <mat-icon>{{ session.panels().side ? 'right_panel_close' : 'right_panel_open' }}</mat-icon>
+    </button>
+    <button mat-icon-button matTooltip="Modo imersivo: esconder tudo (\)" (click)="session.toggleImmersive()">
+      <mat-icon>visibility_off</mat-icon>
+    </button>
+    <button mat-icon-button class="max-sm:!hidden" matTooltip="Tela cheia" (click)="toggleFullscreen()">
+      <mat-icon>fullscreen</mat-icon>
+    </button>
+    <button mat-icon-button matTooltip="Esconder barra de cenas" (click)="session.togglePanel('scenes')">
+      <mat-icon>keyboard_arrow_up</mat-icon>
+    </button>
+  </div>
+</header>
+
+<!-- Seletor de imagem (oculto) -->
+<input #mapInput type="file" accept="image/*" hidden (change)="onMapPicked(mapInput)" />
+
+<!-- Menu: nova cena -->
+<mat-menu #addMenu="matMenu">
+  <button mat-menu-item (click)="pickMap(mapInput)">
+    <mat-icon>add_photo_alternate</mat-icon>
+    <span>Cena com mapa (imagem)</span>
+  </button>
+  <button mat-menu-item (click)="session.addScene()">
+    <mat-icon>grid_on</mat-icon>
+    <span>Cena vazia (só grade)</span>
+  </button>
+</mat-menu>
+
+<!-- Menu: opções de uma cena -->
+<mat-menu #sceneMenu="matMenu">
+  <ng-template matMenuContent let-scene="scene">
+    <button mat-menu-item (click)="renamingId.set(scene.id)">
+      <mat-icon>edit</mat-icon>
+      <span>Renomear</span>
+    </button>
+    <button mat-menu-item (click)="pickMap(mapInput, scene.id)">
+      <mat-icon>image</mat-icon>
+      <span>{{ scene.blobId ? 'Trocar mapa' : 'Adicionar mapa' }}</span>
+    </button>
+    <!-- Tamanho da grade: ajusta sem fechar o menu -->
+    <div class="flex items-center gap-2 px-4 py-2 text-sm text-slate-300" (click)="$event.stopPropagation()">
+      <mat-icon class="!text-slate-400">grid_4x4</mat-icon>
+      <span class="flex-1">Grade</span>
+      <button mat-icon-button class="!size-8 !p-1" aria-label="Diminuir grade" (click)="changeGrid(scene.id, -5)">
+        <mat-icon>remove</mat-icon>
+      </button>
+      <span class="w-12 text-center tabular-nums">{{ gridOf(scene.id) }}px</span>
+      <button mat-icon-button class="!size-8 !p-1" aria-label="Aumentar grade" (click)="changeGrid(scene.id, 5)">
+        <mat-icon>add</mat-icon>
+      </button>
+    </div>
+    <button mat-menu-item (click)="remove(scene)">
+      <mat-icon class="!text-red-400">delete</mat-icon>
+      <span class="text-red-300">Excluir cena</span>
+    </button>
+  </ng-template>
+</mat-menu>

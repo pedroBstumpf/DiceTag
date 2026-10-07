@@ -1,0 +1,94 @@
+<!-- Área do mapa: recebe zoom, arraste e as ferramentas -->
+<div
+  #stage
+  class="relative size-full touch-none select-none overflow-hidden"
+  [style.cursor]="cursor()"
+  (wheel)="onWheel($event)"
+  (pointerdown)="onPointerDown($event)"
+  (pointermove)="onPointerMove($event)"
+  (pointerup)="onPointerUp()"
+  (pointercancel)="onPointerUp()"
+  (auxclick)="$event.preventDefault()"
+>
+  <!-- "Mundo": tudo aqui dentro acompanha o zoom e a posição do mapa -->
+  <div
+    class="absolute left-0 top-0 origin-top-left"
+    [style.width.px]="world().w"
+    [style.height.px]="world().h"
+    [style.transform]="'translate(' + offset().x + 'px,' + offset().y + 'px) scale(' + scale() + ')'"
+  >
+    <!-- Imagem do mapa ou fundo vazio -->
+    @if (src(); as url) {
+      <img
+        #img
+        [src]="url"
+        alt=""
+        draggable="false"
+        class="pointer-events-none absolute inset-0 max-w-none shadow-[0_0_80px_rgb(0_0_0/0.6)]"
+        (load)="onImageLoad(img)"
+      />
+    } @else {
+      <div class="absolute inset-0 rounded-sm border border-astral-300/10 bg-ink-900/70"></div>
+    }
+
+    <!-- Grade -->
+    @if (scene()?.showGrid ?? true) {
+      <div
+        class="pointer-events-none absolute inset-0"
+        [style.background-size]="gridSize() + 'px ' + gridSize() + 'px'"
+        style="
+          background-image:
+            linear-gradient(to right, rgb(169 199 255 / 0.16) 1px, transparent 1px),
+            linear-gradient(to bottom, rgb(169 199 255 / 0.16) 1px, transparent 1px);
+        "
+      ></div>
+    }
+
+    <!-- Régua -->
+    @if (ruler(); as r) {
+      <svg class="pointer-events-none absolute inset-0 overflow-visible" [attr.width]="world().w" [attr.height]="world().h">
+        <line
+          [attr.x1]="r.from.x"
+          [attr.y1]="r.from.y"
+          [attr.x2]="r.to.x"
+          [attr.y2]="r.to.y"
+          stroke="#a9c7ff"
+          [attr.stroke-width]="3 / scale()"
+          [attr.stroke-dasharray]="10 / scale() + ' ' + 6 / scale()"
+        />
+        <circle [attr.cx]="r.from.x" [attr.cy]="r.from.y" [attr.r]="5 / scale()" fill="#a9c7ff" />
+        <circle [attr.cx]="r.to.x" [attr.cy]="r.to.y" [attr.r]="5 / scale()" fill="#a9c7ff" />
+      </svg>
+      <!-- Rótulo com tamanho fixo na tela (escala inversa) -->
+      <div
+        class="pointer-events-none absolute origin-top-left"
+        [style.left.px]="r.to.x"
+        [style.top.px]="r.to.y"
+        [style.transform]="'scale(' + 1 / scale() + ') translate(12px, 12px)'"
+      >
+        <span class="glass whitespace-nowrap rounded-md px-2 py-1 text-xs font-semibold text-star-300">{{ rulerLabel() }}</span>
+      </div>
+    }
+
+    <!-- Pings -->
+    @for (p of pings(); track p.id) {
+      <span
+        class="pointer-events-none absolute rounded-full border-4 border-astral-300 animate-ping-once"
+        [style.left.px]="p.x"
+        [style.top.px]="p.y"
+        [style.width.px]="90 / scale()"
+        [style.height.px]="90 / scale()"
+      ></span>
+    }
+  </div>
+
+  <!-- Mesa sem cenas -->
+  @if (!scene()) {
+    <div class="pointer-events-none absolute inset-0 grid place-items-center">
+      <div class="glass rounded-xl px-6 py-4 text-center">
+        <p class="font-display text-star-300">Nenhuma cena ainda</p>
+        <p class="mt-1 text-sm text-slate-400">Use o <strong>+</strong> na barra superior para adicionar um mapa.</p>
+      </div>
+    </div>
+  }
+</div>

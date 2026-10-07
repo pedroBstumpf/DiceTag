@@ -1,0 +1,190 @@
+<!-- ===== Cabeçalho do painel ===== -->
+<header class="flex h-14 shrink-0 items-center gap-1 border-b border-white/5 pl-4 pr-2">
+  <h2 class="flex-1 font-display text-base text-star-300">Explorador</h2>
+
+  <button mat-icon-button matTooltip="Criar" [matMenuTriggerFor]="createMenu" [matMenuTriggerData]="{ parentId: null }">
+    <mat-icon>add</mat-icon>
+  </button>
+  <button mat-icon-button matTooltip="Esconder painel" (click)="hide.emit()">
+    <mat-icon>left_panel_close</mat-icon>
+  </button>
+</header>
+
+<!-- ===== Busca ===== -->
+<div class="shrink-0 px-3 pt-3">
+  <label class="flex h-9 items-center gap-2 rounded-lg bg-ink-950/70 px-3 text-sm ring-1 ring-white/5 focus-within:ring-astral-500/50">
+    <mat-icon class="!size-[18px] !text-[18px] text-slate-500">search</mat-icon>
+    <input
+      class="min-w-0 flex-1 bg-transparent text-slate-200 outline-none placeholder:text-slate-500"
+      placeholder="Buscar…"
+      [value]="query()"
+      (input)="query.set($any($event.target).value)"
+    />
+    @if (query()) {
+      <button type="button" class="text-slate-500 hover:text-slate-300" aria-label="Limpar busca" (click)="query.set('')">
+        <mat-icon class="!size-[18px] !text-[18px]">close</mat-icon>
+      </button>
+    }
+  </label>
+</div>
+
+<!-- ===== Árvore (a área vazia também aceita itens = mover para a raiz) ===== -->
+<div
+  class="min-h-0 flex-1 overflow-y-auto px-2 py-3 transition-colors"
+  [class.bg-astral-500/5]="dropTargetId() === null"
+  (dragover)="onDragOver($event, null)"
+  (dragleave)="dropTargetId.set(undefined)"
+  (drop)="onDrop($event, null)"
+>
+  @if (searchResults(); as results) {
+    <!-- Resultado de busca: lista plana -->
+    @for (item of results; track item.id) {
+      <ng-container *ngTemplateOutlet="row; context: { $implicit: item, depth: 0 }" />
+    } @empty {
+      <p class="px-3 py-6 text-center text-sm text-slate-500">Nada encontrado.</p>
+    }
+  } @else if (service.childrenOf(null).length) {
+    <ng-container *ngTemplateOutlet="tree; context: { $implicit: null, depth: 0 }" />
+  } @else {
+    <!-- Worldbuild vazio -->
+    <div class="flex flex-col items-center gap-3 px-4 py-10 text-center">
+      <mat-icon class="!size-10 !text-[40px] text-slate-600">auto_stories</mat-icon>
+      <p class="text-sm text-slate-400">Seu mundo começa aqui. Crie uma pasta, um documento ou envie um mapa.</p>
+      <button mat-stroked-button [matMenuTriggerFor]="createMenu" [matMenuTriggerData]="{ parentId: null }">
+        <mat-icon>add</mat-icon>
+        Criar
+      </button>
+    </div>
+  }
+</div>
+
+<p class="shrink-0 border-t border-white/5 px-4 py-2 text-[11px] text-slate-500">
+  Arraste itens para organizar · solte imagens para enviar
+</p>
+
+<!-- Entrada de arquivo oculta (envio de mapas/imagens) -->
+<input #fileInput type="file" accept="image/*" multiple hidden (change)="onFilesPicked(fileInput)" />
+
+<!-- ===================================================================== -->
+<!-- Templates                                                              -->
+<!-- ===================================================================== -->
+
+<!-- Nível da árvore (recursivo) -->
+<ng-template #tree let-parentId let-depth="depth">
+  @for (item of service.childrenOf(parentId); track item.id) {
+    <ng-container *ngTemplateOutlet="row; context: { $implicit: item, depth: depth }" />
+    @if (item.type === 'folder' && expanded().has(item.id)) {
+      <ng-container *ngTemplateOutlet="tree; context: { $implicit: item.id, depth: depth + 1 }" />
+    }
+  }
+</ng-template>
+
+<!-- Linha de um item -->
+<ng-template #row let-item let-depth="depth">
+  <div
+    class="group flex h-9 cursor-pointer select-none items-center gap-1.5 rounded-lg pr-1 text-sm text-slate-300 transition-colors hover:bg-white/5"
+    [class]="dropTargetId() === item.id ? '!bg-astral-500/20 ring-1 ring-astral-500/50' : ''"
+    [style.padding-left.px]="6 + depth * 16"
+    draggable="true"
+    (dragstart)="onDragStart($event, item)"
+    (dragend)="onDragEnd()"
+    (dragover)="onDragOver($event, item.type === 'folder' ? item.id : item.parentId)"
+    (drop)="onDrop($event, item.type === 'folder' ? item.id : item.parentId)"
+    (click)="activate(item)"
+    (dblclick)="renamingId.set(item.id)"
+  >
+    <!-- Seta (somente pastas) -->
+    @if (item.type === 'folder') {
+      <mat-icon class="!size-5 shrink-0 !text-[20px] text-slate-500 transition-transform" [class.rotate-90]="expanded().has(item.id)">
+        chevron_right
+      </mat-icon>
+    } @else {
+      <span class="w-5 shrink-0"></span>
+    }
+
+    <mat-icon class="!size-5 shrink-0 !text-[20px]" [class]="metaOf(item).color">
+      {{ item.type === 'folder' && expanded().has(item.id) ? 'folder_open' : metaOf(item).icon }}
+    </mat-icon>
+
+    <!-- Nome (ou campo de renomear) -->
+    @if (renamingId() === item.id) {
+      <input
+        #renameInput
+        appAutoFocus
+        class="h-7 min-w-0 flex-1 rounded bg-ink-950 px-2 text-slate-100 outline-none ring-1 ring-astral-500/60"
+        [value]="item.name"
+        (click)="$event.stopPropagation()"
+        (keydown.enter)="finishRename(item, renameInput.value)"
+        (keydown.escape)="renamingId.set(null)"
+        (blur)="finishRename(item, renameInput.value)"
+      />
+    } @else {
+      <span class="min-w-0 flex-1 truncate">{{ item.name }}</span>
+    }
+
+    <!-- Menu de opções (aparece ao passar o mouse) -->
+    <button
+      type="button"
+      class="grid size-7 shrink-0 place-items-center rounded-md text-slate-400 opacity-0 transition-opacity hover:bg-white/10 hover:text-slate-100 focus:opacity-100 group-hover:opacity-100 max-lg:opacity-100"
+      aria-label="Opções"
+      [matMenuTriggerFor]="itemMenu"
+      [matMenuTriggerData]="{ item: item }"
+      (click)="$event.stopPropagation()"
+    >
+      <mat-icon class="!size-[18px] !text-[18px]">more_horiz</mat-icon>
+    </button>
+  </div>
+</ng-template>
+
+<!-- Menu "Criar" (reutilizado na raiz e dentro de pastas) -->
+<mat-menu #createMenu="matMenu">
+  <ng-template matMenuContent let-parentId="parentId">
+    <button mat-menu-item (click)="create('folder', parentId)">
+      <mat-icon [class]="meta.folder.color">create_new_folder</mat-icon>
+      <span>Pasta</span>
+    </button>
+    <button mat-menu-item (click)="create('document', parentId)">
+      <mat-icon [class]="meta.document.color">{{ meta.document.icon }}</mat-icon>
+      <span>Documento</span>
+    </button>
+    <button mat-menu-item (click)="create('timeline', parentId)">
+      <mat-icon [class]="meta.timeline.color">{{ meta.timeline.icon }}</mat-icon>
+      <span>Linha do tempo</span>
+    </button>
+    <button mat-menu-item (click)="pickImages(fileInput, parentId)">
+      <mat-icon [class]="meta.image.color">add_photo_alternate</mat-icon>
+      <span>Mapa / imagem</span>
+    </button>
+  </ng-template>
+</mat-menu>
+
+<!-- Menu de opções de um item -->
+<mat-menu #itemMenu="matMenu">
+  <ng-template matMenuContent let-item="item">
+    @if (item.type === 'folder') {
+      <button mat-menu-item [matMenuTriggerFor]="createMenu" [matMenuTriggerData]="{ parentId: item.id }">
+        <mat-icon>add</mat-icon>
+        <span>Criar aqui</span>
+      </button>
+    } @else {
+      <button mat-menu-item (click)="opened.emit(item.id)">
+        <mat-icon>open_in_new</mat-icon>
+        <span>Abrir</span>
+      </button>
+    }
+    <button mat-menu-item (click)="renamingId.set(item.id)">
+      <mat-icon>edit</mat-icon>
+      <span>Renomear</span>
+    </button>
+    @if (item.parentId) {
+      <button mat-menu-item (click)="moveToRoot(item)">
+        <mat-icon>drive_file_move</mat-icon>
+        <span>Mover para a raiz</span>
+      </button>
+    }
+    <button mat-menu-item (click)="remove(item)">
+      <mat-icon class="!text-red-400">delete</mat-icon>
+      <span class="text-red-300">Excluir</span>
+    </button>
+  </ng-template>
+</mat-menu>

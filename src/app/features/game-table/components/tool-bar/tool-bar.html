@@ -1,0 +1,53 @@
+<nav class="glass flex flex-col items-center gap-1 rounded-xl p-1.5 shadow-xl shadow-black/40">
+  <!-- Ferramentas -->
+  @for (tool of tools; track tool.id) {
+    <button
+      type="button"
+      class="grid size-10 place-items-center rounded-lg transition-colors"
+      [class]="
+        tool.soon
+          ? 'cursor-not-allowed text-slate-600'
+          : session.tool() === tool.id
+            ? 'bg-astral-500/25 text-astral-300 ring-1 ring-astral-400/40'
+            : 'text-slate-300 hover:bg-white/10 hover:text-white'
+      "
+      [matTooltip]="tool.label + (tool.soon ? ' (em breve)' : ' (' + tool.key + ')')"
+      matTooltipPosition="right"
+      [attr.aria-label]="tool.label"
+      [attr.aria-pressed]="session.tool() === tool.id"
+      (click)="!tool.soon && session.tool.set(tool.id)"
+    >
+      <mat-icon>{{ tool.icon }}</mat-icon>
+    </button>
+  }
+
+  <span class="my-1 h-px w-7 bg-white/10"></span>
+
+  <!-- Grade e zoom -->
+  <button
+    type="button"
+    class="grid size-10 place-items-center rounded-lg text-slate-300 transition-colors hover:bg-white/10 hover:text-white disabled:text-slate-600"
+    [class.!text-astral-300]="session.activeScene()?.showGrid"
+    [disabled]="!session.activeScene()"
+    matTooltip="Mostrar/ocultar grade (G)"
+    matTooltipPosition="right"
+    (click)="toggleGrid()"
+  >
+    <mat-icon>grid_4x4</mat-icon>
+  </button>
+  <button type="button" class="grid size-10 place-items-center rounded-lg text-slate-300 hover:bg-white/10 hover:text-white" matTooltip="Aproximar (+)" matTooltipPosition="right" (click)="zoomIn.emit()">
+    <mat-icon>zoom_in</mat-icon>
+  </button>
+  <button type="button" class="grid size-10 place-items-center rounded-lg text-slate-300 hover:bg-white/10 hover:text-white" matTooltip="Afastar (−)" matTooltipPosition="right" (click)="zoomOut.emit()">
+    <mat-icon>zoom_out</mat-icon>
+  </button>
+  <button type="button" class="grid size-10 place-items-center rounded-lg text-slate-300 hover:bg-white/10 hover:text-white" matTooltip="Enquadrar mapa" matTooltipPosition="right" (click)="fit.emit()">
+    <mat-icon>fit_screen</mat-icon>
+  </button>
+
+  <span class="my-1 h-px w-7 bg-white/10"></span>
+
+  <button type="button" class="grid size-10 place-items-center rounded-lg text-slate-500 hover:bg-white/10 hover:text-white" matTooltip="Esconder ferramentas" matTooltipPosition="right" (click)="hide.emit()">
+    <mat-icon>left_panel_close</mat-icon>
+  </button>
+</nav>

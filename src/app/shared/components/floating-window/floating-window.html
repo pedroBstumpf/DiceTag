@@ -1,0 +1,56 @@
+<!-- Barra de título: arraste para mover, duplo clique para maximizar -->
+<header
+  class="flex h-11 shrink-0 touch-none items-center gap-1 border-b border-white/5 bg-ink-800/80 pl-3 pr-1"
+  [class]="pinned() || maximized() ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'"
+  (pointerdown)="startPointer($event, 'move')"
+  (dblclick)="toggleMaximize()"
+>
+  <mat-icon class="!size-5 shrink-0 !text-[20px]" [class]="iconClass()">{{ icon() }}</mat-icon>
+  <h3 class="min-w-0 flex-1 truncate pl-1 text-sm font-medium text-slate-200">{{ title() }}</h3>
+
+  <!-- Controles da janela -->
+  <button
+    mat-icon-button
+    class="!size-8 !p-1 max-md:!hidden"
+    [class.!text-astral-300]="pinned()"
+    [matTooltip]="pinned() ? 'Desafixar' : 'Fixar posição'"
+    [attr.aria-label]="pinned() ? 'Desafixar' : 'Fixar posição'"
+    (click)="togglePin()"
+  >
+    <mat-icon class="!text-[18px]" [class.icon-filled]="pinned()">push_pin</mat-icon>
+  </button>
+  <button mat-icon-button class="!size-8 !p-1" [matTooltip]="minimized() ? 'Expandir' : 'Minimizar'" [attr.aria-label]="minimized() ? 'Expandir' : 'Minimizar'" (click)="toggleMinimize()">
+    <mat-icon class="!text-[18px]">{{ minimized() ? 'expand_content' : 'minimize' }}</mat-icon>
+  </button>
+  <button
+    mat-icon-button
+    class="!size-8 !p-1 max-md:!hidden"
+    [matTooltip]="maximized() ? 'Restaurar' : 'Maximizar'"
+    [attr.aria-label]="maximized() ? 'Restaurar' : 'Maximizar'"
+    (click)="toggleMaximize()"
+  >
+    <mat-icon class="!text-[18px]">{{ maximized() ? 'close_fullscreen' : 'open_in_full' }}</mat-icon>
+  </button>
+  <button mat-icon-button class="!size-8 !p-1" matTooltip="Fechar" aria-label="Fechar" (click)="closed.emit()">
+    <mat-icon class="!text-[18px]">close</mat-icon>
+  </button>
+</header>
+
+<!-- Conteúdo projetado (apenas escondido ao minimizar, para não perder o estado) -->
+<div class="relative min-h-0 flex-1" [class.hidden]="minimized()">
+  <ng-content />
+</div>
+
+<!-- Alças de redimensionamento (somente quando a janela pode ser redimensionada) -->
+@if (!maximized() && !minimized() && !pinned()) {
+  <div class="absolute inset-y-0 right-0 w-1.5 touch-none cursor-ew-resize max-md:hidden" (pointerdown)="startPointer($event, 'resize-e')"></div>
+  <div class="absolute inset-x-0 bottom-0 h-1.5 touch-none cursor-ns-resize max-md:hidden" (pointerdown)="startPointer($event, 'resize-s')"></div>
+  <div
+    class="absolute bottom-0 right-0 size-4 touch-none cursor-nwse-resize max-md:hidden"
+    (pointerdown)="startPointer($event, 'resize-se')"
+  >
+    <svg viewBox="0 0 16 16" class="size-full text-slate-500" aria-hidden="true">
+      <path d="M14 6v8H6M14 10v4h-4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="square" />
+    </svg>
+  </div>
+}

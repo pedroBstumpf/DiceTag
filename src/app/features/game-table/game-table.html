@@ -1,0 +1,148 @@
+@if (table(); as t) {
+  <!-- ===== Camada 0: mapa (ocupa a tela inteira) ===== -->
+  <app-map-stage #map class="absolute inset-0" [insets]="insets()" />
+
+  <!-- ===== Camada 1: barras sobrepostas (todas escondíveis) ===== -->
+  @let panels = session.panels();
+
+  <!-- Topo: cenas e mapas -->
+  @if (panels.scenes) {
+    <app-scene-bar class="absolute inset-x-3 top-0 z-10 animate-fade-in" [table]="t" />
+  }
+
+  <!-- Esquerda: ferramentas -->
+  @if (panels.tools) {
+    <app-tool-bar
+      class="absolute left-3 top-1/2 z-10 -translate-y-1/2 animate-fade-in"
+      (zoomIn)="map.zoomBy(1.2)"
+      (zoomOut)="map.zoomBy(1 / 1.2)"
+      (fit)="map.fit()"
+      (hide)="session.togglePanel('tools')"
+    />
+  }
+
+  <!-- Direita: fichas, lore, sons, automações -->
+  @if (panels.side) {
+    <aside
+      class="glass absolute bottom-3 right-3 z-10 flex w-80 max-w-[calc(100vw-24px)] flex-col overflow-hidden rounded-xl shadow-xl shadow-black/40 animate-fade-in"
+      [class]="panels.scenes ? 'top-[60px]' : 'top-3'"
+    >
+      <header class="flex h-10 shrink-0 items-center justify-between border-b border-white/5 pl-4 pr-1">
+        <h2 class="font-display text-sm tracking-wide text-star-300">Painel da mesa</h2>
+        <button mat-icon-button class="!size-8 !p-1" matTooltip="Esconder painel" (click)="session.togglePanel('side')">
+          <mat-icon class="!text-[18px]">right_panel_close</mat-icon>
+        </button>
+      </header>
+      <app-side-panel class="min-h-0 flex-1" (opened)="open($event)" (removed)="windows.close($event)" />
+    </aside>
+  }
+
+  <!-- Baixo: barra de ações (centralizada na área livre) -->
+  @if (panels.actions) {
+    <div
+      class="pointer-events-none absolute bottom-3 left-0 z-10 flex justify-center px-3 animate-fade-in"
+      [style.right.px]="panels.side ? 332 : 0"
+      [style.left.px]="panels.tools ? 64 : 0"
+    >
+      <app-action-bar class="pointer-events-auto max-w-full" (opened)="open($event)" (used)="onActionUsed($event)" />
+    </div>
+  }
+
+  <!-- ===== Camada 2: janelas (podem ficar em qualquer lugar da tela) ===== -->
+  <div #windowLayer class="pointer-events-none absolute inset-0 isolate z-20">
+    @for (win of windows.windows(); track win.id) {
+      @if (content(win.id); as c) {
+        <app-floating-window
+          [title]="c.title"
+          [icon]="c.icon"
+          [iconClass]="c.color"
+          [zIndex]="win.z"
+          [active]="windows.activeId() === win.id"
+          [geometry]="win.geometry"
+          (geometryChange)="windows.patch(win.id, { geometry: $event })"
+          [maximized]="win.maximized"
+          (maximizedChange)="windows.patch(win.id, { maximized: $event })"
+          [minimized]="win.minimized"
+          (minimizedChange)="windows.patch(win.id, { minimized: $event })"
+          [pinned]="win.pinned"
+          (pinnedChange)="windows.patch(win.id, { pinned: $event })"
+          (focused)="windows.focus(win.id)"
+          (closed)="windows.close(win.id)"
+        >
+          @switch (c.type) {
+            @case ('sound') {
+              <app-sound-player [entryId]="win.id" />
+            }
+            @case ('entry') {
+              <app-entry-window [entryId]="win.id" />
+            }
+            @case ('document') {
+              <app-document-editor [itemId]="win.id" />
+            }
+            @case ('timeline') {
+              <app-timeline-editor [itemId]="win.id" />
+            }
+            @case ('image') {
+              <app-image-viewer [itemId]="win.id" />
+            }
+          }
+        </app-floating-window>
+      }
+    }
+  </div>
+
+  <!-- ===== Camada 3: abas para reabrir barras escondidas ===== -->
+  @if (!panels.scenes) {
+    <button
+      type="button"
+      class="glass absolute left-1/2 top-0 z-30 flex h-6 w-16 -translate-x-1/2 items-center justify-center rounded-b-lg border-t-0 text-slate-400 opacity-50 transition-opacity hover:text-white hover:opacity-100"
+      matTooltip="Mostrar cenas"
+      (click)="session.togglePanel('scenes')"
+    >
+      <mat-icon class="!text-[18px]">keyboard_arrow_down</mat-icon>
+    </button>
+  }
+  @if (!panels.tools) {
+    <button
+      type="button"
+      class="glass absolute left-0 top-1/2 z-30 flex h-16 w-6 -translate-y-1/2 items-center justify-center rounded-r-lg border-l-0 text-slate-400 opacity-50 transition-opacity hover:text-white hover:opacity-100"
+      matTooltip="Mostrar ferramentas"
+      matTooltipPosition="right"
+      (click)="session.togglePanel('tools')"
+    >
+      <mat-icon class="!text-[18px]">keyboard_arrow_right</mat-icon>
+    </button>
+  }
+  @if (!panels.side) {
+    <button
+      type="button"
+      class="glass absolute right-0 top-1/2 z-30 flex h-16 w-6 -translate-y-1/2 items-center justify-center rounded-l-lg border-r-0 text-slate-400 opacity-50 transition-opacity hover:text-white hover:opacity-100"
+      matTooltip="Mostrar painel da mesa"
+      matTooltipPosition="left"
+      (click)="session.togglePanel('side')"
+    >
+      <mat-icon class="!text-[18px]">keyboard_arrow_left</mat-icon>
+    </button>
+  }
+  @if (!panels.actions) {
+    <button
+      type="button"
+      class="glass absolute bottom-0 left-1/2 z-30 flex h-6 w-16 -translate-x-1/2 items-center justify-center rounded-t-lg border-b-0 text-slate-400 opacity-50 transition-opacity hover:text-white hover:opacity-100"
+      matTooltip="Mostrar barra de ações"
+      matTooltipPosition="above"
+      (click)="session.togglePanel('actions')"
+    >
+      <mat-icon class="!text-[18px]">keyboard_arrow_up</mat-icon>
+    </button>
+  }
+} @else if (tablesLoaded()) {
+  <!-- ===== Mesa não encontrada ===== -->
+  <div class="grid h-full place-items-center p-6 text-center">
+    <div class="flex flex-col items-center gap-3">
+      <mat-icon class="!size-10 !text-[40px] text-slate-600">travel_explore</mat-icon>
+      <h1 class="font-display text-xl text-star-300">Mesa não encontrada</h1>
+      <p class="max-w-sm text-sm text-slate-400">Ela pode ter sido excluída ou pertencer a outra conta.</p>
+      <a mat-flat-button routerLink="/mesas">Voltar para Minhas mesas</a>
+    </div>
+  </div>
+}

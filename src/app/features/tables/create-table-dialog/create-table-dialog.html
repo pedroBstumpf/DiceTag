@@ -1,0 +1,65 @@
+<h2 mat-dialog-title>Nova mesa</h2>
+
+<form [formGroup]="form" (ngSubmit)="submit()">
+  <mat-dialog-content class="flex flex-col gap-1 !pt-2">
+    <!-- Nome -->
+    <mat-form-field appearance="outline">
+      <mat-label>Nome da mesa</mat-label>
+      <input matInput formControlName="name" placeholder="Ex.: A Queda de Valdris" cdkFocusInitial />
+      @if (form.controls.name.hasError('required')) {
+        <mat-error>Dê um nome para sua mesa.</mat-error>
+      }
+    </mat-form-field>
+
+    <!-- Sistema (com sugestões, mas aceita texto livre) + jogadores -->
+    <div class="grid grid-cols-[1fr_120px] gap-3">
+      <mat-form-field appearance="outline">
+        <mat-label>Sistema</mat-label>
+        <input matInput formControlName="system" [matAutocomplete]="systemsAuto" />
+        <mat-autocomplete #systemsAuto>
+          @for (s of systems; track s) {
+            <mat-option [value]="s">{{ s }}</mat-option>
+          }
+        </mat-autocomplete>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Jogadores</mat-label>
+        <input matInput type="number" min="1" max="20" formControlName="maxPlayers" />
+      </mat-form-field>
+    </div>
+
+    <!-- Descrição -->
+    <mat-form-field appearance="outline">
+      <mat-label>Descrição (opcional)</mat-label>
+      <textarea matInput rows="3" formControlName="description" placeholder="Sobre o que é a campanha?"></textarea>
+      <mat-hint align="end">{{ form.controls.description.value.length }}/400</mat-hint>
+    </mat-form-field>
+
+    <!-- Cor de destaque -->
+    <div class="mt-1">
+      <span class="mb-2 block text-sm text-slate-400">Cor da mesa</span>
+      <div class="flex gap-2">
+        @for (color of accents; track color) {
+          <button
+            type="button"
+            class="size-8 rounded-full ring-offset-2 ring-offset-ink-850 transition-transform hover:scale-110"
+            [class.ring-2]="form.controls.accent.value === color"
+            [style.background]="color"
+            [style.--tw-ring-color]="color"
+            [attr.aria-label]="'Cor ' + color"
+            (click)="form.controls.accent.setValue(color)"
+          ></button>
+        }
+      </div>
+    </div>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button type="button" mat-dialog-close>Cancelar</button>
+    <button mat-flat-button type="submit" [disabled]="saving()">
+      <mat-icon>add</mat-icon>
+      Criar mesa
+    </button>
+  </mat-dialog-actions>
+</form>

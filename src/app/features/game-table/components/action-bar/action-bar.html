@@ -1,0 +1,57 @@
+<div class="glass flex items-center gap-2 rounded-xl p-1.5 shadow-xl shadow-black/40">
+  <!-- Papel atual: mestre ou jogador -->
+  <div class="flex shrink-0 flex-col gap-1 rounded-lg bg-ink-950/60 p-1 text-[11px] font-semibold">
+    <button
+      type="button"
+      class="rounded-md px-2 py-1 transition-colors"
+      [class]="session.role() === 'gm' ? 'bg-astral-500/25 text-astral-300' : 'text-slate-500 hover:text-slate-300'"
+      matTooltip="Ações do mestre"
+      (click)="session.role.set('gm')"
+    >
+      MESTRE
+    </button>
+    <button
+      type="button"
+      class="rounded-md px-2 py-1 transition-colors"
+      [class]="session.role() === 'player' ? 'bg-astral-500/25 text-astral-300' : 'text-slate-500 hover:text-slate-300'"
+      matTooltip="Ações do jogador"
+      (click)="session.role.set('player')"
+    >
+      JOGADOR
+    </button>
+  </div>
+
+  <!-- Espaços de ação -->
+  <div class="flex gap-1.5 overflow-x-auto">
+    @for (slot of slots(); track slot.key; let i = $index) {
+      <button
+        type="button"
+        class="relative grid size-14 shrink-0 place-items-center rounded-lg border transition-all"
+        [class]="
+          slot.entry
+            ? 'border-astral-400/30 bg-gradient-to-b from-ink-700 to-ink-850 text-star-300 hover:border-astral-300/70 hover:shadow-[0_0_14px_rgb(122_167_255/0.35)]'
+            : 'border-dashed border-white/10 text-slate-600 hover:border-white/25 hover:text-slate-400'
+        "
+        [class.scale-90]="flashing() === slot.entry?.id"
+        [matTooltip]="slot.entry ? slot.entry.name + ' (' + slot.key + ')' : 'Nova automação'"
+        (click)="trigger(i)"
+        (contextmenu)="$event.preventDefault(); slot.entry && opened.emit(slot.entry.id)"
+      >
+        <mat-icon>{{ slot.entry ? (slot.entry.icon ?? 'bolt') : 'add' }}</mat-icon>
+        <span class="absolute left-1 top-0.5 text-[10px] font-semibold text-slate-500">{{ slot.key }}</span>
+        @if (slot.entry) {
+          <span class="absolute inset-x-1 bottom-0.5 truncate text-center text-[9px] leading-tight text-slate-400">{{ slot.entry.name }}</span>
+        }
+      </button>
+    }
+  </div>
+
+  <button
+    type="button"
+    class="grid size-8 shrink-0 place-items-center self-start rounded-md text-slate-500 hover:bg-white/10 hover:text-white"
+    matTooltip="Esconder barra de ações"
+    (click)="session.togglePanel('actions')"
+  >
+    <mat-icon class="!text-[18px]">keyboard_arrow_down</mat-icon>
+  </button>
+</div>

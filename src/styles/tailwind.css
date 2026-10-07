@@ -1,0 +1,62 @@
+/* ==========================================================================
+   Tailwind CSS — configuração e design tokens do DiceTag
+   (Tailwind v4: o tema é definido aqui via @theme, sem tailwind.config.js)
+   "static" garante que as variáveis existam sempre, pois também são usadas
+   no styles.scss (tema do Angular Material).
+   ========================================================================== */
+@import "tailwindcss";
+
+@theme static {
+  /* --- Tipografia: letras angulares, inspiradas em runas ---
+     Tektur (títulos): contornos octogonais e miolos retangulares.
+     Chakra Petch (texto): cantos chanfrados, legível em tamanhos pequenos. */
+  --font-sans: "Chakra Petch", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Tektur", "Chakra Petch", ui-sans-serif, sans-serif;
+
+  /* --- Cantos mais retos (estética angular) --- */
+  --radius-md: 0.25rem;
+  --radius-lg: 0.375rem;
+  --radius-xl: 0.5rem;
+  --radius-2xl: 0.625rem;
+  --radius-3xl: 0.875rem;
+
+  /* --- Superfícies: preto espacial com leve tom azulado --- */
+  --color-ink-950: #04060c;
+  --color-ink-900: #080c18;
+  --color-ink-850: #0c1222;
+  --color-ink-800: #111a30;
+  --color-ink-700: #18243f;
+  --color-ink-600: #253457;
+
+  /* --- Astral: azul principal (ações, foco, seleção) --- */
+  --color-astral-300: #a9c7ff;
+  --color-astral-400: #7aa7ff;
+  --color-astral-500: #4f86f7;
+  --color-astral-600: #3462d6;
+
+  /* --- Star: branco estelar (títulos e realces) --- */
+  --color-star-300: #f5f8ff;
+  --color-star-400: #dce6ff;
+  --color-star-500: #b6c8f2;
+
+  /* --- Animações utilitárias --- */
+  --animate-fade-in: fade-in 180ms ease-out;
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  /* Pulso de "ping" no mapa da mesa */
+  --animate-ping-once: ping-once 1.2s ease-out forwards;
+  @keyframes ping-once {
+    0%   { transform: translate(-50%, -50%) scale(0.2); opacity: 1; }
+    100% { transform: translate(-50%, -50%) scale(2.6); opacity: 0; }
+  }
+}
+
+/* Painel "vidro" usado nas barras sobrepostas da mesa e janelas */
+@utility glass {
+  background-color: color-mix(in oklab, var(--color-ink-900) 82%, transparent);
+  backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid color-mix(in oklab, var(--color-astral-300) 12%, transparent);
+}

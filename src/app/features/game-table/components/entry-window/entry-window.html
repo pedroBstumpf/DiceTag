@@ -1,0 +1,45 @@
+@if (entry(); as e) {
+  <!-- Cabeçalho: ícone + nome editável -->
+  <div class="flex items-center gap-4">
+    <div class="grid size-16 shrink-0 place-items-center rounded-xl bg-white/5 ring-1 ring-white/10" [class]="meta().color">
+      <mat-icon class="!size-8 !text-[32px]">{{ e.icon ?? meta().icon }}</mat-icon>
+    </div>
+    <div class="min-w-0 flex-1">
+      <span class="text-[11px] font-semibold uppercase tracking-widest text-slate-500">
+        {{ meta().label }}{{ e.kind === 'automation' ? ' · ' + (e.role === 'gm' ? 'Mestre' : 'Jogador') : '' }}
+      </span>
+      <input
+        #nameInput
+        class="w-full bg-transparent font-display text-2xl text-star-300 outline-none"
+        [value]="e.name"
+        (blur)="rename(nameInput.value)"
+        (keydown.enter)="nameInput.blur()"
+      />
+    </div>
+  </div>
+
+  <!-- Escolha de ícone (automações) -->
+  @if (e.kind === 'automation') {
+    <div class="mt-6">
+      <span class="mb-2 block text-xs text-slate-400">Ícone na barra de ações</span>
+      <div class="flex flex-wrap gap-1.5">
+        @for (icon of icons; track icon) {
+          <button
+            type="button"
+            class="grid size-10 place-items-center rounded-lg transition-colors"
+            [class]="(e.icon ?? 'bolt') === icon ? 'bg-astral-500/25 text-astral-300 ring-1 ring-astral-400/50' : 'bg-white/5 text-slate-400 hover:bg-white/10'"
+            (click)="session.updateEntry(e.id, { icon })"
+          >
+            <mat-icon>{{ icon }}</mat-icon>
+          </button>
+        }
+      </div>
+    </div>
+  }
+
+  <!-- Espaço reservado para a estrutura futura -->
+  <div class="mt-6 flex flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/10 p-6 text-center">
+    <mat-icon class="text-slate-600">construction</mat-icon>
+    <p class="max-w-sm text-sm leading-relaxed text-slate-400">{{ upcoming() }}</p>
+  </div>
+}

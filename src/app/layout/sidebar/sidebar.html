@@ -1,0 +1,173 @@
+<aside
+  class="flex h-full flex-col border-r border-white/5 bg-ink-900/95 backdrop-blur-xl transition-[width,transform] duration-200 ease-out"
+  [class]="
+    layout.isMobile()
+      ? 'fixed inset-y-0 left-0 z-50 w-72 shadow-2xl ' + (layout.mobileOpen() ? 'translate-x-0' : '-translate-x-full')
+      : expanded() ? 'w-64' : 'w-[72px]'
+  "
+>
+  <!-- ===== Marca ===== -->
+  <a routerLink="/" class="flex h-16 shrink-0 items-center gap-3 px-4" (click)="layout.closeMobile()">
+    <img src="images/dicetag-emblem.webp" alt="DiceTag" class="size-10 shrink-0 rounded-xl object-cover ring-1 ring-white/10" />
+    @if (expanded()) {
+      <span class="font-display text-xl font-bold tracking-wide text-star-300">DiceTag</span>
+    }
+  </a>
+
+  <nav class="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto overflow-x-hidden px-3 py-3">
+    <!-- ===== Páginas ===== -->
+    <ul class="flex flex-col gap-1">
+      @for (link of links; track link.route) {
+        <li>
+          <a
+            [routerLink]="link.route"
+            routerLinkActive="!bg-astral-500/15 !text-astral-300"
+            [routerLinkActiveOptions]="{ exact: link.route === '/' }"
+            [matTooltip]="expanded() ? '' : link.label"
+            matTooltipPosition="right"
+            class="flex h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium text-slate-300 transition-colors hover:bg-white/5 hover:text-white"
+            (click)="layout.closeMobile()"
+          >
+            <mat-icon class="shrink-0">{{ link.icon }}</mat-icon>
+            @if (expanded()) {
+              <span class="truncate">{{ link.label }}</span>
+            }
+          </a>
+        </li>
+      }
+    </ul>
+
+    <!-- ===== Criar ===== -->
+    <section>
+      @if (expanded()) {
+        <h4 class="mb-2 px-3 text-[11px] font-semibold uppercase tracking-widest text-slate-500">Criar</h4>
+      } @else {
+        <hr class="mx-3 mb-3 border-white/5" />
+      }
+      <ul class="flex flex-col gap-1">
+        @for (action of createActions; track action.label) {
+          <li>
+            <button
+              type="button"
+              [matTooltip]="expanded() ? '' : action.label"
+              matTooltipPosition="right"
+              class="flex h-10 w-full items-center gap-3 rounded-xl px-3 text-sm text-slate-300 transition-colors hover:bg-white/5 hover:text-white"
+              (click)="run(action)"
+            >
+              <mat-icon class="shrink-0 text-star-400">{{ action.icon }}</mat-icon>
+              @if (expanded()) {
+                <span class="truncate">{{ action.label }}</span>
+              }
+            </button>
+          </li>
+        }
+        <!-- Envio de mapa: abre o seletor de arquivos diretamente -->
+        <li>
+          <button
+            type="button"
+            [matTooltip]="expanded() ? '' : 'Enviar mapa ou imagem'"
+            matTooltipPosition="right"
+            class="flex h-10 w-full items-center gap-3 rounded-xl px-3 text-sm text-slate-300 transition-colors hover:bg-white/5 hover:text-white"
+            (click)="pickMap(mapInput)"
+          >
+            <mat-icon class="shrink-0 text-star-400">add_photo_alternate</mat-icon>
+            @if (expanded()) {
+              <span class="truncate">Enviar mapa / imagem</span>
+            }
+          </button>
+          <input #mapInput type="file" accept="image/*" hidden (change)="uploadMap(mapInput)" />
+        </li>
+      </ul>
+    </section>
+
+    <!-- ===== Em breve ===== -->
+    <section>
+      @if (expanded()) {
+        <h4 class="mb-2 px-3 text-[11px] font-semibold uppercase tracking-widest text-slate-500">Em breve</h4>
+      } @else {
+        <hr class="mx-3 mb-3 border-white/5" />
+      }
+      <ul class="flex flex-col gap-1">
+        @for (item of upcoming; track item.label) {
+          <li
+            class="flex h-10 cursor-default items-center gap-3 rounded-xl px-3 text-sm text-slate-500"
+            [matTooltip]="expanded() ? 'Em desenvolvimento' : item.label + ' (em breve)'"
+            matTooltipPosition="right"
+          >
+            <mat-icon class="shrink-0">{{ item.icon }}</mat-icon>
+            @if (expanded()) {
+              <span class="truncate">{{ item.label }}</span>
+            }
+          </li>
+        }
+      </ul>
+    </section>
+  </nav>
+
+  <!-- ===== Conta ===== -->
+  <footer class="shrink-0 border-t border-white/5 p-3">
+    @if (auth.isGuest() && expanded()) {
+      <!-- Modo de teste: visitante, com atalho para entrar -->
+      <div class="mb-2 flex items-center gap-2 rounded-xl bg-astral-500/10 px-3 py-2 text-xs text-astral-300">
+        <mat-icon class="!size-4 !text-base">science</mat-icon>
+        Modo de teste (sem conta)
+      </div>
+      <div class="flex flex-col gap-2">
+        <button mat-flat-button (click)="openAuth('register')">Criar conta</button>
+        <button mat-stroked-button (click)="openAuth('login')">Entrar</button>
+      </div>
+    } @else if (auth.isGuest()) {
+      <button mat-icon-button class="mx-auto !flex" matTooltip="Modo de teste — entrar" matTooltipPosition="right" (click)="openAuth('login')">
+        <mat-icon>login</mat-icon>
+      </button>
+    } @else if (auth.user(); as user) {
+      <button
+        type="button"
+        [matMenuTriggerFor]="accountMenu"
+        class="flex w-full items-center gap-3 rounded-xl p-2 text-left transition-colors hover:bg-white/5"
+      >
+        <span class="grid size-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-astral-500 to-star-500 font-semibold text-ink-950">
+          {{ user.name.charAt(0).toUpperCase() }}
+        </span>
+        @if (expanded()) {
+          <span class="min-w-0 flex-1">
+            <span class="block truncate text-sm font-medium text-slate-100">{{ user.name }}</span>
+            <span class="block truncate text-xs text-slate-500">{{ user.email }}</span>
+          </span>
+          <mat-icon class="text-slate-500">unfold_more</mat-icon>
+        }
+      </button>
+      <mat-menu #accountMenu="matMenu" xPosition="after" yPosition="above">
+        <button mat-menu-item (click)="logout()">
+          <mat-icon>logout</mat-icon>
+          <span>Sair</span>
+        </button>
+      </mat-menu>
+    } @else if (expanded()) {
+      <div class="flex flex-col gap-2">
+        <button mat-flat-button (click)="openAuth('register')">Criar conta</button>
+        <button mat-stroked-button (click)="openAuth('login')">Entrar</button>
+      </div>
+    } @else {
+      <button mat-icon-button class="mx-auto !flex" matTooltip="Entrar" matTooltipPosition="right" (click)="openAuth('login')">
+        <mat-icon>login</mat-icon>
+      </button>
+    }
+
+    <!-- Recolher / expandir (somente desktop) -->
+    @if (!layout.isMobile()) {
+      <button
+        type="button"
+        class="mt-2 flex h-9 w-full items-center gap-3 rounded-xl px-3 text-xs text-slate-500 transition-colors hover:bg-white/5 hover:text-slate-300"
+        [matTooltip]="expanded() ? '' : 'Expandir barra'"
+        matTooltipPosition="right"
+        (click)="layout.toggleSidebar()"
+      >
+        <mat-icon class="shrink-0">{{ expanded() ? 'left_panel_close' : 'left_panel_open' }}</mat-icon>
+        @if (expanded()) {
+          <span>Recolher barra</span>
+        }
+      </button>
+    }
+  </footer>
+</aside>

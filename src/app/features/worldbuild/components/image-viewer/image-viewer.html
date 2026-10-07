@@ -1,0 +1,46 @@
+<!-- Área de visualização: arraste para mover, role para dar zoom -->
+<div
+  #stage
+  class="relative size-full touch-none overflow-hidden bg-[radial-gradient(circle,_#ffffff0d_1px,_transparent_1px)] bg-[length:20px_20px]"
+  [class.cursor-grab]="!dragging()"
+  [class.cursor-grabbing]="dragging()"
+  (wheel)="onWheel($event)"
+  (pointerdown)="startPan($event)"
+  (pointermove)="pan($event)"
+  (pointerup)="endPan()"
+  (pointercancel)="endPan()"
+  (dblclick)="fit()"
+>
+  @if (src(); as url) {
+    <img
+      #img
+      [src]="url"
+      alt=""
+      draggable="false"
+      class="pointer-events-none absolute left-0 top-0 max-w-none origin-top-left select-none"
+      [style.transform]="'translate(' + offset().x + 'px,' + offset().y + 'px) scale(' + scale() + ')'"
+      (load)="onLoad(img)"
+    />
+  } @else {
+    <div class="grid size-full place-items-center text-sm text-slate-500">Carregando imagem…</div>
+  }
+
+  <!-- Controles de zoom -->
+  <div
+    class="absolute bottom-3 right-3 flex items-center gap-0.5 rounded-xl border border-white/10 bg-ink-900/90 p-1 shadow-lg backdrop-blur"
+    (pointerdown)="$event.stopPropagation()"
+    (dblclick)="$event.stopPropagation()"
+  >
+    <button type="button" class="grid size-8 place-items-center rounded-lg text-slate-300 hover:bg-white/10" matTooltip="Diminuir zoom" (click)="zoomBy(1 / 1.25)">
+      <mat-icon class="!text-[20px]">remove</mat-icon>
+    </button>
+    <span class="w-12 text-center text-xs tabular-nums text-slate-400">{{ (scale() * 100).toFixed(0) }}%</span>
+    <button type="button" class="grid size-8 place-items-center rounded-lg text-slate-300 hover:bg-white/10" matTooltip="Aumentar zoom" (click)="zoomBy(1.25)">
+      <mat-icon class="!text-[20px]">add</mat-icon>
+    </button>
+    <span class="mx-0.5 h-5 w-px bg-white/10"></span>
+    <button type="button" class="grid size-8 place-items-center rounded-lg text-slate-300 hover:bg-white/10" matTooltip="Ajustar à tela (duplo clique)" (click)="fit()">
+      <mat-icon class="!text-[20px]">fit_screen</mat-icon>
+    </button>
+  </div>
+</div>

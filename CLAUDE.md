@@ -1,0 +1,289 @@
+# CLAUDE.md — DiceTag
+
+Contexto do projeto para o Claude Code. Leia antes de qualquer alteração.
+Idioma de trabalho: **português do Brasil** (respostas, comentários no código e textos da interface).
+
+---
+
+## 1. Resumo executivo
+
+**DiceTag** é um VTT (Virtual Tabletop): um aplicativo web para jogar RPG de mesa online com amigos.
+A meta final inclui simular eventos, calcular rolagens, manter fichas, criar mapas, tocar sons e
+organizar toda a atmosfera de uma campanha.
+
+**Estado atual (MVP de interface, sem backend):**
+
+| Área | Status |
+|---|---|
+| Landing page (banner com logo, atalhos, mural de notícias vazio) | Pronto |
+| Barra lateral global (navegação, criação rápida, "em breve", conta) | Pronto |
+| Contas (login/cadastro locais) + **modo de teste sem conta** | Pronto (provisório) |
+| Minhas mesas (criar, listar, excluir, abrir) | Pronto |
+| Worldbuild (pastas, documentos rich text, linhas do tempo, mapas/imagens) | Pronto |
+| **Mesa de jogo** (mapa central, 4 barras escondíveis, janelas flutuantes) | Estrutura pronta |
+| Fichas de personagem/NPC | **Placeholder** (não estruturar sem pedido) |
+| Automações (habilidades/dados) | **Placeholder** (nome + ícone; aparecem na barra de ações) |
+| Rolagem de dados, tokens, desenho, névoa, anotações | Não iniciado |
+| Backend, multiplayer em tempo real | Não iniciado |
+
+Todos os dados ficam **no navegador (IndexedDB)**. Não há API.
+
+---
+
+## 2. Diretrizes do dono do projeto (obrigatórias)
+
+1. **Stack:** Angular + Tailwind + Angular Material. App leve, responsivo e fluido.
+2. **Código limpo e comentado:** comentários em PT-BR explicando a responsabilidade de cada trecho
+   (cabeçalho JSDoc em cada classe + separadores `// --- Seção ---`). Estrutura de pastas profissional padrão Angular.
+3. **Simplicidade:** sempre a solução mais rápida, prática e profissional. Não criar problemas ao resolver outros.
+   Não adicionar bibliotecas sem necessidade real.
+4. **Design moderno e simples:** janelas arrastáveis e redimensionáveis, barras escondíveis, componentes intuitivos.
+5. **UX de VTT:** experiência fluida e imersiva. A interface **não pode atrapalhar a visão** do que importa (o mapa, a história).
+
+---
+
+## 3. Stack e comandos
+
+- **Angular 21** (standalone, **zoneless** — não há zone.js), TypeScript 5.9
+- **Angular Material 21** (tema M3, escuro) + **CDK** (drag-drop, layout)
+- **Tailwind CSS 4** via PostCSS (`.postcssrc.json`), tema em `src/styles/tailwind.css` (sem `tailwind.config.js`)
+- **Tiptap 3** (editor rich text dos documentos)
+- Node 20.19+ ou 22.12+
+
+```bash
+npm install      # .npmrc usa legacy-peer-deps=true (contorna erro de peer deps do npm com vitest)
+npm start        # http://localhost:4200
+npm run build    # SEMPRE rodar após alterações para validar (deve terminar sem erros)
+```
+
+Configuração relevante do `angular.json` (produção):
+- `optimization.fonts: false` → não tenta embutir Google Fonts no build (evita travar em redes restritas).
+- Budgets: inicial 800kB aviso / 1.5MB erro; estilo por componente 6kB / 12kB.
+
+---
+
+## 4. Estrutura de pastas
+
+```
+src/
+├── index.html                  # fontes: Chakra Petch, Tektur, Material Symbols Sharp
+├── styles.scss                 # tema Material (M3) + overrides + base + estilos do editor (.prose-editor)
+├── styles/tailwind.css         # Tailwind 4: tokens (@theme static), animações, utilitário .glass
+└── app/
+    ├── app.ts / app.config.ts / app.routes.ts
+    ├── core/                   # regras e dados — sem UI
+    │   ├── config/app-settings.ts      # flags globais (requireAuth)
+    │   ├── models/                     # interfaces e constantes de domínio
+    │   │   ├── user.model.ts
+    │   │   ├── game-table.model.ts     # GameTable, GAME_SYSTEMS, TABLE_ACCENTS
+    │   │   ├── table-session.model.ts  # Scene, TableEntry, TableState, TableTool, TableRole, TABLE_ENTRY_META
+    │   │   ├── world-item.model.ts     # WorldItem, TimelineEvent, WORLD_ITEM_META, TIMELINE_COLORS
+    │   │   └── news.model.ts
+    │   ├── services/
+    │   │   ├── storage.service.ts      # wrapper chave/valor do IndexedDB (get/set/delete)
+    │   │   ├── auth.service.ts         # contas locais + visitante
+    │   │   ├── game-tables.service.ts  # CRUD de mesas
+    │   │   ├── layout.service.ts       # barra lateral (recolhida/mobile)
+    │   │   └── news.service.ts         # notícias (vazio por enquanto)
+    │   └── utils/id.ts                 # newId() com fallback fora de HTTPS
+    ├── shared/                 # reutilizável entre features
+    │   ├── components/floating-window/ # JANELA FLUTUANTE (peça central da UX)
+    │   ├── components/empty-state/
+    │   ├── directives/auto-focus.directive.ts
+    │   └── services/
+    │       ├── window-manager.service.ts  # abre/fecha/foca janelas (fornecido por página)
+    │       └── quick-actions.service.ts   # ações globais: login, criar mesa, criar item de worldbuild
+    ├── layout/
+    │   ├── shell/              # barra lateral + área de conteúdo (todas as páginas exceto a mesa)
+    │   └── sidebar/
+    └── features/
+        ├── home/               # landing
+        ├── auth/auth-dialog/   # diálogo único Entrar/Criar conta
+        ├── tables/             # "Minhas mesas" + create-table-dialog
+        ├── worldbuild/
+        │   ├── worldbuild.ts           # página: explorador + área de janelas
+        │   ├── services/worldbuild.service.ts
+        │   └── components/ explorer, document-editor, timeline-editor, image-viewer
+        └── game-table/         # MESA DE JOGO (rota /mesa/:id, tela cheia, fora do Shell)
+            ├── game-table.ts           # página: orquestra camadas, janelas e atalhos
+            ├── services/table-session.service.ts
+            └── components/
+                ├── map-stage/          # mapa central: zoom, pan, grade, régua, ping
+                ├── scene-bar/          # barra superior: cenas/mapas
+                ├── tool-bar/           # barra esquerda: ferramentas (TABLE_TOOLS)
+                ├── side-panel/         # barra direita: Fichas, Lore, Sons, Automações
+                ├── action-bar/         # barra inferior: 10 espaços de ações (teclas 1–0)
+                ├── entry-window/       # conteúdo provisório de ficha/NPC/automação
+                └── sound-player/
+```
+
+Rotas (`app.routes.ts`, todas lazy):
+- `''` (Shell) → `''` Home · `mesas` Tables · `worldbuild` Worldbuild (aceita `?novo=<tipo>` e `?abrir=<id>`)
+- `mesa/:id` → GameTablePage (tela cheia, **fora** do Shell)
+- `**` → redireciona para `''`
+
+---
+
+## 5. Convenções de código
+
+- **Componentes standalone**, nomes de arquivo sem sufixo (`home.ts`, classe `Home`) — padrão Angular 20+.
+  Template em `.html` separado; templates muito curtos podem ser inline.
+- **Estado com signals** (`signal`, `computed`, `effect`, `input`, `model`, `output`, `viewChild`).
+  Injeção com `inject()`. Sem `NgModule`, sem RxJS onde signal resolve.
+- **Controle de fluxo novo** no template: `@if`, `@for` (sempre com `track`), `@switch`, `@let`.
+- **Estilo com Tailwind** nas classes do template. Evitar `.scss` por componente. Estilos globais só em `styles.scss`.
+- **Classes do Tailwind dentro de strings TS** (ex.: `color: 'text-astral-300'` nos `*_META`) funcionam
+  porque o Tailwind 4 escaneia os `.ts` — escreva a classe completa, nunca concatene partes.
+- **Comentários em PT-BR**: JSDoc no topo de cada classe/serviço; `// --- Seção ---` para agrupar.
+- **Textos da interface em PT-BR.**
+- **Ícones:** `<mat-icon>` usa a fonte **Material Symbols Sharp** (configurado em `app.config.ts`).
+  Use nomes de ícone do Material Symbols. Classe `.icon-filled` deixa o ícone preenchido.
+- **Templates tipados (strict):** indexar `Record` com valor vindo de `let-` de `ng-template` dá erro TS7053.
+  Solução padrão do projeto: método helper tipado no componente (`metaOf(item)`), não `$any`.
+
+### Armadilhas já resolvidas (não reintroduzir)
+
+- **Effects que chamam métodos que leem signals** passam a rastreá-los. Use `untracked()` quando o effect
+  deve reagir só a um signal (ex.: `GameTablePage` carrega a mesa só quando o `id` muda). Esse bug já
+  causou recarga do estado a cada alteração.
+- **Effects que carregam Blobs** (imagens/sons) devem depender de um `computed` estreito (só `blobId`,
+  ou `mapKey` com `equal` customizado), senão recarregam a cada edição de qualquer outro item.
+- **Effects assíncronos** (que fazem `await`) registram o `onCleanup` **antes** do `await` e marcam
+  o carregamento como cancelado; depois do `await`, conferem o cancelamento antes de gravar o resultado.
+  Sem isso, um arquivo lento da cena anterior aparece na cena nova.
+- **Dados por usuário** (`WorldbuildService`): ao trocar de usuário, gravar as pendências na chave antiga
+  antes de trocar, e descartar carregamentos que terminem depois da troca.
+- Parâmetros de URL que criam dados (`?novo=`) são validados contra uma lista de tipos permitidos.
+- `@theme static` no Tailwind é necessário porque `styles.scss` usa as variáveis `--color-*`.
+- Host de componente: classe estática + `[class]` dinâmico se combinam (usado no `FloatingWindow`).
+- Persistência com **debounce de 300ms** + `flush()` em `pagehide`/destroy — manter esse padrão.
+
+---
+
+## 6. Design system
+
+**Tema:** espaço/universo expansivo — preto, azul e branco. Estética angular, inspirada em runas.
+
+Tokens (`src/styles/tailwind.css`), use sempre por nome:
+
+| Token | Uso |
+|---|---|
+| `ink-950 … ink-600` | Superfícies (preto azulado). 950 = fundo, 900/850 = painéis, 800/700 = elevação, 600 = bordas fortes |
+| `astral-300 … 600` | Azul principal: ações, foco, seleção, item ativo |
+| `star-300 … 500` | Branco estelar: títulos e realces |
+| `slate-*` (Tailwind) | Texto secundário (cinza frio) |
+
+- **Fontes:** `font-display` = **Tektur** (títulos), `font-sans` = **Chakra Petch** (todo o texto).
+- **Cantos retos:** raios do Tailwind reduzidos no `@theme`; botões Material com 6px.
+- **Utilitário `.glass`:** fundo translúcido + blur + borda azul sutil. Usar em barras que ficam sobre o mapa.
+- **Fundo:** campo de estrelas e nebulosas só em CSS no `body` (sem imagens).
+- **Animações:** `animate-fade-in` (entrada de painéis/janelas), `animate-ping-once` (ping no mapa).
+- Material: primary = `astral-400`, superfícies = `ink-*`, snackbar/menu/dialog escuros (overrides em `styles.scss`).
+- Logo: `public/images/dicetag-banner.webp` (banner) e `dicetag-emblem.webp` (ícone 96px); `public/favicon.png`.
+
+---
+
+## 7. Regras de negócio
+
+### Contas
+- `APP_SETTINGS.requireAuth` (`core/config/app-settings.ts`), hoje **`false` = modo de teste**:
+  `AuthService.user()` devolve um visitante fixo (`id: 'guest'`) quando ninguém está logado.
+- `isLoggedIn()` = há usuário (real ou visitante). `isGuest()` = é o visitante.
+- Contas reais: e-mail único (normalizado em minúsculas), senha com mínimo de 6 caracteres, hash SHA-256 (`dicetag:` + senha).
+  Sessão = id do usuário em `localStorage['dicetag.session']`. **É provisório** — não é segurança real.
+- Todos os dados são separados por usuário (o visitante tem os próprios dados).
+
+### Mesas (`GameTablesService`)
+- Campos: nome (obrigatório, até 60), sistema (texto livre com sugestões `GAME_SYSTEMS`), descrição (até 400),
+  jogadores (1–20), cor de destaque (`TABLE_ACCENTS`), dono (`ownerId`).
+- Lista mostra só as mesas do usuário atual, mais recentes primeiro.
+
+### Worldbuild (`WorldbuildService`)
+- Tipos: `folder`, `document` (HTML do Tiptap em `content`), `timeline` (`events[]`), `image` (`blobId`).
+- Árvore por `parentId` (`null` = raiz). Ordenação: pastas primeiro, depois nome (pt-BR, numérico).
+- Nomes padrão sem repetição na mesma pasta ("Novo documento 2"...).
+- Mover: proibido mover uma pasta para dentro dela mesma ou de um descendente.
+- Excluir pasta exclui todo o conteúdo e apaga os Blobs de imagem.
+- Linha do tempo: data é **texto livre** (calendários de fantasia); ordem é **manual** (arrastar).
+- Arquivos soltos no explorador: apenas imagens são aceitas.
+
+### Mesa de jogo (`TableSessionService`, um por mesa aberta)
+- **Cenas:** nome, mapa opcional (`blobId`), `gridSize` (20–300px, padrão 70), `showGrid`. Uma cena ativa.
+  Cena sem mapa = "papel quadriculado" de 2100×1400.
+- **Régua:** 1 quadrado = **1,5 m**.
+- **Arquivos da mesa (`TableEntry`):** `character`, `npc`, `sound` (`blobId` de áudio), `automation`
+  (`role: 'gm' | 'player'` + `icon`).
+- **Lore** não é duplicada: a aba Lore lista os itens do **Worldbuild** do usuário e os abre com os mesmos editores.
+- **Papel (`role`)**: alternado manualmente na barra de ações (Mestre/Jogador) — não há permissões reais ainda.
+  A barra de ações mostra as automações do papel atual (até 10; teclas 1–9 e 0). Espaço vazio cria uma automação.
+- Usar uma ação hoje só mostra um aviso (snackbar). Rolagem real ainda não existe.
+- Estado de sessão **não persistido**: ferramenta ativa, papel, visibilidade das barras, janelas abertas.
+
+### Atalhos da mesa (ignorados ao digitar)
+`V` selecionar · `M` mover mapa · `R` régua · `P` ping · `G` grade · `+`/`-` zoom · `1`–`0` ações · `\` modo imersivo (esconde/mostra todas as barras).
+Botão do meio do mouse sempre move o mapa; roda do mouse = zoom no cursor.
+
+---
+
+## 8. Peças centrais da UX
+
+### `FloatingWindow` (`shared/components/floating-window`)
+Janela reutilizável usada no Worldbuild e na Mesa. Recursos: arrastar pela barra de título, redimensionar
+(bordas direita, inferior e canto), **minimizar** (só a barra fica; o conteúdo é escondido, não destruído),
+**maximizar** (duplo clique na barra), **fixar** (trava posição/tamanho), foco/z-index.
+Usa `model()` para `geometry`, `maximized`, `minimized`, `pinned`. Limita-se ao elemento pai (`position: relative`).
+No mobile (<768px), aberta ocupa a área inteira.
+
+### `WindowManagerService` (`shared/services`)
+Fornecido **por página** (`providers: [WindowManagerService]`). Uma janela por `id` de conteúdo; abrir de novo
+foca/restaura. Abertura em cascata, tamanho por tipo. Padrão no template: `@for (win of windows.windows(); track win.id)`
+com os pares `[x]`/`(xChange)` ligados a `windows.patch(win.id, {...})`.
+
+### Layout da mesa (`game-table.html`) — camadas
+0. `MapStage` ocupa a tela inteira.
+1. Barras sobrepostas com `.glass`: topo (cenas), esquerda (ferramentas), direita (painel 320px), baixo (ações).
+2. Camada de janelas (`pointer-events-none`; janelas com `pointer-events-auto`) acima das barras.
+3. Abas nas bordas para reabrir barras escondidas.
+O `MapStage` recebe `insets` para enquadrar o mapa só na área livre entre as barras.
+
+---
+
+## 9. Persistência (IndexedDB, banco `dicetag`, store `kv`)
+
+| Chave | Conteúdo |
+|---|---|
+| `users` | `StoredUser[]` |
+| `tables` | `GameTable[]` (todas; filtradas por `ownerId`) |
+| `worldbuild:<userId>` | `WorldItem[]` |
+| `table-state:<tableId>` | `TableState` (cenas, cena ativa, arquivos) |
+| `blob:<id>` | `Blob` de imagem/mapa/áudio |
+| `localStorage: dicetag.session` | id do usuário logado |
+| `localStorage: dicetag.sidebarCollapsed` | preferência da barra lateral |
+
+Para conectar um backend no futuro: trocar `StorageService` e `AuthService` mantendo as interfaces públicas.
+Ao excluir mesas, o `table-state` e os blobs da mesa **ainda não são limpos** (pendência conhecida).
+
+---
+
+## 10. Pendências e próximos passos sugeridos
+
+- Estruturar **ficha de personagem/NPC** (aguardar definição do dono: sistema genérico ou por sistema).
+- **Rolador de dados** + automações reais (fórmulas como `1d20+5`, alvos, efeitos) ligadas à barra de ações.
+- **Tokens** no mapa (a ferramenta "Selecionar" hoje só move o mapa).
+- Ferramentas desabilitadas: desenho, névoa de guerra, anotação no mapa (`soon: true` em `TABLE_TOOLS`).
+- Persistir janelas abertas e visibilidade das barras por mesa.
+- Limpar `table-state` e blobs ao excluir uma mesa.
+- Backend + multiplayer em tempo real; permissões reais de mestre/jogador; convite de jogadores.
+- Mural de notícias alimentado por API/CMS (`NewsService.posts`).
+- Testes: o projeto tem Vitest configurado pelo CLI, mas **não há testes escritos** ainda.
+
+---
+
+## 11. Como trabalhar neste projeto (para o Claude Code)
+
+1. Leia os arquivos envolvidos antes de editar; siga o padrão existente da feature.
+2. Mudanças pequenas e focadas; não refatore o que não foi pedido.
+3. Novos componentes: `features/<feature>/components/<nome>/<nome>.ts|.html`, standalone, Tailwind, comentários em PT-BR.
+4. Reaproveite `FloatingWindow`, `WindowManagerService`, `EmptyState`, `AutoFocus`, tokens e `.glass`.
+5. Valide com `npm run build` ao final; corrija erros e avisos introduzidos.
+6. Atualize este `CLAUDE.md` (e o `README.md`) quando mudar arquitetura, regras ou convenções.

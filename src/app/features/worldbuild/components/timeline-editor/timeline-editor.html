@@ -1,0 +1,123 @@
+<!-- ===== Barra superior ===== -->
+<div class="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-white/5 bg-ink-900/60 px-4">
+  <span class="text-xs text-slate-500">{{ events().length }} evento(s)</span>
+  <button mat-flat-button class="!h-8 !text-sm" (click)="add()">
+    <mat-icon>add</mat-icon>
+    Evento
+  </button>
+</div>
+
+<!-- ===== Linha do tempo ===== -->
+<div class="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8">
+  @if (events().length) {
+    <ol cdkDropList class="relative mx-auto flex max-w-2xl flex-col gap-4" (cdkDropListDropped)="reorder($event)">
+      <!-- Linha vertical -->
+      <span class="absolute bottom-2 left-[11px] top-2 w-0.5 rounded bg-gradient-to-b from-astral-500/60 via-star-500/40 to-transparent"></span>
+
+      @for (event of events(); track event.id) {
+        <li cdkDrag cdkDragLockAxis="y" class="relative pl-10">
+          <!-- Marcador -->
+          <span
+            class="absolute left-[4px] top-4 size-4 rounded-full ring-4 ring-ink-850"
+            [style.background]="event.color"
+          ></span>
+
+          <article
+            class="rounded-xl border bg-ink-800/70 transition-colors"
+            [class]="editingId() === event.id ? 'border-astral-500/40' : 'border-white/5 hover:border-white/15'"
+          >
+            <!-- Cabeçalho do evento -->
+            <header class="flex items-start gap-2 p-3">
+              <button
+                type="button"
+                cdkDragHandle
+                class="mt-0.5 cursor-grab text-slate-600 hover:text-slate-300 active:cursor-grabbing"
+                aria-label="Arrastar para reordenar"
+              >
+                <mat-icon class="!size-5 !text-[20px]">drag_indicator</mat-icon>
+              </button>
+
+              <button type="button" class="min-w-0 flex-1 text-left" (click)="toggleEdit(event.id)">
+                <span class="block text-xs font-semibold uppercase tracking-wider" [style.color]="event.color">
+                  {{ event.date || 'Sem data' }}
+                </span>
+                <span class="block truncate font-medium text-slate-100">{{ event.title || 'Evento sem título' }}</span>
+              </button>
+
+              <button mat-icon-button class="!size-8 !p-1" matTooltip="Editar" (click)="toggleEdit(event.id)">
+                <mat-icon class="!text-[20px]">{{ editingId() === event.id ? 'expand_less' : 'edit' }}</mat-icon>
+              </button>
+              <button mat-icon-button class="!size-8 !p-1" matTooltip="Excluir evento" (click)="remove(event.id)">
+                <mat-icon class="!text-[20px]">delete</mat-icon>
+              </button>
+            </header>
+
+            <!-- Corpo: formulário (edição) ou descrição (leitura) -->
+            @if (editingId() === event.id) {
+              <div class="flex flex-col gap-3 border-t border-white/5 p-3">
+                <div class="grid gap-3 sm:grid-cols-[180px_1fr]">
+                  <label class="flex flex-col gap-1 text-xs text-slate-400">
+                    Data / época
+                    <input
+                      appAutoFocus
+                      class="h-9 rounded-lg bg-ink-950 px-3 text-sm text-slate-100 outline-none ring-1 ring-white/10 focus:ring-astral-500/60"
+                      placeholder="Ex.: Ano 312, Era do Sol"
+                      [value]="event.date"
+                      (input)="change(event.id, { date: $any($event.target).value })"
+                    />
+                  </label>
+                  <label class="flex flex-col gap-1 text-xs text-slate-400">
+                    Título
+                    <input
+                      class="h-9 rounded-lg bg-ink-950 px-3 text-sm text-slate-100 outline-none ring-1 ring-white/10 focus:ring-astral-500/60"
+                      placeholder="O que aconteceu?"
+                      [value]="event.title"
+                      (input)="change(event.id, { title: $any($event.target).value })"
+                    />
+                  </label>
+                </div>
+
+                <label class="flex flex-col gap-1 text-xs text-slate-400">
+                  Descrição
+                  <textarea
+                    rows="3"
+                    class="resize-y rounded-lg bg-ink-950 px-3 py-2 text-sm text-slate-100 outline-none ring-1 ring-white/10 focus:ring-astral-500/60"
+                    placeholder="Detalhes, consequências, personagens envolvidos…"
+                    [value]="event.description"
+                    (input)="change(event.id, { description: $any($event.target).value })"
+                  ></textarea>
+                </label>
+
+                <div class="flex items-center gap-2">
+                  <span class="text-xs text-slate-400">Cor</span>
+                  @for (color of colors; track color) {
+                    <button
+                      type="button"
+                      class="size-6 rounded-full ring-offset-2 ring-offset-ink-800 transition-transform hover:scale-110"
+                      [class.ring-2]="event.color === color"
+                      [style.background]="color"
+                      [style.--tw-ring-color]="color"
+                      [attr.aria-label]="'Cor ' + color"
+                      (click)="change(event.id, { color })"
+                    ></button>
+                  }
+                </div>
+              </div>
+            } @else if (event.description) {
+              <p class="whitespace-pre-line px-3 pb-3 pl-10 text-sm leading-relaxed text-slate-400">{{ event.description }}</p>
+            }
+          </article>
+        </li>
+      }
+    </ol>
+  } @else {
+    <div class="flex h-full flex-col items-center justify-center gap-3 text-center">
+      <mat-icon class="!size-10 !text-[40px] text-slate-600">timeline</mat-icon>
+      <p class="max-w-xs text-sm text-slate-400">Registre eras, guerras, nascimentos e reviravoltas do seu mundo.</p>
+      <button mat-stroked-button (click)="add()">
+        <mat-icon>add</mat-icon>
+        Primeiro evento
+      </button>
+    </div>
+  }
+</div>

@@ -1,0 +1,188 @@
+/* ==========================================================================
+   Estilos globais do DiceTag
+   1. Tema Angular Material (M3, escuro)
+   2. Base da página
+   3. Ícones (Material Symbols)
+   4. Conteúdo do editor de texto (ProseMirror / Tiptap)
+   5. Ajustes finos de componentes Material
+   ========================================================================== */
+@use "@angular/material" as mat;
+
+/* --- 1. Tema Angular Material ------------------------------------------- */
+html {
+  color-scheme: dark;
+  @include mat.theme(
+    (
+      color: (
+        primary: mat.$blue-palette,
+        tertiary: mat.$violet-palette,
+        theme-type: dark,
+      ),
+      typography: (
+        plain-family: ("Chakra Petch", ui-sans-serif, sans-serif),
+        brand-family: ("Tektur", "Chakra Petch", sans-serif),
+      ),
+      density: 0,
+    )
+  );
+
+  /* Cores principais alinhadas à paleta espacial (tokens do Tailwind) */
+  @include mat.theme-overrides(
+    (
+      primary: var(--color-astral-400),
+      on-primary: var(--color-ink-950),
+      primary-container: var(--color-astral-600),
+      on-primary-container: #eef3ff,
+      surface: var(--color-ink-900),
+      surface-container: var(--color-ink-850),
+      surface-container-high: var(--color-ink-800),
+      outline: var(--color-ink-600),
+    )
+  );
+
+  /* Botões e campos com cantos retos, combinando com as fontes angulares */
+  @include mat.button-overrides(
+    (
+      filled-container-shape: 6px,
+      outlined-container-shape: 6px,
+      text-container-shape: 6px,
+      protected-container-shape: 6px,
+      tonal-container-shape: 6px,
+    )
+  );
+  @include mat.fab-overrides(
+    (
+      container-shape: 8px,
+      small-container-shape: 6px,
+    )
+  );
+
+  /* Superfícies do Material alinhadas aos tokens do Tailwind */
+  @include mat.dialog-overrides(
+    (
+      container-color: var(--color-ink-850),
+      container-shape: 10px,
+    )
+  );
+  @include mat.snack-bar-overrides(
+    (
+      container-color: var(--color-ink-700),
+      supporting-text-color: var(--color-star-300),
+    )
+  );
+  @include mat.menu-overrides(
+    (
+      container-color: var(--color-ink-800),
+    )
+  );
+}
+
+/* --- 2. Base ------------------------------------------------------------ */
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  color: #e6ecfa;
+  background-color: var(--color-ink-950);
+  /* Fundo de espaço: nebulosas suaves + campo de estrelas, só com CSS */
+  background-image:
+    radial-gradient(ellipse 60% 45% at 85% 10%, rgb(79 134 247 / 0.14), transparent 70%),
+    radial-gradient(ellipse 50% 40% at 10% 90%, rgb(177 140 255 / 0.10), transparent 70%),
+    radial-gradient(1px 1px at 12% 18%, #fff9, transparent),
+    radial-gradient(1px 1px at 72% 34%, #fff7, transparent),
+    radial-gradient(1.5px 1.5px at 38% 72%, #cfe0ff, transparent),
+    radial-gradient(1px 1px at 88% 82%, #fff8, transparent),
+    radial-gradient(1px 1px at 55% 12%, #fff6, transparent),
+    radial-gradient(1.5px 1.5px at 22% 48%, #a9c7ff, transparent);
+  background-size: 100% 100%, 100% 100%, 420px 420px, 420px 420px, 420px 420px, 420px 420px, 420px 420px, 420px 420px;
+  background-attachment: fixed;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Barra de rolagem discreta para não competir com o conteúdo */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-ink-600) transparent;
+}
+
+/* --- 3. Ícones ---------------------------------------------------------- */
+.material-symbols-sharp {
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+}
+.icon-filled {
+  font-variation-settings: "FILL" 1, "wght" 400, "GRAD" 0, "opsz" 24;
+}
+
+/* --- 4. Conteúdo do editor (documentos do worldbuild) ------------------- */
+.prose-editor {
+  outline: none;
+  min-height: 50vh; /* toda a página é clicável para escrever */
+  line-height: 1.75;
+  font-size: 1rem;
+  color: #dde5f7;
+
+  > * + * { margin-top: 0.85em; }
+
+  h1, h2, h3 {
+    font-family: var(--font-display);
+    letter-spacing: 0.02em;
+    color: var(--color-star-300);
+    line-height: 1.25;
+    margin-top: 1.4em;
+  }
+  h1 { font-size: 2rem; }
+  h2 { font-size: 1.5rem; }
+  h3 { font-size: 1.2rem; }
+
+  ul, ol { padding-left: 1.5rem; }
+  ul { list-style: disc; }
+  ol { list-style: decimal; }
+
+  blockquote {
+    border-left: 3px solid var(--color-astral-500);
+    padding-left: 1rem;
+    color: #b5c3e0;
+    font-style: italic;
+  }
+
+  code {
+    background: var(--color-ink-700);
+    padding: 0.1em 0.35em;
+    border-radius: 4px;
+    font-size: 0.9em;
+  }
+
+  pre {
+    background: var(--color-ink-950);
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    overflow-x: auto;
+    code { background: none; padding: 0; }
+  }
+
+  hr {
+    border: none;
+    border-top: 1px solid var(--color-ink-600);
+    margin: 2em 0;
+  }
+
+  a { color: var(--color-astral-300); text-decoration: underline; }
+
+  /* Texto de placeholder no documento vazio */
+  p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    pointer-events: none;
+    color: #6b7a99;
+  }
+}
+
+/* --- 5. Ajustes de componentes Material --------------------------------- */
+.mat-mdc-dialog-container .mat-mdc-dialog-title {
+  font-family: var(--font-display);
+}
