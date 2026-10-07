@@ -29,7 +29,7 @@
     class="grid size-10 place-items-center rounded-lg text-slate-300 transition-colors hover:bg-white/10 hover:text-white disabled:text-slate-600"
     [class.!text-astral-300]="session.activeScene()?.showGrid"
     [disabled]="!session.activeScene()"
-    matTooltip="Mostrar/ocultar grade (G)"
+    [matTooltip]="session.activeScene()?.showGrid ? 'Remover grade: tokens e paredes se movem livres (G)' : 'Mostrar grade e alinhar a ela (G)'"
     matTooltipPosition="right"
     (click)="toggleGrid()"
   >

@@ -86,6 +86,8 @@ export class MapStage {
 
   readonly scene = this.session.activeScene;
   readonly gridSize = computed(() => this.scene()?.gridSize ?? 70);
+  /** Com a grade escondida, tokens e paredes se movem livres (sem alinhar à grade). */
+  readonly snapping = computed(() => this.scene()?.showGrid ?? true);
   /** Muda só quando troca a cena ou o mapa (não ao ajustar a grade). */
   private readonly mapKey = computed(() => ({ sceneId: this.scene()?.id, blobId: this.scene()?.blobId }), {
     equal: (a, b) => a.sceneId === b.sceneId && a.blobId === b.blobId,
@@ -302,7 +304,7 @@ export class MapStage {
 
   /** Parede em linha, clique a clique: duplo clique ou clicar no ponto inicial finaliza. */
   private addLinePoint(event: PointerEvent, raw: Point): void {
-    const p = event.shiftKey ? raw : snapToCorner(raw, this.gridSize());
+    const p = this.snapCorner(raw, event);
     const draft = this.wallDraft();
     const points = draft?.kind === 'line' ? draft.points : [];
 
@@ -368,7 +370,7 @@ export class MapStage {
     const draft = this.wallDraft();
     if (draft?.kind === 'line') {
       const raw = this.toWorld(event);
-      this.wallDraft.set({ ...draft, cursor: event.shiftKey ? raw : snapToCorner(raw, this.gridSize()) });
+      this.wallDraft.set({ ...draft, cursor: this.snapCorner(raw, event) });
     }
 
     const g = this.gesture;
@@ -381,8 +383,8 @@ export class MapStage {
     } else if (g.kind === 'token') {
       const s = this.scale();
       let p = { x: g.cx + (event.clientX - g.sx) / s, y: g.cy + (event.clientY - g.sy) / s };
-      // Snap ao centro do quadrado (Shift posiciona livre)
-      if (!event.shiftKey) p = snapTokenCenter(p, g.size, this.gridSize());
+      // Snap ao centro do quadrado (Shift ou grade escondida: livre)
+      if (this.snapOn(event)) p = snapTokenCenter(p, g.size, this.gridSize());
       const current = this.session.tokens().find((t) => t.id === g.id);
       if (current && (current.x !== p.x || current.y !== p.y)) this.session.moveToken(g.id, p);
     } else if (g.kind === 'resize') {
@@ -489,7 +491,18 @@ export class MapStage {
     const entry = this.session.entryById().get(entryId);
     if (!entry) return;
     const size = this.session.tokenOf(entry).size;
-    if (this.session.placeToken(entryId, snapTokenCenter(p, size, this.gridSize()))) this.session.tool.set('select');
+    const center = this.snapping() ? snapTokenCenter(p, size, this.gridSize()) : p;
+    if (this.session.placeToken(entryId, center)) this.session.tool.set('select');
+  }
+
+  /** Alinhar à grade neste gesto? (grade visível e sem Shift) */
+  private snapOn(event: MouseEvent): boolean {
+    return this.snapping() && !event.shiftKey;
+  }
+
+  /** Ponto alinhado ao canto da grade, se o alinhamento estiver ativo. */
+  private snapCorner(p: Point, event: MouseEvent): Point {
+    return this.snapOn(event) ? snapToCorner(p, this.gridSize()) : p;
   }
 
   private startPan(event: PointerEvent): void {
