@@ -83,6 +83,9 @@ const PANEL_SPACE = { top: 60, left: 76, right: 344, bottom: 100 };
   host: {
     class: 'relative block h-dvh overflow-hidden',
     '(window:keydown)': 'onKeydown($event)',
+    // Soltar WASD/setas encerra o movimento do token; perder o foco também
+    '(window:keyup)': 'map()?.handleKeyUp($event)',
+    '(window:blur)': 'map()?.stopKeyMove()',
     '(window:pagehide)': 'session.flush()',
   },
 })
@@ -99,7 +102,7 @@ export class GameTablePage {
   readonly table = computed(() => this.tables.getById(this.id()));
   readonly tablesLoaded = this.tables.loaded;
 
-  private readonly map = viewChild(MapStage);
+  protected readonly map = viewChild(MapStage);
   private readonly windowLayer = viewChild<ElementRef<HTMLElement>>('windowLayer');
 
   /** Área ocupada pelas barras visíveis (usada para enquadrar o mapa). */

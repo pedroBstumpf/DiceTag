@@ -1,4 +1,4 @@
-import { Component, ElementRef, computed, effect, inject, input, output, signal, viewChild } from '@angular/core';
+import { Component, DestroyRef, ElementRef, computed, effect, inject, input, output, signal, viewChild } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { Point } from '../../../../core/models/geometry.model';
@@ -43,6 +43,21 @@ type Gesture =
 
 /** Largura do popover de anotação (para mantê-lo dentro da tela). */
 const POPOVER_WIDTH = 288;
+
+/** Teclas de movimento do token selecionado → direção. */
+const MOVE_KEYS: Record<string, Point> = {
+  w: { x: 0, y: -1 },
+  arrowup: { x: 0, y: -1 },
+  s: { x: 0, y: 1 },
+  arrowdown: { x: 0, y: 1 },
+  a: { x: -1, y: 0 },
+  arrowleft: { x: -1, y: 0 },
+  d: { x: 1, y: 0 },
+  arrowright: { x: 1, y: 0 },
+};
+/** Velocidade do token movido pelo teclado (quadrados por segundo); Shift multiplica. */
+const KEY_SPEED = 2;
+const KEY_SPEED_FAST = 2.5;
 
 /**
  * Mapa central da mesa — orquestrador das camadas.
@@ -141,6 +156,10 @@ export class MapStage {
 
   private gesture: Gesture | null = null;
   private lastTap = { key: '', time: 0, x: 0, y: 0 };
+  /** Teclas de movimento pressionadas (WASD/setas) e o laço de animação delas. */
+  private readonly heldKeys = new Set<string>();
+  private keyFrame = 0;
+  private keyFast = false;
   /** Muda só ao trocar de cena (editar a cena não altera). */
   private readonly sceneId = computed(() => this.scene()?.id);
 
@@ -166,6 +185,8 @@ export class MapStage {
       url = URL.createObjectURL(blob);
       this.src.set(url);
     });
+
+    inject(DestroyRef).onDestroy(() => cancelAnimationFrame(this.keyFrame));
 
     // Trocar de ferramenta, de modo ou de cena descarta a parede em construção
     effect(() => {
@@ -529,6 +550,18 @@ export class MapStage {
     }
 
     const tokenId = this.session.selectedTokenId();
+
+    // WASD/setas: desliza o token selecionado enquanto a tecla estiver pressionada
+    const key = event.key.toLowerCase();
+    if (tokenId && this.selecting() && MOVE_KEYS[key]) {
+      this.keyFast = event.shiftKey;
+      if (!this.heldKeys.has(key)) {
+        this.heldKeys.add(key);
+        if (!this.keyFrame) this.keyFrame = requestAnimationFrame((t) => this.glide(t, t));
+      }
+      return true;
+    }
+
     if ((event.key === 'Delete' || event.key === 'Backspace') && tokenId) {
       this.session.removeToken(tokenId);
       return true;
@@ -538,6 +571,49 @@ export class MapStage {
       return true;
     }
     return false;
+  }
+
+  /** Soltar uma tecla de movimento; ao soltar todas, o token se alinha à grade (se visível). */
+  handleKeyUp(event: KeyboardEvent): void {
+    this.keyFast = event.shiftKey;
+    if (this.heldKeys.delete(event.key.toLowerCase()) && !this.heldKeys.size) this.stopKeyMove();
+  }
+
+  /** Encerra o movimento por teclado (também ao perder o foco da janela). */
+  stopKeyMove(): void {
+    const wasMoving = this.keyFrame !== 0 || this.heldKeys.size > 0;
+    this.heldKeys.clear();
+    cancelAnimationFrame(this.keyFrame);
+    this.keyFrame = 0;
+    if (!wasMoving) return;
+
+    const id = this.session.selectedTokenId();
+    const token = id ? this.session.resolvedTokenById(id) : null;
+    if (token && this.snapping()) this.session.moveToken(token.placement.id, snapTokenCenter(token.placement, token.size, this.gridSize()));
+  }
+
+  /** Um quadro do movimento por teclado: velocidade constante, independente da taxa de quadros. */
+  private glide(now: number, last: number): void {
+    const id = this.session.selectedTokenId();
+    const token = id ? this.session.resolvedTokenById(id) : null;
+    if (!token || !this.heldKeys.size) {
+      this.keyFrame = 0;
+      return;
+    }
+    let dx = 0;
+    let dy = 0;
+    for (const key of this.heldKeys) {
+      dx += MOVE_KEYS[key].x;
+      dy += MOVE_KEYS[key].y;
+    }
+    const len = Math.hypot(dx, dy);
+    if (len) {
+      // Diagonal com a mesma velocidade; no máximo 50ms por quadro (aba em segundo plano)
+      const dt = Math.min(now - last, 50) / 1000;
+      const step = (KEY_SPEED * (this.keyFast ? KEY_SPEED_FAST : 1) * this.gridSize() * dt) / len;
+      this.session.moveToken(token.placement.id, { x: token.placement.x + dx * step, y: token.placement.y + dy * step });
+    }
+    this.keyFrame = requestAnimationFrame((t) => this.glide(t, now));
   }
 
   // --- Arrastar fichas do painel para o mapa -------------------------------
