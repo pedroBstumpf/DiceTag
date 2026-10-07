@@ -4,8 +4,15 @@ import { WorldItem } from '../../../core/models/world-item.model';
 import {
   BRUSH_COLORS,
   BRUSH_WIDTHS,
+  ChatMessage,
+  DEFAULT_FX,
+  DEFAULT_ROLL,
   DEFAULT_SOUND_VOLUME,
+  DEFAULT_TOKEN_SPEED,
   DoorWall,
+  FxStyle,
+  MAX_CHAT_MESSAGES,
+  RollResult,
   LoreFolder,
   LoreItemOverride,
   METERS_PER_SQUARE,
@@ -28,8 +35,11 @@ import {
   Wall,
   defaultToken,
 } from '../../../core/models/table-session.model';
+import { AuthService } from '../../../core/services/auth.service';
 import { StorageService } from '../../../core/services/storage.service';
 import { newId } from '../../../core/utils/id';
+import { rollDice } from '../utils/dice';
+import { FxDrawing, buildFx, seededRandom } from '../utils/effects';
 import { createMask, decodeMask, encodeMask, isExploredAt, markPolygons, maskFits } from '../utils/fog-memory';
 import { computeVisibilityPolygon, doorSeen, pointInPolygon, wallsToSegments } from '../utils/visibility';
 
@@ -53,12 +63,36 @@ export interface ResolvedToken {
   blobId?: string;
   size: number;
   vision: TokenVision;
+  /** Quadrados por segundo com WASD/setas (sempre da ficha). */
+  speed: number;
   bars: TokenBar[];
   tags: TokenTag[];
 }
 
 /** Campos do token editáveis pela ficha ou pela janela "Token". */
-export type TokenPatch = Partial<Pick<TokenSettings, 'size' | 'vision' | 'bars' | 'tags'>>;
+export type TokenPatch = Partial<Pick<TokenSettings, 'size' | 'vision' | 'speed' | 'bars' | 'tags'>>;
+
+/** Efeito especial em exibição no mapa (transitório, não é salvo). */
+export interface FxInstance {
+  id: string;
+  /** Desenho pronto, montado uma vez no lançamento (utils/effects.ts). */
+  drawing: FxDrawing;
+}
+
+/** Efeito "na mão" do usuário depois de usar uma ação com efeito. */
+export interface ArmedFx extends FxStyle {
+  /** Nome da ação que o armou (exibido no aviso do mapa). */
+  action: string;
+}
+
+/** Resultado de usar uma ação (para o aviso na tela). */
+export interface ActionUse {
+  author: string;
+  roll: RollResult;
+  /** A ação tinha efeito especial (agora armado no mouse). */
+  armed: boolean;
+}
+
 
 /** Modo da ferramenta Névoa. */
 export type WallMode = 'line' | 'circle' | 'door' | 'edit' | 'erase';
@@ -84,6 +118,7 @@ const NO_TOKENS: TokenPlacement[] = [];
 const NO_WALLS: Wall[] = [];
 const NO_STROKES: Stroke[] = [];
 const NO_NOTES: MapNote[] = [];
+const NO_MESSAGES: ChatMessage[] = [];
 
 /**
  * Estado da mesa aberta: cenas, arquivos (fichas, sons, automações),
@@ -96,6 +131,7 @@ const NO_NOTES: MapNote[] = [];
 @Injectable()
 export class TableSessionService {
   private readonly storage = inject(StorageService);
+  private readonly auth = inject(AuthService);
 
   // --- Estado persistido ---------------------------------------------------
   private readonly state = signal<TableState>(EMPTY_STATE);
@@ -242,10 +278,119 @@ export class TableSessionService {
     this.panels.set({ scenes: show, tools: show, side: show, actions: show });
   }
 
-  /** Automações do papel atual (barra inferior). */
-  readonly hotbar = computed(() =>
-    this.entries().filter((e) => e.kind === 'automation' && e.role === this.role()),
-  );
+  // --- Ações (automações) e quem age ---------------------------------------
+
+  /** Personagens da conta atual nesta mesa (sem dono = de qualquer um). */
+  readonly myCharacters = computed(() => this.entries().filter((e) => e.kind === 'character' && this.ownsCharacter(e)));
+
+  /**
+   * Ficha que está agindo (dona das ações da barra inferior):
+   * - Mestre: a ficha do token selecionado (NPC ou personagem); sem seleção, ninguém (ações gerais).
+   * - Jogador: o personagem dele selecionado ou, senão, o primeiro personagem dele.
+   */
+  readonly actor = computed<TableEntry | null>(() => {
+    const id = this.selectedTokenId();
+    const selected = id ? (this.resolvedTokenById(id)?.entry ?? null) : null;
+    if (this.role() === 'gm') return selected;
+    if (selected?.kind === 'character' && this.ownsCharacter(selected)) return selected;
+    return this.myCharacters()[0] ?? null;
+  });
+
+  /** Ações da barra inferior: as da ficha que está agindo (mestre sem seleção: as gerais). */
+  readonly hotbar = computed(() => {
+    const actor = this.actor();
+    if (!actor && this.role() === 'player') return [];
+    return this.automationsOf(actor?.id ?? null);
+  });
+
+  /** Automações de uma ficha (null = gerais do mestre). */
+  automationsOf(ownerEntryId: string | null): TableEntry[] {
+    return this.entries().filter((e) => e.kind === 'automation' && (e.ownerEntryId ?? null) === ownerEntryId);
+  }
+
+  /** O personagem é da conta atual? (personagem sem dono vale para qualquer um) */
+  ownsCharacter(entry: TableEntry): boolean {
+    return !entry.ownerUserId || entry.ownerUserId === this.auth.user()?.id;
+  }
+
+  /**
+   * Usa uma ação: rola os dados, registra no chat em nome de quem agiu e, se a ação
+   * tiver efeito especial, deixa o efeito "na mão" (ferramenta Efeitos) para o usuário lançar.
+   */
+  useAction(entry: TableEntry): ActionUse {
+    const config = entry.roll ?? DEFAULT_ROLL;
+    const roll: RollResult = { action: entry.name, icon: entry.icon ?? 'bolt', dice: config.dice, ...rollDice(config) };
+    const actor = this.actor() ?? (entry.ownerEntryId ? this.entryById().get(entry.ownerEntryId) : undefined);
+    const author = actor?.name ?? this.userName();
+    this.pushChat({ author, roll });
+
+    if (entry.effect) {
+      if (this.tool() !== 'fx') this.fxReturnTool = this.tool();
+      this.armedFx.set({ ...entry.effect, action: entry.name });
+      this.tool.set('fx');
+    }
+    return { author, roll, armed: !!entry.effect };
+  }
+
+  // --- Chat ----------------------------------------------------------------
+
+  readonly chat = computed(() => this.state().chat ?? NO_MESSAGES);
+
+  /** Envia uma mensagem de texto em nome da conta atual. */
+  sendChat(text: string): void {
+    const trimmed = text.trim();
+    if (trimmed) this.pushChat({ author: this.userName(), text: trimmed });
+  }
+
+  clearChat(): void {
+    this.patchState((s) => ({ ...s, chat: [] }));
+  }
+
+  private pushChat(message: Pick<ChatMessage, 'author' | 'text' | 'roll'>): void {
+    const full: ChatMessage = { id: newId(), at: Date.now(), userId: this.auth.user()?.id ?? '', role: this.role(), ...message };
+    this.patchState((s) => ({ ...s, chat: [...(s.chat ?? []), full].slice(-MAX_CHAT_MESSAGES) }));
+  }
+
+  private userName(): string {
+    return this.role() === 'gm' ? 'Mestre' : (this.auth.user()?.name ?? 'Jogador');
+  }
+
+  // --- Efeitos especiais (transitórios) ------------------------------------
+
+  /** Efeito escolhido na ferramenta Efeitos. */
+  readonly fxStyle = signal<FxStyle>(DEFAULT_FX);
+  /** Efeito de uma ação, esperando o usuário arrastar no mapa (vale para um lançamento). */
+  readonly armedFx = signal<ArmedFx | null>(null);
+  /** Efeitos em exibição no mapa. */
+  readonly effects = signal<FxInstance[]>([]);
+  /** Ferramenta para a qual voltar depois de lançar o efeito de uma ação. */
+  private fxReturnTool: TableTool = 'select';
+
+  /**
+   * Lança um efeito de `from` até `to` (o da ação armada, ou o da ferramenta).
+   * `scale` = zoom atual (tamanhos mínimos legíveis do desenho).
+   */
+  castFx(from: Point, to: Point, scale: number): void {
+    const armed = this.armedFx();
+    const { kind, color } = armed ?? this.fxStyle();
+    const id = newId();
+    const drawing = buildFx(kind, color, from, to, {
+      uid: `fx-${id}`,
+      scale,
+      grid: this.activeScene()?.gridSize ?? 70,
+      random: seededRandom(Math.floor(Math.random() * 2 ** 32)),
+    });
+    this.effects.update((list) => [...list, { id, drawing }]);
+    setTimeout(() => this.effects.update((list) => list.filter((f) => f.id !== id)), drawing.duration + 100);
+    if (armed) this.cancelArmedFx();
+  }
+
+  /** Desarma o efeito da ação e volta à ferramenta anterior. */
+  cancelArmedFx(): void {
+    if (!this.armedFx()) return;
+    this.armedFx.set(null);
+    this.tool.set(this.fxReturnTool);
+  }
 
   constructor() {
     // Memória da névoa: tudo o que os tokens enxergam fica marcado como explorado.
@@ -254,6 +399,11 @@ export class TableSessionService {
       const polys = this.visionPolygons();
       const size = this.worldSize();
       if (polys.length && size && this.fogMemory()) untracked(() => this.markExplored(polys, size));
+    });
+
+    // Trocar de ferramenta à mão desarma o efeito de uma ação
+    effect(() => {
+      if (this.tool() !== 'fx') untracked(() => this.armedFx.set(null));
     });
   }
 
@@ -332,7 +482,9 @@ export class TableSessionService {
       kind,
       name: `${TABLE_ENTRY_META[kind].label} ${count}`,
       createdAt: Date.now(),
-      ...(kind === 'automation' && { role: this.role(), icon: 'bolt' }),
+      ...(kind === 'automation' && { icon: 'bolt', roll: { ...DEFAULT_ROLL } }),
+      // O personagem pertence à conta de quem o criou
+      ...(kind === 'character' && { ownerUserId: this.auth.user()?.id }),
       ...extra,
     };
     this.patchState((s) => ({ ...s, entries: [...s.entries, entry] }));
@@ -360,12 +512,12 @@ export class TableSessionService {
     this.patchState((s) => ({ ...s, entries: s.entries.map((e) => (e.id === id ? { ...e, ...patch } : e)) }));
   }
 
-  /** Exclui o arquivo, os tokens dele em todas as cenas e os arquivos (áudio/imagem). */
+  /** Exclui o arquivo, as ações dele, os tokens dele em todas as cenas e os arquivos (áudio/imagem). */
   removeEntry(id: string): void {
     const entry = this.entryById().get(id);
     this.patchState((s) => ({
       ...s,
-      entries: s.entries.filter((e) => e.id !== id),
+      entries: s.entries.filter((e) => e.id !== id && e.ownerEntryId !== id),
       scenes: s.scenes.map((sc) =>
         sc.tokens?.some((t) => t.entryId === id) ? { ...sc, tokens: sc.tokens.filter((t) => t.entryId !== id) } : sc,
       ),
@@ -468,6 +620,7 @@ export class TableSessionService {
       linked,
       blobId: sheet.blobId,
       vision: sheet.vision,
+      speed: sheet.speed ?? DEFAULT_TOKEN_SPEED,
       size: linked ? sheet.size : (placement.size ?? sheet.size),
       bars: linked ? sheet.bars : (placement.bars ?? sheet.bars),
       tags: linked ? sheet.tags : (placement.tags ?? sheet.tags),
@@ -483,19 +636,21 @@ export class TableSessionService {
   /**
    * Altera um token colocado respeitando a regra de vínculo:
    * personagem grava na ficha (vale para todos os tokens dele);
-   * NPC grava só neste token. A visão é sempre da ficha.
+   * NPC grava só neste token. Visão e velocidade são sempre da ficha.
    */
   updateToken(placementId: string, patch: TokenPatch): void {
     const placement = this.findPlacement(placementId);
     const entry = placement && this.entryById().get(placement.entryId);
     if (!placement || !entry) return;
 
-    const { vision, ...own } = patch;
+    const { vision, speed, ...own } = patch;
     if (entry.kind === 'character') {
       this.updateEntryToken(entry.id, patch);
       return;
     }
-    if (vision) this.updateEntryToken(entry.id, { vision });
+    if (vision || speed !== undefined) {
+      this.updateEntryToken(entry.id, { ...(vision && { vision }), ...(speed !== undefined && { speed }) });
+    }
     if (Object.keys(own).length) this.patchPlacement(placementId, own);
   }
 

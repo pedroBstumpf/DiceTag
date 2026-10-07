@@ -55,6 +55,23 @@
   </div>
 </section>
 
+<!-- ===== Velocidade (WASD/setas) ===== -->
+<section>
+  <h4 class="mb-2 text-xs text-slate-400">Velocidade com WASD / setas</h4>
+  <div class="flex items-center gap-2">
+    <div class="flex items-center rounded-md bg-ink-950 ring-1 ring-white/10">
+      <button type="button" class="grid size-8 place-items-center rounded-l-md text-slate-400 hover:bg-white/10 disabled:opacity-30" aria-label="Mais devagar" [disabled]="v.speed <= minSpeed" (click)="stepSpeed(-0.5)">
+        <mat-icon class="!text-[16px]">remove</mat-icon>
+      </button>
+      <span class="w-16 text-center text-sm tabular-nums text-slate-100">{{ v.speed }} quad/s</span>
+      <button type="button" class="grid size-8 place-items-center rounded-r-md text-slate-400 hover:bg-white/10 disabled:opacity-30" aria-label="Mais rápido" [disabled]="v.speed >= maxSpeed" (click)="stepSpeed(0.5)">
+        <mat-icon class="!text-[16px]">add</mat-icon>
+      </button>
+    </div>
+    <span class="text-xs text-slate-500">Shift acelera · vale para todos os tokens desta ficha</span>
+  </div>
+</section>
+
 <!-- ===== Barras ===== -->
 <section>
   <div class="mb-2 flex items-center justify-between">

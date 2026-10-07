@@ -1,20 +1,29 @@
 <!-- ===== Abas ===== -->
-<nav class="grid shrink-0 grid-cols-4 gap-1 border-b border-white/5 p-1.5">
+<nav class="grid shrink-0 grid-cols-5 gap-1 border-b border-white/5 p-1.5">
   @for (t of tabs; track t.id) {
     <button
       type="button"
-      class="flex flex-col items-center gap-0.5 rounded-lg py-1.5 text-[11px] font-medium transition-colors"
+      class="relative flex flex-col items-center gap-0.5 rounded-lg py-1.5 text-[11px] font-medium transition-colors"
       [class]="tab() === t.id ? 'bg-astral-500/20 text-astral-300' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'"
       (click)="tab.set(t.id)"
     >
       <mat-icon class="!text-[20px]">{{ t.icon }}</mat-icon>
       {{ t.label }}
+      <!-- Mensagem nova no chat -->
+      @if (t.id === 'chat' && chatUnread()) {
+        <span class="absolute right-2.5 top-1.5 size-2 rounded-full bg-astral-400 shadow-[0_0_6px_rgb(122_167_255)]"></span>
+      }
     </button>
   }
 </nav>
 
-<!-- ===== Conteúdo da aba ===== -->
-<div class="min-h-0 flex-1 overflow-y-auto p-3">
+<!-- ===== Chat (ocupa a altura toda; tem rolagem e campo próprios) ===== -->
+@if (tab() === 'chat') {
+  <app-chat-panel class="min-h-0 flex-1" />
+}
+
+<!-- ===== Conteúdo das demais abas ===== -->
+<div class="min-h-0 flex-1 overflow-y-auto p-3" [class.hidden]="tab() === 'chat'">
   @switch (tab()) {
     <!-- Fichas: personagens e NPCs -->
     @case ('sheets') {
@@ -151,13 +160,27 @@
       <app-sound-list />
     }
 
-    <!-- Automações -->
+    <!-- Ações automatizadas, agrupadas por dono -->
     @case ('automations') {
       <p class="mb-3 rounded-lg bg-white/5 px-3 py-2 text-xs leading-relaxed text-slate-400">
-        Configure habilidades, ataques e rolagens. Elas aparecem na barra de ações de quem as usa.
+        Cada ação rola 2d12 ou 3d6 + modificador e pode lançar um efeito especial. Ela aparece na barra de baixo
+        de quem age: o jogador vê as do personagem dele; o mestre, as do token selecionado.
       </p>
-      <ng-container *ngTemplateOutlet="section; context: { title: 'Do mestre', kind: 'automation', role: 'gm', list: gmActions() }" />
-      <ng-container *ngTemplateOutlet="section; context: { title: 'Dos jogadores', kind: 'automation', role: 'player', list: playerActions() }" />
+      @if (session.role() === 'gm') {
+        <ng-container *ngTemplateOutlet="section; context: { title: 'Gerais do mestre', kind: 'automation', list: session.automationsOf(null) }" />
+        @for (c of characters(); track c.id) {
+          <ng-container *ngTemplateOutlet="section; context: { title: 'Personagem · ' + c.name, kind: 'automation', owner: c.id, list: session.automationsOf(c.id) }" />
+        }
+        @for (n of npcs(); track n.id) {
+          <ng-container *ngTemplateOutlet="section; context: { title: 'NPC · ' + n.name, kind: 'automation', owner: n.id, list: session.automationsOf(n.id) }" />
+        }
+      } @else {
+        @for (c of session.myCharacters(); track c.id) {
+          <ng-container *ngTemplateOutlet="section; context: { title: c.name, kind: 'automation', owner: c.id, list: session.automationsOf(c.id) }" />
+        } @empty {
+          <p class="px-2 py-6 text-center text-sm text-slate-500">Você ainda não tem personagem nesta mesa. Crie um na aba Fichas.</p>
+        }
+      }
     }
   }
 </div>
@@ -220,15 +243,15 @@
 <!-- ===================================================================== -->
 <!-- Seção com título, botão "+" e lista de arquivos                        -->
 <!-- ===================================================================== -->
-<ng-template #section let-title="title" let-kind="kind" let-role="role" let-list="list">
+<ng-template #section let-title="title" let-kind="kind" let-owner="owner" let-list="list">
   <section class="mb-4">
-    <header class="mb-1 flex items-center justify-between pl-2">
-      <h4 class="text-[11px] font-semibold uppercase tracking-widest text-slate-500">{{ title }}</h4>
+    <header class="mb-1 flex items-center justify-between gap-2 pl-2">
+      <h4 class="min-w-0 truncate text-[11px] font-semibold uppercase tracking-widest text-slate-500">{{ title }}</h4>
       <button
         type="button"
-        class="grid size-7 place-items-center rounded-md text-slate-400 hover:bg-white/10 hover:text-white"
+        class="grid size-7 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-white/10 hover:text-white"
         [matTooltip]="'Novo: ' + metaOf(kind).label"
-        (click)="create(kind, role)"
+        (click)="create(kind, owner)"
       >
         <mat-icon class="!text-[18px]">add</mat-icon>
       </button>

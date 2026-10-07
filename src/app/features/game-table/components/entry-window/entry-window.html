@@ -29,7 +29,7 @@
     }
     <div class="min-w-0 flex-1">
       <span class="text-[11px] font-semibold uppercase tracking-widest text-slate-500">
-        {{ meta().label }}{{ e.kind === 'automation' ? ' · ' + (e.role === 'gm' ? 'Mestre' : 'Jogador') : '' }}
+        {{ e.kind === 'automation' ? ownerLabel(e) : meta().label }}
       </span>
       <input
         #nameInput
@@ -38,40 +38,192 @@
         (blur)="rename(nameInput.value)"
         (keydown.enter)="nameInput.blur()"
       />
+      <!-- Jogador dono do personagem -->
+      @if (e.kind === 'character') {
+        <p class="flex items-center gap-1.5 text-xs text-slate-400">
+          <mat-icon class="!size-4 !text-[16px]">account_circle</mat-icon>
+          @if (!e.ownerUserId) {
+            Sem jogador definido
+          } @else if (isMine()) {
+            Seu personagem
+          } @else {
+            Personagem de outra conta
+          }
+          @if (!isMine()) {
+            <button type="button" class="ml-1 text-astral-300 hover:underline" (click)="claim()">Vincular à minha conta</button>
+          }
+        </p>
+      }
     </div>
   </div>
 
-  <!-- Como colocar e configurar o token (personagens e NPCs) -->
-  @if (e.kind === 'character' || e.kind === 'npc') {
+  @if (hasToken()) {
+    <!-- ===== Personagem / NPC ===== -->
     <p class="mt-4 flex items-start gap-2 rounded-lg bg-white/5 px-3 py-2 text-xs leading-relaxed text-slate-400">
       <mat-icon class="!size-4 shrink-0 !text-[16px] text-astral-300">token</mat-icon>
       A imagem acima também é a do token. Arraste esta ficha do painel direito até o mapa para colocá-lo e
-      dê duplo clique no token para configurar tamanho, visão, barras e etiquetas.
+      dê duplo clique no token para configurar tamanho, visão, velocidade, barras e etiquetas.
     </p>
+
+    <!-- Ações automatizadas desta ficha -->
+    <section class="mt-6">
+      <div class="mb-2 flex items-center justify-between">
+        <h4 class="text-xs text-slate-400">
+          Ações automatizadas
+          <span class="text-slate-600">· {{ e.kind === 'character' ? 'barra do jogador' : 'barra do mestre ao selecionar o token' }}</span>
+        </h4>
+        <button type="button" class="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-astral-300 hover:bg-white/5" (click)="addAction()">
+          <mat-icon class="!size-4 !text-[16px]">add</mat-icon>
+          Ação
+        </button>
+      </div>
+      @for (action of actions(); track action.id) {
+        <button
+          type="button"
+          class="mb-1 flex h-10 w-full items-center gap-2.5 rounded-lg bg-white/5 px-3 text-left text-sm text-slate-200 transition-colors hover:bg-white/10"
+          (click)="openEntry.emit(action.id)"
+        >
+          <mat-icon class="!size-5 !text-[20px] text-amber-300">{{ action.icon ?? 'bolt' }}</mat-icon>
+          <span class="min-w-0 flex-1 truncate">{{ action.name }}</span>
+          <span class="font-mono text-xs text-slate-400">{{ formula(action) }}</span>
+          @if (action.effect) {
+            <span class="size-2.5 rounded-full" [style.background]="action.effect.color" matTooltip="Tem efeito especial"></span>
+          }
+        </button>
+      } @empty {
+        <p class="text-xs text-slate-600">Nenhuma ação ainda. Ex.: ataque, magia, teste de resistência.</p>
+      }
+    </section>
+
+    <!-- Espaço reservado para a estrutura futura da ficha -->
+    <div class="mt-6 flex flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/10 p-6 text-center">
+      <mat-icon class="text-slate-600">construction</mat-icon>
+      <p class="max-w-sm text-sm leading-relaxed text-slate-400">
+        {{ e.kind === 'npc' ? 'A ficha de NPC (atributos, ataques e notas do mestre)' : 'A ficha de personagem (atributos, perícias, inventário)' }}
+        será estruturada na próxima etapa.
+      </p>
+    </div>
   }
 
-  <!-- Escolha de ícone (automações) -->
   @if (e.kind === 'automation') {
-    <div class="mt-6">
-      <span class="mb-2 block text-xs text-slate-400">Ícone na barra de ações</span>
-      <div class="flex flex-wrap gap-1.5">
+    <!-- ===== Dono da ação ===== -->
+    <section class="mt-6">
+      <h4 class="mb-2 text-xs text-slate-400">Pertence a</h4>
+      <select
+        #ownerSelect
+        class="h-9 w-full rounded-md bg-ink-950 px-2 text-sm text-slate-100 outline-none ring-1 ring-white/10 focus:ring-astral-500/60"
+        (change)="setOwner(ownerSelect.value)"
+      >
+        <option value="" [selected]="!e.ownerEntryId">Mestre — ação geral (sem token selecionado)</option>
+        @for (owner of owners(); track owner.id) {
+          <option [value]="owner.id" [selected]="e.ownerEntryId === owner.id">
+            {{ owner.kind === 'character' ? 'Personagem' : 'NPC' }} — {{ owner.name }}
+          </option>
+        }
+      </select>
+      <p class="mt-1.5 text-[11px] leading-relaxed text-slate-500">
+        Ações de personagem aparecem para o jogador dele; as de NPC, para o mestre ao selecionar qualquer token desse NPC.
+        O mestre também usa as ações de um personagem selecionando o token dele.
+      </p>
+    </section>
+
+    <!-- ===== Rolagem ===== -->
+    @let r = roll();
+    <section class="mt-6">
+      <div class="mb-2 flex items-baseline justify-between">
+        <h4 class="text-xs text-slate-400">Rolagem</h4>
+        <span class="font-mono text-sm text-star-300">{{ formula(e) }}</span>
+      </div>
+      <div class="flex flex-wrap items-center gap-3">
+        <!-- Dado -->
+        <div class="flex gap-1">
+          @for (dice of diceKinds; track dice) {
+            <button
+              type="button"
+              class="flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-semibold transition-colors"
+              [class]="r.dice === dice ? 'bg-astral-500/25 text-astral-300 ring-1 ring-astral-400/50' : 'bg-white/5 text-slate-300 hover:bg-white/10'"
+              (click)="setDice(dice)"
+            >
+              <mat-icon class="!size-4 !text-[16px]">casino</mat-icon>
+              {{ dice }}
+            </button>
+          }
+        </div>
+
+        <!-- Modificador -->
+        <div class="flex items-center gap-1.5 text-sm text-slate-300">
+          Modificador
+          <div class="flex items-center rounded-md bg-ink-950 ring-1 ring-white/10">
+            <button type="button" class="grid size-8 place-items-center rounded-l-md text-slate-400 hover:bg-white/10" aria-label="Diminuir modificador" (click)="stepModifier(-1)">
+              <mat-icon class="!text-[16px]">remove</mat-icon>
+            </button>
+            <input
+              #modInput
+              type="number"
+              step="1"
+              class="h-8 w-12 bg-transparent text-center text-sm tabular-nums text-slate-100 outline-none"
+              aria-label="Modificador"
+              [value]="r.modifier"
+              (input)="setModifier(modInput.value)"
+            />
+            <button type="button" class="grid size-8 place-items-center rounded-r-md text-slate-400 hover:bg-white/10" aria-label="Aumentar modificador" (click)="stepModifier(1)">
+              <mat-icon class="!text-[16px]">add</mat-icon>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Legenda dos resultados do dado escolhido -->
+      <div class="mt-3 flex flex-wrap gap-1.5">
+        @for (g of guide(); track g.outcome) {
+          <span class="rounded-md px-2 py-1 text-[11px] ring-1" [class]="outcomeOf(g.outcome).ring">
+            <span class="tabular-nums text-slate-400">{{ g.range }}</span>
+            <span class="ml-1 font-semibold" [class]="outcomeOf(g.outcome).text">{{ outcomeOf(g.outcome).label }}</span>
+          </span>
+        }
+      </div>
+      <p class="mt-2 flex items-center gap-1.5 text-[11px] text-slate-500">
+        <mat-icon class="!size-3.5 !text-[14px]">link</mat-icon>
+        Em breve: somar ao modificador um ou mais atributos da ficha do personagem.
+      </p>
+    </section>
+
+    <!-- ===== Ícone ===== -->
+    <section class="mt-6">
+      <h4 class="mb-2 text-xs text-slate-400">Ícone na barra de ações</h4>
+      <div class="flex max-h-44 flex-wrap gap-1.5 overflow-y-auto pr-1">
         @for (icon of icons; track icon) {
           <button
             type="button"
             class="grid size-10 place-items-center rounded-lg transition-colors"
             [class]="(e.icon ?? 'bolt') === icon ? 'bg-astral-500/25 text-astral-300 ring-1 ring-astral-400/50' : 'bg-white/5 text-slate-400 hover:bg-white/10'"
+            [attr.aria-label]="icon"
             (click)="session.updateEntry(e.id, { icon })"
           >
             <mat-icon>{{ icon }}</mat-icon>
           </button>
         }
       </div>
-    </div>
-  }
+    </section>
 
-  <!-- Espaço reservado para a estrutura futura -->
-  <div class="mt-6 flex flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/10 p-6 text-center">
-    <mat-icon class="text-slate-600">construction</mat-icon>
-    <p class="max-w-sm text-sm leading-relaxed text-slate-400">{{ upcoming() }}</p>
-  </div>
+    <!-- ===== Efeito especial ===== -->
+    <section class="mt-6 pb-2">
+      <button
+        type="button"
+        role="switch"
+        class="mb-3 flex items-center gap-2 text-sm text-slate-200"
+        [attr.aria-checked]="!!e.effect"
+        (click)="toggleEffect()"
+      >
+        <span class="relative h-5 w-9 rounded-full transition-colors" [class]="e.effect ? 'bg-astral-500' : 'bg-ink-600'">
+          <span class="absolute top-0.5 size-4 rounded-full bg-white transition-all" [class]="e.effect ? 'left-[18px]' : 'left-0.5'"></span>
+        </span>
+        Efeito especial ao usar
+      </button>
+      @if (e.effect; as fx) {
+        <app-fx-picker [value]="fx" (picked)="setEffect($event)" />
+        <p class="mt-2 text-[11px] text-slate-500">Ao usar a ação, o efeito fica no mouse: arraste no mapa para lançá-lo (Esc cancela).</p>
+      }
+    </section>
+  }
 }

@@ -4,7 +4,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterLink } from '@angular/router';
-import { TABLE_ENTRY_META, TableEntry } from '../../core/models/table-session.model';
+import { ROLL_OUTCOMES, TABLE_ENTRY_META, TableEntry } from '../../core/models/table-session.model';
 import { WORLD_ITEM_META } from '../../core/models/world-item.model';
 import { GameTablesService } from '../../core/services/game-tables.service';
 import { FloatingWindow } from '../../shared/components/floating-window/floating-window';
@@ -26,6 +26,7 @@ import { TokenWindow } from './components/token-window/token-window';
 import { BlobUrlService } from './services/blob-url.service';
 import { SoundMixerService } from './services/sound-mixer.service';
 import { TableSessionService } from './services/table-session.service';
+import { formatModifier } from './utils/dice';
 
 /** O que uma janela da mesa está exibindo. */
 interface WindowContent {
@@ -190,9 +191,15 @@ export class GameTablePage {
 
   // --- Ações ---------------------------------------------------------------
 
-  /** Uma automação foi usada na barra inferior. */
+  /**
+   * Uma ação foi usada na barra inferior: rola, registra no chat e, se tiver efeito,
+   * o deixa no mouse. O aviso resume o resultado (o detalhe fica no chat).
+   */
   onActionUsed(entry: TableEntry): void {
-    this.snackBar.open(`⚡ ${entry.name}`, undefined, { duration: 1500 });
+    const { author, roll, armed } = this.session.useAction(entry);
+    const formula = roll.dice + formatModifier(roll.modifier);
+    const text = `${author} · ${roll.action}: ${formula} = ${roll.total} — ${ROLL_OUTCOMES[roll.outcome].label}`;
+    this.snackBar.open(armed ? `${text} · arraste no mapa para lançar o efeito` : text, undefined, { duration: 3500 });
   }
 
   /** Atalhos de teclado da mesa (ignorados enquanto se digita). */

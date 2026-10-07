@@ -93,6 +93,18 @@
       />
     }
 
+    <!-- 8. Efeitos especiais (e a mira em andamento) -->
+    @if (session.effects().length || fxDraft()) {
+      <app-fx-layer
+        [effects]="session.effects()"
+        [draft]="fxDraft()"
+        [current]="fxCurrent()"
+        [scale]="scale()"
+        [width]="world().w"
+        [height]="world().h"
+      />
+    }
+
     <!-- 8. Régua -->
     @if (ruler(); as r) {
       <svg class="pointer-events-none absolute inset-0 overflow-visible" [attr.width]="world().w" [attr.height]="world().h">
@@ -136,6 +148,17 @@
     @if (popoverPos(); as pos) {
       <app-note-popover class="absolute z-10" [style.left.px]="pos.left" [style.top.px]="pos.top" [note]="note" (closed)="closeNote()" />
     }
+  }
+
+  <!-- 9. Interface: efeito de uma ação "na mão", esperando o arraste -->
+  @if (session.armedFx(); as armed) {
+    <div class="pointer-events-none absolute inset-x-0 top-16 flex justify-center px-4">
+      <div class="glass flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-slate-200 animate-fade-in">
+        <span class="size-3 rounded-full" [style.background]="armed.color" [style.box-shadow]="'0 0 10px ' + armed.color"></span>
+        <strong class="text-star-300">{{ armed.action }}</strong>
+        arraste no mapa para lançar o efeito · Esc cancela
+      </div>
+    </div>
   }
 
   <!-- 9. Interface: mesa sem cenas -->

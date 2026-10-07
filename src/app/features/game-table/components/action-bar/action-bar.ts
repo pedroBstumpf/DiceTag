@@ -9,8 +9,9 @@ const SLOT_COUNT = 10;
 
 /**
  * Barra de ações (inferior da mesa).
- * Mostra as automações do papel atual — mestre ou jogador — em espaços
- * numerados, usáveis com clique ou pelas teclas 1–0.
+ * Mostra as ações de quem está agindo (`session.actor`): para o mestre, a ficha do
+ * token selecionado (NPC ou personagem) ou, sem seleção, as ações gerais; para o
+ * jogador, o personagem dele. Espaços numerados, usáveis com clique ou teclas 1–0.
  */
 @Component({
   selector: 'app-action-bar',
@@ -37,11 +38,23 @@ export class ActionBar {
     }));
   });
 
-  /** Usa a ação do espaço (ou cria uma nova, se vazio). */
+  /** Jogador sem personagem nesta mesa não tem onde criar ações. */
+  readonly canCreate = computed(() => this.session.role() === 'gm' || !!this.session.actor());
+
+  /** Rótulo de quem está agindo. */
+  readonly actorLabel = computed(() => {
+    const actor = this.session.actor();
+    if (actor) return actor.name;
+    return this.session.role() === 'gm' ? 'Ações gerais' : 'Sem personagem';
+  });
+
+  /** Usa a ação do espaço (ou cria uma nova para quem está agindo, se vazio). */
   trigger(index: number): void {
     const entry = this.slots()[index]?.entry;
     if (!entry) {
-      const created = this.session.addEntry('automation');
+      if (!this.canCreate()) return;
+      const owner = this.session.actor()?.id;
+      const created = this.session.addEntry('automation', owner ? { ownerEntryId: owner } : {});
       this.opened.emit(created.id);
       return;
     }

@@ -1,20 +1,21 @@
 import { NgTemplateOutlet } from '@angular/common';
-import { Component, computed, inject, output, signal } from '@angular/core';
+import { Component, computed, effect, inject, output, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { WORLD_ITEM_META, WorldItem } from '../../../../core/models/world-item.model';
-import { LoreFolder, TABLE_ENTRY_META, TableEntry, TableEntryKind, TableRole } from '../../../../core/models/table-session.model';
+import { LoreFolder, TABLE_ENTRY_META, TableEntry, TableEntryKind } from '../../../../core/models/table-session.model';
 import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
 import { LoreService } from '../../../worldbuild/services/lore.service';
 import { WorldbuildService } from '../../../worldbuild/services/worldbuild.service';
 import { BlobUrlService } from '../../services/blob-url.service';
 import { TableSessionService } from '../../services/table-session.service';
 import { TOKEN_DRAG_TYPE } from '../map-layers/tokens-layer/tokens-layer';
+import { ChatPanel } from '../chat-panel/chat-panel';
 import { SoundList } from '../sound-list/sound-list';
 
 /** Abas do painel lateral direito. */
-type PanelTab = 'sheets' | 'lore' | 'sounds' | 'automations';
+type PanelTab = 'chat' | 'sheets' | 'lore' | 'sounds' | 'automations';
 
 /** Id da janela que mostra as pastas do worldbuild dentro da mesa. */
 export const WORLDBUILD_WINDOW = 'worldbuild:explorer';
@@ -31,16 +32,17 @@ interface LoreRow {
 
 /**
  * Painel lateral direito da mesa, com abas:
+ * - Chat: mensagens e resultados das rolagens
  * - Fichas: personagens e NPCs
  * - Lore: documentos, linhas do tempo e mapas do worldbuild e da Lore geral,
  *   organizados em pastas próprias da mesa (renomear/remover vale só aqui)
  * - Sons: mixer de trilhas e ambientação (tocam direto na lista)
- * - Automações: habilidades e ações (do mestre e dos jogadores)
+ * - Ações: automações agrupadas por dono (gerais do mestre, cada personagem, cada NPC)
  * Fichas, lore e automações abrem numa janela flutuante.
  */
 @Component({
   selector: 'app-side-panel',
-  imports: [NgTemplateOutlet, MatButtonModule, MatIconModule, MatTooltipModule, AutoFocus, SoundList],
+  imports: [NgTemplateOutlet, MatButtonModule, MatIconModule, MatTooltipModule, AutoFocus, SoundList, ChatPanel],
   templateUrl: './side-panel.html',
   host: { class: 'flex h-full flex-col' },
 })
@@ -62,20 +64,32 @@ export class SidePanel {
 
   // --- Abas ----------------------------------------------------------------
   readonly tabs: { id: PanelTab; icon: string; label: string }[] = [
+    { id: 'chat', icon: 'forum', label: 'Chat' },
     { id: 'sheets', icon: 'group', label: 'Fichas' },
     { id: 'lore', icon: 'menu_book', label: 'Lore' },
     { id: 'sounds', icon: 'graphic_eq', label: 'Sons' },
-    { id: 'automations', icon: 'bolt', label: 'Automações' },
+    { id: 'automations', icon: 'bolt', label: 'Ações' },
   ];
-  readonly tab = signal<PanelTab>('sheets');
+  readonly tab = signal<PanelTab>('chat');
   readonly renamingId = signal<string | null>(null);
   readonly query = signal('');
+
+  /** Quantas mensagens do chat já foram vistas (para o aviso de novidade na aba). */
+  private readonly seenChat = signal(0);
+  /** Há mensagens novas enquanto outra aba está aberta. */
+  readonly chatUnread = computed(() => this.tab() !== 'chat' && this.session.chat().length > this.seenChat());
+
+  constructor() {
+    // Com a aba Chat aberta, tudo o que chega já conta como visto
+    effect(() => {
+      const count = this.session.chat().length;
+      if (this.tab() === 'chat') this.seenChat.set(count);
+    });
+  }
 
   // --- Listas --------------------------------------------------------------
   readonly characters = computed(() => this.byKind('character'));
   readonly npcs = computed(() => this.byKind('npc'));
-  readonly gmActions = computed(() => this.byKind('automation').filter((e) => e.role === 'gm'));
-  readonly playerActions = computed(() => this.byKind('automation').filter((e) => e.role === 'player'));
 
   // --- Lore da mesa --------------------------------------------------------
 
@@ -126,8 +140,9 @@ export class SidePanel {
 
   // --- Ações ---------------------------------------------------------------
 
-  create(kind: TableEntryKind, role?: TableRole): void {
-    const entry = this.session.addEntry(kind, role ? { role } : {});
+  /** Cria um arquivo; ações recebem o dono (`owner` = id do personagem/NPC; vazio = geral do mestre). */
+  create(kind: TableEntryKind, owner?: string): void {
+    const entry = this.session.addEntry(kind, owner ? { ownerEntryId: owner } : {});
     this.renamingId.set(entry.id);
     this.opened.emit(entry.id);
   }

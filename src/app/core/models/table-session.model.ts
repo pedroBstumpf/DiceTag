@@ -4,7 +4,7 @@ import { Point } from './geometry.model';
 export type TableRole = 'gm' | 'player';
 
 /** Ferramentas da barra lateral esquerda da mesa. */
-export type TableTool = 'select' | 'pan' | 'ruler' | 'ping' | 'draw' | 'fog' | 'note';
+export type TableTool = 'select' | 'pan' | 'ruler' | 'ping' | 'draw' | 'fog' | 'note' | 'fx';
 
 /** Cena (mapa) da mesa, exibida no centro da tela. */
 export interface Scene {
@@ -123,13 +123,171 @@ export interface TableEntry {
   volume?: number;
   /** sound: repetir ao terminar. Padrão: true. */
   loop?: boolean;
-  /** automation: de quem é a ação (aparece na barra inferior desse papel). */
+  /** automation (legado): papel antigo da ação. Hoje o papel vem do dono (`ownerEntryId`). */
   role?: TableRole;
   /** automation: ícone exibido na barra de ações. */
   icon?: string;
+  /**
+   * automation: ficha dona da ação. Personagem = ação do jogador dele; NPC = ação do mestre
+   * para aquele NPC (vale para cada token dele). Ausente = ação geral do mestre.
+   */
+  ownerEntryId?: string;
+  /** automation: rolagem feita ao usar. Padrão: DEFAULT_ROLL. */
+  roll?: RollConfig;
+  /** automation: efeito especial que fica "na mão" do usuário ao usar a ação. */
+  effect?: FxStyle;
+  /** character: conta do jogador dono do personagem (ausente = qualquer um). */
+  ownerUserId?: string;
   /** character/npc: configuração do token. Padrão: defaultToken(kind). */
   token?: TokenSettings;
 }
+
+// --- Rolagens ----------------------------------------------------------------
+
+/** Dados que uma ação pode rolar. */
+export type DiceKind = '2d12' | '3d6';
+export const DICE_KINDS: readonly DiceKind[] = ['2d12', '3d6'];
+
+/** Rolagem de uma ação. */
+export interface RollConfig {
+  dice: DiceKind;
+  /** Modificador fixo somado ao total. */
+  modifier: number;
+  /**
+   * Reservado para a ficha de personagem: ids de atributos cujos valores serão
+   * somados ao modificador (ver `effectiveModifier` em utils/dice.ts). Ainda sem uso.
+   */
+  attributes?: string[];
+}
+
+export const DEFAULT_ROLL: RollConfig = { dice: '2d12', modifier: 0 };
+
+/** Resultado possível de uma rolagem (depende do dado: 2d12 = sucesso, 3d6 = sorte). */
+export type RollOutcome =
+  | 'critical-failure' | 'failure' | 'partial' | 'success' | 'critical-success'
+  | 'bad-luck' | 'neutral' | 'good-luck';
+
+/** Rótulo e cores de cada resultado (classes Tailwind completas). */
+export const ROLL_OUTCOMES: Record<RollOutcome, { label: string; text: string; ring: string }> = {
+  'critical-failure': { label: 'Falha crítica', text: 'text-red-400', ring: 'ring-red-500/50 bg-red-500/10' },
+  failure: { label: 'Falha', text: 'text-orange-300', ring: 'ring-orange-400/40 bg-orange-500/10' },
+  partial: { label: 'Sucesso parcial', text: 'text-amber-200', ring: 'ring-amber-300/40 bg-amber-400/10' },
+  success: { label: 'Sucesso', text: 'text-emerald-300', ring: 'ring-emerald-400/40 bg-emerald-500/10' },
+  'critical-success': { label: 'Sucesso crítico!', text: 'text-astral-300', ring: 'ring-astral-300/60 bg-astral-500/15' },
+  'bad-luck': { label: 'Azar', text: 'text-violet-300', ring: 'ring-violet-400/40 bg-violet-500/10' },
+  neutral: { label: 'Neutro', text: 'text-slate-300', ring: 'ring-white/15 bg-white/5' },
+  'good-luck': { label: 'Sorte!', text: 'text-amber-300', ring: 'ring-amber-300/50 bg-amber-400/10' },
+};
+
+/** Rolagem feita (fica no chat). */
+export interface RollResult {
+  /** Nome e ícone da ação usada. */
+  action: string;
+  icon: string;
+  dice: DiceKind;
+  /** Valor de cada dado. */
+  rolls: number[];
+  modifier: number;
+  total: number;
+  outcome: RollOutcome;
+}
+
+/** Ícones disponíveis para automações (barra de ações). Nomes do Material Symbols. */
+export const AUTOMATION_ICONS = [
+  'bolt', 'swords', 'shield', 'local_fire_department', 'healing', 'auto_awesome', 'casino', 'visibility',
+  'directions_run', 'psychology', 'skull', 'favorite', 'water_drop', 'ac_unit', 'air', 'electric_bolt',
+  'cyclone', 'volcano', 'tsunami', 'thunderstorm', 'flare', 'science', 'spa', 'eco', 'pets', 'target',
+  'sprint', 'sports_martial_arts', 'front_hand', 'self_improvement', 'shield_moon', 'nightlight', 'wb_sunny',
+  'star', 'diamond', 'military_tech', 'hearing', 'visibility_off', 'record_voice_over', 'music_note',
+  'menu_book', 'key', 'lock_open', 'theater_comedy', 'medication', 'coronavirus', 'hiking', 'explore',
+] as const;
+
+// --- Chat --------------------------------------------------------------------
+
+/** Mensagem do chat da mesa: texto digitado ou resultado de rolagem. */
+export interface ChatMessage {
+  id: string;
+  /** Data/hora (ms). */
+  at: number;
+  /** Conta que enviou. */
+  userId: string;
+  /** Nome exibido (a conta ou o personagem/NPC que agiu). */
+  author: string;
+  role: TableRole;
+  text?: string;
+  roll?: RollResult;
+}
+
+/** Máximo de mensagens guardadas por mesa (as mais antigas saem). */
+export const MAX_CHAT_MESSAGES = 300;
+
+// --- Efeitos especiais -------------------------------------------------------
+
+/** Formas de efeito especial (desenhadas arrastando no mapa). */
+export type FxKind =
+  | 'slash' | 'claw' | 'thrust' | 'impact'
+  | 'arrow' | 'projectile' | 'fireball' | 'lightning' | 'beam' | 'cone'
+  | 'explosion' | 'wave' | 'smoke' | 'meteor' | 'eruption' | 'vortex'
+  | 'heal' | 'shield' | 'rune' | 'teleport';
+
+/** Efeito escolhido: forma + cor (a cor representa o elemento). */
+export interface FxStyle {
+  kind: FxKind;
+  color: string;
+}
+
+/** Grupos do seletor de efeitos. */
+export const FX_GROUPS = ['Golpes', 'Disparos', 'Área', 'Magia'] as const;
+export type FxGroup = (typeof FX_GROUPS)[number];
+
+const AIM = 'Arraste da origem até o alvo';
+const AREA = 'Arraste do centro até a borda (clique = 1,5 quad.)';
+
+/**
+ * Catálogo de efeitos. `radial`: o arraste define centro e raio (não gira com a direção);
+ * os demais vão da origem até o alvo. O desenho de cada um fica em utils/effects.ts.
+ */
+export const FX_KINDS: { id: FxKind; label: string; icon: string; hint: string; group: FxGroup; radial: boolean }[] = [
+  { id: 'slash', label: 'Corte', icon: 'content_cut', hint: 'Arraste na direção do golpe', group: 'Golpes', radial: false },
+  { id: 'claw', label: 'Garras', icon: 'pets', hint: 'Arraste na direção do golpe', group: 'Golpes', radial: false },
+  { id: 'thrust', label: 'Estocada', icon: 'swords', hint: AIM, group: 'Golpes', radial: false },
+  { id: 'impact', label: 'Impacto', icon: 'crisis_alert', hint: AREA, group: 'Golpes', radial: true },
+  { id: 'arrow', label: 'Flecha', icon: 'arrow_outward', hint: AIM, group: 'Disparos', radial: false },
+  { id: 'projectile', label: 'Orbe', icon: 'radio_button_checked', hint: AIM, group: 'Disparos', radial: false },
+  { id: 'fireball', label: 'Bola de fogo', icon: 'local_fire_department', hint: AIM, group: 'Disparos', radial: false },
+  { id: 'lightning', label: 'Raio', icon: 'bolt', hint: AIM, group: 'Disparos', radial: false },
+  { id: 'beam', label: 'Feixe', icon: 'flashlight_on', hint: AIM, group: 'Disparos', radial: false },
+  { id: 'cone', label: 'Jato', icon: 'air', hint: 'Arraste da origem até o alcance', group: 'Disparos', radial: false },
+  { id: 'explosion', label: 'Explosão', icon: 'flare', hint: AREA, group: 'Área', radial: true },
+  { id: 'wave', label: 'Onda', icon: 'radar', hint: AREA, group: 'Área', radial: true },
+  { id: 'smoke', label: 'Fumaça', icon: 'cloud', hint: AREA, group: 'Área', radial: true },
+  { id: 'meteor', label: 'Meteoros', icon: 'grain', hint: AREA, group: 'Área', radial: true },
+  { id: 'eruption', label: 'Erupção', icon: 'landslide', hint: 'Arraste ao longo da linha de estacas', group: 'Área', radial: false },
+  { id: 'vortex', label: 'Vórtice', icon: 'cyclone', hint: AREA, group: 'Área', radial: true },
+  { id: 'heal', label: 'Cura', icon: 'healing', hint: AREA, group: 'Magia', radial: true },
+  { id: 'shield', label: 'Escudo', icon: 'shield', hint: AREA, group: 'Magia', radial: true },
+  { id: 'rune', label: 'Runa', icon: 'blur_circular', hint: AREA, group: 'Magia', radial: true },
+  { id: 'teleport', label: 'Teleporte', icon: 'move_up', hint: AREA, group: 'Magia', radial: true },
+];
+
+/** Cores dos efeitos, por elemento. */
+export const FX_COLORS: { color: string; label: string }[] = [
+  { color: '#ff7a1a', label: 'Fogo' },
+  { color: '#7fe3ff', label: 'Gelo' },
+  { color: '#ffe14d', label: 'Eletricidade' },
+  { color: '#1fa2ff', label: 'Água' },
+  { color: '#7dff5a', label: 'Ácido / veneno' },
+  { color: '#3fbf5f', label: 'Natureza' },
+  { color: '#c08a4a', label: 'Terra' },
+  { color: '#a35cff', label: 'Sombra' },
+  { color: '#ff5fd2', label: 'Psíquico' },
+  { color: '#fff3b0', label: 'Sagrado' },
+  { color: '#ff3355', label: 'Sangue' },
+  { color: '#7aa7ff', label: 'Arcano' },
+  { color: '#e8eefc', label: 'Físico' },
+];
+
+export const DEFAULT_FX: FxStyle = { kind: 'slash', color: '#e8eefc' };
 
 /** Estado salvo de uma mesa. */
 export interface TableState {
@@ -140,6 +298,8 @@ export interface TableState {
   soundMaster?: number;
   /** Organização da aba Lore nesta mesa. Padrão: sem pastas nem ajustes. */
   lore?: TableLore;
+  /** Chat da mesa (mensagens e rolagens). Padrão: []. */
+  chat?: ChatMessage[];
 }
 
 // --- Lore da mesa ------------------------------------------------------------
@@ -205,6 +365,8 @@ export interface TokenSettings {
   /** Tamanho em quadrados da grade (0.5, 1, 2, 3, 4; a alça usa passos de 0.5). */
   size: number;
   vision: TokenVision;
+  /** Velocidade do movimento por WASD/setas, em quadrados por segundo. Padrão: DEFAULT_TOKEN_SPEED. */
+  speed?: number;
   bars: TokenBar[];
   tags: TokenTag[];
 }
@@ -234,6 +396,11 @@ export const METERS_PER_SQUARE = 1.5;
 
 /** Alcance de visão padrão, em metros. */
 export const DEFAULT_VISION_RANGE = 18;
+
+/** Velocidade do token com WASD/setas (quadrados por segundo): padrão e limites. */
+export const DEFAULT_TOKEN_SPEED = 2;
+export const MIN_TOKEN_SPEED = 0.5;
+export const MAX_TOKEN_SPEED = 12;
 
 /** Paleta para barras e etiquetas de tokens (cores livres também são aceitas). */
 export const TOKEN_COLORS = [

@@ -60,4 +60,10 @@
   @case ('fog') {
     <app-fog-menu class="absolute left-full top-0 ml-2 animate-fade-in" />
   }
+  @case ('fx') {
+    <!-- Com o efeito de uma ação na mão, o submenu some (a ação já definiu forma e cor) -->
+    @if (!session.armedFx()) {
+      <app-fx-menu class="absolute left-full top-0 ml-2 animate-fade-in" />
+    }
+  }
 }

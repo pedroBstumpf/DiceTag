@@ -61,6 +61,125 @@
   }
 }
 
+/* --- Efeitos especiais do mapa (fx-layer + utils/effects.ts) ---
+   Animações genéricas, parametrizadas por variáveis CSS que cada parte do efeito define
+   (--dx/--dy deslocamento, --s0/--s1 escala inicial/final, --o0 opacidade, --rot giro, --sy pulso).
+   Todas começam invisíveis: partes com atraso não aparecem antes da hora (fill-mode "both").
+   fx-draw usa pathLength="1" + stroke-dasharray="1". */
+@keyframes fx-draw {
+  0%   { stroke-dashoffset: 1; opacity: 1; }
+  45%  { stroke-dashoffset: 0; opacity: 1; }
+  100% { stroke-dashoffset: 0; opacity: 0; }
+}
+/* Cresce da escala --s0 até 1 enquanto some (anéis, bolas de fogo) */
+@keyframes fx-grow {
+  0%   { transform: scale(var(--s0, 0.1)); opacity: 0; }
+  4%   { opacity: var(--o0, 1); }
+  100% { transform: scale(1); opacity: 0; }
+}
+/* Bola de fogo: cresce, sustenta e só então se apaga */
+@keyframes fx-blast {
+  0%   { transform: scale(var(--s0, 0.1)); opacity: 0; }
+  4%   { opacity: 1; }
+  45%  { transform: scale(0.92); opacity: 1; }
+  100% { transform: scale(1); opacity: 0; }
+}
+/* Clarão: acende rápido e apaga */
+@keyframes fx-flash {
+  0%   { transform: scale(var(--s0, 0.4)); opacity: 0; }
+  12%  { opacity: 1; }
+  100% { transform: scale(1); opacity: 0; }
+}
+/* Partícula: anda (--dx, --dy) mudando de escala até --s1 */
+@keyframes fx-move {
+  0%   { transform: translate(0, 0) scale(1); opacity: 0; }
+  6%   { opacity: var(--o0, 1); }
+  100% { transform: translate(var(--dx), var(--dy)) scale(var(--s1, 0.3)); opacity: 0; }
+}
+/* Fumaça: aparece devagar, sobe/espalha e se dissipa */
+@keyframes fx-smoke {
+  0%   { transform: translate(0, 0) scale(0.5); opacity: 0; }
+  20%  { opacity: 1; }
+  100% { transform: translate(var(--dx), var(--dy)) scale(var(--s1, 1.5)); opacity: 0; }
+}
+/* Projétil: viaja --dx no eixo do arraste */
+@keyframes fx-travel {
+  0%   { transform: translateX(0); opacity: 0; }
+  3%   { opacity: 1; }
+  88%  { transform: translateX(var(--dx)); opacity: 1; }
+  100% { transform: translateX(var(--dx)); opacity: 0; }
+}
+/* Queda (meteoro): vem de (--dx, --dy) até o ponto */
+@keyframes fx-fall {
+  0%   { transform: translate(var(--dx), var(--dy)); opacity: 0; }
+  10%  { opacity: 1; }
+  88%  { transform: translate(0, 0); opacity: 1; }
+  100% { transform: translate(0, 0); opacity: 0; }
+}
+@keyframes fx-flicker {
+  0%   { opacity: 0; }
+  8%   { opacity: 1; }
+  20%  { opacity: 0.25; }
+  32%  { opacity: 1; }
+  48%  { opacity: 0.4; }
+  60%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+/* Golpe: estica a partir da origem e some (origem à esquerda) */
+@keyframes fx-swipe {
+  0%   { transform: scale(0.05, 1); opacity: 0; }
+  3%   { opacity: 1; }
+  22%  { transform: scale(1, 1); opacity: 1; }
+  100% { transform: scale(1, 1); opacity: 0; }
+}
+/* Jato: abre a partir da origem */
+@keyframes fx-cone {
+  0%   { transform: scale(0.08, 0.3); opacity: 0; }
+  4%   { opacity: 1; }
+  35%  { transform: scale(1, 1); opacity: 0.95; }
+  100% { transform: scale(1.05, 1.05); opacity: 0; }
+}
+/* Feixe: estica, sustenta e afina */
+@keyframes fx-beam {
+  0%   { transform: scale(0, 1); opacity: 0; }
+  2%   { opacity: 1; }
+  14%  { transform: scale(1, 1); }
+  80%  { transform: scale(1, 1); opacity: 1; }
+  100% { transform: scale(1, 0.2); opacity: 0; }
+}
+/* Aparece, fica e some */
+@keyframes fx-hold {
+  0%   { opacity: 0; }
+  12%  { opacity: 1; }
+  75%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+/* Surge com um leve "estalo" (escudo, estacas) */
+@keyframes fx-pop {
+  0%   { transform: scale(0.3); opacity: 0; }
+  20%  { transform: scale(1.08); opacity: 1; }
+  32%  { transform: scale(1); }
+  75%  { opacity: 0.9; }
+  100% { transform: scale(1.03); opacity: 0; }
+}
+/* Coluna de luz subindo do chão (origem embaixo) */
+@keyframes fx-rise {
+  0%   { transform: scale(1, 0); opacity: 0; }
+  4%   { opacity: 1; }
+  22%  { transform: scale(1, 1.08); }
+  32%  { transform: scale(1, 1); }
+  70%  { opacity: 1; }
+  100% { transform: scale(0.7, 1); opacity: 0; }
+}
+@keyframes fx-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(var(--rot, 180deg)); }
+}
+@keyframes fx-pulse {
+  0%, 100% { transform: scale(1, 1); }
+  50%      { transform: scale(1, var(--sy, 0.6)); }
+}
+
 /* Painel "vidro" usado nas barras sobrepostas da mesa e janelas */
 @utility glass {
   background-color: color-mix(in oklab, var(--color-ink-900) 82%, transparent);

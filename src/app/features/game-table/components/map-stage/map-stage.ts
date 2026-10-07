@@ -7,11 +7,13 @@ import { newId } from '../../../../core/utils/id';
 import { Viewport, fitRect, screenToWorld, worldToScreen, zoomAt } from '../../../../shared/utils/viewport';
 import { TableSessionService } from '../../services/table-session.service';
 import { distanceToPolyline, sizeFromHandle, snapToCorner, snapTokenCenter } from '../../utils/geometry';
+import { isRadialFx } from '../../utils/effects';
 import { simplifyPath } from '../../utils/simplify';
 import { distanceToWall, handleAt, moveWallHandle, translateWall } from '../../utils/walls';
 import { DoorsLayer } from '../map-layers/doors-layer/doors-layer';
 import { DrawingsLayer, StrokeDraft } from '../map-layers/drawings-layer/drawings-layer';
 import { FogLayer } from '../map-layers/fog-layer/fog-layer';
+import { FxDraft, FxLayer } from '../map-layers/fx-layer/fx-layer';
 import { NotePointerDown, NotesLayer } from '../map-layers/notes-layer/notes-layer';
 import { NotePopover } from '../note-popover/note-popover';
 import { TOKEN_DRAG_TYPE, TokenPointerDown, TokensLayer } from '../map-layers/tokens-layer/tokens-layer';
@@ -39,6 +41,7 @@ type Gesture =
   | { kind: 'wall'; sx: number; sy: number; original: Wall; handle: number }
   | { kind: 'draw' }
   | { kind: 'erase' }
+  | { kind: 'fx' }
   | { kind: 'note'; id: string; sx: number; sy: number; nx: number; ny: number; moved: boolean };
 
 /** Largura do popover de anotação (para mantê-lo dentro da tela). */
@@ -55,9 +58,10 @@ const MOVE_KEYS: Record<string, Point> = {
   d: { x: 1, y: 0 },
   arrowright: { x: 1, y: 0 },
 };
-/** Velocidade do token movido pelo teclado (quadrados por segundo); Shift multiplica. */
-const KEY_SPEED = 2;
+/** Shift multiplica a velocidade do token movido pelo teclado (a base vem da ficha). */
 const KEY_SPEED_FAST = 2.5;
+/** Clique sem arrastar com Explosão/Onda: raio em quadrados. */
+const FX_CLICK_RADIUS = 1.5;
 
 /**
  * Mapa central da mesa — orquestrador das camadas.
@@ -68,12 +72,12 @@ const KEY_SPEED_FAST = 2.5;
  * TableSessionService.
  *
  * Ordem das camadas no "mundo", de baixo para cima:
- *   mapa → grade → desenhos → notas → névoa → tokens visíveis → portas → paredes → régua e ping
+ *   mapa → grade → desenhos → notas → névoa → tokens visíveis → portas → paredes → efeitos, régua e ping
  * Acima do mundo fica a interface (popover de anotação, avisos).
  */
 @Component({
   selector: 'app-map-stage',
-  imports: [MatIconModule, MatTooltipModule, DrawingsLayer, NotesLayer, FogLayer, TokensLayer, DoorsLayer, WallsLayer, NotePopover],
+  imports: [MatIconModule, MatTooltipModule, DrawingsLayer, NotesLayer, FogLayer, TokensLayer, DoorsLayer, WallsLayer, FxLayer, NotePopover],
   templateUrl: './map-stage.html',
   host: { class: 'block' },
 })
@@ -103,6 +107,10 @@ export class MapStage {
   readonly strokeDraft = signal<StrokeDraft | null>(null);
   /** Traços tocados pela borracha no gesto atual (removidos de uma vez ao soltar). */
   readonly erasing = signal<ReadonlySet<string>>(new Set());
+  /** Efeito sendo mirado (ferramenta Efeitos): de onde até onde. */
+  readonly fxDraft = signal<FxDraft | null>(null);
+  /** Forma e cor que o próximo lançamento vai usar (a da ação armada ou a da ferramenta). */
+  readonly fxCurrent = computed(() => this.session.armedFx() ?? this.session.fxStyle());
 
   readonly scene = this.session.activeScene;
   readonly gridSize = computed(() => this.scene()?.gridSize ?? 70);
@@ -151,7 +159,7 @@ export class MapStage {
       return mode === 'erase' ? 'pointer' : mode === 'edit' ? 'move' : 'crosshair';
     }
     if (tool === 'draw') return this.session.brush().eraser ? 'cell' : 'crosshair';
-    return tool === 'ruler' || tool === 'ping' || tool === 'note' ? 'crosshair' : 'grab';
+    return tool === 'ruler' || tool === 'ping' || tool === 'note' || tool === 'fx' ? 'crosshair' : 'grab';
   });
 
   private gesture: Gesture | null = null;
@@ -188,12 +196,13 @@ export class MapStage {
 
     inject(DestroyRef).onDestroy(() => cancelAnimationFrame(this.keyFrame));
 
-    // Trocar de ferramenta, de modo ou de cena descarta a parede em construção
+    // Trocar de ferramenta, de modo ou de cena descarta a parede (e a mira de efeito) em construção
     effect(() => {
       this.session.tool();
       this.session.wallMode();
       this.sceneId();
       this.wallDraft.set(null);
+      this.fxDraft.set(null);
     });
   }
 
@@ -261,6 +270,11 @@ export class MapStage {
       this.onFogDown(event, p);
     } else if (tool === 'draw') {
       this.onDrawDown(event, p);
+    } else if (tool === 'fx') {
+      // Efeito: arrasta da origem até o alvo/alcance
+      this.fxDraft.set({ from: p, to: p });
+      this.gesture = { kind: 'fx' };
+      this.capture(event);
     } else if (tool === 'note') {
       // Clicar no mapa cria uma anotação e já abre a edição
       const note = this.session.addNote(p);
@@ -313,6 +327,24 @@ export class MapStage {
     // Tolerância de ~1px na tela: invisível ao olho, mas reduz bastante os pontos
     const points = simplifyPath(draft.points, 1 / this.scale());
     this.session.addStroke({ ...draft, points });
+  }
+
+  // --- Ferramenta Efeitos --------------------------------------------------
+
+  /**
+   * Lança o efeito mirado. Arraste curto: efeitos radiais usam um raio padrão;
+   * as formas com direção são ignoradas (o efeito armado de uma ação continua na mão).
+   */
+  private finishFx(): void {
+    const draft = this.fxDraft();
+    this.fxDraft.set(null);
+    if (!draft) return;
+    const { from, to } = draft;
+    if (Math.hypot(to.x - from.x, to.y - from.y) * this.scale() > 8) {
+      this.session.castFx(from, to, this.scale());
+    } else if (isRadialFx(this.fxCurrent().kind)) {
+      this.session.castFx(from, { x: from.x + FX_CLICK_RADIUS * this.gridSize(), y: from.y }, this.scale());
+    }
   }
 
   // --- Ferramenta Névoa: paredes -------------------------------------------
@@ -472,6 +504,9 @@ export class MapStage {
       });
     } else if (g.kind === 'erase') {
       this.eraseAt(this.toWorld(event));
+    } else if (g.kind === 'fx') {
+      const to = this.toWorld(event);
+      this.fxDraft.update((d) => (d ? { ...d, to } : d));
     } else if (g.kind === 'note') {
       const dx = event.clientX - g.sx;
       const dy = event.clientY - g.sy;
@@ -488,6 +523,7 @@ export class MapStage {
 
     if (g?.kind === 'note' && !g.moved) this.openNoteId.set(g.id);
     if (g?.kind === 'draw') this.finishStroke();
+    if (g?.kind === 'fx') this.finishFx();
     if (g?.kind === 'erase') {
       this.session.eraseStrokes([...this.erasing()]);
       this.erasing.set(new Set());
@@ -514,6 +550,13 @@ export class MapStage {
   handleKey(event: KeyboardEvent): boolean {
     if (event.key === 'Escape' && this.openNoteId()) {
       this.openNoteId.set(null);
+      return true;
+    }
+
+    // Efeito de uma ação na mão: Esc desiste e volta à ferramenta anterior
+    if (event.key === 'Escape' && this.session.armedFx()) {
+      this.fxDraft.set(null);
+      this.session.cancelArmedFx();
       return true;
     }
 
@@ -601,7 +644,7 @@ export class MapStage {
     if (len) {
       // Diagonal com a mesma velocidade; no máximo 50ms por quadro (aba em segundo plano)
       const dt = Math.min(now - last, 50) / 1000;
-      const step = (KEY_SPEED * (this.keyFast ? KEY_SPEED_FAST : 1) * this.gridSize() * dt) / len;
+      const step = (token.speed * (this.keyFast ? KEY_SPEED_FAST : 1) * this.gridSize() * dt) / len;
       this.session.moveToken(token.placement.id, { x: token.placement.x + dx * step, y: token.placement.y + dy * step });
     }
     this.keyFrame = requestAnimationFrame((t) => this.glide(t, now));

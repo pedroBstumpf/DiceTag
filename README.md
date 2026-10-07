@@ -67,11 +67,12 @@ O mapa ocupa a tela inteira e as barras flutuam por cima — todas escondíveis:
 
 - **Topo — cenas:** abas de mapas; adicionar (com imagem ou só grade), renomear, trocar mapa, ajustar grade.
 - **Esquerda — ferramentas:** selecionar (V), mover (M), régua em quadrados e metros (R), ping (P),
-  desenhar (D), névoa de guerra (F) com paredes (W), anotação (N), grade (G), zoom.
-- **Direita — painel:** Fichas (personagens e NPCs — arraste para o mapa; a imagem enviada na ficha é a do
+  desenhar (D), névoa de guerra (F) com paredes (W), anotação (N), efeitos especiais (E), grade (G), zoom.
+- **Direita — painel:** Chat (mensagens e rolagens), Fichas (personagens e NPCs — arraste para o mapa; a imagem enviada na ficha é a do
   token), Lore (itens da Lore geral e do worldbuild, com pastas próprias da mesa; renomear e remover valem
-  só para a mesa), Sons (mixer), Automações.
-- **Baixo — ações:** 10 espaços (teclas 1–0) com as automações do papel atual (Mestre/Jogador).
+  só para a mesa), Sons (mixer), Ações (automações por personagem, NPC ou gerais do mestre).
+- **Baixo — ações:** 10 espaços (teclas 1–0) com as ações de quem está agindo: o jogador vê as do personagem
+  dele; o mestre, as do token selecionado (NPC ou personagem) ou as gerais.
 - **Janelas:** todo arquivo abre numa janela que pode ser movida, redimensionada, minimizada, maximizada e fixada.
 - **Modo imersivo:** tecla `\` esconde/mostra todas as barras.
 
@@ -81,6 +82,23 @@ circular, tamanho, visão, barras (ex.: PV 12/20) e etiquetas com cor e nível (
 configurado com **duplo clique no token**. Tokens de **personagem** são vinculados à ficha; cada token de
 **NPC** é independente (cinco goblins, cinco PVs). Arraste para mover (snap à grade; Shift ou grade
 escondida = livre), use **WASD/setas** para deslizar devagar, a alça para redimensionar e Delete para remover.
+
+A velocidade do movimento com WASD/setas é configurada por ficha, na janela do token.
+
+### Ações, rolagens e chat
+Cada ação rola **2d12** ou **3d6** + modificador. 2d12: abaixo de 0 falha crítica, até 11 falha, até 16
+sucesso parcial, até 23 sucesso, 24+ sucesso crítico. 3d6: até 9 azar, 10–12 neutro, 13+ sorte. O resultado
+vai para o **chat** da mesa, que também recebe mensagens digitadas.
+
+### Efeitos especiais
+Ferramenta **E**: arraste no mapa para lançar um dos 20 efeitos, na cor do elemento (fogo, gelo, água,
+eletricidade, sombra…):
+- **Golpes:** corte, garras, estocada, impacto
+- **Disparos:** flecha, orbe, bola de fogo, raio, feixe, jato
+- **Área:** explosão, onda de choque, fumaça, chuva de meteoros, erupção de estacas, vórtice
+- **Magia:** cura, escudo, círculo de runas, teleporte
+
+Uma ação pode ter efeito: ao usá-la, ele fica no mouse até você arrastar.
 
 ### Névoa de guerra
 Paredes em linha ou círculo e **portas** (abrem e fecham com um clique) bloqueiam a visão dos tokens.
