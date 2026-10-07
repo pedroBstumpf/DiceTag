@@ -5,6 +5,8 @@ import {
   BRUSH_WIDTHS,
   DEFAULT_SOUND_VOLUME,
   METERS_PER_SQUARE,
+  MapNote,
+  NOTE_COLORS,
   Scene,
   Stroke,
   TABLE_ENTRY_META,
@@ -74,6 +76,7 @@ const EMPTY_STATE: TableState = { scenes: [], activeSceneId: null, entries: [] }
 const NO_TOKENS: TokenPlacement[] = [];
 const NO_WALLS: Wall[] = [];
 const NO_STROKES: Stroke[] = [];
+const NO_NOTES: MapNote[] = [];
 
 /**
  * Estado da mesa aberta: cenas, arquivos (fichas, sons, automações),
@@ -110,6 +113,19 @@ export class TableSessionService {
 
   /** Desenhos da cena ativa. */
   readonly drawings = computed(() => this.activeScene()?.drawings ?? NO_STROKES);
+  /** Anotações da cena ativa. */
+  readonly notes = computed(() => this.activeScene()?.notes ?? NO_NOTES);
+
+  /**
+   * Anotações exibidas: na visão de jogador somem as "só mestre" e, com névoa,
+   * as que estão fora da área visível.
+   */
+  readonly visibleNotes = computed(() => {
+    const notes = this.notes();
+    if (this.role() !== 'player') return notes;
+    const polys = this.visionPolygons();
+    return notes.filter((n) => !n.gmOnly && this.isVisible(n, polys));
+  });
 
   // --- Névoa de guerra e paredes (cena ativa) ------------------------------
   readonly walls = computed(() => this.activeScene()?.walls ?? NO_WALLS);
@@ -217,6 +233,7 @@ export class TableSessionService {
       fog: { enabled: false },
       walls: [],
       drawings: [],
+      notes: [],
     };
     this.patchState((s) => ({ ...s, scenes: [...s.scenes, scene], activeSceneId: scene.id }));
     this.selectedTokenId.set(null);
@@ -491,6 +508,31 @@ export class TableSessionService {
     this.drawHistory.set(sceneId, stack);
   }
 
+  // --- Anotações -----------------------------------------------------------
+
+  /** Cria uma anotação vazia na cena ativa. */
+  addNote(p: Point): MapNote | null {
+    const scene = this.activeScene();
+    if (!scene) return null;
+    const note: MapNote = { id: newId(), x: p.x, y: p.y, title: '', text: '', color: NOTE_COLORS[0], gmOnly: false };
+    this.updateScene(scene.id, { notes: [...(scene.notes ?? []), note] });
+    return note;
+  }
+
+  updateNote(noteId: string, patch: Partial<Omit<MapNote, 'id'>>): void {
+    const scene = this.activeScene();
+    if (scene) this.updateScene(scene.id, { notes: (scene.notes ?? []).map((n) => (n.id === noteId ? { ...n, ...patch } : n)) });
+  }
+
+  moveNote(noteId: string, p: Point): void {
+    this.updateNote(noteId, { x: p.x, y: p.y });
+  }
+
+  removeNote(noteId: string): void {
+    const scene = this.activeScene();
+    if (scene) this.updateScene(scene.id, { notes: (scene.notes ?? []).filter((n) => n.id !== noteId) });
+  }
+
   /** O ponto está em alguma área visível? (sem névoa, tudo é visível) */
   isVisible(p: Point, polys = this.visionPolygons()): boolean {
     if (!this.fogEnabled()) return true;
@@ -553,6 +595,7 @@ function normalizeState(raw: TableState | undefined): TableState {
       fog: sc.fog ?? { enabled: false },
       walls: sc.walls ?? [],
       drawings: sc.drawings ?? [],
+      notes: sc.notes ?? [],
     })),
     entries: raw.entries.map((e) =>
       e.kind === 'sound' ? { ...e, volume: e.volume ?? DEFAULT_SOUND_VOLUME, loop: e.loop ?? true } : e,

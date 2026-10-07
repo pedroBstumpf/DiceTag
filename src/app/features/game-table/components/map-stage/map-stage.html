@@ -49,6 +49,15 @@
     <!-- 3. Desenhos -->
     <app-drawings-layer [strokes]="session.drawings()" [draft]="strokeDraft()" [hidden]="erasing()" />
 
+    <!-- 4. Anotações (marcadores) -->
+    <app-notes-layer
+      [notes]="session.visibleNotes()"
+      [scale]="scale()"
+      [interactive]="notesInteractive()"
+      [activeId]="openNoteId()"
+      (noteDown)="onNoteDown($event)"
+    />
+
     <!-- 5. Névoa de guerra -->
     @if (session.fogEnabled()) {
       <app-fog-layer [width]="world().w" [height]="world().h" [polygons]="session.visionPolygons()" [player]="session.playerFog()" />
@@ -106,6 +115,13 @@
       ></span>
     }
   </div>
+
+  <!-- 9. Interface: edição da anotação aberta -->
+  @if (openNote(); as note) {
+    @if (popoverPos(); as pos) {
+      <app-note-popover class="absolute z-10" [style.left.px]="pos.left" [style.top.px]="pos.top" [note]="note" (closed)="closeNote()" />
+    }
+  }
 
   <!-- 9. Interface: mesa sem cenas -->
   @if (!scene()) {

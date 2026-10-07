@@ -23,7 +23,27 @@ export interface Scene {
   walls?: Wall[];
   /** Desenhos livres (pincel). Padrão: []. */
   drawings?: Stroke[];
+  /** Anotações (marcadores) no mapa. Padrão: []. */
+  notes?: MapNote[];
 }
+
+// --- Anotações ---------------------------------------------------------------
+
+/** Anotação presa a um ponto do mapa (marcador com título e texto). */
+export interface MapNote {
+  id: string;
+  /** Ponto do mapa onde fica a ponta do marcador. */
+  x: number;
+  y: number;
+  title: string;
+  text: string;
+  color: string;
+  /** Só o mestre vê (some na visão de jogador). */
+  gmOnly: boolean;
+}
+
+/** Cores dos marcadores de anotação. */
+export const NOTE_COLORS = ['#facc15', '#7aa7ff', '#ef4444', '#22c55e', '#b18cff', '#e8eefc'] as const;
 
 // --- Desenho -----------------------------------------------------------------
 

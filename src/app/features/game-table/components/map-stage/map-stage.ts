@@ -4,12 +4,14 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { Point } from '../../../../core/models/geometry.model';
 import { METERS_PER_SQUARE } from '../../../../core/models/table-session.model';
 import { newId } from '../../../../core/utils/id';
-import { Viewport, fitRect, screenToWorld, zoomAt } from '../../../../shared/utils/viewport';
+import { Viewport, fitRect, screenToWorld, worldToScreen, zoomAt } from '../../../../shared/utils/viewport';
 import { TableSessionService } from '../../services/table-session.service';
 import { distanceToPolyline, sizeFromHandle, snapToCorner, snapTokenCenter } from '../../utils/geometry';
 import { simplifyPath } from '../../utils/simplify';
 import { DrawingsLayer, StrokeDraft } from '../map-layers/drawings-layer/drawings-layer';
 import { FogLayer } from '../map-layers/fog-layer/fog-layer';
+import { NotePointerDown, NotesLayer } from '../map-layers/notes-layer/notes-layer';
+import { NotePopover } from '../note-popover/note-popover';
 import { TOKEN_DRAG_TYPE, TokenPointerDown, TokensLayer } from '../map-layers/tokens-layer/tokens-layer';
 import { WallDraft, WallsLayer } from '../map-layers/walls-layer/walls-layer';
 
@@ -31,7 +33,11 @@ type Gesture =
   | { kind: 'resize'; id: string; cx: number; cy: number }
   | { kind: 'circle'; cx: number; cy: number }
   | { kind: 'draw' }
-  | { kind: 'erase' };
+  | { kind: 'erase' }
+  | { kind: 'note'; id: string; sx: number; sy: number; nx: number; ny: number; moved: boolean };
+
+/** Largura do popover de anotação (para mantê-lo dentro da tela). */
+const POPOVER_WIDTH = 288;
 
 /**
  * Mapa central da mesa — orquestrador das camadas.
@@ -42,11 +48,12 @@ type Gesture =
  * TableSessionService.
  *
  * Ordem das camadas no "mundo", de baixo para cima:
- *   mapa → grade → desenhos → névoa → tokens visíveis → paredes → régua e ping
+ *   mapa → grade → desenhos → notas → névoa → tokens visíveis → paredes → régua e ping
+ * Acima do mundo fica a interface (popover de anotação, avisos).
  */
 @Component({
   selector: 'app-map-stage',
-  imports: [MatIconModule, MatTooltipModule, DrawingsLayer, FogLayer, TokensLayer, WallsLayer],
+  imports: [MatIconModule, MatTooltipModule, DrawingsLayer, NotesLayer, FogLayer, TokensLayer, WallsLayer, NotePopover],
   templateUrl: './map-stage.html',
   host: { class: 'block' },
 })
@@ -84,8 +91,23 @@ export class MapStage {
     equal: (a, b) => a.sceneId === b.sceneId && a.blobId === b.blobId,
   });
 
-  /** Tokens e anotações recebem o ponteiro só na ferramenta Selecionar. */
+  /** Tokens recebem o ponteiro só na ferramenta Selecionar. */
   readonly selecting = computed(() => this.session.tool() === 'select');
+  /** Marcadores de anotação recebem o ponteiro em Selecionar e Anotação. */
+  readonly notesInteractive = computed(() => this.session.tool() === 'select' || this.session.tool() === 'note');
+
+  // --- Anotação aberta (popover) -------------------------------------------
+  readonly openNoteId = signal<string | null>(null);
+  /** Anotação aberta, se ainda estiver visível (some ao trocar para Jogador, por exemplo). */
+  readonly openNote = computed(() => this.session.visibleNotes().find((n) => n.id === this.openNoteId()) ?? null);
+  /** Posição do popover na tela: logo abaixo da ponta do marcador, dentro da área. */
+  readonly popoverPos = computed(() => {
+    const note = this.openNote();
+    if (!note) return null;
+    const p = worldToScreen(this.view(), note);
+    const width = this.stage().nativeElement.clientWidth;
+    return { left: Math.max(8, Math.min(p.x - POPOVER_WIDTH / 2, width - POPOVER_WIDTH - 8)), top: p.y + 10 };
+  });
 
   /** Distância da régua em quadrados e metros. */
   readonly rulerLabel = computed(() => {
@@ -101,7 +123,7 @@ export class MapStage {
     const tool = this.session.tool();
     if (tool === 'fog') return this.session.wallMode() === 'erase' ? 'pointer' : 'crosshair';
     if (tool === 'draw') return this.session.brush().eraser ? 'cell' : 'crosshair';
-    return tool === 'ruler' || tool === 'ping' ? 'crosshair' : 'grab';
+    return tool === 'ruler' || tool === 'ping' || tool === 'note' ? 'crosshair' : 'grab';
   });
 
   private gesture: Gesture | null = null;
@@ -185,6 +207,8 @@ export class MapStage {
 
   onPointerDown(event: PointerEvent): void {
     const tool = this.session.tool();
+    // Clicar fora fecha a anotação aberta
+    this.openNoteId.set(null);
 
     // Botão do meio sempre move o mapa; Selecionar/Mover arrastam o fundo
     if (event.button === 1 || (event.button === 0 && (tool === 'pan' || tool === 'select'))) {
@@ -206,7 +230,24 @@ export class MapStage {
       this.onFogDown(event, p);
     } else if (tool === 'draw') {
       this.onDrawDown(event, p);
+    } else if (tool === 'note') {
+      // Clicar no mapa cria uma anotação e já abre a edição
+      const note = this.session.addNote(p);
+      if (note) this.openNoteId.set(note.id);
     }
+  }
+
+  // --- Ponteiro: anotações -------------------------------------------------
+
+  /** Marcador pressionado: arrastar move; clique simples abre a edição. */
+  onNoteDown({ event, note }: NotePointerDown): void {
+    this.openNoteId.set(null);
+    this.gesture = { kind: 'note', id: note.id, sx: event.clientX, sy: event.clientY, nx: note.x, ny: note.y, moved: false };
+    this.capture(event);
+  }
+
+  closeNote(): void {
+    this.openNoteId.set(null);
   }
 
   // --- Ferramenta Desenhar -------------------------------------------------
@@ -304,6 +345,7 @@ export class MapStage {
   /** Token pressionado: seleciona, move (com snap) ou redimensiona. Duplo clique abre a janela. */
   onTokenDown({ event, token, mode }: TokenPointerDown): void {
     const id = token.placement.id;
+    this.openNoteId.set(null);
     this.session.selectedTokenId.set(id);
     const { x: cx, y: cy } = token.placement;
 
@@ -359,6 +401,11 @@ export class MapStage {
       });
     } else if (g.kind === 'erase') {
       this.eraseAt(this.toWorld(event));
+    } else if (g.kind === 'note') {
+      const dx = event.clientX - g.sx;
+      const dy = event.clientY - g.sy;
+      if (!g.moved && Math.hypot(dx, dy) > 3) g.moved = true;
+      if (g.moved) this.session.moveNote(g.id, { x: g.nx + dx / this.scale(), y: g.ny + dy / this.scale() });
     }
   }
 
@@ -368,6 +415,7 @@ export class MapStage {
     this.panning.set(false);
     this.ruler.set(null);
 
+    if (g?.kind === 'note' && !g.moved) this.openNoteId.set(g.id);
     if (g?.kind === 'draw') this.finishStroke();
     if (g?.kind === 'erase') {
       this.session.eraseStrokes([...this.erasing()]);
@@ -386,6 +434,11 @@ export class MapStage {
 
   /** Trata Enter/Esc/Delete conforme a ferramenta e a seleção. Retorna true se a tecla foi usada. */
   handleKey(event: KeyboardEvent): boolean {
+    if (event.key === 'Escape' && this.openNoteId()) {
+      this.openNoteId.set(null);
+      return true;
+    }
+
     // Parede em linha: Enter finaliza, Esc cancela
     if (this.wallDraft()?.kind === 'line') {
       if (event.key === 'Enter') {

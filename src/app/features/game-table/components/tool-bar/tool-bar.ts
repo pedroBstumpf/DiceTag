@@ -25,7 +25,7 @@ export const TABLE_TOOLS: ToolDef[] = [
   { id: 'ping', icon: 'my_location', label: 'Ping', key: 'P' },
   { id: 'draw', icon: 'draw', label: 'Desenhar', key: 'D' },
   { id: 'fog', icon: 'cloud', label: 'Névoa de guerra', key: 'F' },
-  { id: 'note', icon: 'sticky_note_2', label: 'Anotação no mapa', key: 'N', soon: true },
+  { id: 'note', icon: 'sticky_note_2', label: 'Anotação no mapa', key: 'N' },
 ];
 
 /**
