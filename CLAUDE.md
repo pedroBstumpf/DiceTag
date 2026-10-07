@@ -22,10 +22,10 @@ organizar toda a atmosfera de uma campanha.
 | Worldbuild (pastas, documentos rich text, **linha do tempo em mapa mental**, mapas/imagens) | Pronto |
 | **Mesa de jogo** (mapa em camadas, 4 barras escondíveis, janelas flutuantes) | Pronto |
 | Sons: **mixer** com faixas simultâneas, volume/repetição por faixa e volume mestre | Pronto |
-| **Tokens** (imagem, tamanho, visão, barras, etiquetas; vínculo personagem/NPC) | Pronto |
-| **Névoa de guerra + paredes** (visão por ray casting, por papel) | Pronto |
+| **Tokens** (imagem, tamanho, visão, barras e etiquetas com cor/nível; vínculo personagem/NPC; WASD) | Pronto |
+| **Névoa de guerra + paredes + portas** (visão por ray casting, por papel, memória de áreas exploradas) | Pronto |
 | **Pincel** (desenho livre, borracha, Ctrl+Z) e **anotações** no mapa | Pronto |
-| Fichas de personagem/NPC | **Placeholder** — só a seção "Token" existe (não estruturar sem pedido) |
+| Fichas de personagem/NPC | **Placeholder** (não estruturar sem pedido); opções do token ficam só no mapa |
 | Automações (habilidades/dados) | **Placeholder** (nome + ícone; aparecem na barra de ações) |
 | Rolagem de dados | Não iniciado |
 | Backend, multiplayer em tempo real | Não iniciado |
@@ -98,6 +98,7 @@ src/
     ├── shared/                 # reutilizável entre features
     │   ├── components/floating-window/ # JANELA FLUTUANTE (peça central da UX)
     │   ├── components/empty-state/
+    │   ├── components/color-picker/    # bolinha de cor + paleta (mat-menu) + cor livre
     │   ├── directives/auto-focus.directive.ts
     │   ├── services/
     │   │   ├── window-manager.service.ts  # abre/fecha/foca janelas (fornecido por página)
@@ -123,20 +124,22 @@ src/
             │   └── blob-url.service.ts       # object URLs com cache (imagens de token)
             ├── utils/                  # funções puras + specs Vitest
             │   ├── geometry.ts         # snap de token/canto, alça de tamanho, distâncias
-            │   ├── visibility.ts       # visão por ray casting, paredes → segmentos, ponto-em-polígono
+            │   ├── visibility.ts       # visão por ray casting, paredes/portas → segmentos, ponto-em-polígono, doorSeen
+            │   ├── walls.ts            # mover parede/alça, distância até a parede
+            │   ├── fog-memory.ts       # máscara de áreas exploradas (bitset base64)
             │   └── simplify.ts         # Ramer–Douglas–Peucker (traços)
             └── components/
-                ├── map-stage/          # ORQUESTRADOR do mapa: zoom, pan, tela↔mundo, roteamento por ferramenta
-                ├── map-layers/         # camadas dentro do "mundo": drawings, notes, fog, tokens, walls
+                ├── map-stage/          # ORQUESTRADOR do mapa: zoom, pan, tela↔mundo, roteamento por ferramenta, WASD
+                ├── map-layers/         # camadas dentro do "mundo": drawings, notes, fog, tokens, doors, walls
                 ├── scene-bar/          # barra superior: cenas/mapas
                 ├── tool-bar/           # barra esquerda: ferramentas (TABLE_TOOLS) + submenus
                 ├── draw-menu/ fog-menu/  # submenus .glass das ferramentas Desenhar e Névoa
                 ├── side-panel/         # barra direita: Fichas, Lore, Sons, Automações
                 ├── sound-list/         # aba Sons: mixer
                 ├── action-bar/         # barra inferior: 10 espaços de ações (teclas 1–0)
-                ├── entry-window/       # janela de ficha/NPC/automação (placeholder + seção Token)
-                ├── token-editor/       # editor de tamanho, visão, barras e etiquetas (reutilizado)
-                ├── token-window/       # janela "Token" (duplo clique num token)
+                ├── entry-window/       # ficha de personagem/NPC/automação (placeholder)
+                ├── token-editor/       # editor de tamanho, visão, barras e etiquetas
+                ├── token-window/       # janela "Token" (duplo clique num token): único lugar das opções do token
                 └── note-popover/       # edição de anotação junto ao marcador
 ```
 
@@ -190,6 +193,10 @@ Rotas (`app.routes.ts`, todas lazy):
 - **Cálculos caros só quando os dados mudam:** visão usa `computed` com igualdade por valor das origens
   (editar volume de um som não recalcula a névoa); a névoa redesenha agrupada em `requestAnimationFrame`.
 - **Mutação de token por id** muda só a cena que o contém (outras cenas mantêm a referência).
+- **Memória da névoa x troca de cena:** o tamanho do mapa chega à sessão junto com o id da cena
+  (`worldSize`). Sem isso, enquanto o mapa novo carrega, a memória seria recriada com o tamanho
+  da cena anterior e apagada. O efeito que grava a memória não se realimenta porque salvar a
+  máscara não muda as origens de visão (computed com igualdade por valor).
 - **Atalhos da mesa** são escutados na `window`: editores com teclas próprias (linha do tempo) chamam
   `stopPropagation()` em Delete/Esc para não disparar ações do mapa.
 - `@theme static` no Tailwind é necessário porque `styles.scss` usa as variáveis `--color-*`.
@@ -266,6 +273,8 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - **Arquivos da mesa (`TableEntry`):** `character`, `npc` (com `token`), `sound` (`blobId`, `volume`, `loop`),
   `automation` (`role: 'gm' | 'player'` + `icon`). Excluir a ficha remove os tokens dela e apaga os Blobs.
 - **Lore** não é duplicada: a aba Lore lista os itens do **Worldbuild** do usuário e os abre com os mesmos editores.
+  "Abrir pastas do Worldbuild" abre o `Explorer` numa janela (`worldbuild:explorer`) **sem sair da mesa**.
+- **Grade:** escondida (G ou menu da cena) = tokens e paredes se movem livres; visível = alinham (Shift = livre).
 - **Papel (`role`)**: alternado manualmente na barra de ações (Mestre/Jogador) — não há permissões reais ainda.
   A barra de ações mostra as automações do papel atual (até 10; teclas 1–9 e 0). Espaço vazio cria uma automação.
 - Usar uma ação hoje só mostra um aviso (snackbar). Rolagem real ainda não existe.
@@ -279,22 +288,34 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - Envio de vários arquivos `audio/*` (ou extensão de áudio) pelo botão ou arrastando para a aba Sons.
 
 ### Tokens — regra de vínculo (único lugar: `resolveToken` / `updateToken`)
-- `TableEntry.token` (ficha): `blobId`, `size` (0.5–4 quadrados), `vision { enabled, range (m) }`, `bars`, `tags`.
+- `TableEntry.token` (ficha): `blobId`, `size` (0.5–4 quadrados), `vision { enabled, range (m) }`, `bars`, `tags`
+  (`TokenTag.level` opcional, ex.: Exaustão 2). Cores de barras/etiquetas: paleta `TOKEN_COLORS` ou cor livre.
   Padrão (`defaultToken`): tamanho 1, visão 18 m (ligada para personagem, desligada para NPC).
 - `Scene.tokens: TokenPlacement { id, entryId, x, y (centro), size?, bars?, tags? }`.
 - **Personagem:** vinculado — tamanho, barras e etiquetas vêm da ficha; alterar qualquer token altera a ficha e todos.
 - **NPC:** ao ser colocado, copia tamanho, barras e etiquetas para a própria colocação (cada goblin tem seu PV).
 - Imagem e visão vêm **sempre da ficha** (inclusive para NPC).
-- Colocar: arrastar a ficha do painel para o mapa ou "Colocar no mapa" na janela (centro da vista); o snap
-  vale ao soltar. Selecionar: clique seleciona, arrastar move com snap (Shift livre), alça redimensiona
-  em passos de 0,5, Delete remove do mapa, duplo clique abre a janela "Token".
+- **Ficha x token:** clicar na ficha no painel abre só a ficha. Colocar no mapa **só arrastando** a ficha
+  do painel. Opções do token **só** pelo duplo clique no token (janela "Token": imagem, tamanho, visão,
+  barras, etiquetas e, para NPC, "Usar como padrão do NPC" → `saveTokenAsDefault`).
+- Selecionar: clique seleciona, arrastar move com snap (Shift livre), alça redimensiona em passos de 0,5,
+  Delete remove do mapa. **WASD/setas** com token selecionado: desliza ~2 quadrados/s (Shift acelera);
+  ao soltar, alinha à grade se ela estiver visível. Movimento não colide com paredes.
 
 ### Névoa de guerra e paredes
-- `Scene.fog.enabled` por cena; `Scene.walls`: `LineWall` (polilinha) ou `CircleWall` (vira 24 lados no cálculo).
+- `Scene.fog { enabled, memory? }` por cena; `Scene.walls`: `LineWall` (polilinha), `CircleWall` (vira 24 lados
+  no cálculo) ou `DoorWall` (`points [a, b]`, `open`: fechada bloqueia, aberta não).
+- Modos da ferramenta Névoa: linha (W), círculo, **porta** (arrastar de batente a batente), **editar paredes**
+  (selecionar; arrastar corpo = move tudo, em passos de quadrado; arrastar alça = move o ponto/raio; Delete
+  remove) e apagar.
+- **Portas** têm camada própria, sempre visível; o botão no meio abre/fecha (ferramenta Selecionar, qualquer papel).
+- **Memória da névoa** (`Scene.explored`, padrão ligada): áreas já vistas ficam reveladas e escurecidas;
+  "Esquecer áreas exploradas" limpa. Trocar o mapa (outro tamanho) recomeça a memória.
 - Visão: `computeVisibilityPolygon` (ray casting com ±ε nos vértices, limitado ao alcance) para cada token
   com visão ligada; recalcula só quando token, parede ou cena mudam.
-- **Jogador:** névoa opaca, removida só na união das áreas visíveis; tokens fora da visão ficam ocultos
-  (personagens sempre aparecem); anotações também (e as "só mestre" somem).
+- **Jogador:** névoa opaca, removida na união das áreas visíveis (e parcialmente nas exploradas); tokens
+  fora da visão atual ficam ocultos (personagens sempre aparecem); anotações e portas aparecem se visíveis
+  ou já exploradas (as anotações "só mestre" somem).
 - **Mestre:** névoa a ~45% e contorno das áreas visíveis.
 - Paredes visíveis durante a ferramenta Névoa ou sempre (opção do mestre). Linha: snap aos cantos da grade
   (Shift livre); Enter / duplo clique / clicar no ponto inicial finaliza; Esc cancela.
@@ -307,8 +328,9 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 
 ### Atalhos da mesa (ignorados ao digitar)
 `V` selecionar · `M` mover mapa · `R` régua · `P` ping · `D` desenhar · `F` névoa · `W` parede (névoa em modo linha) ·
-`N` anotação · `G` grade · `+`/`-` zoom · `1`–`0` ações · `\` modo imersivo · `Delete` remove o token selecionado ·
-`Esc` cancela parede/fecha anotação/limpa seleção · `Enter` finaliza parede · `Ctrl+Z` desfaz desenho.
+`N` anotação · `G` grade · `+`/`-` zoom · `1`–`0` ações · `\` modo imersivo · `Delete` remove o token (ou a parede,
+no modo editar) selecionado · `Esc` cancela parede/fecha anotação/limpa seleção · `Enter` finaliza parede ·
+`Ctrl+Z` desfaz desenho · **`WASD`/setas** movem o token selecionado (nesse caso W/D não trocam de ferramenta).
 Botão do meio do mouse sempre move o mapa; roda do mouse = zoom no cursor.
 
 ---
@@ -339,11 +361,12 @@ O `MapStage` recebe `insets` para enquadrar o mapa só na área livre entre as b
 - `map-stage` é o **orquestrador**: vista (`Viewport`), zoom/pan, conversão tela↔mundo e roteamento do
   ponteiro conforme a ferramenta. Camadas só desenham e emitem eventos (`tokenDown`, `noteDown`).
 - Ordem no "mundo", de baixo para cima: **1** mapa · **2** grade · **3** desenhos · **4** notas · **5** névoa ·
-  **6** tokens visíveis · **7** paredes · **8** régua e ping · **9** interface (popover, avisos — fora do mundo).
+  **6** tokens visíveis · **7** portas e paredes · **8** régua e ping · **9** interface (popover, avisos — fora do mundo).
 - Na ferramenta Selecionar, token ou anotação sob o cursor tem prioridade; o fundo move o mapa.
 - Mutações de cena passam pelo `TableSessionService` (`moveToken`, `updateToken`, `addWall`, `removeWall`,
   `addStroke`, `eraseStrokes`, `undoDrawing`, `addNote`…), sempre com o debounce de persistência.
-- Teclas que dependem da ferramenta/seleção (Enter, Esc, Delete) chegam via `MapStage.handleKey`.
+- Teclas que dependem da ferramenta/seleção (Enter, Esc, Delete, WASD/setas) chegam via `MapStage.handleKey`;
+  soltar tecla e perder o foco via `handleKeyUp` / `stopKeyMove`.
 
 ---
 
@@ -354,7 +377,7 @@ O `MapStage` recebe `insets` para enquadrar o mapa só na área livre entre as b
 | `users` | `StoredUser[]` |
 | `tables` | `GameTable[]` (todas; filtradas por `ownerId`) |
 | `worldbuild:<userId>` | `WorldItem[]` |
-| `table-state:<tableId>` | `TableState` (cenas com tokens/névoa/paredes/desenhos/anotações, cena ativa, arquivos, volume mestre) |
+| `table-state:<tableId>` | `TableState` (cenas com tokens/névoa/memória/paredes/portas/desenhos/anotações, cena ativa, arquivos, volume mestre) |
 | `blob:<id>` | `Blob` de imagem/mapa/áudio/imagem de token |
 | `localStorage: dicetag.session` | id do usuário logado |
 | `localStorage: dicetag.sidebarCollapsed` | preferência da barra lateral |
@@ -369,7 +392,8 @@ Para conectar um backend no futuro: trocar `StorageService` e `AuthService` mant
 - **Rolador de dados** + automações reais (fórmulas como `1d20+5`, alvos, efeitos) ligadas à barra de ações.
 - Persistir janelas abertas, visibilidade das barras e pincel por mesa.
 - Imagens de token substituídas durante a sessão só liberam a URL antiga ao sair da mesa (`BlobUrlService`).
-- Névoa: sem "memória" de áreas já exploradas; sem portas que abrem/fecham; visão só por token.
+- Névoa: visão só por token; portas sem tranca nem permissão (qualquer papel abre/fecha).
+- Movimento de tokens (arrastar ou WASD) não colide com paredes.
 - Ctrl+Z cobre só desenhos (não tokens, paredes ou anotações).
 - Backend + multiplayer em tempo real; permissões reais de mestre/jogador; convite de jogadores.
 - Mural de notícias alimentado por API/CMS (`NewsService.posts`).
@@ -383,6 +407,6 @@ Para conectar um backend no futuro: trocar `StorageService` e `AuthService` mant
 2. Mudanças pequenas e focadas; não refatore o que não foi pedido.
 3. Novos componentes: `features/<feature>/components/<nome>/<nome>.ts|.html`, standalone, Tailwind, comentários em PT-BR.
    Novas camadas do mapa: `features/game-table/components/map-layers/<nome>-layer/`.
-4. Reaproveite `FloatingWindow`, `WindowManagerService`, `EmptyState`, `AutoFocus`, `TokenEditor`, tokens e `.glass`.
+4. Reaproveite `FloatingWindow`, `WindowManagerService`, `EmptyState`, `AutoFocus`, `ColorPicker`, `TokenEditor`, tokens e `.glass`.
 5. Valide com `npm run build` e `npx ng test --watch=false` ao final; corrija erros e avisos introduzidos.
 6. Atualize este `CLAUDE.md` (e o `README.md`) quando mudar arquitetura, regras ou convenções.

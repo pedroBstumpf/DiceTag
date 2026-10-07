@@ -67,21 +67,24 @@ O mapa ocupa a tela inteira e as barras flutuam por cima — todas escondíveis:
 - **Topo — cenas:** abas de mapas; adicionar (com imagem ou só grade), renomear, trocar mapa, ajustar grade.
 - **Esquerda — ferramentas:** selecionar (V), mover (M), régua em quadrados e metros (R), ping (P),
   desenhar (D), névoa de guerra (F) com paredes (W), anotação (N), grade (G), zoom.
-- **Direita — painel:** Fichas (personagens e NPCs — arraste para o mapa), Lore (itens do worldbuild),
-  Sons (mixer), Automações.
+- **Direita — painel:** Fichas (personagens e NPCs — arraste para o mapa), Lore (itens do worldbuild e as
+  pastas do Worldbuild numa janela, sem sair da mesa), Sons (mixer), Automações.
 - **Baixo — ações:** 10 espaços (teclas 1–0) com as automações do papel atual (Mestre/Jogador).
 - **Janelas:** todo arquivo abre numa janela que pode ser movida, redimensionada, minimizada, maximizada e fixada.
 - **Modo imersivo:** tecla `\` esconde/mostra todas as barras.
 
 ### Tokens
-Personagens e NPCs têm token com imagem circular, tamanho, visão, barras (ex.: PV 12/20) e etiquetas.
-Tokens de **personagem** são vinculados à ficha; cada token de **NPC** é independente (cinco goblins,
-cinco PVs). Arraste para mover (snap à grade, Shift livre), use a alça para redimensionar, Delete para
-remover e duplo clique para editar.
+Arraste a ficha de um personagem ou NPC do painel para o mapa para colocar o token. Ele tem imagem
+circular, tamanho, visão, barras (ex.: PV 12/20) e etiquetas com cor e nível (ex.: Exaustão 2), tudo
+configurado com **duplo clique no token**. Tokens de **personagem** são vinculados à ficha; cada token de
+**NPC** é independente (cinco goblins, cinco PVs). Arraste para mover (snap à grade; Shift ou grade
+escondida = livre), use **WASD/setas** para deslizar devagar, a alça para redimensionar e Delete para remover.
 
 ### Névoa de guerra
-Paredes em linha ou círculo bloqueiam a visão dos tokens. Na visão de **Jogador** a névoa é opaca e só se
-abre onde os tokens enxergam; na de **Mestre** fica semitransparente, com o contorno das áreas visíveis.
+Paredes em linha ou círculo e **portas** (abrem e fecham com um clique) bloqueiam a visão dos tokens.
+Paredes podem ser movidas e editadas ponto a ponto. Na visão de **Jogador** a névoa é opaca e só se abre
+onde os tokens enxergam — e as áreas já exploradas continuam reveladas, escurecidas (memória da névoa).
+Na de **Mestre** fica semitransparente, com o contorno das áreas visíveis.
 
 ### Desenho e anotações
 Pincel com cores, espessuras, opacidade, borracha e Ctrl+Z. Anotações são marcadores no mapa com título,
