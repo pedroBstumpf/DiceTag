@@ -1,6 +1,7 @@
 import { Component, ElementRef, computed, effect, inject, input, signal, viewChild } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { fitRect, zoomAt } from '../../../../shared/utils/viewport';
 import { WorldbuildService } from '../../services/worldbuild.service';
 
 const MIN_SCALE = 0.1;
@@ -54,16 +55,18 @@ export class ImageViewer {
 
   // --- Zoom ----------------------------------------------------------------
 
-  /** Ajusta a imagem inteira dentro da área visível. */
+  /** Ajusta a imagem inteira dentro da área visível (sem ampliar além de 100%). */
   fit(): void {
     const el = this.stage().nativeElement;
     if (!this.natural.w) return;
-    const s = Math.min(el.clientWidth / this.natural.w, el.clientHeight / this.natural.h, 1);
-    this.scale.set(s);
-    this.offset.set({
-      x: (el.clientWidth - this.natural.w * s) / 2,
-      y: (el.clientHeight - this.natural.h * s) / 2,
-    });
+    const view = fitRect(
+      { x: 0, y: 0, width: this.natural.w, height: this.natural.h },
+      { x: 0, y: 0, width: el.clientWidth, height: el.clientHeight },
+      1,
+      1,
+    );
+    this.scale.set(view.scale);
+    this.offset.set({ x: view.x, y: view.y });
   }
 
   onLoad(img: HTMLImageElement): void {
@@ -74,14 +77,16 @@ export class ImageViewer {
   /** Zoom mantendo fixo o ponto (cx, cy) — por padrão, o centro da área. */
   zoomBy(factor: number, cx?: number, cy?: number): void {
     const el = this.stage().nativeElement;
-    const px = cx ?? el.clientWidth / 2;
-    const py = cy ?? el.clientHeight / 2;
-    const old = this.scale();
-    const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, old * factor));
-    const { x, y } = this.offset();
-
-    this.scale.set(next);
-    this.offset.set({ x: px - ((px - x) * next) / old, y: py - ((py - y) * next) / old });
+    const view = zoomAt(
+      { ...this.offset(), scale: this.scale() },
+      factor,
+      cx ?? el.clientWidth / 2,
+      cy ?? el.clientHeight / 2,
+      MIN_SCALE,
+      MAX_SCALE,
+    );
+    this.scale.set(view.scale);
+    this.offset.set({ x: view.x, y: view.y });
   }
 
   onWheel(event: WheelEvent): void {

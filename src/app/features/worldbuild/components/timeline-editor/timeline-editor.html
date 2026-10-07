@@ -1,123 +1,221 @@
 <!-- ===== Barra superior ===== -->
-<div class="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-white/5 bg-ink-900/60 px-4">
-  <span class="text-xs text-slate-500">{{ events().length }} evento(s)</span>
-  <button mat-flat-button class="!h-8 !text-sm" (click)="add()">
+<div class="flex h-12 shrink-0 items-center gap-1 border-b border-white/5 bg-ink-900/60 px-3">
+  <button mat-flat-button class="!h-8 !text-sm" (click)="addAtCenter()">
     <mat-icon>add</mat-icon>
     Evento
   </button>
+  <button mat-icon-button class="!size-8 !p-1" matTooltip="Enquadrar tudo" (click)="fitAll()">
+    <mat-icon class="!text-[20px]">fit_screen</mat-icon>
+  </button>
+  <button mat-icon-button class="!size-8 !p-1" matTooltip="Organizar automaticamente" [disabled]="!events().length" (click)="autoLayout()">
+    <mat-icon class="!text-[20px]">account_tree</mat-icon>
+  </button>
+  <span class="ml-auto text-xs text-slate-500">{{ events().length }} evento(s)</span>
 </div>
 
-<!-- ===== Linha do tempo ===== -->
-<div class="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8">
-  @if (events().length) {
-    <ol cdkDropList class="relative mx-auto flex max-w-2xl flex-col gap-4" (cdkDropListDropped)="reorder($event)">
-      <!-- Linha vertical -->
-      <span class="absolute bottom-2 left-[11px] top-2 w-0.5 rounded bg-gradient-to-b from-astral-500/60 via-star-500/40 to-transparent"></span>
+<!-- ===== Quadro (pan com o fundo, zoom com a roda) ===== -->
+<div
+  #stage
+  class="relative min-h-0 flex-1 touch-none select-none overflow-hidden bg-[radial-gradient(circle,_rgb(255_255_255/0.07)_1px,_transparent_1px)]"
+  [class]="panning() ? 'cursor-grabbing' : 'cursor-default'"
+  [style.background-size]="grid().size"
+  [style.background-position]="grid().position"
+  (pointerdown)="onStageDown($event)"
+  (pointermove)="onPointerMove($event)"
+  (pointerup)="onPointerUp($event)"
+  (pointercancel)="onPointerUp($event)"
+  (wheel)="onWheel($event)"
+>
+  <!-- "Mundo": acompanha pan e zoom -->
+  <div
+    class="absolute left-0 top-0 origin-top-left"
+    [style.transform]="'translate(' + view().x + 'px,' + view().y + 'px) scale(' + view().scale + ')'"
+  >
+    <!-- Setas -->
+    <svg class="pointer-events-none absolute left-0 top-0 overflow-visible" width="1" height="1">
+      @for (shape of linkShapes(); track shape.link.id) {
+        @let selected = selectedLinkId() === shape.link.id;
+        <g [class]="selected ? 'text-astral-300' : 'text-slate-500'">
+          <!-- Área de clique mais larga que a linha -->
+          <path [attr.d]="shape.d" fill="none" stroke="transparent" stroke-width="14" pointer-events="stroke" class="cursor-pointer" (pointerdown)="onLinkDown($event, shape.link)" />
+          <path [attr.d]="shape.d" fill="none" stroke="currentColor" [attr.stroke-width]="selected ? 2.5 : 1.75" />
+          <polygon [attr.points]="shape.arrow" fill="currentColor" />
+        </g>
+      }
+      <!-- Seta provisória (arrastando uma alça) -->
+      @if (linkDraft(); as draft) {
+        <line
+          [attr.x1]="draft.from.x"
+          [attr.y1]="draft.from.y"
+          [attr.x2]="draft.to.x"
+          [attr.y2]="draft.to.y"
+          stroke="#a9c7ff"
+          stroke-width="2"
+          stroke-dasharray="6 4"
+        />
+      }
+    </svg>
 
-      @for (event of events(); track event.id) {
-        <li cdkDrag cdkDragLockAxis="y" class="relative pl-10">
-          <!-- Marcador -->
-          <span
-            class="absolute left-[4px] top-4 size-4 rounded-full ring-4 ring-ink-850"
-            [style.background]="event.color"
-          ></span>
-
-          <article
-            class="rounded-xl border bg-ink-800/70 transition-colors"
-            [class]="editingId() === event.id ? 'border-astral-500/40' : 'border-white/5 hover:border-white/15'"
+    <!-- Rótulos das setas (campo de edição quando a seta está selecionada) -->
+    @for (shape of linkShapes(); track shape.link.id) {
+      @if (selectedLinkId() === shape.link.id) {
+        <div
+          class="absolute z-30 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-md bg-ink-850 p-1 shadow-lg ring-1 ring-astral-400/50"
+          [style.left.px]="shape.mid.x"
+          [style.top.px]="shape.mid.y"
+          (pointerdown)="$event.stopPropagation()"
+        >
+          <input
+            #labelInput
+            appAutoFocus
+            class="h-7 w-36 rounded bg-ink-950 px-2 text-xs text-slate-100 outline-none placeholder:text-slate-600"
+            placeholder="Rótulo (opcional)"
+            [value]="shape.link.label ?? ''"
+            (input)="setLinkLabel(shape.link.id, labelInput.value)"
+            (keydown.enter)="selectedLinkId.set(null)"
+          />
+          <button
+            type="button"
+            class="grid size-7 place-items-center rounded text-slate-400 hover:bg-red-500/15 hover:text-red-300"
+            matTooltip="Excluir conexão (Delete)"
+            (click)="removeLink(shape.link.id)"
           >
-            <!-- Cabeçalho do evento -->
-            <header class="flex items-start gap-2 p-3">
+            <mat-icon class="!text-[18px]">link_off</mat-icon>
+          </button>
+        </div>
+      } @else if (shape.link.label) {
+        <span
+          class="absolute z-[1] max-w-40 -translate-x-1/2 -translate-y-1/2 cursor-pointer truncate rounded-full bg-ink-850 px-2 py-0.5 text-[11px] text-slate-300 ring-1 ring-white/10"
+          [style.left.px]="shape.mid.x"
+          [style.top.px]="shape.mid.y"
+          (pointerdown)="onLinkDown($event, shape.link)"
+        >
+          {{ shape.link.label }}
+        </span>
+      }
+    }
+
+    <!-- Cartões -->
+    @for (ev of events(); track ev.id) {
+      @let selected = selectedId() === ev.id;
+      @let editing = editingId() === ev.id;
+      <div
+        class="absolute rounded-lg border bg-ink-800/95 shadow-lg shadow-black/40 transition-[border-color,box-shadow]"
+        [class]="
+          editing
+            ? 'z-20 border-astral-400/70 ring-2 ring-astral-400/30'
+            : selected
+              ? 'z-10 cursor-grab border-astral-400/70 ring-2 ring-astral-400/30'
+              : 'cursor-grab border-white/10 hover:border-white/25'
+        "
+        [style.left.px]="ev.x"
+        [style.top.px]="ev.y"
+        [style.width.px]="card.width"
+        [style.min-height.px]="card.height"
+        [style.height.px]="editing ? null : card.height"
+        (pointerdown)="onCardDown($event, ev)"
+      >
+        <span class="absolute inset-x-0 top-0 h-1 rounded-t-lg" [style.background]="ev.color"></span>
+
+        @if (editing) {
+          <!-- Edição inline -->
+          <div class="flex flex-col gap-2 p-3 pt-3.5">
+            <input
+              appAutoFocus
+              class="h-8 rounded-md bg-ink-950 px-2 text-xs text-slate-100 outline-none ring-1 ring-white/10 focus:ring-astral-500/60"
+              placeholder="Data / época (ex.: Ano 312)"
+              [value]="ev.date"
+              (input)="change(ev.id, { date: $any($event.target).value })"
+            />
+            <input
+              class="h-8 rounded-md bg-ink-950 px-2 text-sm text-slate-100 outline-none ring-1 ring-white/10 focus:ring-astral-500/60"
+              placeholder="Título"
+              [value]="ev.title"
+              (input)="change(ev.id, { title: $any($event.target).value })"
+            />
+            <textarea
+              rows="3"
+              class="resize-none rounded-md bg-ink-950 px-2 py-1.5 text-xs text-slate-100 outline-none ring-1 ring-white/10 focus:ring-astral-500/60"
+              placeholder="Descrição…"
+              [value]="ev.description"
+              (input)="change(ev.id, { description: $any($event.target).value })"
+            ></textarea>
+            <div class="flex items-center gap-1.5">
+              @for (color of colors; track color) {
+                <button
+                  type="button"
+                  class="size-5 rounded-full ring-offset-2 ring-offset-ink-800 transition-transform hover:scale-110"
+                  [class.ring-2]="ev.color === color"
+                  [style.background]="color"
+                  [style.--tw-ring-color]="color"
+                  [attr.aria-label]="'Cor ' + color"
+                  (click)="change(ev.id, { color })"
+                ></button>
+              }
               <button
                 type="button"
-                cdkDragHandle
-                class="mt-0.5 cursor-grab text-slate-600 hover:text-slate-300 active:cursor-grabbing"
-                aria-label="Arrastar para reordenar"
+                class="ml-auto rounded-md bg-astral-500/20 px-2 py-1 text-xs font-semibold text-astral-300 hover:bg-astral-500/30"
+                (click)="finishEditing()"
               >
-                <mat-icon class="!size-5 !text-[20px]">drag_indicator</mat-icon>
+                OK
               </button>
+            </div>
+          </div>
+        } @else {
+          <!-- Leitura -->
+          <div class="flex h-full flex-col gap-0.5 overflow-hidden px-3 pb-2 pt-2.5">
+            <span class="truncate pr-6 text-[11px] font-semibold uppercase tracking-wider" [style.color]="ev.color">
+              {{ ev.date || 'Sem data' }}
+            </span>
+            <span class="truncate text-sm font-medium text-slate-100">{{ ev.title || 'Evento sem título' }}</span>
+            <p class="line-clamp-2 whitespace-pre-line text-xs leading-snug text-slate-400">{{ ev.description }}</p>
+          </div>
+          <button
+            type="button"
+            class="absolute right-1 top-1.5 grid size-6 place-items-center rounded text-slate-500 transition-opacity hover:bg-white/10 hover:text-slate-200"
+            [class]="selected ? 'opacity-100' : 'opacity-0'"
+            aria-label="Editar evento"
+            (click)="startEditing(ev.id)"
+          >
+            <mat-icon class="!text-[16px]">edit</mat-icon>
+          </button>
 
-              <button type="button" class="min-w-0 flex-1 text-left" (click)="toggleEdit(event.id)">
-                <span class="block text-xs font-semibold uppercase tracking-wider" [style.color]="event.color">
-                  {{ event.date || 'Sem data' }}
-                </span>
-                <span class="block truncate font-medium text-slate-100">{{ event.title || 'Evento sem título' }}</span>
+          <!-- Alças: clique cria evento conectado, arraste conecta a outro cartão -->
+          @if (selected) {
+            @for (side of sides; track side) {
+              <button
+                type="button"
+                class="absolute grid size-6 place-items-center rounded-full bg-astral-500 text-ink-950 shadow-md shadow-black/50 transition-transform hover:scale-110"
+                [class]="handleClass[side]"
+                matTooltip="Clique: novo evento conectado · Arraste: conectar"
+                aria-label="Novo evento conectado"
+                (pointerdown)="onHandleDown($event, ev, side)"
+              >
+                <mat-icon class="!size-4 !text-[16px]">add</mat-icon>
               </button>
-
-              <button mat-icon-button class="!size-8 !p-1" matTooltip="Editar" (click)="toggleEdit(event.id)">
-                <mat-icon class="!text-[20px]">{{ editingId() === event.id ? 'expand_less' : 'edit' }}</mat-icon>
-              </button>
-              <button mat-icon-button class="!size-8 !p-1" matTooltip="Excluir evento" (click)="remove(event.id)">
-                <mat-icon class="!text-[20px]">delete</mat-icon>
-              </button>
-            </header>
-
-            <!-- Corpo: formulário (edição) ou descrição (leitura) -->
-            @if (editingId() === event.id) {
-              <div class="flex flex-col gap-3 border-t border-white/5 p-3">
-                <div class="grid gap-3 sm:grid-cols-[180px_1fr]">
-                  <label class="flex flex-col gap-1 text-xs text-slate-400">
-                    Data / época
-                    <input
-                      appAutoFocus
-                      class="h-9 rounded-lg bg-ink-950 px-3 text-sm text-slate-100 outline-none ring-1 ring-white/10 focus:ring-astral-500/60"
-                      placeholder="Ex.: Ano 312, Era do Sol"
-                      [value]="event.date"
-                      (input)="change(event.id, { date: $any($event.target).value })"
-                    />
-                  </label>
-                  <label class="flex flex-col gap-1 text-xs text-slate-400">
-                    Título
-                    <input
-                      class="h-9 rounded-lg bg-ink-950 px-3 text-sm text-slate-100 outline-none ring-1 ring-white/10 focus:ring-astral-500/60"
-                      placeholder="O que aconteceu?"
-                      [value]="event.title"
-                      (input)="change(event.id, { title: $any($event.target).value })"
-                    />
-                  </label>
-                </div>
-
-                <label class="flex flex-col gap-1 text-xs text-slate-400">
-                  Descrição
-                  <textarea
-                    rows="3"
-                    class="resize-y rounded-lg bg-ink-950 px-3 py-2 text-sm text-slate-100 outline-none ring-1 ring-white/10 focus:ring-astral-500/60"
-                    placeholder="Detalhes, consequências, personagens envolvidos…"
-                    [value]="event.description"
-                    (input)="change(event.id, { description: $any($event.target).value })"
-                  ></textarea>
-                </label>
-
-                <div class="flex items-center gap-2">
-                  <span class="text-xs text-slate-400">Cor</span>
-                  @for (color of colors; track color) {
-                    <button
-                      type="button"
-                      class="size-6 rounded-full ring-offset-2 ring-offset-ink-800 transition-transform hover:scale-110"
-                      [class.ring-2]="event.color === color"
-                      [style.background]="color"
-                      [style.--tw-ring-color]="color"
-                      [attr.aria-label]="'Cor ' + color"
-                      (click)="change(event.id, { color })"
-                    ></button>
-                  }
-                </div>
-              </div>
-            } @else if (event.description) {
-              <p class="whitespace-pre-line px-3 pb-3 pl-10 text-sm leading-relaxed text-slate-400">{{ event.description }}</p>
             }
-          </article>
-        </li>
-      }
-    </ol>
-  } @else {
-    <div class="flex h-full flex-col items-center justify-center gap-3 text-center">
-      <mat-icon class="!size-10 !text-[40px] text-slate-600">timeline</mat-icon>
-      <p class="max-w-xs text-sm text-slate-400">Registre eras, guerras, nascimentos e reviravoltas do seu mundo.</p>
-      <button mat-stroked-button (click)="add()">
-        <mat-icon>add</mat-icon>
-        Primeiro evento
-      </button>
+          }
+        }
+      </div>
+    }
+  </div>
+
+  <!-- Quadro vazio -->
+  @if (!events().length) {
+    <div class="pointer-events-none absolute inset-0 grid place-items-center p-6 text-center">
+      <div class="flex flex-col items-center gap-3">
+        <mat-icon class="!size-10 !text-[40px] text-slate-600">account_tree</mat-icon>
+        <p class="max-w-xs text-sm text-slate-400">Registre eras, guerras e reviravoltas. Ligue eventos para mostrar causas e caminhos paralelos.</p>
+        <button mat-stroked-button class="pointer-events-auto" (click)="addAtCenter()" (pointerdown)="$event.stopPropagation()">
+          <mat-icon>add</mat-icon>
+          Primeiro evento
+        </button>
+      </div>
     </div>
   }
+
+  <!-- Dicas e zoom -->
+  <div class="pointer-events-none absolute bottom-2 left-3 text-[11px] text-slate-500">
+    Duplo clique: novo evento · Shift: alinhar à grade · {{ (view().scale * 100).toFixed(0) }}%
+  </div>
 </div>

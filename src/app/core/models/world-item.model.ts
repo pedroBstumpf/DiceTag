@@ -8,6 +8,20 @@ export interface TimelineEvent {
   date: string;
   description: string;
   color: string;
+  /** Posição do cartão no quadro (canto superior esquerdo). Linhas antigas são migradas ao carregar. */
+  x?: number;
+  y?: number;
+}
+
+/** Conexão (seta) entre dois eventos da linha do tempo. */
+export interface TimelineLink {
+  id: string;
+  /** Id do evento de origem. */
+  from: string;
+  /** Id do evento de destino. */
+  to: string;
+  /** Rótulo opcional exibido no meio da seta. */
+  label?: string;
 }
 
 /**
@@ -25,8 +39,10 @@ export interface WorldItem {
 
   /** document: conteúdo em HTML gerado pelo editor. */
   content?: string;
-  /** timeline: eventos em ordem cronológica (ordem manual). */
+  /** timeline: eventos (cartões posicionados livremente no quadro). */
   events?: TimelineEvent[];
+  /** timeline: conexões entre eventos. */
+  links?: TimelineLink[];
   /** image: id do arquivo salvo no IndexedDB. */
   blobId?: string;
 }
