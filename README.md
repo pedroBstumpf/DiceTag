@@ -65,7 +65,8 @@ automaticamente um usuário "Visitante". Mude para `true` para voltar a exigir c
 
 O mapa ocupa a tela inteira e as barras flutuam por cima — todas escondíveis:
 
-- **Topo — cenas:** abas de mapas; adicionar (com imagem ou só grade), renomear, trocar mapa, ajustar grade.
+- **Topo — cenas:** pastas e abas de mapas; adicionar (com imagem ou só grade), renomear, trocar mapa, ajustar grade,
+  mover para pasta; botão de **vista isométrica** (mestre).
 - **Esquerda — ferramentas:** selecionar (V), mover (M), régua em quadrados e metros (R), ping (P),
   desenhar (D), névoa de guerra (F) com paredes (W), anotação (N), efeitos especiais (E), grade (G), zoom.
 - **Direita — painel:** Chat (mensagens e rolagens), Fichas (personagens e NPCs — arraste para o mapa; a imagem enviada na ficha é a do
@@ -84,6 +85,13 @@ configurado com **duplo clique no token**. Tokens de **personagem** são vincula
 escondida = livre), use **WASD/setas** para deslizar devagar, a alça para redimensionar e Delete para remover.
 
 A velocidade do movimento com WASD/setas é configurada por ficha, na janela do token.
+
+### Vista isométrica e camadas do mapa
+O mestre pode ver a cena como uma mesa vista de lado (isométrica): o mapa se inclina e os tokens ficam de pé.
+Nessa vista, o painel **Camadas** (barra de ferramentas) cria até 5 camadas empilhadas — térreo, telhados, céu… —
+cada uma com sua imagem. Camada sem imagem é "ar": mostra a de baixo, e os tokens nela parecem voar, com sombra
+no chão. O mestre escolhe a camada que os jogadores veem; trocar de camada desliza a pilha como um elevador.
+PageUp/PageDown sobem e descem o token selecionado.
 
 ### Ações, rolagens e chat
 Cada ação rola **2d12** ou **3d6** + modificador. 2d12: abaixo de 0 falha crítica, até 11 falha, até 16

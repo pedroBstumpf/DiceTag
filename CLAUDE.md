@@ -22,6 +22,7 @@ organizar toda a atmosfera de uma campanha.
 | Minhas mesas (criar, listar, excluir com limpeza dos dados, abrir) | Pronto |
 | Worldbuild (pastas, documentos rich text, **linha do tempo em mapa mental**, mapas/imagens) | Pronto |
 | **Mesa de jogo** (mapa em camadas, 4 barras escondíveis, janelas flutuantes) | Pronto |
+| **Vista isométrica** por cena + **camadas do mapa** (até 5, "ar" para voo) + **pastas de cenas** | Pronto |
 | Sons: **mixer** com faixas simultâneas, volume/repetição por faixa e volume mestre | Pronto |
 | **Tokens** (imagem, tamanho, visão, barras e etiquetas com cor/nível; vínculo personagem/NPC; WASD com velocidade configurável) | Pronto |
 | **Névoa de guerra + paredes + portas** (visão por ray casting, por papel, memória de áreas exploradas) | Pronto |
@@ -133,12 +134,14 @@ src/
             │   ├── walls.ts            # mover parede/alça, distância até a parede
             │   ├── fog-memory.ts       # máscara de áreas exploradas (bitset base64)
             │   ├── simplify.ts         # Ramer–Douglas–Peucker (traços)
+            │   ├── projection.ts       # matriz 2D/isométrica, tela↔mundo, enquadramento, "em pé" (upright)
             │   ├── dice.ts             # rolagem 2d12/3d6, faixas de resultado, effectiveModifier (futuro: atributos)
             │   └── effects.ts          # buildFx: os 20 efeitos descritos como dados (partes SVG + animações)
             └── components/
                 ├── map-stage/          # ORQUESTRADOR do mapa: zoom, pan, tela↔mundo, roteamento por ferramenta, WASD
                 ├── map-layers/         # camadas dentro do "mundo": drawings, notes, fog, tokens, doors, walls, fx
-                ├── scene-bar/          # barra superior: cenas/mapas
+                ├── scene-bar/          # barra superior: pastas e abas de cenas, vista isométrica (mestre)
+                ├── levels-menu/        # painel de camadas do mapa (mestre, isométrica)
                 ├── tool-bar/           # barra esquerda: ferramentas (TABLE_TOOLS) + submenus
                 ├── draw-menu/ fog-menu/ fx-menu/  # submenus .glass das ferramentas Desenhar, Névoa e Efeitos
                 ├── fx-picker/          # escolha de forma + cor de efeito (submenu e automação)
@@ -286,7 +289,31 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 ### Mesa de jogo (`TableSessionService`, um por mesa aberta)
 - **Cenas:** nome, mapa opcional (`blobId`), `gridSize` (20–300px, padrão 70), `showGrid`, `tokens`, `fog`,
   `walls`, `drawings`, `notes`. Uma cena ativa. Cena sem mapa = "papel quadriculado" de 2100×1400.
-  Excluir a cena apaga o Blob do mapa.
+  Excluir a cena apaga os Blobs do mapa e das camadas.
+- **Pastas de cenas** (`TableState.sceneFolders`, `Scene.folderId`; só o mestre organiza): na barra superior, cada
+  pasta é um botão que abre a lista das cenas dela (a cena aberta aparece como "Pasta › Cena"); cenas fora de
+  pastas são abas. Excluir a pasta mantém as cenas (saem da pasta). Renomear cena de pasta: campo no botão da pasta.
+
+### Vista isométrica e camadas do mapa
+- `Scene.isometric` (mestre, botão na barra superior): a vista vira `matrix(...)` = escala × `isoMatrix()` (gira 45° e
+  achata, `ISO_SQUASH`) — puro em `utils/projection.ts`. **Toda conversão tela↔mundo usa `project`/`unproject`**
+  e deslocamentos do mouse usam `screenDelta` (inversa da matriz); nunca dividir só pelo zoom. WASD move na
+  direção da **tela**. Trocar a vista anima e reenquadra (`projectedBounds`).
+- Elementos "de pé" (tokens, marcadores, botões de porta, efeitos cura/fumaça/teleporte) recebem
+  `uprightMatrix` = inversa da vista × leve achatamento (`TOKEN_TILT`). Rótulos de texto (régua) ficam fora do mundo.
+- **Camadas** (`Scene.levels`, acima do térreo; térreo = `blobId` da cena; máx. `MAX_MAP_LEVELS` = 5; tokens com
+  `TokenPlacement.level`): controladas pelo mestre no painel "Camadas" da barra de ferramentas (só na isométrica).
+  Imagens das camadas são esticadas ao tamanho do térreo. Camada **sem imagem = ar**: mostra a de baixo.
+- **Quem vê o quê:** `Scene.playerLevel` (persistido, o "olho") = camada dos jogadores; o mestre olha qualquer
+  uma (`currentLevel`, sessão; ao abrir a cena começa na dos jogadores). Excluir camada desce os tokens dela.
+- **Desenho (map-stage):** todas as camadas são "mundos" empilhados com a mesma vista; a camada em foco fica
+  parada e recebe ferramentas/névoa/desenhos/notas; as de baixo descem `LEVEL_GAP_SQUARES` por nível e escurecem.
+  Acima: camadas **com mapa** mostram só o contorno da logo acima (sem tokens, para não confundir) e somem na 2D;
+  camadas **sem mapa ("ar")** mostram os tokens voando nelas (na 2D, sobre o mapa). Tokens de camadas acima
+  projetam **sombra** no "chão" sólido mais próximo abaixo. Transições só durante a troca (`animating`), para pan/zoom seguirem leves.
+- Névoa, paredes, desenhos e anotações são da cena (desenhados na camada em foco); a visão usa os tokens da camada em foco.
+- Atalhos (mestre, isométrica): **PageUp/PageDown** sobem/descem o token selecionado (a vista acompanha) ou, sem
+  seleção, a camada em foco.
 - **Régua e visão:** 1 quadrado = **1,5 m** (`METERS_PER_SQUARE`).
 - **Arquivos da mesa (`TableEntry`):** `character`, `npc` (com `token`), `sound` (`blobId`, `volume`, `loop`),
   `automation` (`role: 'gm' | 'player'` + `icon`). Excluir a ficha remove os tokens dela e apaga os Blobs.
@@ -399,7 +426,8 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 `V` selecionar · `M` mover mapa · `R` régua · `P` ping · `D` desenhar · `F` névoa · `W` parede (névoa em modo linha) ·
 `N` anotação · `E` efeitos especiais · `G` grade · `+`/`-` zoom · `1`–`0` ações · `\` modo imersivo · `Delete` remove o token (ou a parede,
 no modo editar) selecionado · `Esc` cancela parede/fecha anotação/desarma efeito de ação/limpa seleção · `Enter` finaliza parede ·
-`Ctrl+Z` desfaz desenho · **`WASD`/setas** movem o token selecionado (nesse caso W/D não trocam de ferramenta).
+`Ctrl+Z` desfaz desenho · **`WASD`/setas** movem o token selecionado (nesse caso W/D não trocam de ferramenta) ·
+**`PageUp`/`PageDown`** (mestre, isométrica) sobem/descem o token selecionado ou a camada em foco.
 Botão do meio do mouse sempre move o mapa; roda do mouse = zoom no cursor.
 
 ---
@@ -427,8 +455,9 @@ Na mesa, janelas "Token" usam o id `token:<id da colocação>` e fecham sozinhas
 O `MapStage` recebe `insets` para enquadrar o mapa só na área livre entre as barras.
 
 ### Mapa (`map-stage` + `map-layers/`)
-- `map-stage` é o **orquestrador**: vista (`Viewport`), zoom/pan, conversão tela↔mundo e roteamento do
-  ponteiro conforme a ferramenta. Camadas só desenham e emitem eventos (`tokenDown`, `noteDown`).
+- `map-stage` é o **orquestrador**: vista (`Viewport` + matriz 2D/isométrica), zoom/pan, conversão tela↔mundo,
+  pilha de camadas do mapa e roteamento do ponteiro conforme a ferramenta. Camadas só desenham e emitem eventos
+  (`tokenDown`, `noteDown`).
 - Ordem no "mundo", de baixo para cima: **1** mapa · **2** grade · **3** desenhos · **4** notas · **5** névoa ·
   **6** tokens visíveis · **7** portas e paredes · **8** efeitos, régua e ping · **9** interface (popover, avisos — fora do mundo).
 - Na ferramenta Selecionar, token ou anotação sob o cursor tem prioridade; o fundo move o mapa.
@@ -447,7 +476,7 @@ O `MapStage` recebe `insets` para enquadrar o mapa só na área livre entre as b
 | `tables` | `GameTable[]` (todas; filtradas por `ownerId`) |
 | `worldbuild:<userId>` | `WorldItem[]` |
 | `lore:global` | `WorldItem[]` da Lore geral (igual para todos) |
-| `table-state:<tableId>` | `TableState` (cenas com tokens/névoa/memória/paredes/portas/desenhos/anotações, cena ativa, arquivos, volume mestre, organização da Lore) |
+| `table-state:<tableId>` | `TableState` (cenas com tokens/névoa/memória/paredes/portas/desenhos/anotações/camadas/vista, pastas de cenas, cena ativa, arquivos, volume mestre, chat, organização da Lore) |
 | `blob:<id>` | `Blob` de imagem/mapa/áudio/imagem de token |
 | `localStorage: dicetag.session` | id do usuário logado |
 | `localStorage: dicetag.sidebarCollapsed` | preferência da barra lateral |
