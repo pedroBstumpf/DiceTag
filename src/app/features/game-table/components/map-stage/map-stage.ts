@@ -234,15 +234,6 @@ export class MapStage {
     this.zoomBy(event.deltaY < 0 ? 1.12 : 1 / 1.12, event.clientX - rect.left, event.clientY - rect.top);
   }
 
-  /** Centro da área livre (entre as barras), em coordenadas do mapa. */
-  centerWorld(): Point {
-    const el = this.stage().nativeElement;
-    const i = this.insets();
-    const sx = i.left + (el.clientWidth - i.left - i.right) / 2;
-    const sy = i.top + (el.clientHeight - i.top - i.bottom) / 2;
-    return screenToWorld(this.view(), sx, sy);
-  }
-
   // --- Ponteiro: fundo do mapa ---------------------------------------------
 
   onPointerDown(event: PointerEvent): void {
@@ -629,11 +620,6 @@ export class MapStage {
     if (!entryId) return;
     event.preventDefault();
     this.placeToken(entryId, this.toWorld(event));
-  }
-
-  /** Coloca o token de uma ficha no centro da vista (botão da janela). */
-  placeAtCenter(entryId: string): void {
-    this.placeToken(entryId, this.centerWorld());
   }
 
   // --- Internos ------------------------------------------------------------

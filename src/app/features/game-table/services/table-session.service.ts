@@ -426,7 +426,18 @@ export class TableSessionService {
     if (Object.keys(own).length) this.patchPlacement(placementId, own);
   }
 
-  /** Altera a configuração de token da ficha (janela do personagem/NPC). */
+  /** NPC: grava tamanho, barras e etiquetas deste token como padrão da ficha (próximos tokens copiam). */
+  saveTokenAsDefault(placementId: string): void {
+    const token = this.resolvedTokenById(placementId);
+    if (!token) return;
+    this.updateEntryToken(token.entry.id, {
+      size: token.size,
+      bars: token.bars.map((b) => ({ ...b })),
+      tags: token.tags.map((t) => ({ ...t })),
+    });
+  }
+
+  /** Altera a configuração de token da ficha. */
   updateEntryToken(entryId: string, patch: Partial<TokenSettings>): void {
     const entry = this.entryById().get(entryId);
     if (entry) this.updateEntry(entryId, { token: { ...this.tokenOf(entry), ...patch } });

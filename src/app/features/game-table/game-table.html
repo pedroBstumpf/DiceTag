@@ -71,7 +71,7 @@
         >
           @switch (c.type) {
             @case ('entry') {
-              <app-entry-window [entryId]="win.id" (placeOnMap)="placeOnMap($event)" />
+              <app-entry-window [entryId]="win.id" />
             }
             @case ('token') {
               <app-token-window [placementId]="placementOf(win.id)" (openEntry)="open($event)" />

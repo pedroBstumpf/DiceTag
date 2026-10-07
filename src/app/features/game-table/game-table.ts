@@ -38,7 +38,7 @@ const TOKEN_WINDOW = 'token:';
 
 /** Tamanho inicial das janelas por tipo de conteúdo. */
 const WINDOW_SIZES: Record<WindowContent['type'], { width: number; height: number }> = {
-  entry: { width: 540, height: 620 },
+  entry: { width: 520, height: 480 },
   token: { width: 460, height: 560 },
   document: { width: 720, height: 600 },
   timeline: { width: 620, height: 560 },
@@ -169,11 +169,6 @@ export class GameTablePage {
   /** Id do token colocado a partir do id da janela "Token". */
   placementOf(windowId: string): string {
     return windowId.slice(TOKEN_WINDOW.length);
-  }
-
-  /** Coloca o token de uma ficha no centro da área visível do mapa. */
-  placeOnMap(entryId: string): void {
-    this.map()?.placeAtCenter(entryId);
   }
 
   // --- Ações ---------------------------------------------------------------
