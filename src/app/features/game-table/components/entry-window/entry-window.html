@@ -1,9 +1,32 @@
 @if (entry(); as e) {
-  <!-- Cabeçalho: ícone + nome editável -->
+  <!-- Cabeçalho: imagem (personagem/NPC) ou ícone + nome editável -->
   <div class="flex items-center gap-4">
-    <div class="grid size-16 shrink-0 place-items-center rounded-xl bg-white/5 ring-1 ring-white/10" [class]="meta().color">
-      <mat-icon class="!size-8 !text-[32px]">{{ e.icon ?? meta().icon }}</mat-icon>
-    </div>
+    @if (hasToken()) {
+      <!-- Imagem da ficha = imagem do token (clique para enviar/trocar) -->
+      <button
+        type="button"
+        class="group relative grid size-24 shrink-0 place-items-center overflow-hidden rounded-xl bg-ink-700 ring-1 ring-white/15"
+        [matTooltip]="e.token?.blobId ? 'Trocar imagem (também usada no token)' : 'Enviar imagem (também usada no token)'"
+        (click)="imageInput.click()"
+      >
+        @if (blobs.url(e.token?.blobId); as src) {
+          <img [src]="src" alt="" class="size-full object-cover" />
+        } @else {
+          <span class="flex flex-col items-center gap-1 text-slate-500">
+            <mat-icon class="!size-8 !text-[32px]" [class]="meta().color">{{ meta().icon }}</mat-icon>
+            <span class="text-[10px]">Enviar imagem</span>
+          </span>
+        }
+        <span class="absolute inset-0 grid place-items-center bg-black/60 opacity-0 transition-opacity group-hover:opacity-100">
+          <mat-icon class="text-white">add_photo_alternate</mat-icon>
+        </span>
+      </button>
+      <input #imageInput type="file" accept="image/*" hidden (change)="onImagePicked(imageInput)" />
+    } @else {
+      <div class="grid size-16 shrink-0 place-items-center rounded-xl bg-white/5 ring-1 ring-white/10" [class]="meta().color">
+        <mat-icon class="!size-8 !text-[32px]">{{ e.icon ?? meta().icon }}</mat-icon>
+      </div>
+    }
     <div class="min-w-0 flex-1">
       <span class="text-[11px] font-semibold uppercase tracking-widest text-slate-500">
         {{ meta().label }}{{ e.kind === 'automation' ? ' · ' + (e.role === 'gm' ? 'Mestre' : 'Jogador') : '' }}
@@ -22,8 +45,8 @@
   @if (e.kind === 'character' || e.kind === 'npc') {
     <p class="mt-4 flex items-start gap-2 rounded-lg bg-white/5 px-3 py-2 text-xs leading-relaxed text-slate-400">
       <mat-icon class="!size-4 shrink-0 !text-[16px] text-astral-300">token</mat-icon>
-      Arraste esta ficha do painel direito até o mapa para colocar o token. Dê duplo clique no token para
-      configurar imagem, tamanho, visão, barras e etiquetas.
+      A imagem acima também é a do token. Arraste esta ficha do painel direito até o mapa para colocá-lo e
+      dê duplo clique no token para configurar tamanho, visão, barras e etiquetas.
     </p>
   }
 

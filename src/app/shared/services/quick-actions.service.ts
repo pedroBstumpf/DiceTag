@@ -3,14 +3,13 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
-import { WorldItemType } from '../../core/models/world-item.model';
 import { AuthService } from '../../core/services/auth.service';
 import { AuthDialog, AuthMode } from '../../features/auth/auth-dialog/auth-dialog';
 import { CreateTableDialog } from '../../features/tables/create-table-dialog/create-table-dialog';
 
 /**
  * Ações rápidas reutilizadas pela barra lateral e pela página inicial
- * (entrar, criar conta, criar mesa, criar itens de worldbuild).
+ * (entrar, criar conta, criar mesa, abrir o worldbuild).
  * Centraliza a regra "precisa estar logado" num único lugar.
  */
 @Injectable({ providedIn: 'root' })
@@ -51,11 +50,5 @@ export class QuickActionsService {
   /** Abre o worldbuild (pede login antes, se necessário). */
   async openWorldbuild(): Promise<void> {
     if (await this.ensureAuth()) this.router.navigate(['/worldbuild']);
-  }
-
-  /** Abre o worldbuild já criando um item do tipo pedido. */
-  async createWorldItem(type: WorldItemType): Promise<void> {
-    if (!(await this.ensureAuth())) return;
-    this.router.navigate(['/worldbuild'], { queryParams: { novo: type } });
   }
 }

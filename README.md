@@ -39,7 +39,7 @@ src/
     │   └── utils/             # viewport (pan/zoom puro)
     ├── layout/
     │   ├── shell/             # barra lateral + área de conteúdo
-    │   └── sidebar/           # navegação, criação rápida, conta
+    │   └── sidebar/           # navegação, Lore geral, conta
     └── features/
         ├── home/              # landing: banner, atalhos, notícias
         ├── auth/              # diálogo de login / cadastro
@@ -49,9 +49,10 @@ src/
         │   │                  # tokens, paredes), barras, submenus, janelas de ficha e token, mixer
         │   ├── services/      # table-session (estado + vínculo de tokens), sound-mixer, blob-url
         │   └── utils/         # geometria, visão (ray casting), simplificação de traços
-        └── worldbuild/        # explorador de pastas + janelas flutuantes
+        └── worldbuild/        # explorador de pastas + janelas flutuantes (também é a página /lore)
             ├── components/    # explorer, document-editor, timeline-editor, image-viewer
-            ├── services/      # worldbuild (dados + migração)
+            ├── directives/    # lore-scope (editores usando a Lore geral)
+            ├── services/      # worldbuild (dados + migração), lore (Lore geral, dados globais)
             └── utils/         # layout da linha do tempo em mapa mental
 ```
 
@@ -67,8 +68,9 @@ O mapa ocupa a tela inteira e as barras flutuam por cima — todas escondíveis:
 - **Topo — cenas:** abas de mapas; adicionar (com imagem ou só grade), renomear, trocar mapa, ajustar grade.
 - **Esquerda — ferramentas:** selecionar (V), mover (M), régua em quadrados e metros (R), ping (P),
   desenhar (D), névoa de guerra (F) com paredes (W), anotação (N), grade (G), zoom.
-- **Direita — painel:** Fichas (personagens e NPCs — arraste para o mapa), Lore (itens do worldbuild e as
-  pastas do Worldbuild numa janela, sem sair da mesa), Sons (mixer), Automações.
+- **Direita — painel:** Fichas (personagens e NPCs — arraste para o mapa; a imagem enviada na ficha é a do
+  token), Lore (itens da Lore geral e do worldbuild, com pastas próprias da mesa; renomear e remover valem
+  só para a mesa), Sons (mixer), Automações.
 - **Baixo — ações:** 10 espaços (teclas 1–0) com as automações do papel atual (Mestre/Jogador).
 - **Janelas:** todo arquivo abre numa janela que pode ser movida, redimensionada, minimizada, maximizada e fixada.
 - **Modo imersivo:** tecla `\` esconde/mostra todas as barras.
@@ -93,7 +95,10 @@ texto, cor e opção "só o mestre vê".
 ### Sons
 Várias faixas tocando juntas, cada uma com volume e repetição, mais volume mestre e "Parar tudo".
 
-## Worldbuild
+## Worldbuild e Lore geral
+
+O **Worldbuild** é de cada usuário. A **Lore geral** (`/lore`, na barra lateral) é a lore oficial do mundo,
+igual para todos — mesma página e mesmos editores, com dados globais.
 
 - **Explorador** (escondível): pastas livres, arrastar para mover, renomear com duplo clique, busca.
 - **Janelas flutuantes**: cada item abre numa janela que pode ser movida, redimensionada e maximizada (duplo clique na barra).

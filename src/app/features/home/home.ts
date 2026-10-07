@@ -20,7 +20,7 @@ interface FeatureCard {
 
 /**
  * Página inicial (landing): banner com a logo, atalhos principais
- * (conta, mesas, worldbuild) e o mural de notícias e anúncios.
+ * (mesas, worldbuild, Lore geral) e o mural de notícias e anúncios.
  */
 @Component({
   selector: 'app-home',
@@ -59,10 +59,10 @@ export class Home {
     },
     {
       icon: 'auto_stories',
-      title: 'Feito para imersão',
-      text: 'Janelas que se movem, barras que se escondem: a interface sai do caminho da história.',
-      cta: this.auth.isLoggedIn() ? 'Minhas mesas' : 'Criar conta',
-      run: () => (this.auth.isLoggedIn() ? this.actions.goTo('/mesas') : this.actions.openAuth('register')),
+      title: 'Lore geral',
+      text: 'A história, os povos e os lugares do mundo — a mesma lore para todas as mesas.',
+      cta: 'Ler a lore',
+      run: () => this.actions.goTo('/lore'),
     },
   ]);
 }

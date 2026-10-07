@@ -138,6 +138,37 @@ export interface TableState {
   entries: TableEntry[];
   /** Volume mestre dos sons da mesa (0–1). Padrão: 1. */
   soundMaster?: number;
+  /** Organização da aba Lore nesta mesa. Padrão: sem pastas nem ajustes. */
+  lore?: TableLore;
+}
+
+// --- Lore da mesa ------------------------------------------------------------
+
+/**
+ * Organização própria da aba Lore de uma mesa. Os itens continuam vindo do
+ * worldbuild e da Lore geral; aqui ficam só ajustes locais (pastas, nomes,
+ * itens removidos), que não alteram nem apagam os originais.
+ */
+export interface TableLore {
+  folders: LoreFolder[];
+  /** Ajustes por item (chave = id do item do worldbuild ou da Lore geral). */
+  items: Record<string, LoreItemOverride>;
+}
+
+/** Pasta da aba Lore (existe só nesta mesa). */
+export interface LoreFolder {
+  id: string;
+  name: string;
+}
+
+/** Ajustes locais de um item da lore nesta mesa. */
+export interface LoreItemOverride {
+  /** Nome usado só nesta mesa (ausente = nome original). */
+  name?: string;
+  /** Pasta da mesa onde o item fica (ausente = raiz). */
+  folderId?: string;
+  /** Removido desta mesa (o original continua existindo). */
+  hidden?: boolean;
 }
 
 // --- Tokens ------------------------------------------------------------------

@@ -1,10 +1,13 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { Point } from '../../../core/models/geometry.model';
+import { WorldItem } from '../../../core/models/world-item.model';
 import {
   BRUSH_COLORS,
   BRUSH_WIDTHS,
   DEFAULT_SOUND_VOLUME,
   DoorWall,
+  LoreFolder,
+  LoreItemOverride,
   METERS_PER_SQUARE,
   MapNote,
   NOTE_COLORS,
@@ -14,6 +17,7 @@ import {
   TableEntry,
   TableEntryKind,
   TableRole,
+  TableLore,
   TableState,
   TableTool,
   TokenBar,
@@ -75,6 +79,7 @@ type DrawAction = { kind: 'add'; strokeId: string } | { kind: 'erase'; removed: 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
 const EMPTY_STATE: TableState = { scenes: [], activeSceneId: null, entries: [] };
+const EMPTY_LORE: TableLore = { folders: [], items: {} };
 const NO_TOKENS: TokenPlacement[] = [];
 const NO_WALLS: Wall[] = [];
 const NO_STROKES: Stroke[] = [];
@@ -104,6 +109,8 @@ export class TableSessionService {
   readonly entryById = computed(() => new Map(this.entries().map((e) => [e.id, e])));
   /** Volume mestre dos sons (0–1). */
   readonly soundMaster = computed(() => this.state().soundMaster ?? 1);
+  /** Organização da aba Lore nesta mesa (pastas e ajustes locais). */
+  readonly lore = computed(() => this.state().lore ?? EMPTY_LORE);
 
   /** Tokens colocados na cena ativa (mesma referência enquanto não mudam). */
   readonly tokens = computed(() => this.activeScene()?.tokens ?? NO_TOKENS);
@@ -369,6 +376,72 @@ export class TableSessionService {
 
   getBlob(blobId: string): Promise<Blob | undefined> {
     return this.storage.get<Blob>(`blob:${blobId}`);
+  }
+
+  // --- Lore da mesa (pastas e ajustes locais) -----------------------------
+  // Nada aqui altera ou apaga os itens do worldbuild / Lore geral.
+
+  /** Nome do item da lore nesta mesa (o local, se renomeado aqui). */
+  loreName(item: WorldItem): string {
+    return this.lore().items[item.id]?.name ?? item.name;
+  }
+
+  /** Cria uma pasta na aba Lore ("Nova pasta", "Nova pasta 2"…). */
+  addLoreFolder(): LoreFolder {
+    const names = new Set(this.lore().folders.map((f) => f.name));
+    let name = 'Nova pasta';
+    for (let n = 2; names.has(name); n++) name = `Nova pasta ${n}`;
+    const folder: LoreFolder = { id: newId(), name };
+    this.patchLore((l) => ({ ...l, folders: [...l.folders, folder] }));
+    return folder;
+  }
+
+  renameLoreFolder(id: string, name: string): void {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    this.patchLore((l) => ({ ...l, folders: l.folders.map((f) => (f.id === id ? { ...f, name: trimmed } : f)) }));
+  }
+
+  /** Exclui a pasta da mesa; os itens dela voltam para a raiz da aba Lore. */
+  removeLoreFolder(id: string): void {
+    this.patchLore((l) => ({
+      folders: l.folders.filter((f) => f.id !== id),
+      items: Object.fromEntries(
+        Object.entries(l.items).map(([itemId, o]) => [itemId, o.folderId === id ? { ...o, folderId: undefined } : o]),
+      ),
+    }));
+  }
+
+  /** Renomeia o item só nesta mesa (nome vazio ou igual ao original volta ao original). */
+  renameLoreItem(item: WorldItem, name: string): void {
+    const trimmed = name.trim();
+    this.patchLoreItem(item.id, { name: trimmed && trimmed !== item.name ? trimmed : undefined });
+  }
+
+  /** Move o item para uma pasta da mesa (null = raiz). */
+  moveLoreItem(itemId: string, folderId: string | null): void {
+    this.patchLoreItem(itemId, { folderId: folderId ?? undefined });
+  }
+
+  /** Remove o item desta mesa (o original continua no worldbuild / Lore geral). */
+  hideLoreItem(itemId: string): void {
+    this.patchLoreItem(itemId, { hidden: true });
+  }
+
+  /** Traz de volta todos os itens removidos desta mesa. */
+  restoreLoreItems(): void {
+    this.patchLore((l) => ({
+      ...l,
+      items: Object.fromEntries(Object.entries(l.items).map(([id, o]) => [id, { ...o, hidden: undefined }])),
+    }));
+  }
+
+  private patchLoreItem(itemId: string, patch: LoreItemOverride): void {
+    this.patchLore((l) => ({ ...l, items: { ...l.items, [itemId]: { ...l.items[itemId], ...patch } } }));
+  }
+
+  private patchLore(fn: (l: TableLore) => TableLore): void {
+    this.patchState((s) => ({ ...s, lore: fn(s.lore ?? EMPTY_LORE) }));
   }
 
   // --- Tokens: regra de vínculo --------------------------------------------

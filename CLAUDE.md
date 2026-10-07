@@ -16,7 +16,8 @@ organizar toda a atmosfera de uma campanha.
 | Área | Status |
 |---|---|
 | Landing page (banner com logo, atalhos, mural de notícias vazio) | Pronto |
-| Barra lateral global (navegação, criação rápida, "em breve", conta) | Pronto |
+| Barra lateral global (navegação, **Lore geral**, "em breve", conta) | Pronto |
+| **Lore geral** (`/lore`): lore oficial do mundo, global, mesma página/editores do Worldbuild | Pronto |
 | Contas (login/cadastro locais) + **modo de teste sem conta** | Pronto (provisório) |
 | Minhas mesas (criar, listar, excluir com limpeza dos dados, abrir) | Pronto |
 | Worldbuild (pastas, documentos rich text, **linha do tempo em mapa mental**, mapas/imagens) | Pronto |
@@ -25,7 +26,7 @@ organizar toda a atmosfera de uma campanha.
 | **Tokens** (imagem, tamanho, visão, barras e etiquetas com cor/nível; vínculo personagem/NPC; WASD) | Pronto |
 | **Névoa de guerra + paredes + portas** (visão por ray casting, por papel, memória de áreas exploradas) | Pronto |
 | **Pincel** (desenho livre, borracha, Ctrl+Z) e **anotações** no mapa | Pronto |
-| Fichas de personagem/NPC | **Placeholder** (não estruturar sem pedido); opções do token ficam só no mapa |
+| Fichas de personagem/NPC | **Placeholder** (não estruturar sem pedido); só nome + imagem (= imagem do token); demais opções do token ficam só no mapa |
 | Automações (habilidades/dados) | **Placeholder** (nome + ícone; aparecem na barra de ações) |
 | Rolagem de dados | Não iniciado |
 | Backend, multiplayer em tempo real | Não iniciado |
@@ -102,7 +103,7 @@ src/
     │   ├── directives/auto-focus.directive.ts
     │   ├── services/
     │   │   ├── window-manager.service.ts  # abre/fecha/foca janelas (fornecido por página)
-    │   │   └── quick-actions.service.ts   # ações globais: login, criar mesa, criar item de worldbuild
+    │   │   └── quick-actions.service.ts   # ações globais: login, criar mesa, abrir worldbuild
     │   └── utils/viewport.ts           # pan/zoom puro (zoomAt, fitRect, screenToWorld) + spec
     ├── layout/
     │   ├── shell/              # barra lateral + área de conteúdo (todas as páginas exceto a mesa)
@@ -112,8 +113,11 @@ src/
         ├── auth/auth-dialog/   # diálogo único Entrar/Criar conta
         ├── tables/             # "Minhas mesas" + create-table-dialog
         ├── worldbuild/
-        │   ├── worldbuild.ts           # página: explorador + área de janelas
-        │   ├── services/worldbuild.service.ts   # inclui a migração de linhas do tempo antigas
+        │   ├── worldbuild.ts           # página: explorador + área de janelas (também serve a /lore)
+        │   ├── lore.routes.ts          # rota /lore: página do worldbuild com LoreService
+        │   ├── services/worldbuild.service.ts   # inclui a migração de linhas do tempo antigas; keyFor() define a chave
+        │   ├── services/lore.service.ts         # Lore geral: estende WorldbuildService, chave global
+        │   ├── directives/lore-scope.directive.ts  # appLoreScope: troca WorldbuildService → LoreService no elemento
         │   ├── utils/timeline-layout.ts         # layouts, setas e hit test do mapa mental + spec
         │   └── components/ explorer, document-editor, timeline-editor, image-viewer
         └── game-table/         # MESA DE JOGO (rota /mesa/:id, tela cheia, fora do Shell)
@@ -144,7 +148,8 @@ src/
 ```
 
 Rotas (`app.routes.ts`, todas lazy):
-- `''` (Shell) → `''` Home · `mesas` Tables · `worldbuild` Worldbuild (aceita `?novo=<tipo>` e `?abrir=<id>`)
+- `''` (Shell) → `''` Home · `mesas` Tables · `worldbuild` Worldbuild (aceita `?novo=<tipo>` e `?abrir=<id>`) ·
+  `lore` Lore geral (`loadChildren` → `LORE_ROUTES`: mesmo componente `Worldbuild` com `LoreService` no lugar do `WorldbuildService`)
 - `mesa/:id` → GameTablePage (tela cheia, **fora** do Shell)
 - `**` → redireciona para `''`
 
@@ -239,7 +244,7 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - `isLoggedIn()` = há usuário (real ou visitante). `isGuest()` = é o visitante.
 - Contas reais: e-mail único (normalizado em minúsculas), senha com mínimo de 6 caracteres, hash SHA-256 (`dicetag:` + senha).
   Sessão = id do usuário em `localStorage['dicetag.session']`. **É provisório** — não é segurança real.
-- Todos os dados são separados por usuário (o visitante tem os próprios dados).
+- Todos os dados são separados por usuário (o visitante tem os próprios dados), **exceto a Lore geral** (global).
 
 ### Mesas (`GameTablesService`)
 - Campos: nome (obrigatório, até 60), sistema (texto livre com sugestões `GAME_SYSTEMS`), descrição (até 400),
@@ -254,6 +259,14 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - Mover: proibido mover uma pasta para dentro dela mesma ou de um descendente.
 - Excluir pasta exclui todo o conteúdo e apaga os Blobs de imagem.
 - Arquivos soltos no explorador: apenas imagens são aceitas.
+
+### Lore geral (`LoreService`)
+- A lore oficial do mundo (o app é voltado a um mundo/sistema próprios). Mesmas regras do Worldbuild,
+  mas numa chave **global** (`lore:global`), igual para todos os usuários. Ainda sem permissões: quem
+  abre pode editar.
+- `LoreService extends WorldbuildService` e só troca `title` e `keyFor()`. Página e editores são os
+  mesmos: a rota `/lore` fornece `LoreService` como `WorldbuildService`; na mesa, a diretiva
+  `appLoreScope` faz o mesmo no elemento do editor/explorador.
 
 ### Linha do tempo (mapa mental)
 - Eventos são cartões livres no quadro (`x`/`y` = canto superior esquerdo; tamanho fixo `TIMELINE_CARD`),
@@ -272,8 +285,17 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - **Régua e visão:** 1 quadrado = **1,5 m** (`METERS_PER_SQUARE`).
 - **Arquivos da mesa (`TableEntry`):** `character`, `npc` (com `token`), `sound` (`blobId`, `volume`, `loop`),
   `automation` (`role: 'gm' | 'player'` + `icon`). Excluir a ficha remove os tokens dela e apaga os Blobs.
-- **Lore** não é duplicada: a aba Lore lista os itens do **Worldbuild** do usuário e os abre com os mesmos editores.
-  "Abrir pastas do Worldbuild" abre o `Explorer` numa janela (`worldbuild:explorer`) **sem sair da mesa**.
+- **Ficha x imagem:** personagem/NPC mostra a imagem no topo da ficha; enviar ali usa `setTokenImage`
+  (a imagem da ficha **é** a do token).
+- **Lore** não é duplicada: a aba Lore lista os itens (exceto pastas) da **Lore geral** (marcados com
+  `auto_stories`) e do **Worldbuild** do usuário e os abre com os mesmos editores.
+  "Abrir Lore geral" / "Abrir pastas do Worldbuild" abrem o `Explorer` numa janela (`lore:explorer` /
+  `worldbuild:explorer`) **sem sair da mesa**.
+- **Organização da Lore por mesa (`TableState.lore`):** pastas próprias da mesa (um nível, `LoreFolder`) e
+  ajustes por item (`LoreItemOverride { name?, folderId?, hidden? }`). Renomear muda só o nome **nesta mesa**
+  (vazio = volta ao original; o título da janela usa `loreName`); a lixeira **esconde** o item desta mesa
+  ("Restaurar N itens" traz de volta); excluir pasta devolve os itens à raiz. **Nunca** altera nem apaga o
+  original. Itens entram nas pastas arrastando.
 - **Grade:** escondida (G ou menu da cena) = tokens e paredes se movem livres; visível = alinham (Shift = livre).
 - **Papel (`role`)**: alternado manualmente na barra de ações (Mestre/Jogador) — não há permissões reais ainda.
   A barra de ações mostra as automações do papel atual (até 10; teclas 1–9 e 0). Espaço vazio cria uma automação.
@@ -377,7 +399,8 @@ O `MapStage` recebe `insets` para enquadrar o mapa só na área livre entre as b
 | `users` | `StoredUser[]` |
 | `tables` | `GameTable[]` (todas; filtradas por `ownerId`) |
 | `worldbuild:<userId>` | `WorldItem[]` |
-| `table-state:<tableId>` | `TableState` (cenas com tokens/névoa/memória/paredes/portas/desenhos/anotações, cena ativa, arquivos, volume mestre) |
+| `lore:global` | `WorldItem[]` da Lore geral (igual para todos) |
+| `table-state:<tableId>` | `TableState` (cenas com tokens/névoa/memória/paredes/portas/desenhos/anotações, cena ativa, arquivos, volume mestre, organização da Lore) |
 | `blob:<id>` | `Blob` de imagem/mapa/áudio/imagem de token |
 | `localStorage: dicetag.session` | id do usuário logado |
 | `localStorage: dicetag.sidebarCollapsed` | preferência da barra lateral |
@@ -396,6 +419,7 @@ Para conectar um backend no futuro: trocar `StorageService` e `AuthService` mant
 - Movimento de tokens (arrastar ou WASD) não colide com paredes.
 - Ctrl+Z cobre só desenhos (não tokens, paredes ou anotações).
 - Backend + multiplayer em tempo real; permissões reais de mestre/jogador; convite de jogadores.
+- Lore geral: hoje qualquer usuário edita; com backend, só o dono do mundo deve editar (os demais só leem).
 - Mural de notícias alimentado por API/CMS (`NewsService.posts`).
 - Testes de componentes (hoje só as funções puras de `utils/` têm testes).
 

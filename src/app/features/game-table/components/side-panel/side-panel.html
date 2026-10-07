@@ -23,38 +23,127 @@
       <p class="px-2 text-[11px] leading-relaxed text-slate-500">Arraste uma ficha até o mapa para colocar o token.</p>
     }
 
-    <!-- Lore: itens do worldbuild -->
+    <!-- Lore: itens da Lore geral e do worldbuild, organizados em pastas desta mesa -->
     @case ('lore') {
-      <label class="mb-3 flex h-9 items-center gap-2 rounded-lg bg-ink-950/70 px-3 text-sm ring-1 ring-white/5 focus-within:ring-astral-400/50">
-        <mat-icon class="!size-[18px] !text-[18px] text-slate-500">search</mat-icon>
-        <input
-          class="min-w-0 flex-1 bg-transparent text-slate-200 outline-none placeholder:text-slate-500"
-          placeholder="Buscar no worldbuild…"
-          [value]="query()"
-          (input)="query.set($any($event.target).value)"
-        />
-      </label>
-
-      @for (item of lore(); track item.id) {
+      <div class="mb-3 flex items-center gap-1">
+        <label class="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-lg bg-ink-950/70 px-3 text-sm ring-1 ring-white/5 focus-within:ring-astral-400/50">
+          <mat-icon class="!size-[18px] !text-[18px] text-slate-500">search</mat-icon>
+          <input
+            class="min-w-0 flex-1 bg-transparent text-slate-200 outline-none placeholder:text-slate-500"
+            placeholder="Buscar na lore…"
+            [value]="query()"
+            (input)="query.set($any($event.target).value)"
+          />
+        </label>
         <button
           type="button"
-          class="flex h-9 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-slate-300 transition-colors hover:bg-white/5 hover:text-white"
-          (click)="opened.emit(item.id)"
+          class="grid size-9 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-white/10 hover:text-white"
+          matTooltip="Nova pasta (só nesta mesa)"
+          (click)="createLoreFolder()"
         >
-          <mat-icon class="!size-5 shrink-0 !text-[20px]" [class]="loreMeta(item).color">{{ loreMeta(item).icon }}</mat-icon>
-          <span class="truncate">{{ item.name }}</span>
+          <mat-icon class="!text-[20px]">create_new_folder</mat-icon>
         </button>
-      } @empty {
-        <p class="px-2 py-6 text-center text-sm text-slate-500">
-          {{ query() ? 'Nada encontrado.' : 'Seu worldbuild está vazio.' }}
-        </p>
+      </div>
+
+      @if (loreSearch(); as results) {
+        <!-- Busca: lista plana -->
+        @for (row of results; track row.item.id) {
+          <ng-container *ngTemplateOutlet="loreItem; context: { $implicit: row, depth: 0 }" />
+        } @empty {
+          <p class="px-2 py-6 text-center text-sm text-slate-500">Nada encontrado.</p>
+        }
+      } @else {
+        <!-- Lista com pastas (a área livre aceita itens = tirar da pasta) -->
+        <div
+          class="min-h-16 rounded-lg transition-colors"
+          [class.bg-astral-500/5]="loreDropTarget() === null"
+          (dragover)="onLoreDragOver($event, null)"
+          (dragleave)="loreDropTarget.set(undefined)"
+          (drop)="onLoreDrop($event, null)"
+        >
+          @for (folder of loreFolders(); track folder.id) {
+            @let open = expandedFolders().has(folder.id);
+            <div
+              class="group flex h-9 cursor-pointer items-center gap-1.5 rounded-lg pl-1 pr-1 text-sm text-slate-300 transition-colors hover:bg-white/5 hover:text-white"
+              [class]="loreDropTarget() === folder.id ? 'bg-astral-500/15 ring-1 ring-astral-400/50' : ''"
+              (click)="renamingId() !== folder.id && toggleFolder(folder.id)"
+              (dblclick)="renamingId.set(folder.id)"
+              (dragover)="onLoreDragOver($event, folder.id)"
+              (drop)="onLoreDrop($event, folder.id)"
+            >
+              <mat-icon class="!size-4 shrink-0 !text-[16px] text-slate-500">{{ open ? 'expand_more' : 'chevron_right' }}</mat-icon>
+              <mat-icon class="!size-5 shrink-0 !text-[20px] text-amber-300/80">{{ open ? 'folder_open' : 'folder' }}</mat-icon>
+              @if (renamingId() === folder.id) {
+                <input
+                  #folderInput
+                  appAutoFocus
+                  class="h-7 min-w-0 flex-1 rounded bg-ink-950 px-2 text-slate-100 outline-none ring-1 ring-astral-400/60"
+                  [value]="folder.name"
+                  (click)="$event.stopPropagation()"
+                  (keydown.enter)="finishFolderRename(folder, folderInput.value)"
+                  (keydown.escape)="renamingId.set(null)"
+                  (blur)="finishFolderRename(folder, folderInput.value)"
+                />
+              } @else {
+                <span class="min-w-0 flex-1 truncate">{{ folder.name }}</span>
+                <span class="text-[11px] text-slate-600">{{ loreIn(folder.id).length }}</span>
+              }
+              <button
+                type="button"
+                class="grid size-7 shrink-0 place-items-center rounded-md text-slate-500 opacity-0 hover:bg-white/10 hover:text-white group-hover:opacity-100 max-lg:opacity-100"
+                aria-label="Renomear pasta"
+                matTooltip="Renomear"
+                (click)="$event.stopPropagation(); renamingId.set(folder.id)"
+              >
+                <mat-icon class="!text-[16px]">edit</mat-icon>
+              </button>
+              <button
+                type="button"
+                class="grid size-7 shrink-0 place-items-center rounded-md text-slate-500 opacity-0 hover:bg-white/10 hover:text-red-300 group-hover:opacity-100 max-lg:opacity-100"
+                aria-label="Excluir pasta"
+                matTooltip="Excluir pasta"
+                (click)="$event.stopPropagation(); removeLoreFolder(folder)"
+              >
+                <mat-icon class="!text-[16px]">delete</mat-icon>
+              </button>
+            </div>
+            @if (open) {
+              @for (row of loreIn(folder.id); track row.item.id) {
+                <ng-container *ngTemplateOutlet="loreItem; context: { $implicit: row, depth: 1 }" />
+              } @empty {
+                <p class="py-1.5 pl-9 text-xs text-slate-600">Arraste itens para cá.</p>
+              }
+            }
+          }
+
+          @for (row of loreIn(null); track row.item.id) {
+            <ng-container *ngTemplateOutlet="loreItem; context: { $implicit: row, depth: 0 }" />
+          } @empty {
+            @if (!loreFolders().length) {
+              <p class="px-2 py-6 text-center text-sm text-slate-500">A lore está vazia.</p>
+            }
+          }
+        </div>
       }
 
-      <!-- Abre o explorador do worldbuild numa janela, sem sair da mesa -->
-      <button mat-stroked-button class="mt-3 w-full" (click)="opened.emit(worldbuildWindow)">
-        <mat-icon>folder_open</mat-icon>
-        Abrir pastas do Worldbuild
-      </button>
+      @if (hiddenLoreCount()) {
+        <button type="button" class="mt-2 flex w-full items-center justify-center gap-1 rounded-md py-1 text-xs text-slate-500 hover:text-astral-300" (click)="session.restoreLoreItems()">
+          <mat-icon class="!size-4 !text-[16px]">undo</mat-icon>
+          Restaurar {{ hiddenLoreCount() }} item(ns) removido(s) desta mesa
+        </button>
+      }
+
+      <!-- Abre os exploradores numa janela, sem sair da mesa -->
+      <div class="mt-3 flex flex-col gap-2">
+        <button mat-stroked-button class="w-full" (click)="opened.emit(loreWindow)">
+          <mat-icon>auto_stories</mat-icon>
+          Abrir Lore geral
+        </button>
+        <button mat-stroked-button class="w-full" (click)="opened.emit(worldbuildWindow)">
+          <mat-icon>folder_open</mat-icon>
+          Abrir pastas do Worldbuild
+        </button>
+      </div>
     }
 
     <!-- Sons e ambientação -->
@@ -72,6 +161,61 @@
     }
   }
 </div>
+
+<!-- ===================================================================== -->
+<!-- Item da Lore: abrir, arrastar para pasta, renomear e remover (só nesta mesa) -->
+<!-- ===================================================================== -->
+<ng-template #loreItem let-row let-depth="depth">
+  <div
+    class="group flex h-9 cursor-pointer items-center gap-2 rounded-lg pr-1 text-sm text-slate-300 transition-colors hover:bg-white/5 hover:text-white"
+    [class]="depth ? 'pl-8' : 'pl-2'"
+    [attr.draggable]="renamingId() === row.item.id ? null : 'true'"
+    (dragstart)="onLoreDragStart($event, row)"
+    (dragend)="onLoreDragEnd()"
+    (click)="renamingId() !== row.item.id && opened.emit(row.item.id)"
+    (dblclick)="renamingId.set(row.item.id)"
+  >
+    <mat-icon class="!size-5 shrink-0 !text-[20px]" [class]="loreMeta(row.item).color">{{ loreMeta(row.item).icon }}</mat-icon>
+
+    @if (renamingId() === row.item.id) {
+      <input
+        #loreInput
+        appAutoFocus
+        class="h-7 min-w-0 flex-1 rounded bg-ink-950 px-2 text-slate-100 outline-none ring-1 ring-astral-400/60"
+        [value]="row.name"
+        [placeholder]="row.item.name"
+        (click)="$event.stopPropagation()"
+        (keydown.enter)="finishLoreRename(row, loreInput.value)"
+        (keydown.escape)="renamingId.set(null)"
+        (blur)="finishLoreRename(row, loreInput.value)"
+      />
+    } @else {
+      <span class="min-w-0 flex-1 truncate">{{ row.name }}</span>
+      @if (row.global) {
+        <mat-icon class="!size-3.5 shrink-0 !text-[14px] text-star-400/70" matTooltip="Lore geral">auto_stories</mat-icon>
+      }
+    }
+
+    <button
+      type="button"
+      class="grid size-7 shrink-0 place-items-center rounded-md text-slate-500 opacity-0 hover:bg-white/10 hover:text-white group-hover:opacity-100 max-lg:opacity-100"
+      aria-label="Renomear nesta mesa"
+      matTooltip="Renomear (só nesta mesa)"
+      (click)="$event.stopPropagation(); renamingId.set(row.item.id)"
+    >
+      <mat-icon class="!text-[16px]">edit</mat-icon>
+    </button>
+    <button
+      type="button"
+      class="grid size-7 shrink-0 place-items-center rounded-md text-slate-500 opacity-0 hover:bg-white/10 hover:text-red-300 group-hover:opacity-100 max-lg:opacity-100"
+      aria-label="Remover desta mesa"
+      matTooltip="Remover (só desta mesa)"
+      (click)="$event.stopPropagation(); hideLore(row)"
+    >
+      <mat-icon class="!text-[16px]">delete</mat-icon>
+    </button>
+  </div>
+</ng-template>
 
 <!-- ===================================================================== -->
 <!-- Seção com título, botão "+" e lista de arquivos                        -->

@@ -73,21 +73,41 @@
             @case ('entry') {
               <app-entry-window [entryId]="win.id" />
             }
-            @case ('explorer') {
-              <!-- Pastas do worldbuild dentro da mesa: os itens abrem em janelas aqui mesmo -->
-              <app-explorer [hideable]="false" (opened)="open($event)" (removed)="windows.closeMany($event)" />
-            }
             @case ('token') {
               <app-token-window [placementId]="placementOf(win.id)" (openEntry)="open($event)" />
             }
-            @case ('document') {
-              <app-document-editor [itemId]="win.id" />
+          }
+          <!-- Lore: mesmos componentes do worldbuild; itens da Lore geral usam o LoreService (appLoreScope) -->
+          @if (c.global) {
+            @switch (c.type) {
+              @case ('explorer') {
+                <app-explorer appLoreScope [hideable]="false" (opened)="open($event)" (removed)="windows.closeMany($event)" />
+              }
+              @case ('document') {
+                <app-document-editor appLoreScope [itemId]="win.id" />
+              }
+              @case ('timeline') {
+                <app-timeline-editor appLoreScope [itemId]="win.id" />
+              }
+              @case ('image') {
+                <app-image-viewer appLoreScope [itemId]="win.id" />
+              }
             }
-            @case ('timeline') {
-              <app-timeline-editor [itemId]="win.id" />
-            }
-            @case ('image') {
-              <app-image-viewer [itemId]="win.id" />
+          } @else {
+            @switch (c.type) {
+              @case ('explorer') {
+                <!-- Pastas do worldbuild dentro da mesa: os itens abrem em janelas aqui mesmo -->
+                <app-explorer [hideable]="false" (opened)="open($event)" (removed)="windows.closeMany($event)" />
+              }
+              @case ('document') {
+                <app-document-editor [itemId]="win.id" />
+              }
+              @case ('timeline') {
+                <app-timeline-editor [itemId]="win.id" />
+              }
+              @case ('image') {
+                <app-image-viewer [itemId]="win.id" />
+              }
             }
           }
         </app-floating-window>
