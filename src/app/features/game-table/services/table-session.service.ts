@@ -1,9 +1,12 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Point } from '../../../core/models/geometry.model';
 import {
+  BRUSH_COLORS,
+  BRUSH_WIDTHS,
   DEFAULT_SOUND_VOLUME,
   METERS_PER_SQUARE,
   Scene,
+  Stroke,
   TABLE_ENTRY_META,
   TableEntry,
   TableEntryKind,
@@ -52,12 +55,25 @@ export type TokenPatch = Partial<Pick<TokenSettings, 'size' | 'vision' | 'bars' 
 /** Modo da ferramenta Névoa. */
 export type WallMode = 'line' | 'circle' | 'erase';
 
+/** Configuração atual do pincel (sessão). */
+export interface Brush {
+  color: string;
+  width: number;
+  opacity: number;
+  /** Borracha: arrastar remove os traços tocados. */
+  eraser: boolean;
+}
+
+/** Ação de desenho que pode ser desfeita (Ctrl+Z). */
+type DrawAction = { kind: 'add'; strokeId: string } | { kind: 'erase'; removed: { stroke: Stroke; index: number }[] };
+
 /** Omit que preserva cada membro de uma união (ex.: Wall sem o id). */
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
 const EMPTY_STATE: TableState = { scenes: [], activeSceneId: null, entries: [] };
 const NO_TOKENS: TokenPlacement[] = [];
 const NO_WALLS: Wall[] = [];
+const NO_STROKES: Stroke[] = [];
 
 /**
  * Estado da mesa aberta: cenas, arquivos (fichas, sons, automações),
@@ -91,6 +107,9 @@ export class TableSessionService {
     const byId = this.entryById();
     return this.tokens().flatMap((p) => this.resolveToken(p, byId) ?? []);
   });
+
+  /** Desenhos da cena ativa. */
+  readonly drawings = computed(() => this.activeScene()?.drawings ?? NO_STROKES);
 
   // --- Névoa de guerra e paredes (cena ativa) ------------------------------
   readonly walls = computed(() => this.activeScene()?.walls ?? NO_WALLS);
@@ -139,6 +158,10 @@ export class TableSessionService {
   readonly wallMode = signal<WallMode>('line');
   /** Mestre: mostrar paredes mesmo fora da ferramenta Névoa. */
   readonly showWallsAlways = signal(false);
+  /** Pincel da ferramenta Desenhar. */
+  readonly brush = signal<Brush>({ color: BRUSH_COLORS[0], width: BRUSH_WIDTHS[1], opacity: 1, eraser: false });
+  /** Pilha de desfazer dos desenhos, por cena (só nesta sessão). */
+  private readonly drawHistory = new Map<string, DrawAction[]>();
   /** Paredes visíveis: durante a ferramenta Névoa ou, para o mestre, sempre (se ligado). */
   readonly wallsVisible = computed(
     () => this.tool() === 'fog' || (this.showWallsAlways() && this.role() === 'gm'),
@@ -193,6 +216,7 @@ export class TableSessionService {
       tokens: [],
       fog: { enabled: false },
       walls: [],
+      drawings: [],
     };
     this.patchState((s) => ({ ...s, scenes: [...s.scenes, scene], activeSceneId: scene.id }));
     this.selectedTokenId.set(null);
@@ -416,6 +440,57 @@ export class TableSessionService {
     if (scene) this.updateScene(scene.id, { walls: (scene.walls ?? []).filter((w) => w.id !== wallId) });
   }
 
+  // --- Desenhos (pincel) ---------------------------------------------------
+
+  /** Adiciona um traço à cena ativa. */
+  addStroke(stroke: Omit<Stroke, 'id'>): void {
+    const scene = this.activeScene();
+    if (!scene) return;
+    const created: Stroke = { ...stroke, id: newId() };
+    this.updateScene(scene.id, { drawings: [...(scene.drawings ?? []), created] });
+    this.pushDrawAction(scene.id, { kind: 'add', strokeId: created.id });
+  }
+
+  /** Remove traços da cena ativa (borracha ou limpar tudo) — pode ser desfeito. */
+  eraseStrokes(ids: string[]): void {
+    const scene = this.activeScene();
+    const drawings = scene?.drawings ?? [];
+    const remove = new Set(ids);
+    const removed = drawings.flatMap((stroke, index) => (remove.has(stroke.id) ? [{ stroke, index }] : []));
+    if (!scene || !removed.length) return;
+    this.updateScene(scene.id, { drawings: drawings.filter((s) => !remove.has(s.id)) });
+    this.pushDrawAction(scene.id, { kind: 'erase', removed });
+  }
+
+  clearDrawings(): void {
+    this.eraseStrokes(this.drawings().map((s) => s.id));
+  }
+
+  /** Desfaz a última ação de desenho da cena ativa. Retorna false se não havia nada. */
+  undoDrawing(): boolean {
+    const scene = this.activeScene();
+    const action = scene && this.drawHistory.get(scene.id)?.pop();
+    if (!scene || !action) return false;
+
+    const drawings = [...(scene.drawings ?? [])];
+    if (action.kind === 'add') {
+      this.updateScene(scene.id, { drawings: drawings.filter((s) => s.id !== action.strokeId) });
+    } else {
+      // Recoloca os traços apagados nas posições originais (mantém a ordem de sobreposição)
+      for (const { stroke, index } of action.removed) drawings.splice(Math.min(index, drawings.length), 0, stroke);
+      this.updateScene(scene.id, { drawings });
+    }
+    return true;
+  }
+
+  private pushDrawAction(sceneId: string, action: DrawAction): void {
+    const stack = this.drawHistory.get(sceneId) ?? [];
+    stack.push(action);
+    // Limite simples para não crescer sem fim numa sessão longa
+    if (stack.length > 100) stack.shift();
+    this.drawHistory.set(sceneId, stack);
+  }
+
   /** O ponto está em alguma área visível? (sem névoa, tudo é visível) */
   isVisible(p: Point, polys = this.visionPolygons()): boolean {
     if (!this.fogEnabled()) return true;
@@ -477,6 +552,7 @@ function normalizeState(raw: TableState | undefined): TableState {
       tokens: sc.tokens ?? [],
       fog: sc.fog ?? { enabled: false },
       walls: sc.walls ?? [],
+      drawings: sc.drawings ?? [],
     })),
     entries: raw.entries.map((e) =>
       e.kind === 'sound' ? { ...e, volume: e.volume ?? DEFAULT_SOUND_VOLUME, loop: e.loop ?? true } : e,

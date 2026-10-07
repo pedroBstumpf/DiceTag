@@ -46,6 +46,9 @@
       ></div>
     }
 
+    <!-- 3. Desenhos -->
+    <app-drawings-layer [strokes]="session.drawings()" [draft]="strokeDraft()" [hidden]="erasing()" />
+
     <!-- 5. Névoa de guerra -->
     @if (session.fogEnabled()) {
       <app-fog-layer [width]="world().w" [height]="world().h" [polygons]="session.visionPolygons()" [player]="session.playerFog()" />

@@ -54,6 +54,9 @@
 
 <!-- Submenus das ferramentas (ao lado da barra) -->
 @switch (session.tool()) {
+  @case ('draw') {
+    <app-draw-menu class="absolute left-full top-0 ml-2 animate-fade-in" />
+  }
   @case ('fog') {
     <app-fog-menu class="absolute left-full top-0 ml-2 animate-fade-in" />
   }

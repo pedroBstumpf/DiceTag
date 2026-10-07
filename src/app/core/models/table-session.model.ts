@@ -21,7 +21,29 @@ export interface Scene {
   fog?: { enabled: boolean };
   /** Paredes que bloqueiam a visão quando a névoa está ativa. Padrão: []. */
   walls?: Wall[];
+  /** Desenhos livres (pincel). Padrão: []. */
+  drawings?: Stroke[];
 }
+
+// --- Desenho -----------------------------------------------------------------
+
+/** Traço do pincel (pontos já simplificados ao finalizar). */
+export interface Stroke {
+  id: string;
+  points: Point[];
+  color: string;
+  /** Espessura em px do mapa. */
+  width: number;
+  /** Opacidade (0–1). */
+  opacity: number;
+}
+
+/** Paleta do pincel: tokens do projeto + branco, vermelho, amarelo e verde. */
+export const BRUSH_COLORS = ['#7aa7ff', '#3462d6', '#b6c8f2', '#ffffff', '#ef4444', '#facc15', '#22c55e', '#04060c'] as const;
+/** Espessuras do pincel (px do mapa). */
+export const BRUSH_WIDTHS = [4, 8, 16, 32] as const;
+/** Opacidades do pincel. */
+export const BRUSH_OPACITIES = [1, 0.6, 0.3] as const;
 
 // --- Paredes -----------------------------------------------------------------
 

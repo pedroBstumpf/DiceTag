@@ -183,7 +183,14 @@ export class GameTablePage {
   /** Atalhos de teclado da mesa (ignorados enquanto se digita). */
   onKeydown(event: KeyboardEvent): void {
     const target = event.target as HTMLElement;
-    if (target.closest('input, textarea, [contenteditable="true"]') || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (target.closest('input, textarea, [contenteditable="true"]')) return;
+
+    // Ctrl+Z: desfaz o último traço da cena (fora de campos de texto)
+    if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === 'z') {
+      if (this.session.undoDrawing()) event.preventDefault();
+      return;
+    }
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
 
     // Teclas que dependem da seleção/ferramenta do mapa (Delete, Esc…)
     if (this.map()?.handleKey(event)) {

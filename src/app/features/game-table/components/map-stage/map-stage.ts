@@ -7,6 +7,8 @@ import { newId } from '../../../../core/utils/id';
 import { Viewport, fitRect, screenToWorld, zoomAt } from '../../../../shared/utils/viewport';
 import { TableSessionService } from '../../services/table-session.service';
 import { distanceToPolyline, sizeFromHandle, snapToCorner, snapTokenCenter } from '../../utils/geometry';
+import { simplifyPath } from '../../utils/simplify';
+import { DrawingsLayer, StrokeDraft } from '../map-layers/drawings-layer/drawings-layer';
 import { FogLayer } from '../map-layers/fog-layer/fog-layer';
 import { TOKEN_DRAG_TYPE, TokenPointerDown, TokensLayer } from '../map-layers/tokens-layer/tokens-layer';
 import { WallDraft, WallsLayer } from '../map-layers/walls-layer/walls-layer';
@@ -27,7 +29,9 @@ type Gesture =
   | { kind: 'ruler' }
   | { kind: 'token'; id: string; size: number; sx: number; sy: number; cx: number; cy: number }
   | { kind: 'resize'; id: string; cx: number; cy: number }
-  | { kind: 'circle'; cx: number; cy: number };
+  | { kind: 'circle'; cx: number; cy: number }
+  | { kind: 'draw' }
+  | { kind: 'erase' };
 
 /**
  * Mapa central da mesa — orquestrador das camadas.
@@ -38,11 +42,11 @@ type Gesture =
  * TableSessionService.
  *
  * Ordem das camadas no "mundo", de baixo para cima:
- *   mapa → grade → névoa → tokens visíveis → paredes → régua e ping
+ *   mapa → grade → desenhos → névoa → tokens visíveis → paredes → régua e ping
  */
 @Component({
   selector: 'app-map-stage',
-  imports: [MatIconModule, MatTooltipModule, TokensLayer, FogLayer, WallsLayer],
+  imports: [MatIconModule, MatTooltipModule, DrawingsLayer, FogLayer, TokensLayer, WallsLayer],
   templateUrl: './map-stage.html',
   host: { class: 'block' },
 })
@@ -68,6 +72,10 @@ export class MapStage {
   readonly pings = signal<(Point & { id: string })[]>([]);
   /** Parede sendo desenhada (ferramenta Névoa). */
   readonly wallDraft = signal<WallDraft | null>(null);
+  /** Traço em andamento (ferramenta Desenhar). */
+  readonly strokeDraft = signal<StrokeDraft | null>(null);
+  /** Traços tocados pela borracha no gesto atual (removidos de uma vez ao soltar). */
+  readonly erasing = signal<ReadonlySet<string>>(new Set());
 
   readonly scene = this.session.activeScene;
   readonly gridSize = computed(() => this.scene()?.gridSize ?? 70);
@@ -92,6 +100,7 @@ export class MapStage {
     if (this.panning()) return 'grabbing';
     const tool = this.session.tool();
     if (tool === 'fog') return this.session.wallMode() === 'erase' ? 'pointer' : 'crosshair';
+    if (tool === 'draw') return this.session.brush().eraser ? 'cell' : 'crosshair';
     return tool === 'ruler' || tool === 'ping' ? 'crosshair' : 'grab';
   });
 
@@ -195,7 +204,43 @@ export class MapStage {
       this.addPing(p);
     } else if (tool === 'fog') {
       this.onFogDown(event, p);
+    } else if (tool === 'draw') {
+      this.onDrawDown(event, p);
     }
+  }
+
+  // --- Ferramenta Desenhar -------------------------------------------------
+
+  private onDrawDown(event: PointerEvent, p: Point): void {
+    const { eraser, color, width, opacity } = this.session.brush();
+    if (eraser) {
+      this.erasing.set(new Set());
+      this.eraseAt(p);
+      this.gesture = { kind: 'erase' };
+    } else {
+      this.strokeDraft.set({ points: [p], color, width, opacity });
+      this.gesture = { kind: 'draw' };
+    }
+    this.capture(event);
+  }
+
+  /** Marca os traços tocados pela borracha neste ponto. */
+  private eraseAt(p: Point): void {
+    const tolerance = HIT_TOLERANCE / this.scale();
+    const touched = this.session
+      .drawings()
+      .filter((s) => !this.erasing().has(s.id) && distanceToPolyline(p, s.points) <= s.width / 2 + tolerance);
+    if (touched.length) this.erasing.update((set) => new Set([...set, ...touched.map((s) => s.id)]));
+  }
+
+  /** Salva o traço em andamento, com os pontos simplificados. */
+  private finishStroke(): void {
+    const draft = this.strokeDraft();
+    this.strokeDraft.set(null);
+    if (!draft) return;
+    // Tolerância de ~1px na tela: invisível ao olho, mas reduz bastante os pontos
+    const points = simplifyPath(draft.points, 1 / this.scale());
+    this.session.addStroke({ ...draft, points });
   }
 
   // --- Ferramenta Névoa: paredes -------------------------------------------
@@ -304,6 +349,16 @@ export class MapStage {
     } else if (g.kind === 'circle') {
       const p = this.toWorld(event);
       this.wallDraft.set({ kind: 'circle', cx: g.cx, cy: g.cy, r: Math.hypot(p.x - g.cx, p.y - g.cy) });
+    } else if (g.kind === 'draw') {
+      const p = this.toWorld(event);
+      this.strokeDraft.update((d) => {
+        if (!d) return d;
+        const last = d.points[d.points.length - 1];
+        // Ignora movimentos menores que ~1,5px na tela
+        return Math.hypot(p.x - last.x, p.y - last.y) * this.scale() < 1.5 ? d : { ...d, points: [...d.points, p] };
+      });
+    } else if (g.kind === 'erase') {
+      this.eraseAt(this.toWorld(event));
     }
   }
 
@@ -312,6 +367,12 @@ export class MapStage {
     this.gesture = null;
     this.panning.set(false);
     this.ruler.set(null);
+
+    if (g?.kind === 'draw') this.finishStroke();
+    if (g?.kind === 'erase') {
+      this.session.eraseStrokes([...this.erasing()]);
+      this.erasing.set(new Set());
+    }
 
     // Círculo: salva ao soltar (ignora cliques sem arrastar)
     const draft = this.wallDraft();
