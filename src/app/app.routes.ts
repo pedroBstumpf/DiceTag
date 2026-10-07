@@ -27,6 +27,12 @@ export const routes: Routes = [
         title: 'DiceTag — Worldbuild',
         loadComponent: () => import('./features/worldbuild/worldbuild').then((m) => m.Worldbuild),
       },
+      {
+        // Lore geral do mundo: mesma página do worldbuild, com dados globais
+        path: 'lore',
+        title: 'DiceTag — Lore geral',
+        loadChildren: () => import('./features/worldbuild/lore.routes').then((m) => m.LORE_ROUTES),
+      },
     ],
   },
   {

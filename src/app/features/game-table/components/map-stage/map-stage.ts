@@ -1,17 +1,21 @@
-import { Component, DestroyRef, ElementRef, computed, effect, inject, input, output, signal, viewChild } from '@angular/core';
+import { Component, DestroyRef, ElementRef, computed, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { Point } from '../../../../core/models/geometry.model';
 import { METERS_PER_SQUARE, Wall } from '../../../../core/models/table-session.model';
 import { newId } from '../../../../core/utils/id';
-import { Viewport, fitRect, screenToWorld, worldToScreen, zoomAt } from '../../../../shared/utils/viewport';
-import { TableSessionService } from '../../services/table-session.service';
+import { Viewport, fitRect, zoomAt } from '../../../../shared/utils/viewport';
+import { BlobUrlService } from '../../services/blob-url.service';
+import { ResolvedToken, TableSessionService } from '../../services/table-session.service';
 import { distanceToPolyline, sizeFromHandle, snapToCorner, snapTokenCenter } from '../../utils/geometry';
+import { isRadialFx } from '../../utils/effects';
+import { IDENTITY, Mat2, apply, invert, isoMatrix, matrixCss, project, projectedBounds, unproject, uprightMatrix, viewCss } from '../../utils/projection';
 import { simplifyPath } from '../../utils/simplify';
 import { distanceToWall, handleAt, moveWallHandle, translateWall } from '../../utils/walls';
 import { DoorsLayer } from '../map-layers/doors-layer/doors-layer';
 import { DrawingsLayer, StrokeDraft } from '../map-layers/drawings-layer/drawings-layer';
 import { FogLayer } from '../map-layers/fog-layer/fog-layer';
+import { FxDraft, FxLayer } from '../map-layers/fx-layer/fx-layer';
 import { NotePointerDown, NotesLayer } from '../map-layers/notes-layer/notes-layer';
 import { NotePopover } from '../note-popover/note-popover';
 import { TOKEN_DRAG_TYPE, TokenPointerDown, TokensLayer } from '../map-layers/tokens-layer/tokens-layer';
@@ -39,6 +43,7 @@ type Gesture =
   | { kind: 'wall'; sx: number; sy: number; original: Wall; handle: number }
   | { kind: 'draw' }
   | { kind: 'erase' }
+  | { kind: 'fx' }
   | { kind: 'note'; id: string; sx: number; sy: number; nx: number; ny: number; moved: boolean };
 
 /** Largura do popover de anotação (para mantê-lo dentro da tela). */
@@ -55,9 +60,31 @@ const MOVE_KEYS: Record<string, Point> = {
   d: { x: 1, y: 0 },
   arrowright: { x: 1, y: 0 },
 };
-/** Velocidade do token movido pelo teclado (quadrados por segundo); Shift multiplica. */
-const KEY_SPEED = 2;
+/** Shift multiplica a velocidade do token movido pelo teclado (a base vem da ficha). */
 const KEY_SPEED_FAST = 2.5;
+/** Clique sem arrastar com Explosão/Onda: raio em quadrados. */
+const FX_CLICK_RADIUS = 1.5;
+
+/** Matriz da vista isométrica (referência fixa: comparada por identidade). */
+const ISO = isoMatrix();
+/** Distância vertical entre camadas do mapa na vista isométrica, em quadrados da grade. */
+const LEVEL_GAP_SQUARES = 3;
+/** Duração da animação de troca de camada / de vista (ms). */
+const VIEW_ANIMATION_MS = 550;
+
+/** Camada do mapa como o MapStage a desenha. */
+interface Plane {
+  id: string;
+  index: number;
+  blobId?: string;
+  /** Distância até a camada em foco: > 0 abaixo, < 0 acima, 0 = em foco. */
+  depth: number;
+  focused: boolean;
+  /** Tokens desta camada (só exibição; os da camada em foco são interativos). */
+  tokens: ResolvedToken[];
+  /** Sombras de tokens voando nas camadas de cima, projetadas nesta. */
+  shadows: ResolvedToken[];
+}
 
 /**
  * Mapa central da mesa — orquestrador das camadas.
@@ -68,17 +95,18 @@ const KEY_SPEED_FAST = 2.5;
  * TableSessionService.
  *
  * Ordem das camadas no "mundo", de baixo para cima:
- *   mapa → grade → desenhos → notas → névoa → tokens visíveis → portas → paredes → régua e ping
+ *   mapa → grade → desenhos → notas → névoa → tokens visíveis → portas → paredes → efeitos, régua e ping
  * Acima do mundo fica a interface (popover de anotação, avisos).
  */
 @Component({
   selector: 'app-map-stage',
-  imports: [MatIconModule, MatTooltipModule, DrawingsLayer, NotesLayer, FogLayer, TokensLayer, DoorsLayer, WallsLayer, NotePopover],
+  imports: [MatIconModule, MatTooltipModule, DrawingsLayer, NotesLayer, FogLayer, TokensLayer, DoorsLayer, WallsLayer, FxLayer, NotePopover],
   templateUrl: './map-stage.html',
   host: { class: 'block' },
 })
 export class MapStage {
   readonly session = inject(TableSessionService);
+  readonly blobs = inject(BlobUrlService);
 
   /** Espaço reservado pelas barras (para centralizar o mapa na área livre). */
   readonly insets = input({ top: 0, right: 0, bottom: 0, left: 0 });
@@ -93,6 +121,72 @@ export class MapStage {
   readonly src = signal<string | null>(null);
   readonly world = signal(EMPTY_WORLD);
 
+  // --- Projeção (2D ou isométrica) e camadas -------------------------------
+  /** Matriz da vista: isométrica ou 2D (identidade). */
+  readonly matrix = computed<Mat2>(() => (this.session.isometric() ? ISO : IDENTITY));
+  /** Deixa um elemento do mundo "em pé" (tokens, marcadores, botões): matriz e CSS. */
+  readonly uprightMat = computed(() => uprightMatrix(this.matrix()));
+  readonly upright = computed(() => matrixCss(this.uprightMat()));
+  /** Transições ligadas só durante a troca de camada/vista (pan e zoom ficam instantâneos). */
+  readonly animating = signal(false);
+  private animationTimer?: ReturnType<typeof setTimeout>;
+  /** Cena + mapa já enquadrados (recarregar a imagem não reenquadra). */
+  private fittedKey = '';
+
+  /** Camadas do mapa, de baixo para cima, com a distância até a camada em foco. */
+  readonly planes = computed<Plane[]>(() => {
+    const current = this.session.currentLevel();
+    const byLevel = this.session.tokensByLevel();
+    const levels = this.session.mapLevels();
+    const list = levels.length ? levels : [{ id: 'ground', index: 0, name: '', blobId: undefined }];
+    // Tokens voando projetam sombra no "chão" mais próximo abaixo (camada com imagem ou térreo)
+    const shadows = new Map<number, ResolvedToken[]>();
+    if (this.session.isometric()) {
+      for (const [level, tokens] of byLevel) {
+        if (level === 0) continue;
+        let ground = 0;
+        for (let j = level - 1; j > 0; j--) {
+          if (list[j]?.blobId) {
+            ground = j;
+            break;
+          }
+        }
+        shadows.set(ground, [...(shadows.get(ground) ?? []), ...tokens]);
+      }
+    }
+    return list.map((l) => ({
+      id: l.id,
+      index: l.index,
+      blobId: l.blobId,
+      depth: current - l.index,
+      focused: l.index === current,
+      // Camadas acima com mapa mostram só o contorno; as sem mapa ("ar") mostram quem voa nelas
+      tokens: l.index < current || (l.index > current && !l.blobId) ? (byLevel.get(l.index) ?? []) : [],
+      shadows: shadows.get(l.index) ?? [],
+    }));
+  });
+
+  /** Transformação de uma camada: a vista + o deslocamento vertical da pilha (só na isométrica). */
+  planeTransform(depth: number): string {
+    const lift = this.session.isometric() ? depth * LEVEL_GAP_SQUARES * this.gridSize() * this.scale() : 0;
+    return viewCss(this.view(), this.matrix(), lift);
+  }
+
+  /**
+   * Camadas acima da em foco: as sem mapa ("ar") aparecem inteiras (só têm tokens voando);
+   * as com mapa mostram só o contorno da logo acima, na isométrica, e somem na 2D.
+   */
+  planeOpacity(plane: Plane): number {
+    if (plane.depth >= 0 || !plane.blobId) return 1;
+    return this.session.isometric() && plane.depth === -1 ? 0.35 : 0;
+  }
+
+  /** Camadas abaixo da em foco ficam mais escuras conforme a profundidade. */
+  planeFilter(depth: number): string | null {
+    if (depth <= 0) return null;
+    return `brightness(${Math.max(0.3, 0.7 - 0.15 * (depth - 1))}) saturate(0.75)`;
+  }
+
   // --- Interações ----------------------------------------------------------
   readonly panning = signal(false);
   readonly ruler = signal<{ from: Point; to: Point } | null>(null);
@@ -103,6 +197,10 @@ export class MapStage {
   readonly strokeDraft = signal<StrokeDraft | null>(null);
   /** Traços tocados pela borracha no gesto atual (removidos de uma vez ao soltar). */
   readonly erasing = signal<ReadonlySet<string>>(new Set());
+  /** Efeito sendo mirado (ferramenta Efeitos): de onde até onde. */
+  readonly fxDraft = signal<FxDraft | null>(null);
+  /** Forma e cor que o próximo lançamento vai usar (a da ação armada ou a da ferramenta). */
+  readonly fxCurrent = computed(() => this.session.armedFx() ?? this.session.fxStyle());
 
   readonly scene = this.session.activeScene;
   readonly gridSize = computed(() => this.scene()?.gridSize ?? 70);
@@ -129,7 +227,7 @@ export class MapStage {
   readonly popoverPos = computed(() => {
     const note = this.openNote();
     if (!note) return null;
-    const p = worldToScreen(this.view(), note);
+    const p = project(this.view(), this.matrix(), note);
     const width = this.stage().nativeElement.clientWidth;
     return { left: Math.max(8, Math.min(p.x - POPOVER_WIDTH / 2, width - POPOVER_WIDTH - 8)), top: p.y + 10 };
   });
@@ -141,6 +239,11 @@ export class MapStage {
     const squares = Math.hypot(r.to.x - r.from.x, r.to.y - r.from.y) / this.gridSize();
     return `${squares.toFixed(1)} quad. · ${(squares * METERS_PER_SQUARE).toFixed(1)} m`;
   });
+  /** Posição do rótulo da régua na tela (fora do mundo, para ficar sempre reto). */
+  readonly rulerLabelPos = computed(() => {
+    const r = this.ruler();
+    return r ? project(this.view(), this.matrix(), r.to) : null;
+  });
 
   /** Cursor conforme a ferramenta ativa. */
   readonly cursor = computed(() => {
@@ -151,7 +254,7 @@ export class MapStage {
       return mode === 'erase' ? 'pointer' : mode === 'edit' ? 'move' : 'crosshair';
     }
     if (tool === 'draw') return this.session.brush().eraser ? 'cell' : 'crosshair';
-    return tool === 'ruler' || tool === 'ping' || tool === 'note' ? 'crosshair' : 'grab';
+    return tool === 'ruler' || tool === 'ping' || tool === 'note' || tool === 'fx' ? 'crosshair' : 'grab';
   });
 
   private gesture: Gesture | null = null;
@@ -188,20 +291,45 @@ export class MapStage {
 
     inject(DestroyRef).onDestroy(() => cancelAnimationFrame(this.keyFrame));
 
-    // Trocar de ferramenta, de modo ou de cena descarta a parede em construção
+    // Trocar de ferramenta, de modo ou de cena descarta a parede (e a mira de efeito) em construção
     effect(() => {
       this.session.tool();
       this.session.wallMode();
       this.sceneId();
       this.wallDraft.set(null);
+      this.fxDraft.set(null);
+    });
+
+    // Na mesma cena: trocar de camada anima a pilha; trocar 2D ↔ isométrica anima e reenquadra
+    let prev = { scene: undefined as string | undefined, level: 0, iso: false };
+    effect(() => {
+      const next = { scene: this.sceneId(), level: this.session.currentLevel(), iso: this.session.isometric() };
+      untracked(() => {
+        if (next.scene === prev.scene && (next.level !== prev.level || next.iso !== prev.iso)) this.animate();
+        if (next.scene === prev.scene && next.iso !== prev.iso) this.fit();
+        prev = next;
+      });
     });
   }
 
   // --- Zoom e enquadramento ------------------------------------------------
 
+  /** Mapa carregado: ajusta o tamanho do mundo e enquadra (só na primeira vez de cada cena/mapa). */
   onImageLoad(img: HTMLImageElement): void {
-    this.setWorld(this.mapKey().sceneId, { w: img.naturalWidth, h: img.naturalHeight });
-    this.fit();
+    const { sceneId, blobId } = this.mapKey();
+    this.setWorld(sceneId, { w: img.naturalWidth, h: img.naturalHeight });
+    const key = `${sceneId}:${blobId}`;
+    if (key !== this.fittedKey) {
+      this.fittedKey = key;
+      this.fit();
+    }
+  }
+
+  /** Liga as transições por um instante (troca de camada ou de vista). */
+  private animate(): void {
+    this.animating.set(true);
+    clearTimeout(this.animationTimer);
+    this.animationTimer = setTimeout(() => this.animating.set(false), VIEW_ANIMATION_MS);
   }
 
   /** Tamanho do mundo (mapa) — também informado à sessão, junto com a cena a que pertence. */
@@ -210,16 +338,18 @@ export class MapStage {
     this.session.worldSize.set(sceneId ? { sceneId, ...size } : null);
   }
 
-  /** Enquadra o mapa inteiro na área livre entre as barras. */
+  /** Enquadra o mapa inteiro (já projetado: na isométrica, o losango) na área livre entre as barras. */
   fit(): void {
     const el = this.stage().nativeElement;
     const i = this.insets();
     const { w, h } = this.world();
     this.view.set(
-      fitRect(
-        { x: 0, y: 0, width: w, height: h },
-        { x: i.left, y: i.top, width: el.clientWidth - i.left - i.right, height: el.clientHeight - i.top - i.bottom },
-      ),
+      fitRect(projectedBounds(this.matrix(), w, h), {
+        x: i.left,
+        y: i.top,
+        width: el.clientWidth - i.left - i.right,
+        height: el.clientHeight - i.top - i.bottom,
+      }),
     );
   }
 
@@ -261,6 +391,11 @@ export class MapStage {
       this.onFogDown(event, p);
     } else if (tool === 'draw') {
       this.onDrawDown(event, p);
+    } else if (tool === 'fx') {
+      // Efeito: arrasta da origem até o alvo/alcance
+      this.fxDraft.set({ from: p, to: p });
+      this.gesture = { kind: 'fx' };
+      this.capture(event);
     } else if (tool === 'note') {
       // Clicar no mapa cria uma anotação e já abre a edição
       const note = this.session.addNote(p);
@@ -313,6 +448,24 @@ export class MapStage {
     // Tolerância de ~1px na tela: invisível ao olho, mas reduz bastante os pontos
     const points = simplifyPath(draft.points, 1 / this.scale());
     this.session.addStroke({ ...draft, points });
+  }
+
+  // --- Ferramenta Efeitos --------------------------------------------------
+
+  /**
+   * Lança o efeito mirado. Arraste curto: efeitos radiais usam um raio padrão;
+   * as formas com direção são ignoradas (o efeito armado de uma ação continua na mão).
+   */
+  private finishFx(): void {
+    const draft = this.fxDraft();
+    this.fxDraft.set(null);
+    if (!draft) return;
+    const { from, to } = draft;
+    if (Math.hypot(to.x - from.x, to.y - from.y) * this.scale() > 8) {
+      this.session.castFx(from, to, this.scale());
+    } else if (isRadialFx(this.fxCurrent().kind)) {
+      this.session.castFx(from, { x: from.x + FX_CLICK_RADIUS * this.gridSize(), y: from.y }, this.scale());
+    }
   }
 
   // --- Ferramenta Névoa: paredes -------------------------------------------
@@ -392,8 +545,7 @@ export class MapStage {
       return moveWallHandle(g.original, g.handle, g.original.kind === 'circle' ? p : this.snapCorner(p, event));
     }
     const grid = this.gridSize();
-    let dx = (event.clientX - g.sx) / this.scale();
-    let dy = (event.clientY - g.sy) / this.scale();
+    let { x: dx, y: dy } = this.screenDelta(event.clientX - g.sx, event.clientY - g.sy);
     if (this.snapOn(event)) {
       dx = Math.round(dx / grid) * grid;
       dy = Math.round(dy / grid) * grid;
@@ -446,8 +598,8 @@ export class MapStage {
     } else if (g.kind === 'ruler') {
       this.ruler.update((r) => (r ? { ...r, to: this.toWorld(event) } : r));
     } else if (g.kind === 'token') {
-      const s = this.scale();
-      let p = { x: g.cx + (event.clientX - g.sx) / s, y: g.cy + (event.clientY - g.sy) / s };
+      const d = this.screenDelta(event.clientX - g.sx, event.clientY - g.sy);
+      let p = { x: g.cx + d.x, y: g.cy + d.y };
       // Snap ao centro do quadrado (Shift ou grade escondida: livre)
       if (this.snapOn(event)) p = snapTokenCenter(p, g.size, this.gridSize());
       const current = this.session.tokens().find((t) => t.id === g.id);
@@ -472,11 +624,17 @@ export class MapStage {
       });
     } else if (g.kind === 'erase') {
       this.eraseAt(this.toWorld(event));
+    } else if (g.kind === 'fx') {
+      const to = this.toWorld(event);
+      this.fxDraft.update((d) => (d ? { ...d, to } : d));
     } else if (g.kind === 'note') {
       const dx = event.clientX - g.sx;
       const dy = event.clientY - g.sy;
       if (!g.moved && Math.hypot(dx, dy) > 3) g.moved = true;
-      if (g.moved) this.session.moveNote(g.id, { x: g.nx + dx / this.scale(), y: g.ny + dy / this.scale() });
+      if (g.moved) {
+        const d = this.screenDelta(dx, dy);
+        this.session.moveNote(g.id, { x: g.nx + d.x, y: g.ny + d.y });
+      }
     }
   }
 
@@ -488,6 +646,7 @@ export class MapStage {
 
     if (g?.kind === 'note' && !g.moved) this.openNoteId.set(g.id);
     if (g?.kind === 'draw') this.finishStroke();
+    if (g?.kind === 'fx') this.finishFx();
     if (g?.kind === 'erase') {
       this.session.eraseStrokes([...this.erasing()]);
       this.erasing.set(new Set());
@@ -514,6 +673,23 @@ export class MapStage {
   handleKey(event: KeyboardEvent): boolean {
     if (event.key === 'Escape' && this.openNoteId()) {
       this.openNoteId.set(null);
+      return true;
+    }
+
+    // Camadas (mestre, vista isométrica): PageUp/PageDown sobem/descem o token selecionado
+    // (a vista o acompanha) ou, sem seleção, a camada em foco
+    if ((event.key === 'PageUp' || event.key === 'PageDown') && this.session.role() === 'gm' && this.session.isometric()) {
+      const delta = event.key === 'PageUp' ? 1 : -1;
+      const selected = this.session.selectedTokenId();
+      if (selected) this.session.moveTokenLevel(selected, delta);
+      else this.session.viewLevel(this.session.currentLevel() + delta);
+      return true;
+    }
+
+    // Efeito de uma ação na mão: Esc desiste e volta à ferramenta anterior
+    if (event.key === 'Escape' && this.session.armedFx()) {
+      this.fxDraft.set(null);
+      this.session.cancelArmedFx();
       return true;
     }
 
@@ -591,17 +767,19 @@ export class MapStage {
       this.keyFrame = 0;
       return;
     }
-    let dx = 0;
-    let dy = 0;
+    let sx = 0;
+    let sy = 0;
     for (const key of this.heldKeys) {
-      dx += MOVE_KEYS[key].x;
-      dy += MOVE_KEYS[key].y;
+      sx += MOVE_KEYS[key].x;
+      sy += MOVE_KEYS[key].y;
     }
+    // Direção na tela → direção no mapa (na isométrica, "W" sobe na tela, não na diagonal)
+    const { x: dx, y: dy } = apply(invert(this.matrix()), { x: sx, y: sy });
     const len = Math.hypot(dx, dy);
     if (len) {
       // Diagonal com a mesma velocidade; no máximo 50ms por quadro (aba em segundo plano)
       const dt = Math.min(now - last, 50) / 1000;
-      const step = (KEY_SPEED * (this.keyFast ? KEY_SPEED_FAST : 1) * this.gridSize() * dt) / len;
+      const step = (token.speed * (this.keyFast ? KEY_SPEED_FAST : 1) * this.gridSize() * dt) / len;
       this.session.moveToken(token.placement.id, { x: token.placement.x + dx * step, y: token.placement.y + dy * step });
     }
     this.keyFrame = requestAnimationFrame((t) => this.glide(t, now));
@@ -654,10 +832,16 @@ export class MapStage {
     this.stage().nativeElement.setPointerCapture(event.pointerId);
   }
 
+  /** Deslocamento do mouse na tela (px) → deslocamento no mapa (desfaz zoom e projeção). */
+  private screenDelta(dx: number, dy: number): Point {
+    const s = this.scale();
+    return apply(invert(this.matrix()), { x: dx / s, y: dy / s });
+  }
+
   /** Converte a posição do mouse para coordenadas do mapa. */
   private toWorld(event: MouseEvent): Point {
     const rect = this.stage().nativeElement.getBoundingClientRect();
-    return screenToWorld(this.view(), event.clientX - rect.left, event.clientY - rect.top);
+    return unproject(this.view(), this.matrix(), event.clientX - rect.left, event.clientY - rect.top);
   }
 
   /**

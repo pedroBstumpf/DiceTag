@@ -10,9 +10,70 @@
 
   <span class="mx-1 hidden h-6 w-px bg-white/10 md:block"></span>
 
-  <!-- ===== Abas de cenas ===== -->
+  <!-- ===== Pastas e abas de cenas ===== -->
   <div class="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-1">
-    @for (scene of session.scenes(); track scene.id) {
+    <!-- Pastas: abrem a lista das cenas delas -->
+    @for (folder of session.sceneFolders(); track folder.id) {
+      @let active = activeFolderId() === folder.id;
+      @if (renamingId() === folder.id) {
+        <div class="flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-white/5 pl-2.5 pr-1">
+          <mat-icon class="!size-4 !text-[16px] text-amber-300/80">folder</mat-icon>
+          <input
+            #folderInput
+            appAutoFocus
+            class="h-6 w-32 rounded bg-ink-950 px-1.5 text-sm text-slate-100 outline-none ring-1 ring-astral-400/60"
+            [value]="folder.name"
+            (keydown.enter)="finishFolderRename(folder, folderInput.value)"
+            (keydown.escape)="renamingId.set(null)"
+            (blur)="finishFolderRename(folder, folderInput.value)"
+          />
+        </div>
+      } @else if (active && renamingId() === session.activeScene()?.id) {
+        <!-- Renomeando a cena aberta desta pasta -->
+        @let scene = session.activeScene()!;
+        <div class="flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-astral-500/20 pl-2.5 pr-1 ring-1 ring-astral-400/40">
+          <mat-icon class="!size-4 !text-[16px] text-amber-300/80">folder_open</mat-icon>
+          <span class="max-w-24 truncate text-sm text-slate-400">{{ folder.name }}</span>
+          <mat-icon class="!size-3.5 !text-[14px] text-slate-500">chevron_right</mat-icon>
+          <input
+            #sceneInput
+            appAutoFocus
+            class="h-6 w-32 rounded bg-ink-950 px-1.5 text-sm text-slate-100 outline-none ring-1 ring-astral-400/60"
+            [value]="scene.name"
+            (keydown.enter)="finishRename(scene, sceneInput.value)"
+            (keydown.escape)="renamingId.set(null)"
+            (blur)="finishRename(scene, sceneInput.value)"
+          />
+        </div>
+      } @else {
+        <button
+          type="button"
+          class="flex h-8 shrink-0 items-center gap-1.5 rounded-lg pl-2.5 pr-1.5 text-sm transition-colors"
+          [class]="active ? 'bg-astral-500/20 text-star-300 ring-1 ring-astral-400/40' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'"
+          [matMenuTriggerFor]="folderMenu"
+          [matMenuTriggerData]="{ folder: folder }"
+          (dblclick)="isGm() && renamingId.set(folder.id)"
+        >
+          <mat-icon class="!size-4 !text-[16px] text-amber-300/80">{{ active ? 'folder_open' : 'folder' }}</mat-icon>
+          <span class="max-w-32 truncate">{{ folder.name }}</span>
+          @if (active) {
+            <!-- Cena aberta dentro da pasta -->
+            <mat-icon class="!size-3.5 !text-[14px] text-slate-500">chevron_right</mat-icon>
+            <span class="max-w-36 truncate">{{ session.activeScene()?.name }}</span>
+          } @else {
+            <span class="text-[11px] text-slate-500">{{ scenesIn(folder.id).length }}</span>
+          }
+          <mat-icon class="!size-4 !text-[16px] text-slate-500">expand_more</mat-icon>
+        </button>
+      }
+    }
+
+    @if (session.sceneFolders().length && looseScenes().length) {
+      <span class="mx-0.5 h-5 w-px shrink-0 bg-white/10"></span>
+    }
+
+    <!-- Cenas fora de pastas -->
+    @for (scene of looseScenes(); track scene.id) {
       <div
         class="group flex h-8 shrink-0 items-center gap-1.5 rounded-lg pl-2.5 pr-1 text-sm transition-colors"
         [class]="
@@ -23,7 +84,7 @@
         (click)="session.setActiveScene(scene.id)"
         (dblclick)="renamingId.set(scene.id)"
       >
-        <mat-icon class="!size-4 !text-[16px]">{{ scene.blobId ? 'map' : 'grid_on' }}</mat-icon>
+        <mat-icon class="!size-4 !text-[16px]">{{ scene.isometric ? 'view_in_ar' : scene.blobId ? 'map' : 'grid_on' }}</mat-icon>
 
         @if (renamingId() === scene.id) {
           <input
@@ -54,11 +115,26 @@
       </div>
     }
 
-    <!-- Nova cena -->
-    <button mat-icon-button class="shrink-0" matTooltip="Nova cena" [matMenuTriggerFor]="addMenu">
+    <!-- Nova cena / pasta -->
+    <button mat-icon-button class="shrink-0" matTooltip="Nova cena ou pasta" [matMenuTriggerFor]="addMenu">
       <mat-icon>add</mat-icon>
     </button>
   </div>
+
+  <!-- ===== Vista do mapa (mestre) ===== -->
+  @if (isGm() && session.activeScene()) {
+    <button
+      type="button"
+      class="flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold transition-colors"
+      [class]="session.isometric() ? 'bg-astral-500/25 text-astral-300 ring-1 ring-astral-400/40' : 'text-slate-300 hover:bg-white/10'"
+      [matTooltip]="session.isometric() ? 'Voltar para a vista de cima (2D)' : 'Vista isométrica: o mapa como uma mesa vista de lado (libera as camadas do mapa)'"
+      [attr.aria-pressed]="session.isometric()"
+      (click)="session.toggleIsometric()"
+    >
+      <mat-icon class="!size-[18px] !text-[18px]">view_in_ar</mat-icon>
+      <span class="max-md:hidden">{{ session.isometric() ? 'Isométrica' : '2D' }}</span>
+    </button>
+  }
 
   <!-- ===== Visibilidade das barras ===== -->
   <div class="flex shrink-0 items-center">
@@ -85,7 +161,7 @@
 <!-- Seletor de imagem (oculto) -->
 <input #mapInput type="file" accept="image/*" hidden (change)="onMapPicked(mapInput)" />
 
-<!-- Menu: nova cena -->
+<!-- Menu: nova cena / pasta -->
 <mat-menu #addMenu="matMenu">
   <button mat-menu-item (click)="pickMap(mapInput)">
     <mat-icon>add_photo_alternate</mat-icon>
@@ -95,6 +171,54 @@
     <mat-icon>grid_on</mat-icon>
     <span>Cena vazia (só grade)</span>
   </button>
+  @if (isGm()) {
+    <button mat-menu-item (click)="createFolder()">
+      <mat-icon>create_new_folder</mat-icon>
+      <span>Pasta de cenas</span>
+    </button>
+  }
+</mat-menu>
+
+<!-- Menu: cenas de uma pasta -->
+<mat-menu #folderMenu="matMenu">
+  <ng-template matMenuContent let-folder="folder">
+    @for (scene of scenesIn(folder.id); track scene.id) {
+      <button mat-menu-item (click)="session.setActiveScene(scene.id)">
+        <mat-icon [class.!text-astral-300]="session.activeScene()?.id === scene.id">
+          {{ scene.isometric ? 'view_in_ar' : scene.blobId ? 'map' : 'grid_on' }}
+        </mat-icon>
+        <span [class.text-star-300]="session.activeScene()?.id === scene.id">{{ scene.name }}</span>
+      </button>
+    } @empty {
+      <p class="px-4 py-2 text-xs text-slate-500">Pasta vazia. Use "Mover para pasta" nas opções de uma cena.</p>
+    }
+    @if (session.activeScene()?.folderId === folder.id) {
+      <!-- Opções da cena aberta, dentro da pasta -->
+      <button mat-menu-item [matMenuTriggerFor]="sceneMenu" [matMenuTriggerData]="{ scene: session.activeScene() }">
+        <mat-icon>tune</mat-icon>
+        <span>Opções da cena aberta</span>
+      </button>
+    }
+    @if (isGm()) {
+      <hr class="my-1 border-white/10" />
+      <button mat-menu-item (click)="addSceneTo(folder.id, mapInput)">
+        <mat-icon>add_photo_alternate</mat-icon>
+        <span>Nova cena com mapa aqui</span>
+      </button>
+      <button mat-menu-item (click)="addSceneTo(folder.id)">
+        <mat-icon>grid_on</mat-icon>
+        <span>Nova cena vazia aqui</span>
+      </button>
+      <button mat-menu-item (click)="renamingId.set(folder.id)">
+        <mat-icon>edit</mat-icon>
+        <span>Renomear pasta</span>
+      </button>
+      <button mat-menu-item (click)="removeFolder(folder)">
+        <mat-icon class="!text-red-400">folder_delete</mat-icon>
+        <span class="text-red-300">Excluir pasta</span>
+      </button>
+    }
+  </ng-template>
 </mat-menu>
 
 <!-- Menu: opções de uma cena -->
@@ -108,6 +232,12 @@
       <mat-icon>image</mat-icon>
       <span>{{ scene.blobId ? 'Trocar mapa' : 'Adicionar mapa' }}</span>
     </button>
+    @if (isGm()) {
+      <button mat-menu-item [matMenuTriggerFor]="moveMenu" [matMenuTriggerData]="{ scene: scene }">
+        <mat-icon>drive_file_move</mat-icon>
+        <span>Mover para pasta</span>
+      </button>
+    }
     <!-- Sem grade, tokens e paredes se movem livres -->
     <button mat-menu-item (click)="session.updateScene(scene.id, { showGrid: !scene.showGrid })">
       <mat-icon>{{ scene.showGrid ? 'grid_off' : 'grid_on' }}</mat-icon>
@@ -128,6 +258,28 @@
     <button mat-menu-item (click)="remove(scene)">
       <mat-icon class="!text-red-400">delete</mat-icon>
       <span class="text-red-300">Excluir cena</span>
+    </button>
+  </ng-template>
+</mat-menu>
+
+<!-- Submenu: mover cena para pasta -->
+<mat-menu #moveMenu="matMenu">
+  <ng-template matMenuContent let-scene="scene">
+    @for (folder of session.sceneFolders(); track folder.id) {
+      <button mat-menu-item [disabled]="scene.folderId === folder.id" (click)="session.moveSceneToFolder(scene.id, folder.id)">
+        <mat-icon class="!text-amber-300/80">folder</mat-icon>
+        <span>{{ folder.name }}</span>
+      </button>
+    }
+    @if (scene.folderId) {
+      <button mat-menu-item (click)="session.moveSceneToFolder(scene.id, null)">
+        <mat-icon>drive_file_move_rtl</mat-icon>
+        <span>Tirar da pasta</span>
+      </button>
+    }
+    <button mat-menu-item (click)="moveToNewFolder(scene)">
+      <mat-icon>create_new_folder</mat-icon>
+      <span>Nova pasta…</span>
     </button>
   </ng-template>
 </mat-menu>

@@ -2,7 +2,9 @@ import { Component, input, output } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import {
+  MAX_TOKEN_SPEED,
   METERS_PER_SQUARE,
+  MIN_TOKEN_SPEED,
   TOKEN_COLORS,
   TOKEN_SIZES,
   TokenBar,
@@ -17,12 +19,14 @@ import { TokenPatch } from '../../services/table-session.service';
 export interface TokenEditorValue {
   size: number;
   vision: TokenVision;
+  /** Quadrados por segundo com WASD/setas. */
+  speed: number;
   bars: TokenBar[];
   tags: TokenTag[];
 }
 
 /**
- * Editor das configurações de um token: tamanho, visão, barras e etiquetas.
+ * Editor das configurações de um token: tamanho, visão, velocidade, barras e etiquetas.
  * Não grava nada sozinho — emite `changed` com o trecho alterado, e quem usa
  * decide onde gravar (ficha ou token colocado, conforme a regra de vínculo).
  */
@@ -64,6 +68,15 @@ export class TokenEditor {
   squares(meters: number): string {
     return (meters / METERS_PER_SQUARE).toFixed(1).replace('.0', '');
   }
+
+  /** Botões −/+ da velocidade (passos de 0,5 quadrado/s, dentro dos limites). */
+  stepSpeed(delta: number): void {
+    const speed = Math.min(MAX_TOKEN_SPEED, Math.max(MIN_TOKEN_SPEED, this.value().speed + delta));
+    this.changed.emit({ speed });
+  }
+
+  readonly minSpeed = MIN_TOKEN_SPEED;
+  readonly maxSpeed = MAX_TOKEN_SPEED;
 
   // --- Barras --------------------------------------------------------------
 

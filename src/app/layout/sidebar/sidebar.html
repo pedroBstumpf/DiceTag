@@ -37,47 +37,26 @@
       }
     </ul>
 
-    <!-- ===== Criar ===== -->
+    <!-- ===== Mundo: Lore geral (a lore oficial do mundo, igual para todos) ===== -->
     <section>
       @if (expanded()) {
-        <h4 class="mb-2 px-3 text-[11px] font-semibold uppercase tracking-widest text-slate-500">Criar</h4>
+        <h4 class="mb-2 px-3 text-[11px] font-semibold uppercase tracking-widest text-slate-500">Mundo</h4>
       } @else {
         <hr class="mx-3 mb-3 border-white/5" />
       }
-      <ul class="flex flex-col gap-1">
-        @for (action of createActions; track action.label) {
-          <li>
-            <button
-              type="button"
-              [matTooltip]="expanded() ? '' : action.label"
-              matTooltipPosition="right"
-              class="flex h-10 w-full items-center gap-3 rounded-xl px-3 text-sm text-slate-300 transition-colors hover:bg-white/5 hover:text-white"
-              (click)="run(action)"
-            >
-              <mat-icon class="shrink-0 text-star-400">{{ action.icon }}</mat-icon>
-              @if (expanded()) {
-                <span class="truncate">{{ action.label }}</span>
-              }
-            </button>
-          </li>
+      <a
+        routerLink="/lore"
+        routerLinkActive="!bg-astral-500/15 !text-astral-300"
+        [matTooltip]="expanded() ? '' : 'Lore geral'"
+        matTooltipPosition="right"
+        class="flex h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium text-slate-300 transition-colors hover:bg-white/5 hover:text-white"
+        (click)="layout.closeMobile()"
+      >
+        <mat-icon class="shrink-0 text-star-400">auto_stories</mat-icon>
+        @if (expanded()) {
+          <span class="truncate">Lore geral</span>
         }
-        <!-- Envio de mapa: abre o seletor de arquivos diretamente -->
-        <li>
-          <button
-            type="button"
-            [matTooltip]="expanded() ? '' : 'Enviar mapa ou imagem'"
-            matTooltipPosition="right"
-            class="flex h-10 w-full items-center gap-3 rounded-xl px-3 text-sm text-slate-300 transition-colors hover:bg-white/5 hover:text-white"
-            (click)="pickMap(mapInput)"
-          >
-            <mat-icon class="shrink-0 text-star-400">add_photo_alternate</mat-icon>
-            @if (expanded()) {
-              <span class="truncate">Enviar mapa / imagem</span>
-            }
-          </button>
-          <input #mapInput type="file" accept="image/*" hidden (change)="uploadMap(mapInput)" />
-        </li>
-      </ul>
+      </a>
     </section>
 
     <!-- ===== Em breve ===== -->

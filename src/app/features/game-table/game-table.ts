@@ -4,7 +4,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterLink } from '@angular/router';
-import { TABLE_ENTRY_META, TableEntry } from '../../core/models/table-session.model';
+import { ROLL_OUTCOMES, TABLE_ENTRY_META, TableEntry } from '../../core/models/table-session.model';
 import { WORLD_ITEM_META } from '../../core/models/world-item.model';
 import { GameTablesService } from '../../core/services/game-tables.service';
 import { FloatingWindow } from '../../shared/components/floating-window/floating-window';
@@ -13,17 +13,20 @@ import { DocumentEditor } from '../worldbuild/components/document-editor/documen
 import { Explorer } from '../worldbuild/components/explorer/explorer';
 import { ImageViewer } from '../worldbuild/components/image-viewer/image-viewer';
 import { TimelineEditor } from '../worldbuild/components/timeline-editor/timeline-editor';
+import { LoreScope } from '../worldbuild/directives/lore-scope.directive';
+import { LoreService } from '../worldbuild/services/lore.service';
 import { WorldbuildService } from '../worldbuild/services/worldbuild.service';
 import { ActionBar } from './components/action-bar/action-bar';
 import { EntryWindow } from './components/entry-window/entry-window';
 import { MapStage } from './components/map-stage/map-stage';
 import { SceneBar } from './components/scene-bar/scene-bar';
-import { SidePanel, WORLDBUILD_WINDOW } from './components/side-panel/side-panel';
+import { LORE_WINDOW, SidePanel, WORLDBUILD_WINDOW } from './components/side-panel/side-panel';
 import { TABLE_TOOLS, ToolBar } from './components/tool-bar/tool-bar';
 import { TokenWindow } from './components/token-window/token-window';
 import { BlobUrlService } from './services/blob-url.service';
 import { SoundMixerService } from './services/sound-mixer.service';
 import { TableSessionService } from './services/table-session.service';
+import { formatModifier } from './utils/dice';
 
 /** O que uma janela da mesa está exibindo. */
 interface WindowContent {
@@ -32,6 +35,8 @@ interface WindowContent {
   color: string;
   /** Tipo de conteúdo, usado para escolher o componente. */
   type: 'entry' | 'token' | 'explorer' | 'document' | 'timeline' | 'image';
+  /** O conteúdo vem da Lore geral (os editores usam o LoreService). */
+  global?: boolean;
 }
 
 /** Prefixo do id das janelas "Token" (token:<id do token colocado>). */
@@ -76,6 +81,7 @@ const PANEL_SPACE = { top: 60, left: 76, right: 344, bottom: 100 };
     ActionBar,
     EntryWindow,
     TokenWindow,
+    LoreScope,
     Explorer,
     DocumentEditor,
     TimelineEditor,
@@ -97,6 +103,7 @@ export class GameTablePage {
   readonly windows = inject(WindowManagerService);
   private readonly tables = inject(GameTablesService);
   private readonly worldbuild = inject(WorldbuildService);
+  private readonly loreGeneral = inject(LoreService);
   private readonly snackBar = inject(MatSnackBar);
 
   /** Id da mesa (parâmetro da rota /mesa/:id). */
@@ -138,10 +145,13 @@ export class GameTablePage {
 
   // --- Janelas -------------------------------------------------------------
 
-  /** Descobre o que mostrar numa janela (arquivo/token da mesa ou item do worldbuild). */
+  /** Descobre o que mostrar numa janela (arquivo/token da mesa ou item do worldbuild / Lore geral). */
   content(id: string): WindowContent | null {
     if (id === WORLDBUILD_WINDOW) {
       return { title: 'Worldbuild', icon: 'public', color: 'text-sky-300', type: 'explorer' };
+    }
+    if (id === LORE_WINDOW) {
+      return { title: 'Lore geral', icon: 'auto_stories', color: 'text-star-400', type: 'explorer', global: true };
     }
     if (id.startsWith(TOKEN_WINDOW)) {
       const token = this.session.resolvedTokenById(id.slice(TOKEN_WINDOW.length));
@@ -153,10 +163,12 @@ export class GameTablePage {
       const meta = TABLE_ENTRY_META[entry.kind];
       return { title: entry.name, icon: entry.icon ?? meta.icon, color: meta.color, type: 'entry' };
     }
-    const item = this.worldbuild.byId().get(id);
+    // Itens da lore: o título usa o nome desta mesa (pode ter sido renomeado só aqui)
+    const globalItem = this.loreGeneral.byId().get(id);
+    const item = globalItem ?? this.worldbuild.byId().get(id);
     if (item && item.type !== 'folder') {
       const meta = WORLD_ITEM_META[item.type];
-      return { title: item.name, icon: meta.icon, color: meta.color, type: item.type };
+      return { title: this.session.loreName(item), icon: meta.icon, color: meta.color, type: item.type, global: !!globalItem };
     }
     return null;
   }
@@ -179,9 +191,15 @@ export class GameTablePage {
 
   // --- Ações ---------------------------------------------------------------
 
-  /** Uma automação foi usada na barra inferior. */
+  /**
+   * Uma ação foi usada na barra inferior: rola, registra no chat e, se tiver efeito,
+   * o deixa no mouse. O aviso resume o resultado (o detalhe fica no chat).
+   */
   onActionUsed(entry: TableEntry): void {
-    this.snackBar.open(`⚡ ${entry.name}`, undefined, { duration: 1500 });
+    const { author, roll, armed } = this.session.useAction(entry);
+    const formula = roll.dice + formatModifier(roll.modifier);
+    const text = `${author} · ${roll.action}: ${formula} = ${roll.total} — ${ROLL_OUTCOMES[roll.outcome].label}`;
+    this.snackBar.open(armed ? `${text} · arraste no mapa para lançar o efeito` : text, undefined, { duration: 3500 });
   }
 
   /** Atalhos de teclado da mesa (ignorados enquanto se digita). */

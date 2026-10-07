@@ -26,7 +26,7 @@ export interface NotePointerDown {
         class="absolute origin-bottom"
         [style.left.px]="note.x"
         [style.top.px]="note.y"
-        [style.transform]="'translate(-50%, -100%) scale(' + 1 / scale() + ')'"
+        [style.transform]="'translate(-50%, -100%) ' + upright() + ' scale(' + 1 / scale() + ')'"
       >
         <button
           type="button"
@@ -56,6 +56,8 @@ export class NotesLayer {
   readonly interactive = input(false);
   /** Anotação com a edição aberta (marcador em destaque). */
   readonly activeId = input<string | null>(null);
+  /** Vista isométrica: deixa o marcador "em pé" (vazio na 2D). */
+  readonly upright = input('');
 
   readonly noteDown = output<NotePointerDown>();
 

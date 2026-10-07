@@ -21,6 +21,12 @@
     </button>
   </div>
 
+  <!-- Quem está agindo (muda com o token selecionado) -->
+  <div class="flex w-20 shrink-0 flex-col justify-center leading-tight" [matTooltip]="session.role() === 'gm' ? 'Selecione um token para usar as ações dele' : ''">
+    <span class="text-[10px] uppercase tracking-widest text-slate-500">Agindo</span>
+    <span class="truncate text-xs font-semibold text-star-300">{{ actorLabel() }}</span>
+  </div>
+
   <!-- Espaços de ação -->
   <div class="flex gap-1.5 overflow-x-auto">
     @for (slot of slots(); track slot.key; let i = $index) {
@@ -33,7 +39,8 @@
             : 'border-dashed border-white/10 text-slate-600 hover:border-white/25 hover:text-slate-400'
         "
         [class.scale-90]="flashing() === slot.entry?.id"
-        [matTooltip]="slot.entry ? slot.entry.name + ' (' + slot.key + ')' : 'Nova automação'"
+        [class.opacity-40]="!slot.entry && !canCreate()"
+        [matTooltip]="slot.entry ? slot.entry.name + ' (' + slot.key + ') · clique direito: configurar' : canCreate() ? 'Nova ação para ' + actorLabel() : 'Crie um personagem para ter ações'"
         (click)="trigger(i)"
         (contextmenu)="$event.preventDefault(); slot.entry && opened.emit(slot.entry.id)"
       >

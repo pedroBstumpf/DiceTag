@@ -1,10 +1,23 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { Point } from '../../../core/models/geometry.model';
+import { WorldItem } from '../../../core/models/world-item.model';
 import {
   BRUSH_COLORS,
   BRUSH_WIDTHS,
+  ChatMessage,
+  DEFAULT_FX,
+  DEFAULT_ROLL,
   DEFAULT_SOUND_VOLUME,
+  DEFAULT_TOKEN_SPEED,
   DoorWall,
+  FxStyle,
+  MAX_CHAT_MESSAGES,
+  MAX_MAP_LEVELS,
+  MapLevel,
+  SceneFolder,
+  RollResult,
+  LoreFolder,
+  LoreItemOverride,
   METERS_PER_SQUARE,
   MapNote,
   NOTE_COLORS,
@@ -14,6 +27,7 @@ import {
   TableEntry,
   TableEntryKind,
   TableRole,
+  TableLore,
   TableState,
   TableTool,
   TokenBar,
@@ -24,8 +38,11 @@ import {
   Wall,
   defaultToken,
 } from '../../../core/models/table-session.model';
+import { AuthService } from '../../../core/services/auth.service';
 import { StorageService } from '../../../core/services/storage.service';
 import { newId } from '../../../core/utils/id';
+import { rollDice } from '../utils/dice';
+import { FxDrawing, buildFx, seededRandom } from '../utils/effects';
 import { createMask, decodeMask, encodeMask, isExploredAt, markPolygons, maskFits } from '../utils/fog-memory';
 import { computeVisibilityPolygon, doorSeen, pointInPolygon, wallsToSegments } from '../utils/visibility';
 
@@ -49,12 +66,36 @@ export interface ResolvedToken {
   blobId?: string;
   size: number;
   vision: TokenVision;
+  /** Quadrados por segundo com WASD/setas (sempre da ficha). */
+  speed: number;
   bars: TokenBar[];
   tags: TokenTag[];
 }
 
 /** Campos do token editáveis pela ficha ou pela janela "Token". */
-export type TokenPatch = Partial<Pick<TokenSettings, 'size' | 'vision' | 'bars' | 'tags'>>;
+export type TokenPatch = Partial<Pick<TokenSettings, 'size' | 'vision' | 'speed' | 'bars' | 'tags'>>;
+
+/** Efeito especial em exibição no mapa (transitório, não é salvo). */
+export interface FxInstance {
+  id: string;
+  /** Desenho pronto, montado uma vez no lançamento (utils/effects.ts). */
+  drawing: FxDrawing;
+}
+
+/** Efeito "na mão" do usuário depois de usar uma ação com efeito. */
+export interface ArmedFx extends FxStyle {
+  /** Nome da ação que o armou (exibido no aviso do mapa). */
+  action: string;
+}
+
+/** Resultado de usar uma ação (para o aviso na tela). */
+export interface ActionUse {
+  author: string;
+  roll: RollResult;
+  /** A ação tinha efeito especial (agora armado no mouse). */
+  armed: boolean;
+}
+
 
 /** Modo da ferramenta Névoa. */
 export type WallMode = 'line' | 'circle' | 'door' | 'edit' | 'erase';
@@ -75,10 +116,27 @@ type DrawAction = { kind: 'add'; strokeId: string } | { kind: 'erase'; removed: 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
 const EMPTY_STATE: TableState = { scenes: [], activeSceneId: null, entries: [] };
+const EMPTY_LORE: TableLore = { folders: [], items: {} };
 const NO_TOKENS: TokenPlacement[] = [];
 const NO_WALLS: Wall[] = [];
 const NO_STROKES: Stroke[] = [];
 const NO_NOTES: MapNote[] = [];
+const NO_MESSAGES: ChatMessage[] = [];
+const NO_RESOLVED: ResolvedToken[] = [];
+const NO_FOLDERS: SceneFolder[] = [];
+
+/** Camada do mapa como a interface a exibe (0 = térreo, com o mapa da cena). */
+export interface LevelView {
+  id: string;
+  index: number;
+  name: string;
+  blobId?: string;
+}
+
+/** Camada de um token (tokens antigos ficam no térreo). */
+export function levelOf(placement: TokenPlacement): number {
+  return placement.level ?? 0;
+}
 
 /**
  * Estado da mesa aberta: cenas, arquivos (fichas, sons, automações),
@@ -91,6 +149,7 @@ const NO_NOTES: MapNote[] = [];
 @Injectable()
 export class TableSessionService {
   private readonly storage = inject(StorageService);
+  private readonly auth = inject(AuthService);
 
   // --- Estado persistido ---------------------------------------------------
   private readonly state = signal<TableState>(EMPTY_STATE);
@@ -104,6 +163,32 @@ export class TableSessionService {
   readonly entryById = computed(() => new Map(this.entries().map((e) => [e.id, e])));
   /** Volume mestre dos sons (0–1). */
   readonly soundMaster = computed(() => this.state().soundMaster ?? 1);
+  /** Organização da aba Lore nesta mesa (pastas e ajustes locais). */
+  readonly lore = computed(() => this.state().lore ?? EMPTY_LORE);
+
+  // --- Vista isométrica e camadas do mapa (cena ativa) ---------------------
+
+  /** Vista isométrica da cena ativa (mapa e tokens como numa mesa vista de lado). */
+  readonly isometric = computed(() => this.activeScene()?.isometric ?? false);
+  /** Camadas da cena: o térreo (mapa da cena) + as de cima, de baixo para cima. */
+  readonly mapLevels = computed<LevelView[]>(() => {
+    const scene = this.activeScene();
+    if (!scene) return [];
+    return [
+      { id: 'ground', index: 0, name: 'Térreo', blobId: scene.blobId },
+      ...(scene.levels ?? []).map((l, i) => ({ id: l.id, index: i + 1, name: l.name, blobId: l.blobId })),
+    ];
+  });
+  readonly levelCount = computed(() => Math.max(1, this.mapLevels().length));
+  /** Camada que os jogadores veem. */
+  readonly playerLevel = computed(() => this.clampLevel(this.activeScene()?.playerLevel ?? 0));
+  /** Camada que o mestre está olhando (só nesta sessão; começa na dos jogadores). */
+  private readonly gmLevel = signal(0);
+  /** Camada em foco na tela: o jogador vê sempre a camada liberada pelo mestre. */
+  readonly currentLevel = computed(() => (this.role() === 'player' ? this.playerLevel() : this.clampLevel(this.gmLevel())));
+  /** Painel de camadas aberto (barra de ferramentas). */
+  readonly levelsOpen = signal(false);
+  private readonly activeSceneId = computed(() => this.state().activeSceneId);
 
   /** Tokens colocados na cena ativa (mesma referência enquanto não mudam). */
   readonly tokens = computed(() => this.activeScene()?.tokens ?? NO_TOKENS);
@@ -144,8 +229,10 @@ export class TableSessionService {
   private readonly visionSources = computed(
     () => {
       const grid = this.activeScene()?.gridSize ?? 70;
+      const level = this.currentLevel();
+      // A névoa fica na camada em foco: enxergam os tokens dela
       return this.resolvedTokens()
-        .filter((t) => t.vision.enabled)
+        .filter((t) => t.vision.enabled && levelOf(t.placement) === level)
         .map((t) => ({ x: t.placement.x, y: t.placement.y, range: (t.vision.range / METERS_PER_SQUARE) * grid }));
     },
     { equal: (a, b) => a.length === b.length && a.every((s, i) => s.x === b[i].x && s.y === b[i].y && s.range === b[i].range) },
@@ -191,13 +278,26 @@ export class TableSessionService {
   /** Visão de jogador com névoa: a área fora da visão fica escondida. */
   readonly playerFog = computed(() => this.fogEnabled() && this.role() === 'player');
 
-  /** Tokens exibidos: na visão de jogador com névoa, só os visíveis (personagens sempre aparecem). */
-  readonly visibleTokens = computed(() => {
-    const tokens = this.resolvedTokens();
-    if (!this.playerFog()) return tokens;
-    const polys = this.visionPolygons();
-    return tokens.filter((t) => t.entry.kind === 'character' || this.isVisible(t.placement, polys));
+  /**
+   * Tokens exibidos, por camada: na visão de jogador com névoa, só os visíveis
+   * (personagens sempre aparecem).
+   */
+  readonly tokensByLevel = computed(() => {
+    let tokens = this.resolvedTokens();
+    if (this.playerFog()) {
+      const polys = this.visionPolygons();
+      tokens = tokens.filter((t) => t.entry.kind === 'character' || this.isVisible(t.placement, polys));
+    }
+    const byLevel = new Map<number, ResolvedToken[]>();
+    for (const t of tokens) {
+      const level = this.clampLevel(levelOf(t.placement));
+      byLevel.set(level, [...(byLevel.get(level) ?? []), t]);
+    }
+    return byLevel;
   });
+
+  /** Tokens exibidos na camada em foco (interativos). */
+  readonly visibleTokens = computed(() => this.tokensByLevel().get(this.currentLevel()) ?? NO_RESOLVED);
 
   // --- Estado da sessão (não persistido) -----------------------------------
   readonly tool = signal<TableTool>('select');
@@ -235,10 +335,119 @@ export class TableSessionService {
     this.panels.set({ scenes: show, tools: show, side: show, actions: show });
   }
 
-  /** Automações do papel atual (barra inferior). */
-  readonly hotbar = computed(() =>
-    this.entries().filter((e) => e.kind === 'automation' && e.role === this.role()),
-  );
+  // --- Ações (automações) e quem age ---------------------------------------
+
+  /** Personagens da conta atual nesta mesa (sem dono = de qualquer um). */
+  readonly myCharacters = computed(() => this.entries().filter((e) => e.kind === 'character' && this.ownsCharacter(e)));
+
+  /**
+   * Ficha que está agindo (dona das ações da barra inferior):
+   * - Mestre: a ficha do token selecionado (NPC ou personagem); sem seleção, ninguém (ações gerais).
+   * - Jogador: o personagem dele selecionado ou, senão, o primeiro personagem dele.
+   */
+  readonly actor = computed<TableEntry | null>(() => {
+    const id = this.selectedTokenId();
+    const selected = id ? (this.resolvedTokenById(id)?.entry ?? null) : null;
+    if (this.role() === 'gm') return selected;
+    if (selected?.kind === 'character' && this.ownsCharacter(selected)) return selected;
+    return this.myCharacters()[0] ?? null;
+  });
+
+  /** Ações da barra inferior: as da ficha que está agindo (mestre sem seleção: as gerais). */
+  readonly hotbar = computed(() => {
+    const actor = this.actor();
+    if (!actor && this.role() === 'player') return [];
+    return this.automationsOf(actor?.id ?? null);
+  });
+
+  /** Automações de uma ficha (null = gerais do mestre). */
+  automationsOf(ownerEntryId: string | null): TableEntry[] {
+    return this.entries().filter((e) => e.kind === 'automation' && (e.ownerEntryId ?? null) === ownerEntryId);
+  }
+
+  /** O personagem é da conta atual? (personagem sem dono vale para qualquer um) */
+  ownsCharacter(entry: TableEntry): boolean {
+    return !entry.ownerUserId || entry.ownerUserId === this.auth.user()?.id;
+  }
+
+  /**
+   * Usa uma ação: rola os dados, registra no chat em nome de quem agiu e, se a ação
+   * tiver efeito especial, deixa o efeito "na mão" (ferramenta Efeitos) para o usuário lançar.
+   */
+  useAction(entry: TableEntry): ActionUse {
+    const config = entry.roll ?? DEFAULT_ROLL;
+    const roll: RollResult = { action: entry.name, icon: entry.icon ?? 'bolt', dice: config.dice, ...rollDice(config) };
+    const actor = this.actor() ?? (entry.ownerEntryId ? this.entryById().get(entry.ownerEntryId) : undefined);
+    const author = actor?.name ?? this.userName();
+    this.pushChat({ author, roll });
+
+    if (entry.effect) {
+      if (this.tool() !== 'fx') this.fxReturnTool = this.tool();
+      this.armedFx.set({ ...entry.effect, action: entry.name });
+      this.tool.set('fx');
+    }
+    return { author, roll, armed: !!entry.effect };
+  }
+
+  // --- Chat ----------------------------------------------------------------
+
+  readonly chat = computed(() => this.state().chat ?? NO_MESSAGES);
+
+  /** Envia uma mensagem de texto em nome da conta atual. */
+  sendChat(text: string): void {
+    const trimmed = text.trim();
+    if (trimmed) this.pushChat({ author: this.userName(), text: trimmed });
+  }
+
+  clearChat(): void {
+    this.patchState((s) => ({ ...s, chat: [] }));
+  }
+
+  private pushChat(message: Pick<ChatMessage, 'author' | 'text' | 'roll'>): void {
+    const full: ChatMessage = { id: newId(), at: Date.now(), userId: this.auth.user()?.id ?? '', role: this.role(), ...message };
+    this.patchState((s) => ({ ...s, chat: [...(s.chat ?? []), full].slice(-MAX_CHAT_MESSAGES) }));
+  }
+
+  private userName(): string {
+    return this.role() === 'gm' ? 'Mestre' : (this.auth.user()?.name ?? 'Jogador');
+  }
+
+  // --- Efeitos especiais (transitórios) ------------------------------------
+
+  /** Efeito escolhido na ferramenta Efeitos. */
+  readonly fxStyle = signal<FxStyle>(DEFAULT_FX);
+  /** Efeito de uma ação, esperando o usuário arrastar no mapa (vale para um lançamento). */
+  readonly armedFx = signal<ArmedFx | null>(null);
+  /** Efeitos em exibição no mapa. */
+  readonly effects = signal<FxInstance[]>([]);
+  /** Ferramenta para a qual voltar depois de lançar o efeito de uma ação. */
+  private fxReturnTool: TableTool = 'select';
+
+  /**
+   * Lança um efeito de `from` até `to` (o da ação armada, ou o da ferramenta).
+   * `scale` = zoom atual (tamanhos mínimos legíveis do desenho).
+   */
+  castFx(from: Point, to: Point, scale: number): void {
+    const armed = this.armedFx();
+    const { kind, color } = armed ?? this.fxStyle();
+    const id = newId();
+    const drawing = buildFx(kind, color, from, to, {
+      uid: `fx-${id}`,
+      scale,
+      grid: this.activeScene()?.gridSize ?? 70,
+      random: seededRandom(Math.floor(Math.random() * 2 ** 32)),
+    });
+    this.effects.update((list) => [...list, { id, drawing }]);
+    setTimeout(() => this.effects.update((list) => list.filter((f) => f.id !== id)), drawing.duration + 100);
+    if (armed) this.cancelArmedFx();
+  }
+
+  /** Desarma o efeito da ação e volta à ferramenta anterior. */
+  cancelArmedFx(): void {
+    if (!this.armedFx()) return;
+    this.armedFx.set(null);
+    this.tool.set(this.fxReturnTool);
+  }
 
   constructor() {
     // Memória da névoa: tudo o que os tokens enxergam fica marcado como explorado.
@@ -247,6 +456,17 @@ export class TableSessionService {
       const polys = this.visionPolygons();
       const size = this.worldSize();
       if (polys.length && size && this.fogMemory()) untracked(() => this.markExplored(polys, size));
+    });
+
+    // Trocar de ferramenta à mão desarma o efeito de uma ação
+    effect(() => {
+      if (this.tool() !== 'fx') untracked(() => this.armedFx.set(null));
+    });
+
+    // Ao abrir outra cena, o mestre começa olhando a camada dos jogadores
+    effect(() => {
+      this.activeSceneId();
+      untracked(() => this.gmLevel.set(this.activeScene()?.playerLevel ?? 0));
     });
   }
 
@@ -304,7 +524,7 @@ export class TableSessionService {
     this.selectedTokenId.set(null);
   }
 
-  /** Exclui a cena e apaga o arquivo do mapa dela. */
+  /** Exclui a cena e apaga os arquivos dos mapas dela (térreo e camadas). */
   removeScene(id: string): void {
     const scene = this.scenes().find((s) => s.id === id);
     this.patchState((s) => {
@@ -312,7 +532,139 @@ export class TableSessionService {
       const activeSceneId = s.activeSceneId === id ? (scenes[0]?.id ?? null) : s.activeSceneId;
       return { ...s, scenes, activeSceneId };
     });
-    if (scene?.blobId) this.storage.delete(`blob:${scene.blobId}`);
+    for (const blobId of [scene?.blobId, ...(scene?.levels ?? []).map((l) => l.blobId)]) {
+      if (blobId) this.storage.delete(`blob:${blobId}`);
+    }
+  }
+
+  /** Liga/desliga a vista isométrica da cena ativa. */
+  toggleIsometric(): void {
+    const scene = this.activeScene();
+    if (!scene) return;
+    this.updateScene(scene.id, { isometric: !scene.isometric });
+    if (scene.isometric) this.levelsOpen.set(false);
+  }
+
+  // --- Pastas de cenas -----------------------------------------------------
+
+  readonly sceneFolders = computed(() => this.state().sceneFolders ?? NO_FOLDERS);
+
+  /** Cria uma pasta de cenas ("Nova pasta", "Nova pasta 2"…). */
+  addSceneFolder(): SceneFolder {
+    const names = new Set(this.sceneFolders().map((f) => f.name));
+    let name = 'Nova pasta';
+    for (let n = 2; names.has(name); n++) name = `Nova pasta ${n}`;
+    const folder: SceneFolder = { id: newId(), name };
+    this.patchState((s) => ({ ...s, sceneFolders: [...(s.sceneFolders ?? []), folder] }));
+    return folder;
+  }
+
+  renameSceneFolder(id: string, name: string): void {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    this.patchState((s) => ({ ...s, sceneFolders: (s.sceneFolders ?? []).map((f) => (f.id === id ? { ...f, name: trimmed } : f)) }));
+  }
+
+  /** Exclui a pasta; as cenas dela continuam, fora de pastas. */
+  removeSceneFolder(id: string): void {
+    this.patchState((s) => ({
+      ...s,
+      sceneFolders: (s.sceneFolders ?? []).filter((f) => f.id !== id),
+      scenes: s.scenes.map((sc) => (sc.folderId === id ? { ...sc, folderId: undefined } : sc)),
+    }));
+  }
+
+  /** Move a cena para uma pasta (null = fora de pastas). */
+  moveSceneToFolder(sceneId: string, folderId: string | null): void {
+    this.updateScene(sceneId, { folderId: folderId ?? undefined });
+  }
+
+  // --- Camadas do mapa -----------------------------------------------------
+
+  /** Mestre: passa a olhar outra camada (a seleção sai se o token não estiver nela). */
+  viewLevel(level: number): void {
+    const target = this.clampLevel(level);
+    this.gmLevel.set(target);
+    const selected = this.selectedTokenId();
+    const token = selected ? this.findPlacement(selected) : undefined;
+    if (token && levelOf(token) !== target) this.selectedTokenId.set(null);
+  }
+
+  /** Cria uma camada vazia ("ar") no topo e passa a olhá-la. */
+  addLevel(): void {
+    const scene = this.activeScene();
+    if (!scene || this.levelCount() >= MAX_MAP_LEVELS) return;
+    const level: MapLevel = { id: newId(), name: `Camada ${this.levelCount() + 1}` };
+    this.updateScene(scene.id, { levels: [...(scene.levels ?? []), level] });
+    this.viewLevel(this.levelCount() - 1);
+  }
+
+  renameLevel(index: number, name: string): void {
+    const scene = this.activeScene();
+    const trimmed = name.trim();
+    if (!scene || index < 1 || !trimmed) return;
+    this.updateScene(scene.id, { levels: (scene.levels ?? []).map((l, i) => (i === index - 1 ? { ...l, name: trimmed } : l)) });
+  }
+
+  /** Envia (ou troca) a imagem de uma camada. O térreo usa o mapa da cena. */
+  async setLevelImage(index: number, file: File): Promise<void> {
+    const scene = this.activeScene();
+    if (!scene) return;
+    if (index === 0) return this.setSceneMap(scene.id, file);
+    const old = scene.levels?.[index - 1]?.blobId;
+    const blobId = newId();
+    await this.storage.set(`blob:${blobId}`, file);
+    this.patchLevel(scene.id, index, { blobId });
+    if (old) this.storage.delete(`blob:${old}`);
+  }
+
+  /** Tira a imagem de uma camada de cima: ela vira "ar" (mostra a de baixo). */
+  clearLevelImage(index: number): void {
+    const scene = this.activeScene();
+    const old = scene?.levels?.[index - 1]?.blobId;
+    if (!scene || index < 1 || !old) return;
+    this.patchLevel(scene.id, index, { blobId: undefined });
+    this.storage.delete(`blob:${old}`);
+  }
+
+  /** Exclui uma camada de cima; os tokens dela descem uma camada. */
+  removeLevel(index: number): void {
+    const scene = this.activeScene();
+    const level = scene?.levels?.[index - 1];
+    if (!scene || index < 1 || !level) return;
+    const shift = (n: number) => (n >= index ? n - 1 : n);
+    this.updateScene(scene.id, {
+      levels: (scene.levels ?? []).filter((l) => l.id !== level.id),
+      tokens: (scene.tokens ?? []).map((t) => (levelOf(t) >= index ? { ...t, level: levelOf(t) - 1 } : t)),
+      playerLevel: shift(scene.playerLevel ?? 0),
+    });
+    this.gmLevel.update(shift);
+    if (level.blobId) this.storage.delete(`blob:${level.blobId}`);
+  }
+
+  /** Libera uma camada para os jogadores (é a que eles passam a ver). */
+  showLevelToPlayers(index: number): void {
+    const scene = this.activeScene();
+    if (scene) this.updateScene(scene.id, { playerLevel: this.clampLevel(index) });
+  }
+
+  /** Sobe/desce um token de camada; se for o selecionado, a vista do mestre o acompanha. */
+  moveTokenLevel(placementId: string, delta: number): void {
+    const placement = this.findPlacement(placementId);
+    if (!placement) return;
+    const target = this.clampLevel(levelOf(placement) + delta);
+    if (target === levelOf(placement)) return;
+    this.patchPlacement(placementId, { level: target });
+    if (this.selectedTokenId() === placementId && this.role() === 'gm') this.gmLevel.set(target);
+  }
+
+  private patchLevel(sceneId: string, index: number, patch: Partial<MapLevel>): void {
+    const scene = this.scenes().find((s) => s.id === sceneId);
+    if (scene) this.updateScene(sceneId, { levels: (scene.levels ?? []).map((l, i) => (i === index - 1 ? { ...l, ...patch } : l)) });
+  }
+
+  private clampLevel(level: number): number {
+    return Math.min(Math.max(0, Math.round(level)), this.levelCount() - 1);
   }
 
   // --- Arquivos da mesa ----------------------------------------------------
@@ -325,7 +677,9 @@ export class TableSessionService {
       kind,
       name: `${TABLE_ENTRY_META[kind].label} ${count}`,
       createdAt: Date.now(),
-      ...(kind === 'automation' && { role: this.role(), icon: 'bolt' }),
+      ...(kind === 'automation' && { icon: 'bolt', roll: { ...DEFAULT_ROLL } }),
+      // O personagem pertence à conta de quem o criou
+      ...(kind === 'character' && { ownerUserId: this.auth.user()?.id }),
       ...extra,
     };
     this.patchState((s) => ({ ...s, entries: [...s.entries, entry] }));
@@ -353,12 +707,12 @@ export class TableSessionService {
     this.patchState((s) => ({ ...s, entries: s.entries.map((e) => (e.id === id ? { ...e, ...patch } : e)) }));
   }
 
-  /** Exclui o arquivo, os tokens dele em todas as cenas e os arquivos (áudio/imagem). */
+  /** Exclui o arquivo, as ações dele, os tokens dele em todas as cenas e os arquivos (áudio/imagem). */
   removeEntry(id: string): void {
     const entry = this.entryById().get(id);
     this.patchState((s) => ({
       ...s,
-      entries: s.entries.filter((e) => e.id !== id),
+      entries: s.entries.filter((e) => e.id !== id && e.ownerEntryId !== id),
       scenes: s.scenes.map((sc) =>
         sc.tokens?.some((t) => t.entryId === id) ? { ...sc, tokens: sc.tokens.filter((t) => t.entryId !== id) } : sc,
       ),
@@ -369,6 +723,72 @@ export class TableSessionService {
 
   getBlob(blobId: string): Promise<Blob | undefined> {
     return this.storage.get<Blob>(`blob:${blobId}`);
+  }
+
+  // --- Lore da mesa (pastas e ajustes locais) -----------------------------
+  // Nada aqui altera ou apaga os itens do worldbuild / Lore geral.
+
+  /** Nome do item da lore nesta mesa (o local, se renomeado aqui). */
+  loreName(item: WorldItem): string {
+    return this.lore().items[item.id]?.name ?? item.name;
+  }
+
+  /** Cria uma pasta na aba Lore ("Nova pasta", "Nova pasta 2"…). */
+  addLoreFolder(): LoreFolder {
+    const names = new Set(this.lore().folders.map((f) => f.name));
+    let name = 'Nova pasta';
+    for (let n = 2; names.has(name); n++) name = `Nova pasta ${n}`;
+    const folder: LoreFolder = { id: newId(), name };
+    this.patchLore((l) => ({ ...l, folders: [...l.folders, folder] }));
+    return folder;
+  }
+
+  renameLoreFolder(id: string, name: string): void {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    this.patchLore((l) => ({ ...l, folders: l.folders.map((f) => (f.id === id ? { ...f, name: trimmed } : f)) }));
+  }
+
+  /** Exclui a pasta da mesa; os itens dela voltam para a raiz da aba Lore. */
+  removeLoreFolder(id: string): void {
+    this.patchLore((l) => ({
+      folders: l.folders.filter((f) => f.id !== id),
+      items: Object.fromEntries(
+        Object.entries(l.items).map(([itemId, o]) => [itemId, o.folderId === id ? { ...o, folderId: undefined } : o]),
+      ),
+    }));
+  }
+
+  /** Renomeia o item só nesta mesa (nome vazio ou igual ao original volta ao original). */
+  renameLoreItem(item: WorldItem, name: string): void {
+    const trimmed = name.trim();
+    this.patchLoreItem(item.id, { name: trimmed && trimmed !== item.name ? trimmed : undefined });
+  }
+
+  /** Move o item para uma pasta da mesa (null = raiz). */
+  moveLoreItem(itemId: string, folderId: string | null): void {
+    this.patchLoreItem(itemId, { folderId: folderId ?? undefined });
+  }
+
+  /** Remove o item desta mesa (o original continua no worldbuild / Lore geral). */
+  hideLoreItem(itemId: string): void {
+    this.patchLoreItem(itemId, { hidden: true });
+  }
+
+  /** Traz de volta todos os itens removidos desta mesa. */
+  restoreLoreItems(): void {
+    this.patchLore((l) => ({
+      ...l,
+      items: Object.fromEntries(Object.entries(l.items).map(([id, o]) => [id, { ...o, hidden: undefined }])),
+    }));
+  }
+
+  private patchLoreItem(itemId: string, patch: LoreItemOverride): void {
+    this.patchLore((l) => ({ ...l, items: { ...l.items, [itemId]: { ...l.items[itemId], ...patch } } }));
+  }
+
+  private patchLore(fn: (l: TableLore) => TableLore): void {
+    this.patchState((s) => ({ ...s, lore: fn(s.lore ?? EMPTY_LORE) }));
   }
 
   // --- Tokens: regra de vínculo --------------------------------------------
@@ -395,6 +815,7 @@ export class TableSessionService {
       linked,
       blobId: sheet.blobId,
       vision: sheet.vision,
+      speed: sheet.speed ?? DEFAULT_TOKEN_SPEED,
       size: linked ? sheet.size : (placement.size ?? sheet.size),
       bars: linked ? sheet.bars : (placement.bars ?? sheet.bars),
       tags: linked ? sheet.tags : (placement.tags ?? sheet.tags),
@@ -410,19 +831,21 @@ export class TableSessionService {
   /**
    * Altera um token colocado respeitando a regra de vínculo:
    * personagem grava na ficha (vale para todos os tokens dele);
-   * NPC grava só neste token. A visão é sempre da ficha.
+   * NPC grava só neste token. Visão e velocidade são sempre da ficha.
    */
   updateToken(placementId: string, patch: TokenPatch): void {
     const placement = this.findPlacement(placementId);
     const entry = placement && this.entryById().get(placement.entryId);
     if (!placement || !entry) return;
 
-    const { vision, ...own } = patch;
+    const { vision, speed, ...own } = patch;
     if (entry.kind === 'character') {
       this.updateEntryToken(entry.id, patch);
       return;
     }
-    if (vision) this.updateEntryToken(entry.id, { vision });
+    if (vision || speed !== undefined) {
+      this.updateEntryToken(entry.id, { ...(vision && { vision }), ...(speed !== undefined && { speed }) });
+    }
     if (Object.keys(own).length) this.patchPlacement(placementId, own);
   }
 
@@ -468,6 +891,8 @@ export class TableSessionService {
       entryId,
       x: p.x,
       y: p.y,
+      // Entra na camada em foco
+      ...(this.currentLevel() > 0 && { level: this.currentLevel() }),
       // NPC: cada token colocado é independente (cópia da ficha)
       ...(entry.kind === 'npc' && {
         size: sheet.size,

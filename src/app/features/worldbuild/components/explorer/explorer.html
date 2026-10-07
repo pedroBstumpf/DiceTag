@@ -1,6 +1,6 @@
 <!-- ===== Cabeçalho do painel ===== -->
 <header class="flex h-14 shrink-0 items-center gap-1 border-b border-white/5 pl-4 pr-2">
-  <h2 class="flex-1 font-display text-base text-star-300">Explorador</h2>
+  <h2 class="flex-1 font-display text-base text-star-300">{{ service.title }}</h2>
 
   <button mat-icon-button matTooltip="Criar" [matMenuTriggerFor]="createMenu" [matMenuTriggerData]="{ parentId: null }">
     <mat-icon>add</mat-icon>

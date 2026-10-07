@@ -1,4 +1,5 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
+import { User } from '../../../core/models/user.model';
 import { WORLD_ITEM_META, WorldItem, WorldItemType } from '../../../core/models/world-item.model';
 import { AuthService } from '../../../core/services/auth.service';
 import { StorageService } from '../../../core/services/storage.service';
@@ -11,11 +12,17 @@ import { columnLayout } from '../utils/timeline-layout';
  * Os itens formam uma árvore (parentId). A lista de itens é salva como um
  * único registro por usuário; imagens são salvas como Blobs separados
  * (chave "blob:<id>") para não pesar a lista.
+ *
+ * Também é a base do LoreService (Lore geral): a subclasse só troca o título
+ * e a chave de armazenamento, e todos os editores funcionam com as duas.
  */
 @Injectable({ providedIn: 'root' })
 export class WorldbuildService {
   private readonly storage = inject(StorageService);
   private readonly auth = inject(AuthService);
+
+  /** Nome exibido no cabeçalho do explorador. */
+  readonly title: string = 'Worldbuild';
 
   // --- Estado --------------------------------------------------------------
   private readonly _items = signal<WorldItem[]>([]);
@@ -41,10 +48,15 @@ export class WorldbuildService {
         this.flush();
         this.loaded.set(false);
         this._items.set([]);
-        this.storageKey = user ? `worldbuild:${user.id}` : null;
+        this.storageKey = this.keyFor(user);
         if (this.storageKey) this.load(this.storageKey);
       });
     });
+  }
+
+  /** Chave do IndexedDB onde ficam os itens (por usuário; null = ninguém logado). */
+  protected keyFor(user: User | null): string | null {
+    return user ? `worldbuild:${user.id}` : null;
   }
 
   // --- Consultas -----------------------------------------------------------

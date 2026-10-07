@@ -38,6 +38,8 @@ export class TokensLayer {
   readonly selectedId = input<string | null>(null);
   /** Tokens recebem o ponteiro (ferramenta Selecionar). */
   readonly interactive = input(false);
+  /** Vista isométrica: transformação CSS que deixa o token "em pé" (vazio na 2D). */
+  readonly upright = input('');
 
   readonly tokenDown = output<TokenPointerDown>();
 

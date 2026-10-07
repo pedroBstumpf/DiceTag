@@ -5,6 +5,8 @@ import { TableTool } from '../../../../core/models/table-session.model';
 import { TableSessionService } from '../../services/table-session.service';
 import { DrawMenu } from '../draw-menu/draw-menu';
 import { FogMenu } from '../fog-menu/fog-menu';
+import { FxMenu } from '../fx-menu/fx-menu';
+import { LevelsMenu } from '../levels-menu/levels-menu';
 
 /** Definição de uma ferramenta exibida na barra. */
 export interface ToolDef {
@@ -26,6 +28,7 @@ export const TABLE_TOOLS: ToolDef[] = [
   { id: 'draw', icon: 'draw', label: 'Desenhar', key: 'D' },
   { id: 'fog', icon: 'cloud', label: 'Névoa de guerra', key: 'F' },
   { id: 'note', icon: 'sticky_note_2', label: 'Anotação no mapa', key: 'N' },
+  { id: 'fx', icon: 'auto_awesome', label: 'Efeitos especiais', key: 'E' },
 ];
 
 /**
@@ -35,7 +38,7 @@ export const TABLE_TOOLS: ToolDef[] = [
  */
 @Component({
   selector: 'app-tool-bar',
-  imports: [MatIconModule, MatTooltipModule, DrawMenu, FogMenu],
+  imports: [MatIconModule, MatTooltipModule, DrawMenu, FogMenu, FxMenu, LevelsMenu],
   templateUrl: './tool-bar.html',
 })
 export class ToolBar {

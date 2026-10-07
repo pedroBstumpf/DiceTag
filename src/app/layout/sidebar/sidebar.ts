@@ -7,7 +7,6 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { LayoutService } from '../../core/services/layout.service';
-import { WorldbuildService } from '../../features/worldbuild/services/worldbuild.service';
 import { QuickActionsService } from '../../shared/services/quick-actions.service';
 
 /** Item de navegação (página). */
@@ -17,15 +16,8 @@ interface NavLink {
   route: string;
 }
 
-/** Ação de criação rápida. */
-interface CreateAction {
-  label: string;
-  icon: string;
-  run: () => void;
-}
-
 /**
- * Barra lateral principal: navegação entre páginas, atalhos de criação,
+ * Barra lateral principal: navegação entre páginas, Lore geral do mundo,
  * recursos futuros e área da conta. Recolhível no desktop e gaveta no mobile.
  */
 @Component({
@@ -38,7 +30,6 @@ export class Sidebar {
   readonly layout = inject(LayoutService);
   readonly auth = inject(AuthService);
   private readonly actions = inject(QuickActionsService);
-  private readonly worldbuild = inject(WorldbuildService);
   private readonly router = inject(Router);
   private readonly snackBar = inject(MatSnackBar);
 
@@ -47,14 +38,6 @@ export class Sidebar {
     { label: 'Início', icon: 'home', route: '/' },
     { label: 'Minhas mesas', icon: 'groups', route: '/mesas' },
     { label: 'Worldbuild', icon: 'public', route: '/worldbuild' },
-  ];
-
-  // --- Criação rápida ------------------------------------------------------
-  readonly createActions: CreateAction[] = [
-    { label: 'Nova mesa', icon: 'add_circle', run: () => this.actions.createTable() },
-    { label: 'Novo documento', icon: 'note_add', run: () => this.actions.createWorldItem('document') },
-    { label: 'Nova linha do tempo', icon: 'timeline', run: () => this.actions.createWorldItem('timeline') },
-    { label: 'Nova pasta', icon: 'create_new_folder', run: () => this.actions.createWorldItem('folder') },
   ];
 
   // --- Recursos planejados (exibidos como "em breve") ----------------------
@@ -67,27 +50,6 @@ export class Sidebar {
   readonly expanded = computed(() => this.layout.isMobile() || !this.layout.collapsed());
 
   // --- Ações ---------------------------------------------------------------
-
-  run(action: CreateAction): void {
-    this.layout.closeMobile();
-    action.run();
-  }
-
-  /** Envio de mapa/imagem: o seletor de arquivos abre aqui (gesto do usuário). */
-  async pickMap(input: HTMLInputElement): Promise<void> {
-    if (!(await this.actions.ensureAuth())) return;
-    input.click();
-  }
-
-  async uploadMap(input: HTMLInputElement): Promise<void> {
-    const file = input.files?.[0];
-    input.value = '';
-    if (!file) return;
-
-    const item = await this.worldbuild.uploadImage(file);
-    this.layout.closeMobile();
-    this.router.navigate(['/worldbuild'], { queryParams: { abrir: item.id } });
-  }
 
   openAuth(mode: 'login' | 'register'): void {
     this.layout.closeMobile();
