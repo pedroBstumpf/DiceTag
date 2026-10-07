@@ -5,9 +5,11 @@
   <button mat-icon-button matTooltip="Criar" [matMenuTriggerFor]="createMenu" [matMenuTriggerData]="{ parentId: null }">
     <mat-icon>add</mat-icon>
   </button>
-  <button mat-icon-button matTooltip="Esconder painel" (click)="hide.emit()">
-    <mat-icon>left_panel_close</mat-icon>
-  </button>
+  @if (hideable()) {
+    <button mat-icon-button matTooltip="Esconder painel" (click)="hide.emit()">
+      <mat-icon>left_panel_close</mat-icon>
+    </button>
+  }
 </header>
 
 <!-- ===== Busca ===== -->

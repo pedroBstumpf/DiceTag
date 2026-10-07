@@ -3,7 +3,6 @@ import { Component, computed, inject, output, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { RouterLink } from '@angular/router';
 import { WORLD_ITEM_META, WorldItem } from '../../../../core/models/world-item.model';
 import { TABLE_ENTRY_META, TableEntry, TableEntryKind, TableRole } from '../../../../core/models/table-session.model';
 import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
@@ -16,17 +15,20 @@ import { SoundList } from '../sound-list/sound-list';
 /** Abas do painel lateral direito. */
 type PanelTab = 'sheets' | 'lore' | 'sounds' | 'automations';
 
+/** Id da janela que mostra as pastas do worldbuild dentro da mesa. */
+export const WORLDBUILD_WINDOW = 'worldbuild:explorer';
+
 /**
  * Painel lateral direito da mesa, com abas:
  * - Fichas: personagens e NPCs
- * - Lore: documentos, linhas do tempo e mapas do worldbuild
+ * - Lore: documentos, linhas do tempo e mapas do worldbuild (e as pastas, numa janela)
  * - Sons: mixer de trilhas e ambientação (tocam direto na lista)
  * - Automações: habilidades e ações (do mestre e dos jogadores)
  * Fichas, lore e automações abrem numa janela flutuante.
  */
 @Component({
   selector: 'app-side-panel',
-  imports: [NgTemplateOutlet, RouterLink, MatButtonModule, MatIconModule, MatTooltipModule, AutoFocus, SoundList],
+  imports: [NgTemplateOutlet, MatButtonModule, MatIconModule, MatTooltipModule, AutoFocus, SoundList],
   templateUrl: './side-panel.html',
   host: { class: 'flex h-full flex-col' },
 })
@@ -36,6 +38,8 @@ export class SidePanel {
   private readonly blobs = inject(BlobUrlService);
 
   readonly worldMeta = WORLD_ITEM_META;
+  /** Id da janela do explorador do worldbuild na mesa. */
+  readonly worldbuildWindow = WORLDBUILD_WINDOW;
 
   /** Pedido para abrir um arquivo (da mesa ou do worldbuild) numa janela. */
   readonly opened = output<string>();

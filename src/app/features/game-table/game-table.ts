@@ -10,6 +10,7 @@ import { GameTablesService } from '../../core/services/game-tables.service';
 import { FloatingWindow } from '../../shared/components/floating-window/floating-window';
 import { WindowManagerService } from '../../shared/services/window-manager.service';
 import { DocumentEditor } from '../worldbuild/components/document-editor/document-editor';
+import { Explorer } from '../worldbuild/components/explorer/explorer';
 import { ImageViewer } from '../worldbuild/components/image-viewer/image-viewer';
 import { TimelineEditor } from '../worldbuild/components/timeline-editor/timeline-editor';
 import { WorldbuildService } from '../worldbuild/services/worldbuild.service';
@@ -17,7 +18,7 @@ import { ActionBar } from './components/action-bar/action-bar';
 import { EntryWindow } from './components/entry-window/entry-window';
 import { MapStage } from './components/map-stage/map-stage';
 import { SceneBar } from './components/scene-bar/scene-bar';
-import { SidePanel } from './components/side-panel/side-panel';
+import { SidePanel, WORLDBUILD_WINDOW } from './components/side-panel/side-panel';
 import { TABLE_TOOLS, ToolBar } from './components/tool-bar/tool-bar';
 import { TokenWindow } from './components/token-window/token-window';
 import { BlobUrlService } from './services/blob-url.service';
@@ -30,7 +31,7 @@ interface WindowContent {
   icon: string;
   color: string;
   /** Tipo de conteúdo, usado para escolher o componente. */
-  type: 'entry' | 'token' | 'document' | 'timeline' | 'image';
+  type: 'entry' | 'token' | 'explorer' | 'document' | 'timeline' | 'image';
 }
 
 /** Prefixo do id das janelas "Token" (token:<id do token colocado>). */
@@ -40,6 +41,7 @@ const TOKEN_WINDOW = 'token:';
 const WINDOW_SIZES: Record<WindowContent['type'], { width: number; height: number }> = {
   entry: { width: 520, height: 480 },
   token: { width: 460, height: 560 },
+  explorer: { width: 340, height: 540 },
   document: { width: 720, height: 600 },
   timeline: { width: 620, height: 560 },
   image: { width: 720, height: 520 },
@@ -74,6 +76,7 @@ const PANEL_SPACE = { top: 60, left: 76, right: 344, bottom: 100 };
     ActionBar,
     EntryWindow,
     TokenWindow,
+    Explorer,
     DocumentEditor,
     TimelineEditor,
     ImageViewer,
@@ -137,6 +140,9 @@ export class GameTablePage {
 
   /** Descobre o que mostrar numa janela (arquivo/token da mesa ou item do worldbuild). */
   content(id: string): WindowContent | null {
+    if (id === WORLDBUILD_WINDOW) {
+      return { title: 'Worldbuild', icon: 'public', color: 'text-sky-300', type: 'explorer' };
+    }
     if (id.startsWith(TOKEN_WINDOW)) {
       const token = this.session.resolvedTokenById(id.slice(TOKEN_WINDOW.length));
       return token ? { title: `Token: ${token.entry.name}`, icon: 'token', color: TABLE_ENTRY_META[token.entry.kind].color, type: 'token' } : null;

@@ -73,6 +73,10 @@
             @case ('entry') {
               <app-entry-window [entryId]="win.id" />
             }
+            @case ('explorer') {
+              <!-- Pastas do worldbuild dentro da mesa: os itens abrem em janelas aqui mesmo -->
+              <app-explorer [hideable]="false" (opened)="open($event)" (removed)="windows.closeMany($event)" />
+            }
             @case ('token') {
               <app-token-window [placementId]="placementOf(win.id)" (openEntry)="open($event)" />
             }
