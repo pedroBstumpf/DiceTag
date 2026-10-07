@@ -27,6 +27,14 @@ export interface Scene {
   drawings?: Stroke[];
   /** Anotações (marcadores) no mapa. Padrão: []. */
   notes?: MapNote[];
+  /** Pasta da barra de cenas (ausente = fora de pastas). */
+  folderId?: string;
+}
+
+/** Pasta da barra de cenas. */
+export interface SceneFolder {
+  id: string;
+  name: string;
 }
 
 // --- Anotações ---------------------------------------------------------------
@@ -300,6 +308,8 @@ export interface TableState {
   lore?: TableLore;
   /** Chat da mesa (mensagens e rolagens). Padrão: []. */
   chat?: ChatMessage[];
+  /** Pastas da barra de cenas. Padrão: []. */
+  sceneFolders?: SceneFolder[];
 }
 
 // --- Lore da mesa ------------------------------------------------------------

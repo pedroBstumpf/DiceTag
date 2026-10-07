@@ -12,6 +12,7 @@ import {
   DoorWall,
   FxStyle,
   MAX_CHAT_MESSAGES,
+  SceneFolder,
   RollResult,
   LoreFolder,
   LoreItemOverride,
@@ -119,6 +120,7 @@ const NO_WALLS: Wall[] = [];
 const NO_STROKES: Stroke[] = [];
 const NO_NOTES: MapNote[] = [];
 const NO_MESSAGES: ChatMessage[] = [];
+const NO_FOLDERS: SceneFolder[] = [];
 
 /**
  * Estado da mesa aberta: cenas, arquivos (fichas, sons, automações),
@@ -470,6 +472,40 @@ export class TableSessionService {
       return { ...s, scenes, activeSceneId };
     });
     if (scene?.blobId) this.storage.delete(`blob:${scene.blobId}`);
+  }
+
+  // --- Pastas de cenas -----------------------------------------------------
+
+  readonly sceneFolders = computed(() => this.state().sceneFolders ?? NO_FOLDERS);
+
+  /** Cria uma pasta de cenas ("Nova pasta", "Nova pasta 2"…). */
+  addSceneFolder(): SceneFolder {
+    const names = new Set(this.sceneFolders().map((f) => f.name));
+    let name = 'Nova pasta';
+    for (let n = 2; names.has(name); n++) name = `Nova pasta ${n}`;
+    const folder: SceneFolder = { id: newId(), name };
+    this.patchState((s) => ({ ...s, sceneFolders: [...(s.sceneFolders ?? []), folder] }));
+    return folder;
+  }
+
+  renameSceneFolder(id: string, name: string): void {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    this.patchState((s) => ({ ...s, sceneFolders: (s.sceneFolders ?? []).map((f) => (f.id === id ? { ...f, name: trimmed } : f)) }));
+  }
+
+  /** Exclui a pasta; as cenas dela continuam, fora de pastas. */
+  removeSceneFolder(id: string): void {
+    this.patchState((s) => ({
+      ...s,
+      sceneFolders: (s.sceneFolders ?? []).filter((f) => f.id !== id),
+      scenes: s.scenes.map((sc) => (sc.folderId === id ? { ...sc, folderId: undefined } : sc)),
+    }));
+  }
+
+  /** Move a cena para uma pasta (null = fora de pastas). */
+  moveSceneToFolder(sceneId: string, folderId: string | null): void {
+    this.updateScene(sceneId, { folderId: folderId ?? undefined });
   }
 
   // --- Arquivos da mesa ----------------------------------------------------
