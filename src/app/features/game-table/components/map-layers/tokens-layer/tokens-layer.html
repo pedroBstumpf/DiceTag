@@ -71,6 +71,10 @@
             [style.padding]="ui(3) + 'px ' + ui(7) + 'px'"
           >
             {{ tag.text }}
+            @if (tag.level) {
+              <!-- Nível da condição -->
+              <span class="ml-[0.3em] rounded-full bg-ink-950/80 px-[0.4em] text-white">{{ tag.level }}</span>
+            }
           </span>
         }
       </div>

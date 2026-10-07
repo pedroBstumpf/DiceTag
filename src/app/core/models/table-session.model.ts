@@ -129,11 +129,13 @@ export interface TokenBar {
   color: string;
 }
 
-/** Etiqueta exibida abaixo do token (ex.: "Envenenado"). */
+/** Etiqueta exibida abaixo do token (ex.: "Envenenado", "Exaustão 2"). */
 export interface TokenTag {
   id: string;
   text: string;
   color: string;
+  /** Nível da condição (ex.: exaustão 2). Ausente ou 0 = sem nível. */
+  level?: number;
 }
 
 /** Visão do token (usada pela névoa de guerra). */

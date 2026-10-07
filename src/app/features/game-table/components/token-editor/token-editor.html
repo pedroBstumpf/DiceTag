@@ -126,6 +126,18 @@
           [value]="tag.text"
           (input)="updateTag(tag.id, { text: tagInput.value })"
         />
+        <!-- Nível (opcional) -->
+        <div class="flex shrink-0 items-center rounded-md bg-ink-950 ring-1 ring-white/10" matTooltip="Nível (0 = sem nível)">
+          <button type="button" class="grid size-7 place-items-center rounded-l-md text-slate-400 hover:bg-white/10 disabled:opacity-30" aria-label="Diminuir nível" [disabled]="!tag.level" (click)="stepTagLevel(tag, -1)">
+            <mat-icon class="!text-[16px]">remove</mat-icon>
+          </button>
+          <span class="w-9 text-center text-xs tabular-nums" [class]="tag.level ? 'font-semibold text-star-300' : 'text-slate-600'">
+            {{ tag.level ? 'Nv ' + tag.level : '—' }}
+          </span>
+          <button type="button" class="grid size-7 place-items-center rounded-r-md text-slate-400 hover:bg-white/10" aria-label="Aumentar nível" (click)="stepTagLevel(tag, 1)">
+            <mat-icon class="!text-[16px]">add</mat-icon>
+          </button>
+        </div>
         <button type="button" class="grid size-7 shrink-0 place-items-center rounded-md text-slate-500 hover:bg-red-500/15 hover:text-red-300" aria-label="Remover etiqueta" (click)="removeTag(tag.id)">
           <mat-icon class="!text-[16px]">close</mat-icon>
         </button>

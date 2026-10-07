@@ -102,6 +102,12 @@ export class TokenEditor {
     this.changed.emit({ tags: this.value().tags.map((t) => (t.id === id ? { ...t, ...patch } : t)) });
   }
 
+  /** Botões −/+ do nível da etiqueta (0 remove o nível). */
+  stepTagLevel(tag: TokenTag, delta: number): void {
+    const level = Math.max(0, (tag.level ?? 0) + delta);
+    this.updateTag(tag.id, { level: level || undefined });
+  }
+
   removeTag(id: string): void {
     this.changed.emit({ tags: this.value().tags.filter((t) => t.id !== id) });
   }
