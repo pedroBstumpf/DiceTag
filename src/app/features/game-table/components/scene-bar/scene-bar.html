@@ -127,7 +127,7 @@
       type="button"
       class="flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold transition-colors"
       [class]="session.isometric() ? 'bg-astral-500/25 text-astral-300 ring-1 ring-astral-400/40' : 'text-slate-300 hover:bg-white/10'"
-      [matTooltip]="session.isometric() ? 'Voltar para a vista de cima (2D)' : 'Vista isométrica: o mapa como uma mesa vista de lado'"
+      [matTooltip]="session.isometric() ? 'Voltar para a vista de cima (2D)' : 'Vista isométrica: o mapa como uma mesa vista de lado (libera as camadas do mapa)'"
       [attr.aria-pressed]="session.isometric()"
       (click)="session.toggleIsometric()"
     >

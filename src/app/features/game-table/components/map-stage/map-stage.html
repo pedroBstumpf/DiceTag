@@ -12,137 +12,184 @@
   (dragover)="onDragOver($event)"
   (drop)="onDrop($event)"
 >
-  <!-- "Mundo": tudo aqui dentro acompanha o zoom, a posição e a projeção (2D ou isométrica) do mapa -->
-  <div
-    class="absolute left-0 top-0 origin-top-left"
-    [class]="animating() ? 'transition-transform duration-500 ease-out' : ''"
-    [style.width.px]="world().w"
-    [style.height.px]="world().h"
-    [style.transform]="worldTransform()"
-  >
-    <!-- 1. Imagem do mapa ou fundo vazio -->
-    @if (src(); as url) {
-      <img
-        #img
-        [src]="url"
-        alt=""
-        draggable="false"
-        class="pointer-events-none absolute inset-0 max-w-none shadow-[0_0_80px_rgb(0_0_0/0.6)]"
-        (load)="onImageLoad(img)"
-      />
-    } @else {
-      <div class="absolute inset-0 rounded-sm border border-astral-300/10 bg-ink-900/70"></div>
-    }
-
-    <!-- 2. Grade -->
-    @if (scene()?.showGrid ?? true) {
-      <div
-        class="pointer-events-none absolute inset-0"
-        [style.background-size]="gridSize() + 'px ' + gridSize() + 'px'"
-        style="
-          background-image:
-            linear-gradient(to right, rgb(169 199 255 / 0.16) 1px, transparent 1px),
-            linear-gradient(to bottom, rgb(169 199 255 / 0.16) 1px, transparent 1px);
-        "
-      ></div>
-    }
-
-    <!-- 3. Desenhos -->
-    <app-drawings-layer [strokes]="session.drawings()" [draft]="strokeDraft()" [hidden]="erasing()" />
-
-    <!-- 4. Anotações (marcadores) -->
-    <app-notes-layer
-      [notes]="session.visibleNotes()"
-      [scale]="scale()"
-      [interactive]="notesInteractive()"
-      [activeId]="openNoteId()"
-      [upright]="upright()"
-      (noteDown)="onNoteDown($event)"
-    />
-
-    <!-- 5. Névoa de guerra -->
-    @if (session.fogEnabled()) {
-      <app-fog-layer
-        [width]="world().w"
-        [height]="world().h"
-        [polygons]="session.visionPolygons()"
-        [explored]="session.explored()"
-        [player]="session.playerFog()"
-      />
-    }
-
-    <!-- 6. Tokens visíveis -->
-    <app-tokens-layer
-      [tokens]="session.visibleTokens()"
-      [scale]="scale()"
-      [gridSize]="gridSize()"
-      [selectedId]="session.selectedTokenId()"
-      [interactive]="selecting()"
-      [upright]="upright()"
-      (tokenDown)="onTokenDown($event)"
-    />
-
-    <!-- 7. Portas (sempre visíveis; o jogador só vê as que algum token enxerga) -->
-    <app-doors-layer
-      [doors]="session.visibleDoors()"
-      [scale]="scale()"
-      [interactive]="selecting()"
-      [upright]="upright()"
-      (toggled)="session.toggleDoor($event)"
-    />
-
-    <!-- 7. Paredes (durante a ferramenta Névoa ou sempre, para o mestre) -->
-    @if (session.wallsVisible() || wallDraft()) {
-      <app-walls-layer
-        [walls]="session.walls()"
-        [draft]="wallDraft()"
-        [scale]="scale()"
-        [selectedId]="session.selectedWallId()"
-        [editing]="editingWalls()"
-      />
-    }
-
-    <!-- 8. Efeitos especiais (e a mira em andamento) -->
-    @if (session.effects().length || fxDraft()) {
-      <app-fx-layer
-        [effects]="session.effects()"
-        [draft]="fxDraft()"
-        [current]="fxCurrent()"
-        [scale]="scale()"
-        [upright]="uprightMat()"
-        [width]="world().w"
-        [height]="world().h"
-      />
-    }
-
-    <!-- 8. Régua -->
-    @if (ruler(); as r) {
-      <svg class="pointer-events-none absolute inset-0 overflow-visible" [attr.width]="world().w" [attr.height]="world().h">
-        <line
-          [attr.x1]="r.from.x"
-          [attr.y1]="r.from.y"
-          [attr.x2]="r.to.x"
-          [attr.y2]="r.to.y"
-          stroke="#a9c7ff"
-          [attr.stroke-width]="3 / scale()"
-          [attr.stroke-dasharray]="10 / scale() + ' ' + 6 / scale()"
+  <!--
+    Camadas do mapa, de baixo para cima. Cada uma é um "mundo" com a mesma vista
+    (zoom, posição e projeção 2D/isométrica). A camada em foco fica sempre no mesmo
+    lugar da tela e recebe as ferramentas; as de baixo descem e escurecem, as de
+    cima viram um contorno fantasma. Trocar de camada desliza a pilha (elevador).
+  -->
+  @for (plane of planes(); track plane.id) {
+    <div
+      class="absolute left-0 top-0 origin-top-left"
+      [class]="animating() ? 'transition-[transform,opacity,filter] duration-500 ease-out' : ''"
+      [class.pointer-events-none]="!plane.focused"
+      [style.width.px]="world().w"
+      [style.height.px]="world().h"
+      [style.transform]="planeTransform(plane.depth)"
+      [style.opacity]="planeOpacity(plane)"
+      [style.filter]="planeFilter(plane.depth)"
+      [style.visibility]="planeOpacity(plane) === 0 ? 'hidden' : null"
+    >
+      <!-- 1. Imagem da camada (térreo: mapa da cena) -->
+      @if (plane.index === 0) {
+        @if (src(); as url) {
+          <img
+            #img
+            [src]="url"
+            alt=""
+            draggable="false"
+            class="pointer-events-none absolute inset-0 size-full max-w-none shadow-[0_0_80px_rgb(0_0_0/0.6)]"
+            [class.invisible]="plane.depth < 0"
+            (load)="onImageLoad(img)"
+          />
+        } @else {
+          <div class="absolute inset-0 rounded-sm border border-astral-300/10 bg-ink-900/70" [class.invisible]="plane.depth < 0"></div>
+        }
+      } @else if (blobs.url(plane.blobId); as url) {
+        <img
+          [src]="url"
+          alt=""
+          draggable="false"
+          class="pointer-events-none absolute inset-0 size-full max-w-none object-fill shadow-[0_0_60px_rgb(0_0_0/0.55)]"
+          [class.invisible]="plane.depth < 0"
         />
-        <circle [attr.cx]="r.from.x" [attr.cy]="r.from.y" [attr.r]="5 / scale()" fill="#a9c7ff" />
-        <circle [attr.cx]="r.to.x" [attr.cy]="r.to.y" [attr.r]="5 / scale()" fill="#a9c7ff" />
-      </svg>
-    }
+      } @else if (plane.focused) {
+        <!-- Camada sem imagem = "ar": deixa ver a de baixo -->
+        <div class="absolute inset-0 border border-dashed border-astral-300/35 bg-astral-400/[0.04]"></div>
+      }
 
-    <!-- 8. Pings -->
-    @for (p of pings(); track p.id) {
-      <span
-        class="pointer-events-none absolute rounded-full border-4 border-astral-300 animate-ping-once"
-        [style.left.px]="p.x"
-        [style.top.px]="p.y"
-        [style.width.px]="90 / scale()"
-        [style.height.px]="90 / scale()"
-      ></span>
-    }
-  </div>
+      <!-- Contorno da camada logo acima da em foco (fantasma; mais fraco se ela for "ar") -->
+      @if (plane.depth === -1 && session.isometric()) {
+        <div class="absolute inset-0 border-2 border-dashed border-astral-300/60" [style.opacity]="plane.blobId ? null : 0.35"></div>
+      }
+
+      <!-- Sombras de tokens voando nas camadas de cima -->
+      @for (s of plane.shadows; track s.placement.id) {
+        @let px = s.size * gridSize();
+        <span
+          class="pointer-events-none absolute rounded-full bg-[radial-gradient(closest-side,rgb(0_0_0/0.55),rgb(0_0_0/0.25)_60%,transparent)]"
+          [style.left.px]="s.placement.x - px / 2"
+          [style.top.px]="s.placement.y - px / 2"
+          [style.width.px]="px"
+          [style.height.px]="px"
+        ></span>
+      }
+
+      @if (plane.focused) {
+        <!-- 2. Grade -->
+        @if (scene()?.showGrid ?? true) {
+          <div
+            class="pointer-events-none absolute inset-0"
+            [style.background-size]="gridSize() + 'px ' + gridSize() + 'px'"
+            style="
+              background-image:
+                linear-gradient(to right, rgb(169 199 255 / 0.16) 1px, transparent 1px),
+                linear-gradient(to bottom, rgb(169 199 255 / 0.16) 1px, transparent 1px);
+            "
+          ></div>
+        }
+
+        <!-- 3. Desenhos -->
+        <app-drawings-layer [strokes]="session.drawings()" [draft]="strokeDraft()" [hidden]="erasing()" />
+
+        <!-- 4. Anotações (marcadores) -->
+        <app-notes-layer
+          [notes]="session.visibleNotes()"
+          [scale]="scale()"
+          [interactive]="notesInteractive()"
+          [activeId]="openNoteId()"
+          [upright]="upright()"
+          (noteDown)="onNoteDown($event)"
+        />
+
+        <!-- 5. Névoa de guerra -->
+        @if (session.fogEnabled()) {
+          <app-fog-layer
+            [width]="world().w"
+            [height]="world().h"
+            [polygons]="session.visionPolygons()"
+            [explored]="session.explored()"
+            [player]="session.playerFog()"
+          />
+        }
+
+        <!-- 6. Tokens visíveis (da camada em foco) -->
+        <app-tokens-layer
+          [tokens]="session.visibleTokens()"
+          [scale]="scale()"
+          [gridSize]="gridSize()"
+          [selectedId]="session.selectedTokenId()"
+          [interactive]="selecting()"
+          [upright]="upright()"
+          (tokenDown)="onTokenDown($event)"
+        />
+
+        <!-- 7. Portas (sempre visíveis; o jogador só vê as que algum token enxerga) -->
+        <app-doors-layer
+          [doors]="session.visibleDoors()"
+          [scale]="scale()"
+          [interactive]="selecting()"
+          [upright]="upright()"
+          (toggled)="session.toggleDoor($event)"
+        />
+
+        <!-- 7. Paredes (durante a ferramenta Névoa ou sempre, para o mestre) -->
+        @if (session.wallsVisible() || wallDraft()) {
+          <app-walls-layer
+            [walls]="session.walls()"
+            [draft]="wallDraft()"
+            [scale]="scale()"
+            [selectedId]="session.selectedWallId()"
+            [editing]="editingWalls()"
+          />
+        }
+
+        <!-- 8. Efeitos especiais (e a mira em andamento) -->
+        @if (session.effects().length || fxDraft()) {
+          <app-fx-layer
+            [effects]="session.effects()"
+            [draft]="fxDraft()"
+            [current]="fxCurrent()"
+            [scale]="scale()"
+            [upright]="uprightMat()"
+            [width]="world().w"
+            [height]="world().h"
+          />
+        }
+
+        <!-- 8. Régua -->
+        @if (ruler(); as r) {
+          <svg class="pointer-events-none absolute inset-0 overflow-visible" [attr.width]="world().w" [attr.height]="world().h">
+            <line
+              [attr.x1]="r.from.x"
+              [attr.y1]="r.from.y"
+              [attr.x2]="r.to.x"
+              [attr.y2]="r.to.y"
+              stroke="#a9c7ff"
+              [attr.stroke-width]="3 / scale()"
+              [attr.stroke-dasharray]="10 / scale() + ' ' + 6 / scale()"
+            />
+            <circle [attr.cx]="r.from.x" [attr.cy]="r.from.y" [attr.r]="5 / scale()" fill="#a9c7ff" />
+            <circle [attr.cx]="r.to.x" [attr.cy]="r.to.y" [attr.r]="5 / scale()" fill="#a9c7ff" />
+          </svg>
+        }
+
+        <!-- 8. Pings -->
+        @for (p of pings(); track p.id) {
+          <span
+            class="pointer-events-none absolute rounded-full border-4 border-astral-300 animate-ping-once"
+            [style.left.px]="p.x"
+            [style.top.px]="p.y"
+            [style.width.px]="90 / scale()"
+            [style.height.px]="90 / scale()"
+          ></span>
+        }
+      } @else {
+        <!-- Tokens das outras camadas (só exibição) -->
+        <app-tokens-layer [tokens]="plane.tokens" [scale]="scale()" [gridSize]="gridSize()" [upright]="upright()" />
+      }
+    </div>
+  }
 
   <!-- 9. Interface: rótulo da régua (fora do mundo: sempre reto, na tela) -->
   @if (rulerLabelPos(); as pos) {
@@ -170,6 +217,23 @@
         <strong class="text-star-300">{{ armed.action }}</strong>
         arraste no mapa para lançar o efeito · Esc cancela
       </div>
+    </div>
+  }
+
+  <!-- 9. Interface: camada em foco (quando a cena tem mais de uma) -->
+  @if (session.levelCount() > 1 && session.isometric()) {
+    @let level = session.mapLevels()[session.currentLevel()];
+    <div class="pointer-events-none absolute bottom-28 left-1/2 -translate-x-1/2">
+      @if (level) {
+        <div class="glass flex items-center gap-2 rounded-full px-3 py-1 text-xs text-slate-300 animate-fade-in">
+          <mat-icon class="!size-4 !text-[16px] text-astral-300">layers</mat-icon>
+          <span class="font-display text-star-300">{{ level.name }}</span>
+          <span class="text-slate-500">{{ session.currentLevel() + 1 }}/{{ session.levelCount() }}</span>
+          @if (session.role() === 'gm' && session.currentLevel() !== session.playerLevel()) {
+            <span class="text-amber-300/80">· jogadores na {{ session.playerLevel() + 1 }}</span>
+          }
+        </div>
+      }
     </div>
   }
 

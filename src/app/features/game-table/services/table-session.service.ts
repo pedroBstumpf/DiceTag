@@ -12,6 +12,8 @@ import {
   DoorWall,
   FxStyle,
   MAX_CHAT_MESSAGES,
+  MAX_MAP_LEVELS,
+  MapLevel,
   SceneFolder,
   RollResult,
   LoreFolder,
@@ -120,7 +122,21 @@ const NO_WALLS: Wall[] = [];
 const NO_STROKES: Stroke[] = [];
 const NO_NOTES: MapNote[] = [];
 const NO_MESSAGES: ChatMessage[] = [];
+const NO_RESOLVED: ResolvedToken[] = [];
 const NO_FOLDERS: SceneFolder[] = [];
+
+/** Camada do mapa como a interface a exibe (0 = térreo, com o mapa da cena). */
+export interface LevelView {
+  id: string;
+  index: number;
+  name: string;
+  blobId?: string;
+}
+
+/** Camada de um token (tokens antigos ficam no térreo). */
+export function levelOf(placement: TokenPlacement): number {
+  return placement.level ?? 0;
+}
 
 /**
  * Estado da mesa aberta: cenas, arquivos (fichas, sons, automações),
@@ -150,8 +166,29 @@ export class TableSessionService {
   /** Organização da aba Lore nesta mesa (pastas e ajustes locais). */
   readonly lore = computed(() => this.state().lore ?? EMPTY_LORE);
 
+  // --- Vista isométrica e camadas do mapa (cena ativa) ---------------------
+
   /** Vista isométrica da cena ativa (mapa e tokens como numa mesa vista de lado). */
   readonly isometric = computed(() => this.activeScene()?.isometric ?? false);
+  /** Camadas da cena: o térreo (mapa da cena) + as de cima, de baixo para cima. */
+  readonly mapLevels = computed<LevelView[]>(() => {
+    const scene = this.activeScene();
+    if (!scene) return [];
+    return [
+      { id: 'ground', index: 0, name: 'Térreo', blobId: scene.blobId },
+      ...(scene.levels ?? []).map((l, i) => ({ id: l.id, index: i + 1, name: l.name, blobId: l.blobId })),
+    ];
+  });
+  readonly levelCount = computed(() => Math.max(1, this.mapLevels().length));
+  /** Camada que os jogadores veem. */
+  readonly playerLevel = computed(() => this.clampLevel(this.activeScene()?.playerLevel ?? 0));
+  /** Camada que o mestre está olhando (só nesta sessão; começa na dos jogadores). */
+  private readonly gmLevel = signal(0);
+  /** Camada em foco na tela: o jogador vê sempre a camada liberada pelo mestre. */
+  readonly currentLevel = computed(() => (this.role() === 'player' ? this.playerLevel() : this.clampLevel(this.gmLevel())));
+  /** Painel de camadas aberto (barra de ferramentas). */
+  readonly levelsOpen = signal(false);
+  private readonly activeSceneId = computed(() => this.state().activeSceneId);
 
   /** Tokens colocados na cena ativa (mesma referência enquanto não mudam). */
   readonly tokens = computed(() => this.activeScene()?.tokens ?? NO_TOKENS);
@@ -192,8 +229,10 @@ export class TableSessionService {
   private readonly visionSources = computed(
     () => {
       const grid = this.activeScene()?.gridSize ?? 70;
+      const level = this.currentLevel();
+      // A névoa fica na camada em foco: enxergam os tokens dela
       return this.resolvedTokens()
-        .filter((t) => t.vision.enabled)
+        .filter((t) => t.vision.enabled && levelOf(t.placement) === level)
         .map((t) => ({ x: t.placement.x, y: t.placement.y, range: (t.vision.range / METERS_PER_SQUARE) * grid }));
     },
     { equal: (a, b) => a.length === b.length && a.every((s, i) => s.x === b[i].x && s.y === b[i].y && s.range === b[i].range) },
@@ -239,13 +278,26 @@ export class TableSessionService {
   /** Visão de jogador com névoa: a área fora da visão fica escondida. */
   readonly playerFog = computed(() => this.fogEnabled() && this.role() === 'player');
 
-  /** Tokens exibidos: na visão de jogador com névoa, só os visíveis (personagens sempre aparecem). */
-  readonly visibleTokens = computed(() => {
-    const tokens = this.resolvedTokens();
-    if (!this.playerFog()) return tokens;
-    const polys = this.visionPolygons();
-    return tokens.filter((t) => t.entry.kind === 'character' || this.isVisible(t.placement, polys));
+  /**
+   * Tokens exibidos, por camada: na visão de jogador com névoa, só os visíveis
+   * (personagens sempre aparecem).
+   */
+  readonly tokensByLevel = computed(() => {
+    let tokens = this.resolvedTokens();
+    if (this.playerFog()) {
+      const polys = this.visionPolygons();
+      tokens = tokens.filter((t) => t.entry.kind === 'character' || this.isVisible(t.placement, polys));
+    }
+    const byLevel = new Map<number, ResolvedToken[]>();
+    for (const t of tokens) {
+      const level = this.clampLevel(levelOf(t.placement));
+      byLevel.set(level, [...(byLevel.get(level) ?? []), t]);
+    }
+    return byLevel;
   });
+
+  /** Tokens exibidos na camada em foco (interativos). */
+  readonly visibleTokens = computed(() => this.tokensByLevel().get(this.currentLevel()) ?? NO_RESOLVED);
 
   // --- Estado da sessão (não persistido) -----------------------------------
   readonly tool = signal<TableTool>('select');
@@ -410,6 +462,12 @@ export class TableSessionService {
     effect(() => {
       if (this.tool() !== 'fx') untracked(() => this.armedFx.set(null));
     });
+
+    // Ao abrir outra cena, o mestre começa olhando a camada dos jogadores
+    effect(() => {
+      this.activeSceneId();
+      untracked(() => this.gmLevel.set(this.activeScene()?.playerLevel ?? 0));
+    });
   }
 
   // --- Carregamento --------------------------------------------------------
@@ -466,7 +524,7 @@ export class TableSessionService {
     this.selectedTokenId.set(null);
   }
 
-  /** Exclui a cena e apaga o arquivo do mapa dela. */
+  /** Exclui a cena e apaga os arquivos dos mapas dela (térreo e camadas). */
   removeScene(id: string): void {
     const scene = this.scenes().find((s) => s.id === id);
     this.patchState((s) => {
@@ -474,13 +532,17 @@ export class TableSessionService {
       const activeSceneId = s.activeSceneId === id ? (scenes[0]?.id ?? null) : s.activeSceneId;
       return { ...s, scenes, activeSceneId };
     });
-    if (scene?.blobId) this.storage.delete(`blob:${scene.blobId}`);
+    for (const blobId of [scene?.blobId, ...(scene?.levels ?? []).map((l) => l.blobId)]) {
+      if (blobId) this.storage.delete(`blob:${blobId}`);
+    }
   }
 
   /** Liga/desliga a vista isométrica da cena ativa. */
   toggleIsometric(): void {
     const scene = this.activeScene();
-    if (scene) this.updateScene(scene.id, { isometric: !scene.isometric });
+    if (!scene) return;
+    this.updateScene(scene.id, { isometric: !scene.isometric });
+    if (scene.isometric) this.levelsOpen.set(false);
   }
 
   // --- Pastas de cenas -----------------------------------------------------
@@ -515,6 +577,94 @@ export class TableSessionService {
   /** Move a cena para uma pasta (null = fora de pastas). */
   moveSceneToFolder(sceneId: string, folderId: string | null): void {
     this.updateScene(sceneId, { folderId: folderId ?? undefined });
+  }
+
+  // --- Camadas do mapa -----------------------------------------------------
+
+  /** Mestre: passa a olhar outra camada (a seleção sai se o token não estiver nela). */
+  viewLevel(level: number): void {
+    const target = this.clampLevel(level);
+    this.gmLevel.set(target);
+    const selected = this.selectedTokenId();
+    const token = selected ? this.findPlacement(selected) : undefined;
+    if (token && levelOf(token) !== target) this.selectedTokenId.set(null);
+  }
+
+  /** Cria uma camada vazia ("ar") no topo e passa a olhá-la. */
+  addLevel(): void {
+    const scene = this.activeScene();
+    if (!scene || this.levelCount() >= MAX_MAP_LEVELS) return;
+    const level: MapLevel = { id: newId(), name: `Camada ${this.levelCount() + 1}` };
+    this.updateScene(scene.id, { levels: [...(scene.levels ?? []), level] });
+    this.viewLevel(this.levelCount() - 1);
+  }
+
+  renameLevel(index: number, name: string): void {
+    const scene = this.activeScene();
+    const trimmed = name.trim();
+    if (!scene || index < 1 || !trimmed) return;
+    this.updateScene(scene.id, { levels: (scene.levels ?? []).map((l, i) => (i === index - 1 ? { ...l, name: trimmed } : l)) });
+  }
+
+  /** Envia (ou troca) a imagem de uma camada. O térreo usa o mapa da cena. */
+  async setLevelImage(index: number, file: File): Promise<void> {
+    const scene = this.activeScene();
+    if (!scene) return;
+    if (index === 0) return this.setSceneMap(scene.id, file);
+    const old = scene.levels?.[index - 1]?.blobId;
+    const blobId = newId();
+    await this.storage.set(`blob:${blobId}`, file);
+    this.patchLevel(scene.id, index, { blobId });
+    if (old) this.storage.delete(`blob:${old}`);
+  }
+
+  /** Tira a imagem de uma camada de cima: ela vira "ar" (mostra a de baixo). */
+  clearLevelImage(index: number): void {
+    const scene = this.activeScene();
+    const old = scene?.levels?.[index - 1]?.blobId;
+    if (!scene || index < 1 || !old) return;
+    this.patchLevel(scene.id, index, { blobId: undefined });
+    this.storage.delete(`blob:${old}`);
+  }
+
+  /** Exclui uma camada de cima; os tokens dela descem uma camada. */
+  removeLevel(index: number): void {
+    const scene = this.activeScene();
+    const level = scene?.levels?.[index - 1];
+    if (!scene || index < 1 || !level) return;
+    const shift = (n: number) => (n >= index ? n - 1 : n);
+    this.updateScene(scene.id, {
+      levels: (scene.levels ?? []).filter((l) => l.id !== level.id),
+      tokens: (scene.tokens ?? []).map((t) => (levelOf(t) >= index ? { ...t, level: levelOf(t) - 1 } : t)),
+      playerLevel: shift(scene.playerLevel ?? 0),
+    });
+    this.gmLevel.update(shift);
+    if (level.blobId) this.storage.delete(`blob:${level.blobId}`);
+  }
+
+  /** Libera uma camada para os jogadores (é a que eles passam a ver). */
+  showLevelToPlayers(index: number): void {
+    const scene = this.activeScene();
+    if (scene) this.updateScene(scene.id, { playerLevel: this.clampLevel(index) });
+  }
+
+  /** Sobe/desce um token de camada; se for o selecionado, a vista do mestre o acompanha. */
+  moveTokenLevel(placementId: string, delta: number): void {
+    const placement = this.findPlacement(placementId);
+    if (!placement) return;
+    const target = this.clampLevel(levelOf(placement) + delta);
+    if (target === levelOf(placement)) return;
+    this.patchPlacement(placementId, { level: target });
+    if (this.selectedTokenId() === placementId && this.role() === 'gm') this.gmLevel.set(target);
+  }
+
+  private patchLevel(sceneId: string, index: number, patch: Partial<MapLevel>): void {
+    const scene = this.scenes().find((s) => s.id === sceneId);
+    if (scene) this.updateScene(sceneId, { levels: (scene.levels ?? []).map((l, i) => (i === index - 1 ? { ...l, ...patch } : l)) });
+  }
+
+  private clampLevel(level: number): number {
+    return Math.min(Math.max(0, Math.round(level)), this.levelCount() - 1);
   }
 
   // --- Arquivos da mesa ----------------------------------------------------
@@ -741,6 +891,8 @@ export class TableSessionService {
       entryId,
       x: p.x,
       y: p.y,
+      // Entra na camada em foco
+      ...(this.currentLevel() > 0 && { level: this.currentLevel() }),
       // NPC: cada token colocado é independente (cópia da ficha)
       ...(entry.kind === 'npc' && {
         size: sheet.size,

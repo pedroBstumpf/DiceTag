@@ -5,7 +5,8 @@ import { Point } from '../../../../core/models/geometry.model';
 import { METERS_PER_SQUARE, Wall } from '../../../../core/models/table-session.model';
 import { newId } from '../../../../core/utils/id';
 import { Viewport, fitRect, zoomAt } from '../../../../shared/utils/viewport';
-import { TableSessionService } from '../../services/table-session.service';
+import { BlobUrlService } from '../../services/blob-url.service';
+import { ResolvedToken, TableSessionService } from '../../services/table-session.service';
 import { distanceToPolyline, sizeFromHandle, snapToCorner, snapTokenCenter } from '../../utils/geometry';
 import { isRadialFx } from '../../utils/effects';
 import { IDENTITY, Mat2, apply, invert, isoMatrix, matrixCss, project, projectedBounds, unproject, uprightMatrix, viewCss } from '../../utils/projection';
@@ -66,8 +67,24 @@ const FX_CLICK_RADIUS = 1.5;
 
 /** Matriz da vista isométrica (referência fixa: comparada por identidade). */
 const ISO = isoMatrix();
-/** Duração da animação de troca de vista (ms). */
+/** Distância vertical entre camadas do mapa na vista isométrica, em quadrados da grade. */
+const LEVEL_GAP_SQUARES = 3;
+/** Duração da animação de troca de camada / de vista (ms). */
 const VIEW_ANIMATION_MS = 550;
+
+/** Camada do mapa como o MapStage a desenha. */
+interface Plane {
+  id: string;
+  index: number;
+  blobId?: string;
+  /** Distância até a camada em foco: > 0 abaixo, < 0 acima, 0 = em foco. */
+  depth: number;
+  focused: boolean;
+  /** Tokens desta camada (só exibição; os da camada em foco são interativos). */
+  tokens: ResolvedToken[];
+  /** Sombras de tokens voando nas camadas de cima, projetadas nesta. */
+  shadows: ResolvedToken[];
+}
 
 /**
  * Mapa central da mesa — orquestrador das camadas.
@@ -89,6 +106,7 @@ const VIEW_ANIMATION_MS = 550;
 })
 export class MapStage {
   readonly session = inject(TableSessionService);
+  readonly blobs = inject(BlobUrlService);
 
   /** Espaço reservado pelas barras (para centralizar o mapa na área livre). */
   readonly insets = input({ top: 0, right: 0, bottom: 0, left: 0 });
@@ -103,19 +121,71 @@ export class MapStage {
   readonly src = signal<string | null>(null);
   readonly world = signal(EMPTY_WORLD);
 
-  // --- Projeção (2D ou isométrica) -----------------------------------------
+  // --- Projeção (2D ou isométrica) e camadas -------------------------------
   /** Matriz da vista: isométrica ou 2D (identidade). */
   readonly matrix = computed<Mat2>(() => (this.session.isometric() ? ISO : IDENTITY));
   /** Deixa um elemento do mundo "em pé" (tokens, marcadores, botões): matriz e CSS. */
   readonly uprightMat = computed(() => uprightMatrix(this.matrix()));
   readonly upright = computed(() => matrixCss(this.uprightMat()));
-  /** Transição ligada só durante a troca de vista (pan e zoom ficam instantâneos). */
+  /** Transições ligadas só durante a troca de camada/vista (pan e zoom ficam instantâneos). */
   readonly animating = signal(false);
   private animationTimer?: ReturnType<typeof setTimeout>;
   /** Cena + mapa já enquadrados (recarregar a imagem não reenquadra). */
   private fittedKey = '';
-  /** Transformação do "mundo": vista + projeção. */
-  readonly worldTransform = computed(() => viewCss(this.view(), this.matrix()));
+
+  /** Camadas do mapa, de baixo para cima, com a distância até a camada em foco. */
+  readonly planes = computed<Plane[]>(() => {
+    const current = this.session.currentLevel();
+    const byLevel = this.session.tokensByLevel();
+    const levels = this.session.mapLevels();
+    const list = levels.length ? levels : [{ id: 'ground', index: 0, name: '', blobId: undefined }];
+    // Tokens voando projetam sombra no "chão" mais próximo abaixo (camada com imagem ou térreo)
+    const shadows = new Map<number, ResolvedToken[]>();
+    if (this.session.isometric()) {
+      for (const [level, tokens] of byLevel) {
+        if (level === 0) continue;
+        let ground = 0;
+        for (let j = level - 1; j > 0; j--) {
+          if (list[j]?.blobId) {
+            ground = j;
+            break;
+          }
+        }
+        shadows.set(ground, [...(shadows.get(ground) ?? []), ...tokens]);
+      }
+    }
+    return list.map((l) => ({
+      id: l.id,
+      index: l.index,
+      blobId: l.blobId,
+      depth: current - l.index,
+      focused: l.index === current,
+      // Camadas acima com mapa mostram só o contorno; as sem mapa ("ar") mostram quem voa nelas
+      tokens: l.index < current || (l.index > current && !l.blobId) ? (byLevel.get(l.index) ?? []) : [],
+      shadows: shadows.get(l.index) ?? [],
+    }));
+  });
+
+  /** Transformação de uma camada: a vista + o deslocamento vertical da pilha (só na isométrica). */
+  planeTransform(depth: number): string {
+    const lift = this.session.isometric() ? depth * LEVEL_GAP_SQUARES * this.gridSize() * this.scale() : 0;
+    return viewCss(this.view(), this.matrix(), lift);
+  }
+
+  /**
+   * Camadas acima da em foco: as sem mapa ("ar") aparecem inteiras (só têm tokens voando);
+   * as com mapa mostram só o contorno da logo acima, na isométrica, e somem na 2D.
+   */
+  planeOpacity(plane: Plane): number {
+    if (plane.depth >= 0 || !plane.blobId) return 1;
+    return this.session.isometric() && plane.depth === -1 ? 0.35 : 0;
+  }
+
+  /** Camadas abaixo da em foco ficam mais escuras conforme a profundidade. */
+  planeFilter(depth: number): string | null {
+    if (depth <= 0) return null;
+    return `brightness(${Math.max(0.3, 0.7 - 0.15 * (depth - 1))}) saturate(0.75)`;
+  }
 
   // --- Interações ----------------------------------------------------------
   readonly panning = signal(false);
@@ -230,15 +300,13 @@ export class MapStage {
       this.fxDraft.set(null);
     });
 
-    // Na mesma cena, trocar 2D ↔ isométrica anima e reenquadra
-    let prev = { scene: undefined as string | undefined, iso: false };
+    // Na mesma cena: trocar de camada anima a pilha; trocar 2D ↔ isométrica anima e reenquadra
+    let prev = { scene: undefined as string | undefined, level: 0, iso: false };
     effect(() => {
-      const next = { scene: this.sceneId(), iso: this.session.isometric() };
+      const next = { scene: this.sceneId(), level: this.session.currentLevel(), iso: this.session.isometric() };
       untracked(() => {
-        if (next.scene === prev.scene && next.iso !== prev.iso) {
-          this.animate();
-          this.fit();
-        }
+        if (next.scene === prev.scene && (next.level !== prev.level || next.iso !== prev.iso)) this.animate();
+        if (next.scene === prev.scene && next.iso !== prev.iso) this.fit();
         prev = next;
       });
     });
@@ -257,7 +325,7 @@ export class MapStage {
     }
   }
 
-  /** Liga as transições por um instante (troca de vista). */
+  /** Liga as transições por um instante (troca de camada ou de vista). */
   private animate(): void {
     this.animating.set(true);
     clearTimeout(this.animationTimer);
@@ -605,6 +673,16 @@ export class MapStage {
   handleKey(event: KeyboardEvent): boolean {
     if (event.key === 'Escape' && this.openNoteId()) {
       this.openNoteId.set(null);
+      return true;
+    }
+
+    // Camadas (mestre, vista isométrica): PageUp/PageDown sobem/descem o token selecionado
+    // (a vista o acompanha) ou, sem seleção, a camada em foco
+    if ((event.key === 'PageUp' || event.key === 'PageDown') && this.session.role() === 'gm' && this.session.isometric()) {
+      const delta = event.key === 'PageUp' ? 1 : -1;
+      const selected = this.session.selectedTokenId();
+      if (selected) this.session.moveTokenLevel(selected, delta);
+      else this.session.viewLevel(this.session.currentLevel() + delta);
       return true;
     }
 

@@ -31,7 +31,24 @@ export interface Scene {
   folderId?: string;
   /** Vista isométrica (mapa e tokens como numa mesa vista de lado). Padrão: false. */
   isometric?: boolean;
+  /**
+   * Camadas do mapa ACIMA do térreo (andares, céu…), de baixo para cima. O térreo é a
+   * camada 0 e usa o mapa da cena (`blobId`). Máximo: MAX_MAP_LEVELS no total. Padrão: [].
+   */
+  levels?: MapLevel[];
+  /** Camada que os jogadores veem (0 = térreo). Padrão: 0. */
+  playerLevel?: number;
 }
+
+/** Camada do mapa acima do térreo. Sem imagem = "ar": mostra a camada de baixo (tokens voando). */
+export interface MapLevel {
+  id: string;
+  name: string;
+  blobId?: string;
+}
+
+/** Máximo de camadas numa cena (térreo + 4). */
+export const MAX_MAP_LEVELS = 5;
 
 /** Pasta da barra de cenas. */
 export interface SceneFolder {
@@ -393,6 +410,8 @@ export interface TokenPlacement {
   entryId: string;
   x: number;
   y: number;
+  /** Camada do mapa onde o token está (0 = térreo). Padrão: 0. */
+  level?: number;
   size?: number;
   bars?: TokenBar[];
   tags?: TokenTag[];

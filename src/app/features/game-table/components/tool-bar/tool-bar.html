@@ -23,6 +23,27 @@
 
   <span class="my-1 h-px w-7 bg-white/10"></span>
 
+  <!-- Camadas do mapa (mestre, vista isométrica) -->
+  @if (session.role() === 'gm' && session.isometric()) {
+    <button
+      type="button"
+      class="relative grid size-10 place-items-center rounded-lg transition-colors"
+      [class]="session.levelsOpen() ? 'bg-astral-500/25 text-astral-300 ring-1 ring-astral-400/40' : 'text-slate-300 hover:bg-white/10 hover:text-white'"
+      matTooltip="Camadas do mapa (PageUp/PageDown)"
+      matTooltipPosition="right"
+      aria-label="Camadas do mapa"
+      [attr.aria-pressed]="session.levelsOpen()"
+      (click)="session.levelsOpen.set(!session.levelsOpen())"
+    >
+      <mat-icon>layers</mat-icon>
+      @if (session.levelCount() > 1) {
+        <span class="absolute bottom-0.5 right-0.5 grid size-4 place-items-center rounded-full bg-astral-500 text-[9px] font-bold text-white">
+          {{ session.currentLevel() + 1 }}
+        </span>
+      }
+    </button>
+  }
+
   <!-- Grade e zoom -->
   <button
     type="button"
@@ -52,18 +73,23 @@
   </button>
 </nav>
 
-<!-- Submenus das ferramentas (ao lado da barra) -->
-@switch (session.tool()) {
-  @case ('draw') {
-    <app-draw-menu class="absolute left-full top-0 ml-2 animate-fade-in" />
-  }
-  @case ('fog') {
-    <app-fog-menu class="absolute left-full top-0 ml-2 animate-fade-in" />
-  }
-  @case ('fx') {
-    <!-- Com o efeito de uma ação na mão, o submenu some (a ação já definiu forma e cor) -->
-    @if (!session.armedFx()) {
-      <app-fx-menu class="absolute left-full top-0 ml-2 animate-fade-in" />
+<!-- Submenus (ao lado da barra): o da ferramenta ativa e, se aberto, o de camadas -->
+<div class="pointer-events-none absolute left-full top-0 ml-2 flex items-start gap-2 [&>*]:pointer-events-auto">
+  @switch (session.tool()) {
+    @case ('draw') {
+      <app-draw-menu class="animate-fade-in" />
+    }
+    @case ('fog') {
+      <app-fog-menu class="animate-fade-in" />
+    }
+    @case ('fx') {
+      <!-- Com o efeito de uma ação na mão, o submenu some (a ação já definiu forma e cor) -->
+      @if (!session.armedFx()) {
+        <app-fx-menu class="animate-fade-in" />
+      }
     }
   }
-}
+  @if (session.levelsOpen() && session.role() === 'gm' && session.isometric()) {
+    <app-levels-menu class="animate-fade-in" />
+  }
+</div>
