@@ -108,6 +108,11 @@
       <mat-icon>image</mat-icon>
       <span>{{ scene.blobId ? 'Trocar mapa' : 'Adicionar mapa' }}</span>
     </button>
+    <!-- Sem grade, tokens e paredes se movem livres -->
+    <button mat-menu-item (click)="session.updateScene(scene.id, { showGrid: !scene.showGrid })">
+      <mat-icon>{{ scene.showGrid ? 'grid_off' : 'grid_on' }}</mat-icon>
+      <span>{{ scene.showGrid ? 'Remover grade (movimento livre)' : 'Mostrar grade' }}</span>
+    </button>
     <!-- Tamanho da grade: ajusta sem fechar o menu -->
     <div class="flex items-center gap-2 px-4 py-2 text-sm text-slate-300" (click)="$event.stopPropagation()">
       <mat-icon class="!text-slate-400">grid_4x4</mat-icon>

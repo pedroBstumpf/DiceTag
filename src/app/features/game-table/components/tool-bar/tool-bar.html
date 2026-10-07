@@ -29,7 +29,7 @@
     class="grid size-10 place-items-center rounded-lg text-slate-300 transition-colors hover:bg-white/10 hover:text-white disabled:text-slate-600"
     [class.!text-astral-300]="session.activeScene()?.showGrid"
     [disabled]="!session.activeScene()"
-    matTooltip="Mostrar/ocultar grade (G)"
+    [matTooltip]="session.activeScene()?.showGrid ? 'Remover grade: tokens e paredes se movem livres (G)' : 'Mostrar grade e alinhar a ela (G)'"
     matTooltipPosition="right"
     (click)="toggleGrid()"
   >
@@ -51,3 +51,13 @@
     <mat-icon>left_panel_close</mat-icon>
   </button>
 </nav>
+
+<!-- Submenus das ferramentas (ao lado da barra) -->
+@switch (session.tool()) {
+  @case ('draw') {
+    <app-draw-menu class="absolute left-full top-0 ml-2 animate-fade-in" />
+  }
+  @case ('fog') {
+    <app-fog-menu class="absolute left-full top-0 ml-2 animate-fade-in" />
+  }
+}

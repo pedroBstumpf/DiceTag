@@ -1,0 +1,149 @@
+@let v = value();
+
+<!-- ===== Tamanho ===== -->
+<section>
+  <h4 class="mb-2 text-xs text-slate-400">Tamanho (quadrados)</h4>
+  <div class="flex flex-wrap items-center gap-1.5">
+    @for (size of sizes; track size) {
+      <button
+        type="button"
+        class="h-8 min-w-10 rounded-md px-2 text-sm font-semibold transition-colors"
+        [class]="v.size === size ? 'bg-astral-500/25 text-astral-300 ring-1 ring-astral-400/50' : 'bg-white/5 text-slate-300 hover:bg-white/10'"
+        (click)="setSize(size)"
+      >
+        {{ size === 0.5 ? '½' : size }}
+      </button>
+    }
+    @if (!isPresetSize(v.size)) {
+      <span class="text-xs text-slate-500">atual: {{ v.size }} (ajustado no mapa)</span>
+    }
+  </div>
+</section>
+
+<!-- ===== Visão ===== -->
+<section>
+  <h4 class="mb-2 text-xs text-slate-400">Visão (névoa de guerra)</h4>
+  <div class="flex flex-wrap items-center gap-3">
+    <button
+      type="button"
+      role="switch"
+      class="flex items-center gap-2 text-sm text-slate-200"
+      [attr.aria-checked]="v.vision.enabled"
+      (click)="toggleVision()"
+    >
+      <span class="relative h-5 w-9 rounded-full transition-colors" [class]="v.vision.enabled ? 'bg-astral-500' : 'bg-ink-600'">
+        <span class="absolute top-0.5 size-4 rounded-full bg-white transition-all" [class]="v.vision.enabled ? 'left-[18px]' : 'left-0.5'"></span>
+      </span>
+      {{ v.vision.enabled ? 'Enxerga' : 'Sem visão' }}
+    </button>
+    @if (v.vision.enabled) {
+      <label class="flex items-center gap-1.5 text-sm text-slate-300">
+        Alcance
+        <input
+          #rangeInput
+          type="number"
+          min="0"
+          [step]="metersPerSquare"
+          class="h-8 w-20 rounded-md bg-ink-950 px-2 text-right text-slate-100 outline-none ring-1 ring-white/10 focus:ring-astral-500/60"
+          [value]="v.vision.range"
+          (input)="setRange(rangeInput.value)"
+        />
+        m
+        <span class="text-xs text-slate-500">({{ squares(v.vision.range) }} quad.)</span>
+      </label>
+    }
+  </div>
+</section>
+
+<!-- ===== Barras ===== -->
+<section>
+  <div class="mb-2 flex items-center justify-between">
+    <h4 class="text-xs text-slate-400">Barras</h4>
+    <button type="button" class="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-astral-300 hover:bg-white/5" (click)="addBar()">
+      <mat-icon class="!size-4 !text-[16px]">add</mat-icon>
+      Barra
+    </button>
+  </div>
+  @for (bar of v.bars; track bar.id) {
+    <div class="mb-1.5 flex items-center gap-1.5">
+      <app-color-picker [value]="bar.color" [palette]="colors" label="Cor da barra" (picked)="updateBar(bar.id, { color: $event })" />
+      <input
+        #labelInput
+        class="h-8 w-16 min-w-0 rounded-md bg-ink-950 px-2 text-sm text-slate-100 outline-none ring-1 ring-white/10 focus:ring-astral-500/60"
+        placeholder="Rótulo"
+        [value]="bar.label"
+        (input)="updateBar(bar.id, { label: labelInput.value })"
+      />
+      <button type="button" class="grid size-7 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-white/10" aria-label="Diminuir" (click)="stepBar(bar, -1)">
+        <mat-icon class="!text-[16px]">remove</mat-icon>
+      </button>
+      <input
+        #valueInput
+        type="number"
+        class="h-8 w-14 min-w-0 rounded-md bg-ink-950 px-1.5 text-right text-sm text-slate-100 outline-none ring-1 ring-white/10 focus:ring-astral-500/60"
+        aria-label="Valor"
+        [value]="bar.value"
+        (input)="setBarNumber(bar, 'value', valueInput.value)"
+      />
+      <button type="button" class="grid size-7 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-white/10" aria-label="Aumentar" (click)="stepBar(bar, 1)">
+        <mat-icon class="!text-[16px]">add</mat-icon>
+      </button>
+      <span class="text-slate-500">/</span>
+      <input
+        #maxInput
+        type="number"
+        class="h-8 w-14 min-w-0 rounded-md bg-ink-950 px-1.5 text-right text-sm text-slate-100 outline-none ring-1 ring-white/10 focus:ring-astral-500/60"
+        aria-label="Máximo"
+        [value]="bar.max"
+        (input)="setBarNumber(bar, 'max', maxInput.value)"
+      />
+      <button type="button" class="ml-auto grid size-7 shrink-0 place-items-center rounded-md text-slate-500 hover:bg-red-500/15 hover:text-red-300" aria-label="Remover barra" (click)="removeBar(bar.id)">
+        <mat-icon class="!text-[16px]">close</mat-icon>
+      </button>
+    </div>
+  } @empty {
+    <p class="text-xs text-slate-600">Ex.: PV, mana, escudo.</p>
+  }
+</section>
+
+<!-- ===== Etiquetas ===== -->
+<section>
+  <div class="mb-2 flex items-center justify-between">
+    <h4 class="text-xs text-slate-400">Etiquetas</h4>
+    <button type="button" class="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-astral-300 hover:bg-white/5" (click)="addTag()">
+      <mat-icon class="!size-4 !text-[16px]">add</mat-icon>
+      Etiqueta
+    </button>
+  </div>
+  <div class="flex flex-col gap-1.5">
+    @for (tag of v.tags; track tag.id) {
+      <div class="flex items-center gap-1.5">
+        <app-color-picker [value]="tag.color" [palette]="colors" label="Cor da etiqueta" (picked)="updateTag(tag.id, { color: $event })" />
+        <input
+          #tagInput
+          class="h-8 min-w-0 flex-1 rounded-md bg-ink-950 px-2 text-sm text-slate-100 outline-none ring-1 ring-white/10 focus:ring-astral-500/60"
+          placeholder="Ex.: Envenenado"
+          [value]="tag.text"
+          (input)="updateTag(tag.id, { text: tagInput.value })"
+        />
+        <!-- Nível (opcional) -->
+        <div class="flex shrink-0 items-center rounded-md bg-ink-950 ring-1 ring-white/10" matTooltip="Nível (0 = sem nível)">
+          <button type="button" class="grid size-7 place-items-center rounded-l-md text-slate-400 hover:bg-white/10 disabled:opacity-30" aria-label="Diminuir nível" [disabled]="!tag.level" (click)="stepTagLevel(tag, -1)">
+            <mat-icon class="!text-[16px]">remove</mat-icon>
+          </button>
+          <span class="w-9 text-center text-xs tabular-nums" [class]="tag.level ? 'font-semibold text-star-300' : 'text-slate-600'">
+            {{ tag.level ? 'Nv ' + tag.level : '—' }}
+          </span>
+          <button type="button" class="grid size-7 place-items-center rounded-r-md text-slate-400 hover:bg-white/10" aria-label="Aumentar nível" (click)="stepTagLevel(tag, 1)">
+            <mat-icon class="!text-[16px]">add</mat-icon>
+          </button>
+        </div>
+        <button type="button" class="grid size-7 shrink-0 place-items-center rounded-md text-slate-500 hover:bg-red-500/15 hover:text-red-300" aria-label="Remover etiqueta" (click)="removeTag(tag.id)">
+          <mat-icon class="!text-[16px]">close</mat-icon>
+        </button>
+      </div>
+    } @empty {
+      <p class="text-xs text-slate-600">Ex.: Envenenado, Caído, Inspirado.</p>
+    }
+  </div>
+</section>

@@ -1,5 +1,5 @@
 import { NgTemplateOutlet } from '@angular/common';
-import { Component, computed, inject, output, signal } from '@angular/core';
+import { Component, computed, inject, input, output, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
@@ -42,6 +42,8 @@ export class Explorer {
   readonly removed = output<string[]>();
   /** Pedido para esconder o painel. */
   readonly hide = output<void>();
+  /** Mostra o botão "Esconder painel" (falso quando o explorador está numa janela, ex.: na mesa). */
+  readonly hideable = input(true);
 
   // --- Estado da árvore ----------------------------------------------------
   readonly expanded = signal(new Set<string>());

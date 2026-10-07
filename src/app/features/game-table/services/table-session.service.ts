@@ -1,15 +1,33 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
+import { Point } from '../../../core/models/geometry.model';
 import {
+  BRUSH_COLORS,
+  BRUSH_WIDTHS,
+  DEFAULT_SOUND_VOLUME,
+  DoorWall,
+  METERS_PER_SQUARE,
+  MapNote,
+  NOTE_COLORS,
   Scene,
+  Stroke,
   TABLE_ENTRY_META,
   TableEntry,
   TableEntryKind,
   TableRole,
   TableState,
   TableTool,
+  TokenBar,
+  TokenPlacement,
+  TokenSettings,
+  TokenTag,
+  TokenVision,
+  Wall,
+  defaultToken,
 } from '../../../core/models/table-session.model';
 import { StorageService } from '../../../core/services/storage.service';
 import { newId } from '../../../core/utils/id';
+import { createMask, decodeMask, encodeMask, isExploredAt, markPolygons, maskFits } from '../utils/fog-memory';
+import { computeVisibilityPolygon, doorSeen, pointInPolygon, wallsToSegments } from '../utils/visibility';
 
 /** Barras da mesa que podem ser escondidas. */
 export interface TablePanels {
@@ -19,14 +37,56 @@ export interface TablePanels {
   actions: boolean;
 }
 
+/**
+ * Token com as configurações efetivas (regra de vínculo já aplicada).
+ * É o que o mapa e a janela "Token" exibem.
+ */
+export interface ResolvedToken {
+  placement: TokenPlacement;
+  entry: TableEntry;
+  /** Personagem: alterações valem para a ficha e todos os tokens dela. */
+  linked: boolean;
+  blobId?: string;
+  size: number;
+  vision: TokenVision;
+  bars: TokenBar[];
+  tags: TokenTag[];
+}
+
+/** Campos do token editáveis pela ficha ou pela janela "Token". */
+export type TokenPatch = Partial<Pick<TokenSettings, 'size' | 'vision' | 'bars' | 'tags'>>;
+
+/** Modo da ferramenta Névoa. */
+export type WallMode = 'line' | 'circle' | 'door' | 'edit' | 'erase';
+
+/** Configuração atual do pincel (sessão). */
+export interface Brush {
+  color: string;
+  width: number;
+  opacity: number;
+  /** Borracha: arrastar remove os traços tocados. */
+  eraser: boolean;
+}
+
+/** Ação de desenho que pode ser desfeita (Ctrl+Z). */
+type DrawAction = { kind: 'add'; strokeId: string } | { kind: 'erase'; removed: { stroke: Stroke; index: number }[] };
+
+/** Omit que preserva cada membro de uma união (ex.: Wall sem o id). */
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+
 const EMPTY_STATE: TableState = { scenes: [], activeSceneId: null, entries: [] };
+const NO_TOKENS: TokenPlacement[] = [];
+const NO_WALLS: Wall[] = [];
+const NO_STROKES: Stroke[] = [];
+const NO_NOTES: MapNote[] = [];
 
 /**
  * Estado da mesa aberta: cenas, arquivos (fichas, sons, automações),
- * ferramenta ativa e papel do usuário (mestre ou jogador).
+ * tokens, ferramenta ativa e papel do usuário (mestre ou jogador).
  *
  * Fornecido no componente da mesa — cada mesa aberta tem sua instância.
- * Salva no IndexedDB com a chave "table-state:<id>".
+ * Salva no IndexedDB com a chave "table-state:<id>". Toda mutação passa
+ * por patchState (gravação agrupada com debounce de 300ms).
  */
 @Injectable()
 export class TableSessionService {
@@ -42,10 +102,122 @@ export class TableSessionService {
   readonly entries = computed(() => this.state().entries);
   readonly activeScene = computed(() => this.scenes().find((s) => s.id === this.state().activeSceneId) ?? null);
   readonly entryById = computed(() => new Map(this.entries().map((e) => [e.id, e])));
+  /** Volume mestre dos sons (0–1). */
+  readonly soundMaster = computed(() => this.state().soundMaster ?? 1);
+
+  /** Tokens colocados na cena ativa (mesma referência enquanto não mudam). */
+  readonly tokens = computed(() => this.activeScene()?.tokens ?? NO_TOKENS);
+  /** Tokens da cena ativa com as configurações efetivas. */
+  readonly resolvedTokens = computed(() => {
+    const byId = this.entryById();
+    return this.tokens().flatMap((p) => this.resolveToken(p, byId) ?? []);
+  });
+
+  /** Desenhos da cena ativa. */
+  readonly drawings = computed(() => this.activeScene()?.drawings ?? NO_STROKES);
+  /** Anotações da cena ativa. */
+  readonly notes = computed(() => this.activeScene()?.notes ?? NO_NOTES);
+
+  /**
+   * Anotações exibidas: na visão de jogador somem as "só mestre" e, com névoa,
+   * as que estão fora da área visível.
+   */
+  readonly visibleNotes = computed(() => {
+    const notes = this.notes();
+    if (this.role() !== 'player') return notes;
+    const polys = this.visionPolygons();
+    const explored = this.explored();
+    // Anotações em áreas já exploradas continuam visíveis (o jogador lembra o que viu)
+    return notes.filter((n) => !n.gmOnly && (this.isVisible(n, polys) || (explored && isExploredAt(explored, n))));
+  });
+
+  // --- Névoa de guerra e paredes (cena ativa) ------------------------------
+  readonly walls = computed(() => this.activeScene()?.walls ?? NO_WALLS);
+  readonly fogEnabled = computed(() => this.activeScene()?.fog?.enabled ?? false);
+  private readonly wallSegments = computed(() => wallsToSegments(this.walls()));
+
+  /**
+   * Origens de visão (tokens com visão ligada), com o alcance em px do mapa.
+   * Igualdade por valor: editar algo que não afeta a visão (ex.: volume de um som)
+   * não dispara novo cálculo.
+   */
+  private readonly visionSources = computed(
+    () => {
+      const grid = this.activeScene()?.gridSize ?? 70;
+      return this.resolvedTokens()
+        .filter((t) => t.vision.enabled)
+        .map((t) => ({ x: t.placement.x, y: t.placement.y, range: (t.vision.range / METERS_PER_SQUARE) * grid }));
+    },
+    { equal: (a, b) => a.length === b.length && a.every((s, i) => s.x === b[i].x && s.y === b[i].y && s.range === b[i].range) },
+  );
+
+  /** Áreas visíveis dos tokens (recalculadas só quando token, parede ou cena mudam). */
+  readonly visionPolygons = computed(() => {
+    if (!this.fogEnabled()) return [];
+    const segments = this.wallSegments();
+    return this.visionSources().map((s) => computeVisibilityPolygon(s, s.range, segments));
+  });
+
+  // --- Memória da névoa (áreas exploradas) ---------------------------------
+
+  /**
+   * Tamanho do mapa em px, informado pelo map-stage quando o mapa da cena termina de carregar
+   * (dimensiona a memória da névoa). Guarda a cena a que pertence: enquanto o mapa de outra
+   * cena carrega, a memória não é tocada (senão seria recriada com o tamanho errado).
+   */
+  readonly worldSize = signal<{ sceneId: string; w: number; h: number } | null>(null);
+  /** Lembrar áreas já vistas (padrão: ligado). */
+  readonly fogMemory = computed(() => this.activeScene()?.fog?.memory ?? true);
+  /** Mesma referência enquanto a memória não muda (evita decodificar a cada edição da cena). */
+  private readonly exploredData = computed(() => this.activeScene()?.explored);
+  /** Áreas exploradas da cena ativa (null se a memória estiver desligada ou vazia). */
+  readonly explored = computed(() => {
+    const data = this.exploredData();
+    return this.fogEnabled() && this.fogMemory() && data ? decodeMask(data) : null;
+  });
+
+  /** Portas da cena ativa. */
+  readonly doors = computed(() => this.walls().filter((w): w is DoorWall => w.kind === 'door'));
+
+  /** Portas exibidas: o jogador, com névoa, só vê as portas que algum token já enxerga. */
+  readonly visibleDoors = computed(() => {
+    const doors = this.doors();
+    if (!this.playerFog()) return doors;
+    const polys = this.visionPolygons();
+    const explored = this.explored();
+    return doors.filter((d) => doorSeen(d.points, polys) || (explored && isExploredAt(explored, midpoint(d.points))));
+  });
+
+  /** Visão de jogador com névoa: a área fora da visão fica escondida. */
+  readonly playerFog = computed(() => this.fogEnabled() && this.role() === 'player');
+
+  /** Tokens exibidos: na visão de jogador com névoa, só os visíveis (personagens sempre aparecem). */
+  readonly visibleTokens = computed(() => {
+    const tokens = this.resolvedTokens();
+    if (!this.playerFog()) return tokens;
+    const polys = this.visionPolygons();
+    return tokens.filter((t) => t.entry.kind === 'character' || this.isVisible(t.placement, polys));
+  });
 
   // --- Estado da sessão (não persistido) -----------------------------------
   readonly tool = signal<TableTool>('select');
   readonly role = signal<TableRole>('gm');
+  /** Token selecionado no mapa (anel azul). */
+  readonly selectedTokenId = signal<string | null>(null);
+  /** Modo da ferramenta Névoa: desenhar parede em linha, em círculo ou apagar. */
+  readonly wallMode = signal<WallMode>('line');
+  /** Mestre: mostrar paredes mesmo fora da ferramenta Névoa. */
+  readonly showWallsAlways = signal(false);
+  /** Parede selecionada no modo "Editar paredes". */
+  readonly selectedWallId = signal<string | null>(null);
+  /** Pincel da ferramenta Desenhar. */
+  readonly brush = signal<Brush>({ color: BRUSH_COLORS[0], width: BRUSH_WIDTHS[1], opacity: 1, eraser: false });
+  /** Pilha de desfazer dos desenhos, por cena (só nesta sessão). */
+  private readonly drawHistory = new Map<string, DrawAction[]>();
+  /** Paredes visíveis: durante a ferramenta Névoa ou, para o mestre, sempre (se ligado). */
+  readonly wallsVisible = computed(
+    () => this.tool() === 'fog' || (this.showWallsAlways() && this.role() === 'gm'),
+  );
 
   /** Barras visíveis da mesa (todas podem ser escondidas). */
   readonly panels = signal<TablePanels>({ scenes: true, tools: true, side: true, actions: true });
@@ -68,13 +240,23 @@ export class TableSessionService {
     this.entries().filter((e) => e.kind === 'automation' && e.role === this.role()),
   );
 
+  constructor() {
+    // Memória da névoa: tudo o que os tokens enxergam fica marcado como explorado.
+    // (Salvar a máscara não altera a visão, então este efeito não se realimenta.)
+    effect(() => {
+      const polys = this.visionPolygons();
+      const size = this.worldSize();
+      if (polys.length && size && this.fogMemory()) untracked(() => this.markExplored(polys, size));
+    });
+  }
+
   // --- Carregamento --------------------------------------------------------
 
   async load(tableId: string): Promise<void> {
     this.flush();
     this.tableId = tableId;
     this.loaded.set(false);
-    this.state.set((await this.storage.get<TableState>(this.key())) ?? EMPTY_STATE);
+    this.state.set(normalizeState(await this.storage.get<TableState>(this.key())));
     this.loaded.set(true);
   }
 
@@ -93,8 +275,14 @@ export class TableSessionService {
       blobId,
       gridSize: 70,
       showGrid: true,
+      tokens: [],
+      fog: { enabled: false },
+      walls: [],
+      drawings: [],
+      notes: [],
     };
     this.patchState((s) => ({ ...s, scenes: [...s.scenes, scene], activeSceneId: scene.id }));
+    this.selectedTokenId.set(null);
     return scene;
   }
 
@@ -113,8 +301,10 @@ export class TableSessionService {
 
   setActiveScene(id: string): void {
     this.patchState((s) => ({ ...s, activeSceneId: id }));
+    this.selectedTokenId.set(null);
   }
 
+  /** Exclui a cena e apaga o arquivo do mapa dela. */
   removeScene(id: string): void {
     const scene = this.scenes().find((s) => s.id === id);
     this.patchState((s) => {
@@ -146,21 +336,319 @@ export class TableSessionService {
   async uploadSound(file: File): Promise<TableEntry> {
     const blobId = newId();
     await this.storage.set(`blob:${blobId}`, file);
-    return this.addEntry('sound', { name: file.name.replace(/\.[^.]+$/, ''), blobId });
+    return this.addEntry('sound', {
+      name: file.name.replace(/\.[^.]+$/, ''),
+      blobId,
+      volume: DEFAULT_SOUND_VOLUME,
+      loop: true,
+    });
+  }
+
+  /** Define o volume mestre dos sons da mesa (0–1). */
+  setSoundMaster(volume: number): void {
+    this.patchState((s) => ({ ...s, soundMaster: clamp01(volume) }));
   }
 
   updateEntry(id: string, patch: Partial<Omit<TableEntry, 'id' | 'kind'>>): void {
     this.patchState((s) => ({ ...s, entries: s.entries.map((e) => (e.id === id ? { ...e, ...patch } : e)) }));
   }
 
+  /** Exclui o arquivo, os tokens dele em todas as cenas e os arquivos (áudio/imagem). */
   removeEntry(id: string): void {
     const entry = this.entryById().get(id);
-    this.patchState((s) => ({ ...s, entries: s.entries.filter((e) => e.id !== id) }));
+    this.patchState((s) => ({
+      ...s,
+      entries: s.entries.filter((e) => e.id !== id),
+      scenes: s.scenes.map((sc) =>
+        sc.tokens?.some((t) => t.entryId === id) ? { ...sc, tokens: sc.tokens.filter((t) => t.entryId !== id) } : sc,
+      ),
+    }));
     if (entry?.blobId) this.storage.delete(`blob:${entry.blobId}`);
+    if (entry?.token?.blobId) this.storage.delete(`blob:${entry.token.blobId}`);
   }
 
   getBlob(blobId: string): Promise<Blob | undefined> {
     return this.storage.get<Blob>(`blob:${blobId}`);
+  }
+
+  // --- Tokens: regra de vínculo --------------------------------------------
+
+  /** Configuração do token na ficha (ou o padrão do tipo). */
+  tokenOf(entry: TableEntry): TokenSettings {
+    return entry.token ?? defaultToken(entry.kind);
+  }
+
+  /**
+   * Configurações efetivas de um token colocado — único lugar da regra de vínculo:
+   * - Personagem: tamanho, barras e etiquetas vêm sempre da ficha.
+   * - NPC: usa os valores próprios da colocação (copiados ao colocar).
+   * Imagem e visão vêm sempre da ficha.
+   */
+  resolveToken(placement: TokenPlacement, byId = this.entryById()): ResolvedToken | null {
+    const entry = byId.get(placement.entryId);
+    if (!entry) return null;
+    const sheet = this.tokenOf(entry);
+    const linked = entry.kind === 'character';
+    return {
+      placement,
+      entry,
+      linked,
+      blobId: sheet.blobId,
+      vision: sheet.vision,
+      size: linked ? sheet.size : (placement.size ?? sheet.size),
+      bars: linked ? sheet.bars : (placement.bars ?? sheet.bars),
+      tags: linked ? sheet.tags : (placement.tags ?? sheet.tags),
+    };
+  }
+
+  /** Token colocado (em qualquer cena) com as configurações efetivas. */
+  resolvedTokenById(placementId: string): ResolvedToken | null {
+    const placement = this.findPlacement(placementId);
+    return placement ? this.resolveToken(placement) : null;
+  }
+
+  /**
+   * Altera um token colocado respeitando a regra de vínculo:
+   * personagem grava na ficha (vale para todos os tokens dele);
+   * NPC grava só neste token. A visão é sempre da ficha.
+   */
+  updateToken(placementId: string, patch: TokenPatch): void {
+    const placement = this.findPlacement(placementId);
+    const entry = placement && this.entryById().get(placement.entryId);
+    if (!placement || !entry) return;
+
+    const { vision, ...own } = patch;
+    if (entry.kind === 'character') {
+      this.updateEntryToken(entry.id, patch);
+      return;
+    }
+    if (vision) this.updateEntryToken(entry.id, { vision });
+    if (Object.keys(own).length) this.patchPlacement(placementId, own);
+  }
+
+  /** NPC: grava tamanho, barras e etiquetas deste token como padrão da ficha (próximos tokens copiam). */
+  saveTokenAsDefault(placementId: string): void {
+    const token = this.resolvedTokenById(placementId);
+    if (!token) return;
+    this.updateEntryToken(token.entry.id, {
+      size: token.size,
+      bars: token.bars.map((b) => ({ ...b })),
+      tags: token.tags.map((t) => ({ ...t })),
+    });
+  }
+
+  /** Altera a configuração de token da ficha. */
+  updateEntryToken(entryId: string, patch: Partial<TokenSettings>): void {
+    const entry = this.entryById().get(entryId);
+    if (entry) this.updateEntry(entryId, { token: { ...this.tokenOf(entry), ...patch } });
+  }
+
+  /** Troca a imagem do token da ficha e apaga a anterior. */
+  async setTokenImage(entryId: string, file: File): Promise<void> {
+    const entry = this.entryById().get(entryId);
+    if (!entry) return;
+    const blobId = newId();
+    await this.storage.set(`blob:${blobId}`, file);
+    const old = this.tokenOf(entry).blobId;
+    this.updateEntryToken(entryId, { blobId });
+    if (old) this.storage.delete(`blob:${old}`);
+  }
+
+  // --- Tokens no mapa ------------------------------------------------------
+
+  /** Coloca o token de um personagem/NPC na cena ativa (centro em `p`). */
+  placeToken(entryId: string, p: Point): TokenPlacement | null {
+    const entry = this.entryById().get(entryId);
+    const scene = this.activeScene();
+    if (!entry || !scene || (entry.kind !== 'character' && entry.kind !== 'npc')) return null;
+
+    const sheet = this.tokenOf(entry);
+    const placement: TokenPlacement = {
+      id: newId(),
+      entryId,
+      x: p.x,
+      y: p.y,
+      // NPC: cada token colocado é independente (cópia da ficha)
+      ...(entry.kind === 'npc' && {
+        size: sheet.size,
+        bars: sheet.bars.map((b) => ({ ...b })),
+        tags: sheet.tags.map((t) => ({ ...t })),
+      }),
+    };
+    this.updateScene(scene.id, { tokens: [...(scene.tokens ?? []), placement] });
+    this.selectedTokenId.set(placement.id);
+    return placement;
+  }
+
+  moveToken(placementId: string, p: Point): void {
+    this.patchPlacement(placementId, { x: p.x, y: p.y });
+  }
+
+  /** Remove o token do mapa (a ficha continua). */
+  removeToken(placementId: string): void {
+    this.patchState((s) => ({
+      ...s,
+      scenes: s.scenes.map((sc) =>
+        sc.tokens?.some((t) => t.id === placementId) ? { ...sc, tokens: sc.tokens.filter((t) => t.id !== placementId) } : sc,
+      ),
+    }));
+    if (this.selectedTokenId() === placementId) this.selectedTokenId.set(null);
+  }
+
+  // --- Névoa e paredes -----------------------------------------------------
+
+  /** Liga/desliga a névoa de guerra na cena ativa. */
+  setFog(enabled: boolean): void {
+    const scene = this.activeScene();
+    if (scene) this.updateScene(scene.id, { fog: { ...scene.fog, enabled } });
+  }
+
+  /** Adiciona uma parede à cena ativa. */
+  addWall(wall: DistributiveOmit<Wall, 'id'>): void {
+    const scene = this.activeScene();
+    if (scene) this.updateScene(scene.id, { walls: [...(scene.walls ?? []), { ...wall, id: newId() } as Wall] });
+  }
+
+  /** Substitui uma parede da cena ativa (mover parede ou ponto). */
+  updateWall(wall: Wall): void {
+    const scene = this.activeScene();
+    if (scene) this.updateScene(scene.id, { walls: (scene.walls ?? []).map((w) => (w.id === wall.id ? wall : w)) });
+  }
+
+  /** Liga/desliga a memória da névoa (lembrar áreas exploradas) na cena ativa. */
+  setFogMemory(memory: boolean): void {
+    const scene = this.activeScene();
+    if (scene) this.updateScene(scene.id, { fog: { enabled: scene.fog?.enabled ?? false, memory } });
+  }
+
+  /** Esquece as áreas exploradas da cena ativa. */
+  clearExplored(): void {
+    const scene = this.activeScene();
+    if (scene) this.updateScene(scene.id, { explored: undefined });
+  }
+
+  /** Soma as áreas visíveis à memória da cena (só grava se algo novo foi visto). */
+  private markExplored(polygons: Point[][], size: { sceneId: string; w: number; h: number }): void {
+    const scene = this.activeScene();
+    if (!scene || scene.id !== size.sceneId) return;
+    const current = scene.explored ? decodeMask(scene.explored) : null;
+    // Mapa trocado (outro tamanho): a memória recomeça
+    const mask = current && maskFits(current, size.w, size.h) ? current : createMask(size.w, size.h);
+    if (markPolygons(mask, polygons) || mask !== current) this.updateScene(scene.id, { explored: encodeMask(mask) });
+  }
+
+  /** Abre ou fecha uma porta (a visão é recalculada automaticamente). */
+  toggleDoor(doorId: string): void {
+    const door = this.doors().find((d) => d.id === doorId);
+    if (door) this.updateWall({ ...door, open: !door.open });
+  }
+
+  removeWall(wallId: string): void {
+    const scene = this.activeScene();
+    if (scene) this.updateScene(scene.id, { walls: (scene.walls ?? []).filter((w) => w.id !== wallId) });
+    if (this.selectedWallId() === wallId) this.selectedWallId.set(null);
+  }
+
+  // --- Desenhos (pincel) ---------------------------------------------------
+
+  /** Adiciona um traço à cena ativa. */
+  addStroke(stroke: Omit<Stroke, 'id'>): void {
+    const scene = this.activeScene();
+    if (!scene) return;
+    const created: Stroke = { ...stroke, id: newId() };
+    this.updateScene(scene.id, { drawings: [...(scene.drawings ?? []), created] });
+    this.pushDrawAction(scene.id, { kind: 'add', strokeId: created.id });
+  }
+
+  /** Remove traços da cena ativa (borracha ou limpar tudo) — pode ser desfeito. */
+  eraseStrokes(ids: string[]): void {
+    const scene = this.activeScene();
+    const drawings = scene?.drawings ?? [];
+    const remove = new Set(ids);
+    const removed = drawings.flatMap((stroke, index) => (remove.has(stroke.id) ? [{ stroke, index }] : []));
+    if (!scene || !removed.length) return;
+    this.updateScene(scene.id, { drawings: drawings.filter((s) => !remove.has(s.id)) });
+    this.pushDrawAction(scene.id, { kind: 'erase', removed });
+  }
+
+  clearDrawings(): void {
+    this.eraseStrokes(this.drawings().map((s) => s.id));
+  }
+
+  /** Desfaz a última ação de desenho da cena ativa. Retorna false se não havia nada. */
+  undoDrawing(): boolean {
+    const scene = this.activeScene();
+    const action = scene && this.drawHistory.get(scene.id)?.pop();
+    if (!scene || !action) return false;
+
+    const drawings = [...(scene.drawings ?? [])];
+    if (action.kind === 'add') {
+      this.updateScene(scene.id, { drawings: drawings.filter((s) => s.id !== action.strokeId) });
+    } else {
+      // Recoloca os traços apagados nas posições originais (mantém a ordem de sobreposição)
+      for (const { stroke, index } of action.removed) drawings.splice(Math.min(index, drawings.length), 0, stroke);
+      this.updateScene(scene.id, { drawings });
+    }
+    return true;
+  }
+
+  private pushDrawAction(sceneId: string, action: DrawAction): void {
+    const stack = this.drawHistory.get(sceneId) ?? [];
+    stack.push(action);
+    // Limite simples para não crescer sem fim numa sessão longa
+    if (stack.length > 100) stack.shift();
+    this.drawHistory.set(sceneId, stack);
+  }
+
+  // --- Anotações -----------------------------------------------------------
+
+  /** Cria uma anotação vazia na cena ativa. */
+  addNote(p: Point): MapNote | null {
+    const scene = this.activeScene();
+    if (!scene) return null;
+    const note: MapNote = { id: newId(), x: p.x, y: p.y, title: '', text: '', color: NOTE_COLORS[0], gmOnly: false };
+    this.updateScene(scene.id, { notes: [...(scene.notes ?? []), note] });
+    return note;
+  }
+
+  updateNote(noteId: string, patch: Partial<Omit<MapNote, 'id'>>): void {
+    const scene = this.activeScene();
+    if (scene) this.updateScene(scene.id, { notes: (scene.notes ?? []).map((n) => (n.id === noteId ? { ...n, ...patch } : n)) });
+  }
+
+  moveNote(noteId: string, p: Point): void {
+    this.updateNote(noteId, { x: p.x, y: p.y });
+  }
+
+  removeNote(noteId: string): void {
+    const scene = this.activeScene();
+    if (scene) this.updateScene(scene.id, { notes: (scene.notes ?? []).filter((n) => n.id !== noteId) });
+  }
+
+  /** O ponto está em alguma área visível? (sem névoa, tudo é visível) */
+  isVisible(p: Point, polys = this.visionPolygons()): boolean {
+    if (!this.fogEnabled()) return true;
+    return polys.some((poly) => pointInPolygon(p, poly));
+  }
+
+  private findPlacement(placementId: string): TokenPlacement | undefined {
+    for (const scene of this.scenes()) {
+      const found = scene.tokens?.find((t) => t.id === placementId);
+      if (found) return found;
+    }
+    return undefined;
+  }
+
+  /** Altera um token colocado (só a cena que o contém muda de referência). */
+  private patchPlacement(placementId: string, patch: Partial<Omit<TokenPlacement, 'id' | 'entryId'>>): void {
+    this.patchState((s) => ({
+      ...s,
+      scenes: s.scenes.map((sc) =>
+        sc.tokens?.some((t) => t.id === placementId)
+          ? { ...sc, tokens: sc.tokens.map((t) => (t.id === placementId ? { ...t, ...patch } : t)) }
+          : sc,
+      ),
+    }));
   }
 
   // --- Persistência --------------------------------------------------------
@@ -181,4 +669,36 @@ export class TableSessionService {
     clearTimeout(this.saveTimer);
     if (this.loaded() && this.tableId) this.storage.set(this.key(), this.state());
   }
+}
+
+// --- Leitura de dados salvos ------------------------------------------------
+
+/**
+ * Completa um estado salvo com os valores padrão dos campos novos.
+ * Mesas criadas em versões antigas continuam abrindo sem erro.
+ */
+function normalizeState(raw: TableState | undefined): TableState {
+  if (!raw) return EMPTY_STATE;
+  return {
+    ...raw,
+    scenes: raw.scenes.map((sc) => ({
+      ...sc,
+      tokens: sc.tokens ?? [],
+      fog: sc.fog ?? { enabled: false },
+      walls: sc.walls ?? [],
+      drawings: sc.drawings ?? [],
+      notes: sc.notes ?? [],
+    })),
+    entries: raw.entries.map((e) =>
+      e.kind === 'sound' ? { ...e, volume: e.volume ?? DEFAULT_SOUND_VOLUME, loop: e.loop ?? true } : e,
+    ),
+  };
+}
+
+function midpoint([a, b]: Point[]): Point {
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+}
+
+function clamp01(value: number): number {
+  return Math.min(1, Math.max(0, value));
 }

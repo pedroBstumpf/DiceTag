@@ -1,4 +1,4 @@
-<!-- Área do mapa: recebe zoom, arraste e as ferramentas -->
+<!-- Área do mapa: recebe zoom, arraste, ferramentas e fichas soltas do painel -->
 <div
   #stage
   class="relative size-full touch-none select-none overflow-hidden"
@@ -9,15 +9,17 @@
   (pointerup)="onPointerUp()"
   (pointercancel)="onPointerUp()"
   (auxclick)="$event.preventDefault()"
+  (dragover)="onDragOver($event)"
+  (drop)="onDrop($event)"
 >
   <!-- "Mundo": tudo aqui dentro acompanha o zoom e a posição do mapa -->
   <div
     class="absolute left-0 top-0 origin-top-left"
     [style.width.px]="world().w"
     [style.height.px]="world().h"
-    [style.transform]="'translate(' + offset().x + 'px,' + offset().y + 'px) scale(' + scale() + ')'"
+    [style.transform]="'translate(' + view().x + 'px,' + view().y + 'px) scale(' + scale() + ')'"
   >
-    <!-- Imagem do mapa ou fundo vazio -->
+    <!-- 1. Imagem do mapa ou fundo vazio -->
     @if (src(); as url) {
       <img
         #img
@@ -31,7 +33,7 @@
       <div class="absolute inset-0 rounded-sm border border-astral-300/10 bg-ink-900/70"></div>
     }
 
-    <!-- Grade -->
+    <!-- 2. Grade -->
     @if (scene()?.showGrid ?? true) {
       <div
         class="pointer-events-none absolute inset-0"
@@ -44,7 +46,54 @@
       ></div>
     }
 
-    <!-- Régua -->
+    <!-- 3. Desenhos -->
+    <app-drawings-layer [strokes]="session.drawings()" [draft]="strokeDraft()" [hidden]="erasing()" />
+
+    <!-- 4. Anotações (marcadores) -->
+    <app-notes-layer
+      [notes]="session.visibleNotes()"
+      [scale]="scale()"
+      [interactive]="notesInteractive()"
+      [activeId]="openNoteId()"
+      (noteDown)="onNoteDown($event)"
+    />
+
+    <!-- 5. Névoa de guerra -->
+    @if (session.fogEnabled()) {
+      <app-fog-layer
+        [width]="world().w"
+        [height]="world().h"
+        [polygons]="session.visionPolygons()"
+        [explored]="session.explored()"
+        [player]="session.playerFog()"
+      />
+    }
+
+    <!-- 6. Tokens visíveis -->
+    <app-tokens-layer
+      [tokens]="session.visibleTokens()"
+      [scale]="scale()"
+      [gridSize]="gridSize()"
+      [selectedId]="session.selectedTokenId()"
+      [interactive]="selecting()"
+      (tokenDown)="onTokenDown($event)"
+    />
+
+    <!-- 7. Portas (sempre visíveis; o jogador só vê as que algum token enxerga) -->
+    <app-doors-layer [doors]="session.visibleDoors()" [scale]="scale()" [interactive]="selecting()" (toggled)="session.toggleDoor($event)" />
+
+    <!-- 7. Paredes (durante a ferramenta Névoa ou sempre, para o mestre) -->
+    @if (session.wallsVisible() || wallDraft()) {
+      <app-walls-layer
+        [walls]="session.walls()"
+        [draft]="wallDraft()"
+        [scale]="scale()"
+        [selectedId]="session.selectedWallId()"
+        [editing]="editingWalls()"
+      />
+    }
+
+    <!-- 8. Régua -->
     @if (ruler(); as r) {
       <svg class="pointer-events-none absolute inset-0 overflow-visible" [attr.width]="world().w" [attr.height]="world().h">
         <line
@@ -70,7 +119,7 @@
       </div>
     }
 
-    <!-- Pings -->
+    <!-- 8. Pings -->
     @for (p of pings(); track p.id) {
       <span
         class="pointer-events-none absolute rounded-full border-4 border-astral-300 animate-ping-once"
@@ -82,7 +131,14 @@
     }
   </div>
 
-  <!-- Mesa sem cenas -->
+  <!-- 9. Interface: edição da anotação aberta -->
+  @if (openNote(); as note) {
+    @if (popoverPos(); as pos) {
+      <app-note-popover class="absolute z-10" [style.left.px]="pos.left" [style.top.px]="pos.top" [note]="note" (closed)="closeNote()" />
+    }
+  }
+
+  <!-- 9. Interface: mesa sem cenas -->
   @if (!scene()) {
     <div class="pointer-events-none absolute inset-0 grid place-items-center">
       <div class="glass rounded-xl px-6 py-4 text-center">

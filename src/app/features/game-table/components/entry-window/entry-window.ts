@@ -7,9 +7,10 @@ import { TableSessionService } from '../../services/table-session.service';
 const AUTOMATION_ICONS = ['bolt', 'swords', 'shield', 'local_fire_department', 'healing', 'auto_awesome', 'casino', 'visibility', 'directions_run', 'psychology'];
 
 /**
- * Conteúdo provisório das janelas de fichas, NPCs e automações.
- * A estrutura de cada tipo será construída nas próximas etapas;
- * por enquanto mostra nome editável e (automações) a escolha de ícone.
+ * Ficha aberta pelo painel (personagem, NPC ou automação).
+ * A estrutura de cada ficha será construída nas próximas etapas; por enquanto
+ * mostra nome editável e, nas automações, a escolha de ícone.
+ * As opções do token ficam só no mapa (duplo clique no token).
  */
 @Component({
   selector: 'app-entry-window',
@@ -21,6 +22,7 @@ export class EntryWindow {
   readonly session = inject(TableSessionService);
 
   readonly entryId = input.required<string>();
+
   readonly entry = computed(() => this.session.entryById().get(this.entryId()));
   readonly meta = computed(() => TABLE_ENTRY_META[this.entry()?.kind ?? 'character']);
   readonly icons = AUTOMATION_ICONS;

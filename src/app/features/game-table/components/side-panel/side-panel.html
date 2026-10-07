@@ -20,6 +20,7 @@
     @case ('sheets') {
       <ng-container *ngTemplateOutlet="section; context: { title: 'Personagens', kind: 'character', list: characters() }" />
       <ng-container *ngTemplateOutlet="section; context: { title: 'NPCs', kind: 'npc', list: npcs() }" />
+      <p class="px-2 text-[11px] leading-relaxed text-slate-500">Arraste uma ficha até o mapa para colocar o token.</p>
     }
 
     <!-- Lore: itens do worldbuild -->
@@ -49,20 +50,16 @@
         </p>
       }
 
-      <a mat-stroked-button routerLink="/worldbuild" class="mt-3 w-full">
-        <mat-icon>public</mat-icon>
-        Abrir Worldbuild
-      </a>
+      <!-- Abre o explorador do worldbuild numa janela, sem sair da mesa -->
+      <button mat-stroked-button class="mt-3 w-full" (click)="opened.emit(worldbuildWindow)">
+        <mat-icon>folder_open</mat-icon>
+        Abrir pastas do Worldbuild
+      </button>
     }
 
     <!-- Sons e ambientação -->
     @case ('sounds') {
-      <ng-container *ngTemplateOutlet="section; context: { title: 'Trilhas e ambientes', kind: 'sound', list: sounds() }" />
-      <button mat-stroked-button class="w-full" (click)="soundInput.click()">
-        <mat-icon>upload</mat-icon>
-        Enviar áudio
-      </button>
-      <input #soundInput type="file" accept="audio/*" multiple hidden (change)="onSoundsPicked(soundInput)" />
+      <app-sound-list />
     }
 
     <!-- Automações -->
@@ -83,27 +80,31 @@
   <section class="mb-4">
     <header class="mb-1 flex items-center justify-between pl-2">
       <h4 class="text-[11px] font-semibold uppercase tracking-widest text-slate-500">{{ title }}</h4>
-      @if (kind !== 'sound') {
-        <button
-          type="button"
-          class="grid size-7 place-items-center rounded-md text-slate-400 hover:bg-white/10 hover:text-white"
-          [matTooltip]="'Novo: ' + metaOf(kind).label"
-          (click)="create(kind, role)"
-        >
-          <mat-icon class="!text-[18px]">add</mat-icon>
-        </button>
-      }
+      <button
+        type="button"
+        class="grid size-7 place-items-center rounded-md text-slate-400 hover:bg-white/10 hover:text-white"
+        [matTooltip]="'Novo: ' + metaOf(kind).label"
+        (click)="create(kind, role)"
+      >
+        <mat-icon class="!text-[18px]">add</mat-icon>
+      </button>
     </header>
 
     @for (entry of list; track entry.id) {
       <div
         class="group flex h-9 cursor-pointer items-center gap-2 rounded-lg pl-2 pr-1 text-sm text-slate-300 transition-colors hover:bg-white/5 hover:text-white"
+        [attr.draggable]="kind === 'character' || kind === 'npc' ? 'true' : null"
+        (dragstart)="onDragStart($event, entry)"
         (click)="renamingId() !== entry.id && opened.emit(entry.id)"
         (dblclick)="renamingId.set(entry.id)"
       >
-        <mat-icon class="!size-5 shrink-0 !text-[20px]" [class]="metaOf(entry.kind).color">
-          {{ entry.icon ?? metaOf(entry.kind).icon }}
-        </mat-icon>
+        @if (tokenImage(entry); as src) {
+          <img [src]="src" alt="" draggable="false" class="size-5 shrink-0 rounded-full object-cover ring-1 ring-white/30" />
+        } @else {
+          <mat-icon class="!size-5 shrink-0 !text-[20px]" [class]="metaOf(entry.kind).color">
+            {{ entry.icon ?? metaOf(entry.kind).icon }}
+          </mat-icon>
+        }
 
         @if (renamingId() === entry.id) {
           <input

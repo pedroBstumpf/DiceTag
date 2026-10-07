@@ -18,6 +18,15 @@
     </div>
   </div>
 
+  <!-- Como colocar e configurar o token (personagens e NPCs) -->
+  @if (e.kind === 'character' || e.kind === 'npc') {
+    <p class="mt-4 flex items-start gap-2 rounded-lg bg-white/5 px-3 py-2 text-xs leading-relaxed text-slate-400">
+      <mat-icon class="!size-4 shrink-0 !text-[16px] text-astral-300">token</mat-icon>
+      Arraste esta ficha do painel direito até o mapa para colocar o token. Dê duplo clique no token para
+      configurar imagem, tamanho, visão, barras e etiquetas.
+    </p>
+  }
+
   <!-- Escolha de ícone (automações) -->
   @if (e.kind === 'automation') {
     <div class="mt-6">

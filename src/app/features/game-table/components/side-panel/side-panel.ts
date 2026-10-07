@@ -3,35 +3,43 @@ import { Component, computed, inject, output, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { RouterLink } from '@angular/router';
 import { WORLD_ITEM_META, WorldItem } from '../../../../core/models/world-item.model';
 import { TABLE_ENTRY_META, TableEntry, TableEntryKind, TableRole } from '../../../../core/models/table-session.model';
 import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
 import { WorldbuildService } from '../../../worldbuild/services/worldbuild.service';
+import { BlobUrlService } from '../../services/blob-url.service';
 import { TableSessionService } from '../../services/table-session.service';
+import { TOKEN_DRAG_TYPE } from '../map-layers/tokens-layer/tokens-layer';
+import { SoundList } from '../sound-list/sound-list';
 
 /** Abas do painel lateral direito. */
 type PanelTab = 'sheets' | 'lore' | 'sounds' | 'automations';
 
+/** Id da janela que mostra as pastas do worldbuild dentro da mesa. */
+export const WORLDBUILD_WINDOW = 'worldbuild:explorer';
+
 /**
  * Painel lateral direito da mesa, com abas:
  * - Fichas: personagens e NPCs
- * - Lore: documentos, linhas do tempo e mapas do worldbuild
- * - Sons: trilhas e ambientação
+ * - Lore: documentos, linhas do tempo e mapas do worldbuild (e as pastas, numa janela)
+ * - Sons: mixer de trilhas e ambientação (tocam direto na lista)
  * - Automações: habilidades e ações (do mestre e dos jogadores)
- * Cada arquivo abre numa janela flutuante.
+ * Fichas, lore e automações abrem numa janela flutuante.
  */
 @Component({
   selector: 'app-side-panel',
-  imports: [NgTemplateOutlet, RouterLink, MatButtonModule, MatIconModule, MatTooltipModule, AutoFocus],
+  imports: [NgTemplateOutlet, MatButtonModule, MatIconModule, MatTooltipModule, AutoFocus, SoundList],
   templateUrl: './side-panel.html',
   host: { class: 'flex h-full flex-col' },
 })
 export class SidePanel {
   readonly session = inject(TableSessionService);
   private readonly worldbuild = inject(WorldbuildService);
+  private readonly blobs = inject(BlobUrlService);
 
   readonly worldMeta = WORLD_ITEM_META;
+  /** Id da janela do explorador do worldbuild na mesa. */
+  readonly worldbuildWindow = WORLDBUILD_WINDOW;
 
   /** Pedido para abrir um arquivo (da mesa ou do worldbuild) numa janela. */
   readonly opened = output<string>();
@@ -52,7 +60,6 @@ export class SidePanel {
   // --- Listas --------------------------------------------------------------
   readonly characters = computed(() => this.byKind('character'));
   readonly npcs = computed(() => this.byKind('npc'));
-  readonly sounds = computed(() => this.byKind('sound'));
   readonly gmActions = computed(() => this.byKind('automation').filter((e) => e.role === 'gm'));
   readonly playerActions = computed(() => this.byKind('automation').filter((e) => e.role === 'player'));
 
@@ -73,17 +80,22 @@ export class SidePanel {
     this.opened.emit(entry.id);
   }
 
-  async onSoundsPicked(input: HTMLInputElement): Promise<void> {
-    for (const file of Array.from(input.files ?? [])) {
-      if (file.type.startsWith('audio/')) await this.session.uploadSound(file);
-    }
-    input.value = '';
-  }
-
   finishRename(entry: TableEntry, value: string): void {
     if (this.renamingId() !== entry.id) return;
     if (value.trim()) this.session.updateEntry(entry.id, { name: value.trim() });
     this.renamingId.set(null);
+  }
+
+  /** Personagens/NPCs podem ser arrastados até o mapa para colocar o token. */
+  onDragStart(event: DragEvent, entry: TableEntry): void {
+    if (!event.dataTransfer || (entry.kind !== 'character' && entry.kind !== 'npc')) return;
+    event.dataTransfer.setData(TOKEN_DRAG_TYPE, entry.id);
+    event.dataTransfer.effectAllowed = 'copy';
+  }
+
+  /** Imagem do token da ficha (para o avatar da lista). */
+  tokenImage(entry: TableEntry): string | null {
+    return this.blobs.url(entry.token?.blobId);
   }
 
   remove(entry: TableEntry): void {

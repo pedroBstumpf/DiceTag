@@ -1,6 +1,6 @@
 @if (table(); as t) {
   <!-- ===== Camada 0: mapa (ocupa a tela inteira) ===== -->
-  <app-map-stage #map class="absolute inset-0" [insets]="insets()" />
+  <app-map-stage #map class="absolute inset-0" [insets]="insets()" (tokenOpened)="openToken($event)" />
 
   <!-- ===== Camada 1: barras sobrepostas (todas escondíveis) ===== -->
   @let panels = session.panels();
@@ -70,11 +70,15 @@
           (closed)="windows.close(win.id)"
         >
           @switch (c.type) {
-            @case ('sound') {
-              <app-sound-player [entryId]="win.id" />
-            }
             @case ('entry') {
               <app-entry-window [entryId]="win.id" />
+            }
+            @case ('explorer') {
+              <!-- Pastas do worldbuild dentro da mesa: os itens abrem em janelas aqui mesmo -->
+              <app-explorer [hideable]="false" (opened)="open($event)" (removed)="windows.closeMany($event)" />
+            }
+            @case ('token') {
+              <app-token-window [placementId]="placementOf(win.id)" (openEntry)="open($event)" />
             }
             @case ('document') {
               <app-document-editor [itemId]="win.id" />

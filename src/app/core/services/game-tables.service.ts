@@ -1,5 +1,6 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { GameTable, NewGameTable } from '../models/game-table.model';
+import { TableState } from '../models/table-session.model';
 import { newId } from '../utils/id';
 import { AuthService } from './auth.service';
 import { StorageService } from './storage.service';
@@ -51,9 +52,11 @@ export class GameTablesService {
     return this.tables().find((t) => t.id === id);
   }
 
+  /** Exclui a mesa, o estado salvo dela e todos os arquivos (mapas, sons, tokens). */
   async remove(id: string): Promise<void> {
     this.all.update((list) => list.filter((t) => t.id !== id));
     await this.persist();
+    await this.purgeTableData(id);
   }
 
   // --- Persistência --------------------------------------------------------
@@ -65,5 +68,19 @@ export class GameTablesService {
 
   private persist(): Promise<void> {
     return this.storage.set(TABLES_KEY, this.all());
+  }
+
+  /** Apaga "table-state:<id>" e os Blobs referenciados por ele. */
+  private async purgeTableData(id: string): Promise<void> {
+    const key = `table-state:${id}`;
+    const state = await this.storage.get<TableState>(key);
+    if (state) {
+      const blobIds = [
+        ...state.scenes.map((s) => s.blobId),
+        ...state.entries.flatMap((e) => [e.blobId, e.token?.blobId]),
+      ].filter((b): b is string => !!b);
+      await Promise.all(blobIds.map((b) => this.storage.delete(`blob:${b}`)));
+    }
+    await this.storage.delete(key);
   }
 }

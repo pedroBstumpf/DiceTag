@@ -3,6 +3,8 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { TableTool } from '../../../../core/models/table-session.model';
 import { TableSessionService } from '../../services/table-session.service';
+import { DrawMenu } from '../draw-menu/draw-menu';
+import { FogMenu } from '../fog-menu/fog-menu';
 
 /** Definição de uma ferramenta exibida na barra. */
 export interface ToolDef {
@@ -21,18 +23,19 @@ export const TABLE_TOOLS: ToolDef[] = [
   { id: 'pan', icon: 'pan_tool', label: 'Mover mapa', key: 'M' },
   { id: 'ruler', icon: 'straighten', label: 'Régua', key: 'R' },
   { id: 'ping', icon: 'my_location', label: 'Ping', key: 'P' },
-  { id: 'draw', icon: 'draw', label: 'Desenhar', key: 'D', soon: true },
-  { id: 'fog', icon: 'cloud', label: 'Névoa de guerra', key: 'F', soon: true },
-  { id: 'note', icon: 'sticky_note_2', label: 'Anotação no mapa', key: 'N', soon: true },
+  { id: 'draw', icon: 'draw', label: 'Desenhar', key: 'D' },
+  { id: 'fog', icon: 'cloud', label: 'Névoa de guerra', key: 'F' },
+  { id: 'note', icon: 'sticky_note_2', label: 'Anotação no mapa', key: 'N' },
 ];
 
 /**
  * Barra de ferramentas (lateral esquerda da mesa):
  * ferramentas de mapa, grade e controles de zoom.
+ * Ferramentas com opções (ex.: Névoa) abrem um submenu ao lado da barra.
  */
 @Component({
   selector: 'app-tool-bar',
-  imports: [MatIconModule, MatTooltipModule],
+  imports: [MatIconModule, MatTooltipModule, DrawMenu, FogMenu],
   templateUrl: './tool-bar.html',
 })
 export class ToolBar {

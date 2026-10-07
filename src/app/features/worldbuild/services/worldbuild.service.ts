@@ -3,6 +3,7 @@ import { WORLD_ITEM_META, WorldItem, WorldItemType } from '../../../core/models/
 import { AuthService } from '../../../core/services/auth.service';
 import { StorageService } from '../../../core/services/storage.service';
 import { newId } from '../../../core/utils/id';
+import { columnLayout } from '../utils/timeline-layout';
 
 /**
  * Fonte única de dados do worldbuild do usuário logado.
@@ -87,7 +88,7 @@ export class WorldbuildService {
       createdAt: now,
       updatedAt: now,
       ...(type === 'document' && { content: '' }),
-      ...(type === 'timeline' && { events: [] }),
+      ...(type === 'timeline' && { events: [], links: [] }),
     };
     this._items.update((list) => [...list, item]);
     this.persist();
@@ -172,7 +173,7 @@ export class WorldbuildService {
     const items = (await this.storage.get<WorldItem[]>(key)) ?? [];
     // O usuário mudou durante o carregamento: descarta o resultado antigo
     if (key !== this.storageKey) return;
-    this._items.set(items);
+    this._items.set(items.map(migrateTimeline));
     this.loaded.set(true);
   }
 
@@ -190,4 +191,28 @@ export class WorldbuildService {
     clearTimeout(this.saveTimer);
     if (this.loaded() && this.storageKey) this.storage.set(this.storageKey, this._items());
   }
+}
+
+// --- Migração de dados antigos ----------------------------------------------
+
+/**
+ * Linhas do tempo antigas (lista vertical) viram mapa mental:
+ * eventos sem posição são empilhados em coluna e, se a linha ainda não tinha
+ * conexões, cada evento é ligado ao seguinte (preserva a ordem original).
+ * Único ponto de migração do worldbuild — aplicado ao carregar.
+ */
+function migrateTimeline(item: WorldItem): WorldItem {
+  if (item.type !== 'timeline') return item;
+  const events = item.events ?? [];
+  const needsPositions = events.some((e) => e.x === undefined || e.y === undefined);
+  if (!needsPositions && item.links) return item;
+
+  const column = columnLayout(events.length);
+  return {
+    ...item,
+    events: events.map((e, i) => (e.x === undefined || e.y === undefined ? { ...e, ...column[i] } : e)),
+    links:
+      item.links ??
+      events.slice(1).map((e, i) => ({ id: newId(), from: events[i].id, to: e.id })),
+  };
 }
