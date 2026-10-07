@@ -66,14 +66,7 @@
   </div>
   @for (bar of v.bars; track bar.id) {
     <div class="mb-1.5 flex items-center gap-1.5">
-      <button
-        type="button"
-        class="size-5 shrink-0 rounded-full ring-1 ring-white/20 transition-transform hover:scale-110"
-        [style.background]="bar.color"
-        matTooltip="Trocar cor"
-        aria-label="Trocar cor"
-        (click)="updateBar(bar.id, { color: nextColor(bar.color) })"
-      ></button>
+      <app-color-picker [value]="bar.color" [palette]="colors" label="Cor da barra" (picked)="updateBar(bar.id, { color: $event })" />
       <input
         #labelInput
         class="h-8 w-16 min-w-0 rounded-md bg-ink-950 px-2 text-sm text-slate-100 outline-none ring-1 ring-white/10 focus:ring-astral-500/60"
@@ -125,14 +118,7 @@
   <div class="flex flex-col gap-1.5">
     @for (tag of v.tags; track tag.id) {
       <div class="flex items-center gap-1.5">
-        <button
-          type="button"
-          class="size-5 shrink-0 rounded-full ring-1 ring-white/20 transition-transform hover:scale-110"
-          [style.background]="tag.color"
-          matTooltip="Trocar cor"
-          aria-label="Trocar cor"
-          (click)="updateTag(tag.id, { color: nextColor(tag.color) })"
-        ></button>
+        <app-color-picker [value]="tag.color" [palette]="colors" label="Cor da etiqueta" (picked)="updateTag(tag.id, { color: $event })" />
         <input
           #tagInput
           class="h-8 min-w-0 flex-1 rounded-md bg-ink-950 px-2 text-sm text-slate-100 outline-none ring-1 ring-white/10 focus:ring-astral-500/60"

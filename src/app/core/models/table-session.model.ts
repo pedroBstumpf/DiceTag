@@ -180,8 +180,11 @@ export const METERS_PER_SQUARE = 1.5;
 /** Alcance de visão padrão, em metros. */
 export const DEFAULT_VISION_RANGE = 18;
 
-/** Cores para barras e etiquetas de tokens. */
-export const TOKEN_COLORS = ['#ef4444', '#22c55e', '#4f86f7', '#eab308', '#b18cff', '#f97316', '#e8eefc'] as const;
+/** Paleta para barras e etiquetas de tokens (cores livres também são aceitas). */
+export const TOKEN_COLORS = [
+  '#ef4444', '#f97316', '#eab308', '#22c55e', '#2dd4bf',
+  '#4f86f7', '#b18cff', '#f472b6', '#e8eefc', '#64748b',
+] as const;
 
 /** Token padrão de uma ficha: personagens enxergam, NPCs começam sem visão. */
 export function defaultToken(kind: TableEntryKind): TokenSettings {

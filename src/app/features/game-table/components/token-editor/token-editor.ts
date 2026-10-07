@@ -10,6 +10,7 @@ import {
   TokenVision,
 } from '../../../../core/models/table-session.model';
 import { newId } from '../../../../core/utils/id';
+import { ColorPicker } from '../../../../shared/components/color-picker/color-picker';
 import { TokenPatch } from '../../services/table-session.service';
 
 /** Valores exibidos no editor (ficha ou token colocado). */
@@ -27,7 +28,7 @@ export interface TokenEditorValue {
  */
 @Component({
   selector: 'app-token-editor',
-  imports: [MatIconModule, MatTooltipModule],
+  imports: [MatIconModule, MatTooltipModule, ColorPicker],
   templateUrl: './token-editor.html',
   host: { class: 'flex flex-col gap-5' },
 })
@@ -37,6 +38,7 @@ export class TokenEditor {
 
   readonly sizes = TOKEN_SIZES;
   readonly metersPerSquare = METERS_PER_SQUARE;
+  readonly colors = TOKEN_COLORS;
 
   // --- Tamanho e visão -----------------------------------------------------
 
@@ -104,9 +106,4 @@ export class TokenEditor {
     this.changed.emit({ tags: this.value().tags.filter((t) => t.id !== id) });
   }
 
-  /** Próxima cor da paleta (o botão de cor alterna entre elas). */
-  nextColor(current: string): string {
-    const i = TOKEN_COLORS.indexOf(current as (typeof TOKEN_COLORS)[number]);
-    return TOKEN_COLORS[(i + 1) % TOKEN_COLORS.length];
-  }
 }
