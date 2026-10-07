@@ -18,8 +18,8 @@ import { EntryWindow } from './components/entry-window/entry-window';
 import { MapStage } from './components/map-stage/map-stage';
 import { SceneBar } from './components/scene-bar/scene-bar';
 import { SidePanel } from './components/side-panel/side-panel';
-import { SoundPlayer } from './components/sound-player/sound-player';
 import { TABLE_TOOLS, ToolBar } from './components/tool-bar/tool-bar';
+import { SoundMixerService } from './services/sound-mixer.service';
 import { TableSessionService } from './services/table-session.service';
 
 /** O que uma janela da mesa está exibindo. */
@@ -28,12 +28,11 @@ interface WindowContent {
   icon: string;
   color: string;
   /** Tipo de conteúdo, usado para escolher o componente. */
-  type: 'sound' | 'entry' | 'document' | 'timeline' | 'image';
+  type: 'entry' | 'document' | 'timeline' | 'image';
 }
 
 /** Tamanho inicial das janelas por tipo de conteúdo. */
 const WINDOW_SIZES: Record<WindowContent['type'], { width: number; height: number }> = {
-  sound: { width: 380, height: 320 },
   entry: { width: 520, height: 480 },
   document: { width: 720, height: 600 },
   timeline: { width: 620, height: 560 },
@@ -68,12 +67,11 @@ const PANEL_SPACE = { top: 60, left: 76, right: 344, bottom: 100 };
     SidePanel,
     ActionBar,
     EntryWindow,
-    SoundPlayer,
     DocumentEditor,
     TimelineEditor,
     ImageViewer,
   ],
-  providers: [TableSessionService, WindowManagerService],
+  providers: [TableSessionService, SoundMixerService, WindowManagerService],
   templateUrl: './game-table.html',
   host: {
     class: 'relative block h-dvh overflow-hidden',
@@ -122,9 +120,10 @@ export class GameTablePage {
   /** Descobre o que mostrar numa janela (arquivo da mesa ou item do worldbuild). */
   content(id: string): WindowContent | null {
     const entry = this.session.entryById().get(id);
-    if (entry) {
+    // Sons não abrem janela: são controlados direto no mixer da aba Sons
+    if (entry && entry.kind !== 'sound') {
       const meta = TABLE_ENTRY_META[entry.kind];
-      return { title: entry.name, icon: entry.icon ?? meta.icon, color: meta.color, type: entry.kind === 'sound' ? 'sound' : 'entry' };
+      return { title: entry.name, icon: entry.icon ?? meta.icon, color: meta.color, type: 'entry' };
     }
     const item = this.worldbuild.byId().get(id);
     if (item && item.type !== 'folder') {

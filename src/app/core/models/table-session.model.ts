@@ -26,6 +26,10 @@ export interface TableEntry {
   createdAt: number;
   /** sound: arquivo de áudio no IndexedDB. */
   blobId?: string;
+  /** sound: volume da faixa (0–1). Padrão: DEFAULT_SOUND_VOLUME. */
+  volume?: number;
+  /** sound: repetir ao terminar. Padrão: true. */
+  loop?: boolean;
   /** automation: de quem é a ação (aparece na barra inferior desse papel). */
   role?: TableRole;
   /** automation: ícone exibido na barra de ações. */
@@ -37,7 +41,12 @@ export interface TableState {
   scenes: Scene[];
   activeSceneId: string | null;
   entries: TableEntry[];
+  /** Volume mestre dos sons da mesa (0–1). Padrão: 1. */
+  soundMaster?: number;
 }
+
+/** Volume inicial de uma faixa de som. */
+export const DEFAULT_SOUND_VOLUME = 0.8;
 
 /** Metadados visuais de cada tipo de arquivo da mesa. */
 export const TABLE_ENTRY_META: Record<TableEntryKind, { icon: string; label: string; color: string }> = {

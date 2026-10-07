@@ -1,5 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import {
+  DEFAULT_SOUND_VOLUME,
   Scene,
   TABLE_ENTRY_META,
   TableEntry,
@@ -42,6 +43,8 @@ export class TableSessionService {
   readonly entries = computed(() => this.state().entries);
   readonly activeScene = computed(() => this.scenes().find((s) => s.id === this.state().activeSceneId) ?? null);
   readonly entryById = computed(() => new Map(this.entries().map((e) => [e.id, e])));
+  /** Volume mestre dos sons (0–1). */
+  readonly soundMaster = computed(() => this.state().soundMaster ?? 1);
 
   // --- Estado da sessão (não persistido) -----------------------------------
   readonly tool = signal<TableTool>('select');
@@ -74,7 +77,7 @@ export class TableSessionService {
     this.flush();
     this.tableId = tableId;
     this.loaded.set(false);
-    this.state.set((await this.storage.get<TableState>(this.key())) ?? EMPTY_STATE);
+    this.state.set(normalizeState(await this.storage.get<TableState>(this.key())));
     this.loaded.set(true);
   }
 
@@ -146,7 +149,17 @@ export class TableSessionService {
   async uploadSound(file: File): Promise<TableEntry> {
     const blobId = newId();
     await this.storage.set(`blob:${blobId}`, file);
-    return this.addEntry('sound', { name: file.name.replace(/\.[^.]+$/, ''), blobId });
+    return this.addEntry('sound', {
+      name: file.name.replace(/\.[^.]+$/, ''),
+      blobId,
+      volume: DEFAULT_SOUND_VOLUME,
+      loop: true,
+    });
+  }
+
+  /** Define o volume mestre dos sons da mesa (0–1). */
+  setSoundMaster(volume: number): void {
+    this.patchState((s) => ({ ...s, soundMaster: clamp01(volume) }));
   }
 
   updateEntry(id: string, patch: Partial<Omit<TableEntry, 'id' | 'kind'>>): void {
@@ -181,4 +194,24 @@ export class TableSessionService {
     clearTimeout(this.saveTimer);
     if (this.loaded() && this.tableId) this.storage.set(this.key(), this.state());
   }
+}
+
+// --- Leitura de dados salvos ------------------------------------------------
+
+/**
+ * Completa um estado salvo com os valores padrão dos campos novos.
+ * Mesas criadas em versões antigas continuam abrindo sem erro.
+ */
+function normalizeState(raw: TableState | undefined): TableState {
+  if (!raw) return EMPTY_STATE;
+  return {
+    ...raw,
+    entries: raw.entries.map((e) =>
+      e.kind === 'sound' ? { ...e, volume: e.volume ?? DEFAULT_SOUND_VOLUME, loop: e.loop ?? true } : e,
+    ),
+  };
+}
+
+function clamp01(value: number): number {
+  return Math.min(1, Math.max(0, value));
 }

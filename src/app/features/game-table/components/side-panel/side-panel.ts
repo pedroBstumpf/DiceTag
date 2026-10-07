@@ -9,6 +9,7 @@ import { TABLE_ENTRY_META, TableEntry, TableEntryKind, TableRole } from '../../.
 import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
 import { WorldbuildService } from '../../../worldbuild/services/worldbuild.service';
 import { TableSessionService } from '../../services/table-session.service';
+import { SoundList } from '../sound-list/sound-list';
 
 /** Abas do painel lateral direito. */
 type PanelTab = 'sheets' | 'lore' | 'sounds' | 'automations';
@@ -17,13 +18,13 @@ type PanelTab = 'sheets' | 'lore' | 'sounds' | 'automations';
  * Painel lateral direito da mesa, com abas:
  * - Fichas: personagens e NPCs
  * - Lore: documentos, linhas do tempo e mapas do worldbuild
- * - Sons: trilhas e ambientação
+ * - Sons: mixer de trilhas e ambientação (tocam direto na lista)
  * - Automações: habilidades e ações (do mestre e dos jogadores)
- * Cada arquivo abre numa janela flutuante.
+ * Fichas, lore e automações abrem numa janela flutuante.
  */
 @Component({
   selector: 'app-side-panel',
-  imports: [NgTemplateOutlet, RouterLink, MatButtonModule, MatIconModule, MatTooltipModule, AutoFocus],
+  imports: [NgTemplateOutlet, RouterLink, MatButtonModule, MatIconModule, MatTooltipModule, AutoFocus, SoundList],
   templateUrl: './side-panel.html',
   host: { class: 'flex h-full flex-col' },
 })
@@ -52,7 +53,6 @@ export class SidePanel {
   // --- Listas --------------------------------------------------------------
   readonly characters = computed(() => this.byKind('character'));
   readonly npcs = computed(() => this.byKind('npc'));
-  readonly sounds = computed(() => this.byKind('sound'));
   readonly gmActions = computed(() => this.byKind('automation').filter((e) => e.role === 'gm'));
   readonly playerActions = computed(() => this.byKind('automation').filter((e) => e.role === 'player'));
 
@@ -71,13 +71,6 @@ export class SidePanel {
     const entry = this.session.addEntry(kind, role ? { role } : {});
     this.renamingId.set(entry.id);
     this.opened.emit(entry.id);
-  }
-
-  async onSoundsPicked(input: HTMLInputElement): Promise<void> {
-    for (const file of Array.from(input.files ?? [])) {
-      if (file.type.startsWith('audio/')) await this.session.uploadSound(file);
-    }
-    input.value = '';
   }
 
   finishRename(entry: TableEntry, value: string): void {

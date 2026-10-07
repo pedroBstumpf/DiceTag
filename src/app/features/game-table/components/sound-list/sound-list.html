@@ -1,0 +1,137 @@
+<!-- ===== Mestre: volume geral + parar tudo ===== -->
+<div class="flex items-center gap-2 rounded-lg bg-ink-950/60 px-3 py-2 ring-1 ring-white/5">
+  <mat-icon class="!size-5 shrink-0 !text-[20px] text-slate-400">volume_up</mat-icon>
+  <input
+    type="range"
+    min="0"
+    max="1"
+    step="0.01"
+    class="min-w-0 flex-1 accent-astral-400"
+    aria-label="Volume mestre"
+    matTooltip="Volume mestre"
+    [value]="session.soundMaster()"
+    (input)="setMaster(volumeMaster.value)"
+    #volumeMaster
+  />
+  <button
+    type="button"
+    class="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-slate-300 transition-colors hover:bg-red-500/15 hover:text-red-300 disabled:opacity-40"
+    [disabled]="!mixer.playing().size"
+    (click)="mixer.stopAll()"
+  >
+    <mat-icon class="!size-4 !text-[16px]">stop</mat-icon>
+    Parar tudo
+  </button>
+</div>
+
+<!-- ===== Faixas ===== -->
+<section>
+  <h4 class="mb-1 pl-2 text-[11px] font-semibold uppercase tracking-widest text-slate-500">Trilhas e ambientes</h4>
+
+  @for (entry of sounds(); track entry.id) {
+    @let playing = mixer.playing().has(entry.id);
+    <div
+      class="mb-1 flex flex-col gap-1 rounded-lg px-1.5 py-1.5 transition-colors"
+      [class]="playing ? 'bg-astral-500/10 ring-1 ring-astral-400/20' : 'hover:bg-white/5'"
+    >
+      <div class="flex items-center gap-1.5">
+        <!-- Play / pausa (com equalizador animado enquanto toca) -->
+        <button
+          type="button"
+          class="grid size-8 shrink-0 place-items-center rounded-md transition-colors"
+          [class]="playing ? 'bg-astral-500/25 text-astral-300' : 'text-slate-300 hover:bg-white/10 hover:text-white'"
+          [attr.aria-label]="playing ? 'Pausar' : 'Tocar'"
+          (click)="mixer.toggle(entry)"
+        >
+          @if (playing) {
+            <span class="flex h-4 items-end gap-[3px]" aria-hidden="true">
+              @for (delay of eqDelays; track $index) {
+                <span class="h-full w-[3px] origin-bottom rounded-sm bg-astral-300 animate-eq" [style.animation-delay]="delay"></span>
+              }
+            </span>
+          } @else {
+            <mat-icon class="!text-[20px]">play_arrow</mat-icon>
+          }
+        </button>
+
+        <!-- Nome (ou campo de renomear) -->
+        @if (renamingId() === entry.id) {
+          <input
+            #nameInput
+            appAutoFocus
+            class="h-7 min-w-0 flex-1 rounded bg-ink-950 px-2 text-sm text-slate-100 outline-none ring-1 ring-astral-400/60"
+            [value]="entry.name"
+            (keydown.enter)="finishRename(entry, nameInput.value)"
+            (keydown.escape)="renamingId.set(null)"
+            (blur)="finishRename(entry, nameInput.value)"
+          />
+        } @else {
+          <span class="min-w-0 flex-1 truncate text-sm text-slate-200" (dblclick)="renamingId.set(entry.id)">{{ entry.name }}</span>
+        }
+
+        <!-- Repetição -->
+        <button
+          type="button"
+          class="grid size-7 shrink-0 place-items-center rounded-md transition-colors"
+          [class]="(entry.loop ?? true) ? 'text-astral-300 hover:bg-white/10' : 'text-slate-600 hover:bg-white/10 hover:text-slate-300'"
+          [matTooltip]="(entry.loop ?? true) ? 'Repetição ligada' : 'Repetição desligada'"
+          [attr.aria-pressed]="entry.loop ?? true"
+          (click)="toggleLoop(entry)"
+        >
+          <mat-icon class="!text-[18px]">repeat</mat-icon>
+        </button>
+
+        <!-- Menu: renomear / excluir -->
+        <button
+          type="button"
+          class="grid size-7 shrink-0 place-items-center rounded-md text-slate-500 hover:bg-white/10 hover:text-slate-200"
+          aria-label="Opções do som"
+          [matMenuTriggerFor]="soundMenu"
+          [matMenuTriggerData]="{ entry: entry }"
+        >
+          <mat-icon class="!text-[18px]">more_vert</mat-icon>
+        </button>
+      </div>
+
+      <!-- Volume da faixa -->
+      <label class="flex items-center gap-2 pl-[38px] pr-1">
+        <mat-icon class="!size-4 shrink-0 !text-[16px] text-slate-500">volume_down</mat-icon>
+        <input
+          #volumeInput
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          class="h-1 min-w-0 flex-1 accent-astral-400"
+          [attr.aria-label]="'Volume de ' + entry.name"
+          [value]="volumeOf(entry)"
+          (input)="setVolume(entry, volumeInput.value)"
+        />
+        <span class="w-8 text-right text-[10px] tabular-nums text-slate-500">{{ (volumeOf(entry) * 100).toFixed(0) }}%</span>
+      </label>
+    </div>
+  } @empty {
+    <p class="px-2 py-2 text-xs text-slate-600">Nenhum som ainda. Envie ou arraste arquivos de áudio para cá.</p>
+  }
+</section>
+
+<!-- ===== Envio ===== -->
+<button mat-stroked-button class="w-full" (click)="soundInput.click()">
+  <mat-icon>upload</mat-icon>
+  Enviar áudio
+</button>
+<input #soundInput type="file" accept="audio/*,.mp3" multiple hidden (change)="onPicked(soundInput)" />
+
+<!-- Menu de opções de um som -->
+<mat-menu #soundMenu="matMenu" xPosition="before">
+  <ng-template matMenuContent let-entry="entry">
+    <button mat-menu-item (click)="renamingId.set(entry.id)">
+      <mat-icon>edit</mat-icon>
+      <span>Renomear</span>
+    </button>
+    <button mat-menu-item (click)="remove(entry)">
+      <mat-icon class="!text-red-400">delete</mat-icon>
+      <span class="text-red-300">Excluir</span>
+    </button>
+  </ng-template>
+</mat-menu>

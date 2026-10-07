@@ -57,12 +57,7 @@
 
     <!-- Sons e ambientação -->
     @case ('sounds') {
-      <ng-container *ngTemplateOutlet="section; context: { title: 'Trilhas e ambientes', kind: 'sound', list: sounds() }" />
-      <button mat-stroked-button class="w-full" (click)="soundInput.click()">
-        <mat-icon>upload</mat-icon>
-        Enviar áudio
-      </button>
-      <input #soundInput type="file" accept="audio/*" multiple hidden (change)="onSoundsPicked(soundInput)" />
+      <app-sound-list />
     }
 
     <!-- Automações -->
@@ -83,16 +78,14 @@
   <section class="mb-4">
     <header class="mb-1 flex items-center justify-between pl-2">
       <h4 class="text-[11px] font-semibold uppercase tracking-widest text-slate-500">{{ title }}</h4>
-      @if (kind !== 'sound') {
-        <button
-          type="button"
-          class="grid size-7 place-items-center rounded-md text-slate-400 hover:bg-white/10 hover:text-white"
-          [matTooltip]="'Novo: ' + metaOf(kind).label"
-          (click)="create(kind, role)"
-        >
-          <mat-icon class="!text-[18px]">add</mat-icon>
-        </button>
-      }
+      <button
+        type="button"
+        class="grid size-7 place-items-center rounded-md text-slate-400 hover:bg-white/10 hover:text-white"
+        [matTooltip]="'Novo: ' + metaOf(kind).label"
+        (click)="create(kind, role)"
+      >
+        <mat-icon class="!text-[18px]">add</mat-icon>
+      </button>
     </header>
 
     @for (entry of list; track entry.id) {

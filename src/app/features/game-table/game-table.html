@@ -70,9 +70,6 @@
           (closed)="windows.close(win.id)"
         >
           @switch (c.type) {
-            @case ('sound') {
-              <app-sound-player [entryId]="win.id" />
-            }
             @case ('entry') {
               <app-entry-window [entryId]="win.id" />
             }
