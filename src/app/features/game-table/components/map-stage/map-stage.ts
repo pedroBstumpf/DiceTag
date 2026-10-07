@@ -2,12 +2,13 @@ import { Component, ElementRef, computed, effect, inject, input, output, signal,
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { Point } from '../../../../core/models/geometry.model';
-import { METERS_PER_SQUARE } from '../../../../core/models/table-session.model';
+import { METERS_PER_SQUARE, Wall } from '../../../../core/models/table-session.model';
 import { newId } from '../../../../core/utils/id';
 import { Viewport, fitRect, screenToWorld, worldToScreen, zoomAt } from '../../../../shared/utils/viewport';
 import { TableSessionService } from '../../services/table-session.service';
 import { distanceToPolyline, sizeFromHandle, snapToCorner, snapTokenCenter } from '../../utils/geometry';
 import { simplifyPath } from '../../utils/simplify';
+import { distanceToWall, handleAt, moveWallHandle, translateWall } from '../../utils/walls';
 import { DrawingsLayer, StrokeDraft } from '../map-layers/drawings-layer/drawings-layer';
 import { FogLayer } from '../map-layers/fog-layer/fog-layer';
 import { NotePointerDown, NotesLayer } from '../map-layers/notes-layer/notes-layer';
@@ -32,6 +33,8 @@ type Gesture =
   | { kind: 'token'; id: string; size: number; sx: number; sy: number; cx: number; cy: number }
   | { kind: 'resize'; id: string; cx: number; cy: number }
   | { kind: 'circle'; cx: number; cy: number }
+  /** Editar parede: `handle` = índice da alça arrastada, ou -1 para mover a parede inteira. */
+  | { kind: 'wall'; sx: number; sy: number; original: Wall; handle: number }
   | { kind: 'draw' }
   | { kind: 'erase' }
   | { kind: 'note'; id: string; sx: number; sy: number; nx: number; ny: number; moved: boolean };
@@ -93,6 +96,9 @@ export class MapStage {
     equal: (a, b) => a.sceneId === b.sceneId && a.blobId === b.blobId,
   });
 
+  /** Modo "Editar paredes" ativo (mostra alças e permite mover). */
+  readonly editingWalls = computed(() => this.session.tool() === 'fog' && this.session.wallMode() === 'edit');
+
   /** Tokens recebem o ponteiro só na ferramenta Selecionar. */
   readonly selecting = computed(() => this.session.tool() === 'select');
   /** Marcadores de anotação recebem o ponteiro em Selecionar e Anotação. */
@@ -123,7 +129,10 @@ export class MapStage {
   readonly cursor = computed(() => {
     if (this.panning()) return 'grabbing';
     const tool = this.session.tool();
-    if (tool === 'fog') return this.session.wallMode() === 'erase' ? 'pointer' : 'crosshair';
+    if (tool === 'fog') {
+      const mode = this.session.wallMode();
+      return mode === 'erase' ? 'pointer' : mode === 'edit' ? 'move' : 'crosshair';
+    }
     if (tool === 'draw') return this.session.brush().eraser ? 'cell' : 'crosshair';
     return tool === 'ruler' || tool === 'ping' || tool === 'note' ? 'crosshair' : 'grab';
   });
@@ -297,9 +306,26 @@ export class MapStage {
       this.wallDraft.set({ kind: 'circle', cx: p.x, cy: p.y, r: 0 });
       this.gesture = { kind: 'circle', cx: p.x, cy: p.y };
       this.capture(event);
+    } else if (mode === 'edit') {
+      this.onWallEditDown(event, p);
     } else {
       this.addLinePoint(event, p);
     }
+  }
+
+  /** Editar paredes: alça da parede selecionada, corpo de uma parede ou fundo (move o mapa). */
+  private onWallEditDown(event: PointerEvent, p: Point): void {
+    const selected = this.session.walls().find((w) => w.id === this.session.selectedWallId());
+    const handle = selected ? handleAt(selected, p, HIT_TOLERANCE / this.scale()) : -1;
+    const wall = handle >= 0 ? selected : this.wallAt(p);
+    if (!wall) {
+      this.session.selectedWallId.set(null);
+      this.startPan(event);
+      return;
+    }
+    this.session.selectedWallId.set(wall.id);
+    this.gesture = { kind: 'wall', sx: event.clientX, sy: event.clientY, original: wall, handle };
+    this.capture(event);
   }
 
   /** Parede em linha, clique a clique: duplo clique ou clicar no ponto inicial finaliza. */
@@ -330,16 +356,29 @@ export class MapStage {
     this.wallDraft.set(null);
   }
 
+  /**
+   * Parede resultante do arraste: alça → move só aquele ponto (alinhado aos cantos);
+   * corpo → move tudo (em passos de quadrado, para paredes alinhadas continuarem alinhadas).
+   */
+  private editedWall(g: Extract<Gesture, { kind: 'wall' }>, event: PointerEvent): Wall {
+    if (g.handle >= 0) {
+      const p = this.toWorld(event);
+      return moveWallHandle(g.original, g.handle, g.original.kind === 'circle' ? p : this.snapCorner(p, event));
+    }
+    const grid = this.gridSize();
+    let dx = (event.clientX - g.sx) / this.scale();
+    let dy = (event.clientY - g.sy) / this.scale();
+    if (this.snapOn(event)) {
+      dx = Math.round(dx / grid) * grid;
+      dy = Math.round(dy / grid) * grid;
+    }
+    return translateWall(g.original, dx, dy);
+  }
+
   /** Parede sob o ponto (a mais recente primeiro), com tolerância constante na tela. */
   private wallAt(p: Point) {
     const tolerance = HIT_TOLERANCE / this.scale();
-    return [...this.session.walls()]
-      .reverse()
-      .find((w) =>
-        w.kind === 'line'
-          ? distanceToPolyline(p, w.points) < tolerance
-          : Math.abs(Math.hypot(p.x - w.cx, p.y - w.cy) - w.r) < tolerance,
-      );
+    return [...this.session.walls()].reverse().find((w) => distanceToWall(w, p) < tolerance);
   }
 
   // --- Ponteiro: tokens ----------------------------------------------------
@@ -393,6 +432,8 @@ export class MapStage {
     } else if (g.kind === 'circle') {
       const p = this.toWorld(event);
       this.wallDraft.set({ kind: 'circle', cx: g.cx, cy: g.cy, r: Math.hypot(p.x - g.cx, p.y - g.cy) });
+    } else if (g.kind === 'wall') {
+      this.session.updateWall(this.editedWall(g, event));
     } else if (g.kind === 'draw') {
       const p = this.toWorld(event);
       this.strokeDraft.update((d) => {
@@ -451,6 +492,17 @@ export class MapStage {
         this.wallDraft.set(null);
         return true;
       }
+    }
+
+    // Editar paredes: Delete remove a parede selecionada, Esc desmarca
+    const wallId = this.editingWalls() ? this.session.selectedWallId() : null;
+    if (wallId && (event.key === 'Delete' || event.key === 'Backspace')) {
+      this.session.removeWall(wallId);
+      return true;
+    }
+    if (wallId && event.key === 'Escape') {
+      this.session.selectedWallId.set(null);
+      return true;
     }
 
     const tokenId = this.session.selectedTokenId();

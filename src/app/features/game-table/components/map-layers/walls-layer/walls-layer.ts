@@ -1,6 +1,7 @@
-import { Component, input } from '@angular/core';
+import { Component, computed, input } from '@angular/core';
 import { Point } from '../../../../../core/models/geometry.model';
 import { Wall } from '../../../../../core/models/table-session.model';
+import { wallHandles } from '../../../utils/walls';
 
 /** Parede em construção (ainda não salva). */
 export type WallDraft =
@@ -9,8 +10,9 @@ export type WallDraft =
 
 /**
  * Camada de paredes (SVG, dentro do "mundo"): linhas e círculos em azul
- * tracejado, discretos, mais a parede em construção. Não recebe ponteiro —
- * criar e apagar paredes é roteado pelo map-stage.
+ * tracejado, discretos, mais a parede em construção e as alças da parede
+ * selecionada. Não recebe ponteiro — criar, mover e apagar paredes é
+ * roteado pelo map-stage.
  */
 @Component({
   selector: 'app-walls-layer',
@@ -18,11 +20,29 @@ export type WallDraft =
   template: `
     <svg class="absolute left-0 top-0 overflow-visible" width="1" height="1" fill="none" stroke-linecap="round" stroke-linejoin="round">
       @for (wall of walls(); track wall.id) {
-        @if (wall.kind === 'line') {
-          <polyline [attr.points]="pointsAttr(wall.points)" [attr.stroke]="color" [attr.stroke-width]="ui(2.5)" [attr.stroke-dasharray]="dash()" />
+        @let selected = editing() && wall.id === selectedId();
+        @if (wall.kind === 'circle') {
+          <circle
+            [attr.cx]="wall.cx"
+            [attr.cy]="wall.cy"
+            [attr.r]="wall.r"
+            [attr.stroke]="selected ? selectedColor : color"
+            [attr.stroke-width]="ui(selected ? 3.5 : 2.5)"
+            [attr.stroke-dasharray]="selected ? null : dash()"
+          />
         } @else {
-          <circle [attr.cx]="wall.cx" [attr.cy]="wall.cy" [attr.r]="wall.r" [attr.stroke]="color" [attr.stroke-width]="ui(2.5)" [attr.stroke-dasharray]="dash()" />
+          <polyline
+            [attr.points]="pointsAttr(wall.points)"
+            [attr.stroke]="selected ? selectedColor : color"
+            [attr.stroke-width]="ui(selected ? 3.5 : 2.5)"
+            [attr.stroke-dasharray]="selected ? null : dash()"
+          />
         }
+      }
+
+      <!-- Alças da parede selecionada (modo "Editar paredes") -->
+      @for (h of handles(); track $index) {
+        <circle [attr.cx]="h.x" [attr.cy]="h.y" [attr.r]="ui(6)" fill="#04060c" [attr.stroke]="selectedColor" [attr.stroke-width]="ui(2)" />
       }
 
       <!-- Parede em construção -->
@@ -43,8 +63,19 @@ export class WallsLayer {
   readonly walls = input.required<Wall[]>();
   readonly draft = input<WallDraft | null>(null);
   readonly scale = input.required<number>();
+  /** Parede selecionada (destacada). */
+  readonly selectedId = input<string | null>(null);
+  /** Modo "Editar paredes": mostra as alças da parede selecionada. */
+  readonly editing = input(false);
 
   readonly color = '#7aa7ff';
+  readonly selectedColor = '#f5f8ff';
+
+  /** Alças de edição (pontos da linha ou raio do círculo). */
+  readonly handles = computed(() => {
+    const wall = this.editing() && this.walls().find((w) => w.id === this.selectedId());
+    return wall ? wallHandles(wall) : [];
+  });
 
   /** Tamanho em px do mundo que aparece com `screenPx` na tela. */
   ui(screenPx: number): number {

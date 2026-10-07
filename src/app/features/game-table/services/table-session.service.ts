@@ -55,7 +55,7 @@ export interface ResolvedToken {
 export type TokenPatch = Partial<Pick<TokenSettings, 'size' | 'vision' | 'bars' | 'tags'>>;
 
 /** Modo da ferramenta Névoa. */
-export type WallMode = 'line' | 'circle' | 'erase';
+export type WallMode = 'line' | 'circle' | 'edit' | 'erase';
 
 /** Configuração atual do pincel (sessão). */
 export interface Brush {
@@ -174,6 +174,8 @@ export class TableSessionService {
   readonly wallMode = signal<WallMode>('line');
   /** Mestre: mostrar paredes mesmo fora da ferramenta Névoa. */
   readonly showWallsAlways = signal(false);
+  /** Parede selecionada no modo "Editar paredes". */
+  readonly selectedWallId = signal<string | null>(null);
   /** Pincel da ferramenta Desenhar. */
   readonly brush = signal<Brush>({ color: BRUSH_COLORS[0], width: BRUSH_WIDTHS[1], opacity: 1, eraser: false });
   /** Pilha de desfazer dos desenhos, por cena (só nesta sessão). */
@@ -452,9 +454,16 @@ export class TableSessionService {
     if (scene) this.updateScene(scene.id, { walls: [...(scene.walls ?? []), { ...wall, id: newId() } as Wall] });
   }
 
+  /** Substitui uma parede da cena ativa (mover parede ou ponto). */
+  updateWall(wall: Wall): void {
+    const scene = this.activeScene();
+    if (scene) this.updateScene(scene.id, { walls: (scene.walls ?? []).map((w) => (w.id === wall.id ? wall : w)) });
+  }
+
   removeWall(wallId: string): void {
     const scene = this.activeScene();
     if (scene) this.updateScene(scene.id, { walls: (scene.walls ?? []).filter((w) => w.id !== wallId) });
+    if (this.selectedWallId() === wallId) this.selectedWallId.set(null);
   }
 
   // --- Desenhos (pincel) ---------------------------------------------------
