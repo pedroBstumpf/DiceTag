@@ -19,6 +19,8 @@ import { MapStage } from './components/map-stage/map-stage';
 import { SceneBar } from './components/scene-bar/scene-bar';
 import { SidePanel } from './components/side-panel/side-panel';
 import { TABLE_TOOLS, ToolBar } from './components/tool-bar/tool-bar';
+import { TokenWindow } from './components/token-window/token-window';
+import { BlobUrlService } from './services/blob-url.service';
 import { SoundMixerService } from './services/sound-mixer.service';
 import { TableSessionService } from './services/table-session.service';
 
@@ -28,12 +30,16 @@ interface WindowContent {
   icon: string;
   color: string;
   /** Tipo de conteúdo, usado para escolher o componente. */
-  type: 'entry' | 'document' | 'timeline' | 'image';
+  type: 'entry' | 'token' | 'document' | 'timeline' | 'image';
 }
+
+/** Prefixo do id das janelas "Token" (token:<id do token colocado>). */
+const TOKEN_WINDOW = 'token:';
 
 /** Tamanho inicial das janelas por tipo de conteúdo. */
 const WINDOW_SIZES: Record<WindowContent['type'], { width: number; height: number }> = {
-  entry: { width: 520, height: 480 },
+  entry: { width: 540, height: 620 },
+  token: { width: 460, height: 560 },
   document: { width: 720, height: 600 },
   timeline: { width: 620, height: 560 },
   image: { width: 720, height: 520 },
@@ -67,11 +73,12 @@ const PANEL_SPACE = { top: 60, left: 76, right: 344, bottom: 100 };
     SidePanel,
     ActionBar,
     EntryWindow,
+    TokenWindow,
     DocumentEditor,
     TimelineEditor,
     ImageViewer,
   ],
-  providers: [TableSessionService, SoundMixerService, WindowManagerService],
+  providers: [TableSessionService, SoundMixerService, BlobUrlService, WindowManagerService],
   templateUrl: './game-table.html',
   host: {
     class: 'relative block h-dvh overflow-hidden',
@@ -113,12 +120,24 @@ export class GameTablePage {
       untracked(() => this.session.load(id));
     });
     inject(DestroyRef).onDestroy(() => this.session.flush());
+
+    // Fecha janelas "Token" de tokens removidos do mapa
+    effect(() => {
+      const stale = this.windows
+        .windows()
+        .filter((w) => w.id.startsWith(TOKEN_WINDOW) && !this.session.resolvedTokenById(w.id.slice(TOKEN_WINDOW.length)));
+      if (stale.length) untracked(() => this.windows.closeMany(stale.map((w) => w.id)));
+    });
   }
 
   // --- Janelas -------------------------------------------------------------
 
-  /** Descobre o que mostrar numa janela (arquivo da mesa ou item do worldbuild). */
+  /** Descobre o que mostrar numa janela (arquivo/token da mesa ou item do worldbuild). */
   content(id: string): WindowContent | null {
+    if (id.startsWith(TOKEN_WINDOW)) {
+      const token = this.session.resolvedTokenById(id.slice(TOKEN_WINDOW.length));
+      return token ? { title: `Token: ${token.entry.name}`, icon: 'token', color: TABLE_ENTRY_META[token.entry.kind].color, type: 'token' } : null;
+    }
     const entry = this.session.entryById().get(id);
     // Sons não abrem janela: são controlados direto no mixer da aba Sons
     if (entry && entry.kind !== 'sound') {
@@ -139,6 +158,21 @@ export class GameTablePage {
     this.windows.open(id, { width: el?.clientWidth ?? 1200, height: el?.clientHeight ?? 800 }, WINDOW_SIZES[type]);
   }
 
+  /** Abre a janela "Token" de um token colocado no mapa. */
+  openToken(placementId: string): void {
+    this.open(TOKEN_WINDOW + placementId);
+  }
+
+  /** Id do token colocado a partir do id da janela "Token". */
+  placementOf(windowId: string): string {
+    return windowId.slice(TOKEN_WINDOW.length);
+  }
+
+  /** Coloca o token de uma ficha no centro da área visível do mapa. */
+  placeOnMap(entryId: string): void {
+    this.map()?.placeAtCenter(entryId);
+  }
+
   // --- Ações ---------------------------------------------------------------
 
   /** Uma automação foi usada na barra inferior. */
@@ -150,6 +184,12 @@ export class GameTablePage {
   onKeydown(event: KeyboardEvent): void {
     const target = event.target as HTMLElement;
     if (target.closest('input, textarea, [contenteditable="true"]') || event.ctrlKey || event.metaKey || event.altKey) return;
+
+    // Teclas que dependem da seleção/ferramenta do mapa (Delete, Esc…)
+    if (this.map()?.handleKey(event)) {
+      event.preventDefault();
+      return;
+    }
 
     const key = event.key.toLowerCase();
     const tool = TABLE_TOOLS.find((t) => t.key.toLowerCase() === key && !t.soon);

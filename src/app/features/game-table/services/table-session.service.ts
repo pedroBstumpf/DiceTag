@@ -1,4 +1,5 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
+import { Point } from '../../../core/models/geometry.model';
 import {
   DEFAULT_SOUND_VOLUME,
   Scene,
@@ -8,6 +9,12 @@ import {
   TableRole,
   TableState,
   TableTool,
+  TokenBar,
+  TokenPlacement,
+  TokenSettings,
+  TokenTag,
+  TokenVision,
+  defaultToken,
 } from '../../../core/models/table-session.model';
 import { StorageService } from '../../../core/services/storage.service';
 import { newId } from '../../../core/utils/id';
@@ -20,14 +27,35 @@ export interface TablePanels {
   actions: boolean;
 }
 
+/**
+ * Token com as configurações efetivas (regra de vínculo já aplicada).
+ * É o que o mapa e a janela "Token" exibem.
+ */
+export interface ResolvedToken {
+  placement: TokenPlacement;
+  entry: TableEntry;
+  /** Personagem: alterações valem para a ficha e todos os tokens dela. */
+  linked: boolean;
+  blobId?: string;
+  size: number;
+  vision: TokenVision;
+  bars: TokenBar[];
+  tags: TokenTag[];
+}
+
+/** Campos do token editáveis pela ficha ou pela janela "Token". */
+export type TokenPatch = Partial<Pick<TokenSettings, 'size' | 'vision' | 'bars' | 'tags'>>;
+
 const EMPTY_STATE: TableState = { scenes: [], activeSceneId: null, entries: [] };
+const NO_TOKENS: TokenPlacement[] = [];
 
 /**
  * Estado da mesa aberta: cenas, arquivos (fichas, sons, automações),
- * ferramenta ativa e papel do usuário (mestre ou jogador).
+ * tokens, ferramenta ativa e papel do usuário (mestre ou jogador).
  *
  * Fornecido no componente da mesa — cada mesa aberta tem sua instância.
- * Salva no IndexedDB com a chave "table-state:<id>".
+ * Salva no IndexedDB com a chave "table-state:<id>". Toda mutação passa
+ * por patchState (gravação agrupada com debounce de 300ms).
  */
 @Injectable()
 export class TableSessionService {
@@ -46,9 +74,19 @@ export class TableSessionService {
   /** Volume mestre dos sons (0–1). */
   readonly soundMaster = computed(() => this.state().soundMaster ?? 1);
 
+  /** Tokens colocados na cena ativa (mesma referência enquanto não mudam). */
+  readonly tokens = computed(() => this.activeScene()?.tokens ?? NO_TOKENS);
+  /** Tokens da cena ativa com as configurações efetivas. */
+  readonly resolvedTokens = computed(() => {
+    const byId = this.entryById();
+    return this.tokens().flatMap((p) => this.resolveToken(p, byId) ?? []);
+  });
+
   // --- Estado da sessão (não persistido) -----------------------------------
   readonly tool = signal<TableTool>('select');
   readonly role = signal<TableRole>('gm');
+  /** Token selecionado no mapa (anel azul). */
+  readonly selectedTokenId = signal<string | null>(null);
 
   /** Barras visíveis da mesa (todas podem ser escondidas). */
   readonly panels = signal<TablePanels>({ scenes: true, tools: true, side: true, actions: true });
@@ -96,8 +134,10 @@ export class TableSessionService {
       blobId,
       gridSize: 70,
       showGrid: true,
+      tokens: [],
     };
     this.patchState((s) => ({ ...s, scenes: [...s.scenes, scene], activeSceneId: scene.id }));
+    this.selectedTokenId.set(null);
     return scene;
   }
 
@@ -116,8 +156,10 @@ export class TableSessionService {
 
   setActiveScene(id: string): void {
     this.patchState((s) => ({ ...s, activeSceneId: id }));
+    this.selectedTokenId.set(null);
   }
 
+  /** Exclui a cena e apaga o arquivo do mapa dela. */
   removeScene(id: string): void {
     const scene = this.scenes().find((s) => s.id === id);
     this.patchState((s) => {
@@ -166,14 +208,155 @@ export class TableSessionService {
     this.patchState((s) => ({ ...s, entries: s.entries.map((e) => (e.id === id ? { ...e, ...patch } : e)) }));
   }
 
+  /** Exclui o arquivo, os tokens dele em todas as cenas e os arquivos (áudio/imagem). */
   removeEntry(id: string): void {
     const entry = this.entryById().get(id);
-    this.patchState((s) => ({ ...s, entries: s.entries.filter((e) => e.id !== id) }));
+    this.patchState((s) => ({
+      ...s,
+      entries: s.entries.filter((e) => e.id !== id),
+      scenes: s.scenes.map((sc) =>
+        sc.tokens?.some((t) => t.entryId === id) ? { ...sc, tokens: sc.tokens.filter((t) => t.entryId !== id) } : sc,
+      ),
+    }));
     if (entry?.blobId) this.storage.delete(`blob:${entry.blobId}`);
+    if (entry?.token?.blobId) this.storage.delete(`blob:${entry.token.blobId}`);
   }
 
   getBlob(blobId: string): Promise<Blob | undefined> {
     return this.storage.get<Blob>(`blob:${blobId}`);
+  }
+
+  // --- Tokens: regra de vínculo --------------------------------------------
+
+  /** Configuração do token na ficha (ou o padrão do tipo). */
+  tokenOf(entry: TableEntry): TokenSettings {
+    return entry.token ?? defaultToken(entry.kind);
+  }
+
+  /**
+   * Configurações efetivas de um token colocado — único lugar da regra de vínculo:
+   * - Personagem: tamanho, barras e etiquetas vêm sempre da ficha.
+   * - NPC: usa os valores próprios da colocação (copiados ao colocar).
+   * Imagem e visão vêm sempre da ficha.
+   */
+  resolveToken(placement: TokenPlacement, byId = this.entryById()): ResolvedToken | null {
+    const entry = byId.get(placement.entryId);
+    if (!entry) return null;
+    const sheet = this.tokenOf(entry);
+    const linked = entry.kind === 'character';
+    return {
+      placement,
+      entry,
+      linked,
+      blobId: sheet.blobId,
+      vision: sheet.vision,
+      size: linked ? sheet.size : (placement.size ?? sheet.size),
+      bars: linked ? sheet.bars : (placement.bars ?? sheet.bars),
+      tags: linked ? sheet.tags : (placement.tags ?? sheet.tags),
+    };
+  }
+
+  /** Token colocado (em qualquer cena) com as configurações efetivas. */
+  resolvedTokenById(placementId: string): ResolvedToken | null {
+    const placement = this.findPlacement(placementId);
+    return placement ? this.resolveToken(placement) : null;
+  }
+
+  /**
+   * Altera um token colocado respeitando a regra de vínculo:
+   * personagem grava na ficha (vale para todos os tokens dele);
+   * NPC grava só neste token. A visão é sempre da ficha.
+   */
+  updateToken(placementId: string, patch: TokenPatch): void {
+    const placement = this.findPlacement(placementId);
+    const entry = placement && this.entryById().get(placement.entryId);
+    if (!placement || !entry) return;
+
+    const { vision, ...own } = patch;
+    if (entry.kind === 'character') {
+      this.updateEntryToken(entry.id, patch);
+      return;
+    }
+    if (vision) this.updateEntryToken(entry.id, { vision });
+    if (Object.keys(own).length) this.patchPlacement(placementId, own);
+  }
+
+  /** Altera a configuração de token da ficha (janela do personagem/NPC). */
+  updateEntryToken(entryId: string, patch: Partial<TokenSettings>): void {
+    const entry = this.entryById().get(entryId);
+    if (entry) this.updateEntry(entryId, { token: { ...this.tokenOf(entry), ...patch } });
+  }
+
+  /** Troca a imagem do token da ficha e apaga a anterior. */
+  async setTokenImage(entryId: string, file: File): Promise<void> {
+    const entry = this.entryById().get(entryId);
+    if (!entry) return;
+    const blobId = newId();
+    await this.storage.set(`blob:${blobId}`, file);
+    const old = this.tokenOf(entry).blobId;
+    this.updateEntryToken(entryId, { blobId });
+    if (old) this.storage.delete(`blob:${old}`);
+  }
+
+  // --- Tokens no mapa ------------------------------------------------------
+
+  /** Coloca o token de um personagem/NPC na cena ativa (centro em `p`). */
+  placeToken(entryId: string, p: Point): TokenPlacement | null {
+    const entry = this.entryById().get(entryId);
+    const scene = this.activeScene();
+    if (!entry || !scene || (entry.kind !== 'character' && entry.kind !== 'npc')) return null;
+
+    const sheet = this.tokenOf(entry);
+    const placement: TokenPlacement = {
+      id: newId(),
+      entryId,
+      x: p.x,
+      y: p.y,
+      // NPC: cada token colocado é independente (cópia da ficha)
+      ...(entry.kind === 'npc' && {
+        size: sheet.size,
+        bars: sheet.bars.map((b) => ({ ...b })),
+        tags: sheet.tags.map((t) => ({ ...t })),
+      }),
+    };
+    this.updateScene(scene.id, { tokens: [...(scene.tokens ?? []), placement] });
+    this.selectedTokenId.set(placement.id);
+    return placement;
+  }
+
+  moveToken(placementId: string, p: Point): void {
+    this.patchPlacement(placementId, { x: p.x, y: p.y });
+  }
+
+  /** Remove o token do mapa (a ficha continua). */
+  removeToken(placementId: string): void {
+    this.patchState((s) => ({
+      ...s,
+      scenes: s.scenes.map((sc) =>
+        sc.tokens?.some((t) => t.id === placementId) ? { ...sc, tokens: sc.tokens.filter((t) => t.id !== placementId) } : sc,
+      ),
+    }));
+    if (this.selectedTokenId() === placementId) this.selectedTokenId.set(null);
+  }
+
+  private findPlacement(placementId: string): TokenPlacement | undefined {
+    for (const scene of this.scenes()) {
+      const found = scene.tokens?.find((t) => t.id === placementId);
+      if (found) return found;
+    }
+    return undefined;
+  }
+
+  /** Altera um token colocado (só a cena que o contém muda de referência). */
+  private patchPlacement(placementId: string, patch: Partial<Omit<TokenPlacement, 'id' | 'entryId'>>): void {
+    this.patchState((s) => ({
+      ...s,
+      scenes: s.scenes.map((sc) =>
+        sc.tokens?.some((t) => t.id === placementId)
+          ? { ...sc, tokens: sc.tokens.map((t) => (t.id === placementId ? { ...t, ...patch } : t)) }
+          : sc,
+      ),
+    }));
   }
 
   // --- Persistência --------------------------------------------------------
@@ -206,6 +389,7 @@ function normalizeState(raw: TableState | undefined): TableState {
   if (!raw) return EMPTY_STATE;
   return {
     ...raw,
+    scenes: raw.scenes.map((sc) => ({ ...sc, tokens: sc.tokens ?? [] })),
     entries: raw.entries.map((e) =>
       e.kind === 'sound' ? { ...e, volume: e.volume ?? DEFAULT_SOUND_VOLUME, loop: e.loop ?? true } : e,
     ),

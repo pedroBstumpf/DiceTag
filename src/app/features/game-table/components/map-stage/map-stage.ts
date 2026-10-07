@@ -1,32 +1,42 @@
-import { Component, ElementRef, computed, effect, inject, input, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, computed, effect, inject, input, output, signal, viewChild } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { Point } from '../../../../core/models/geometry.model';
+import { METERS_PER_SQUARE } from '../../../../core/models/table-session.model';
 import { newId } from '../../../../core/utils/id';
+import { Viewport, fitRect, screenToWorld, zoomAt } from '../../../../shared/utils/viewport';
 import { TableSessionService } from '../../services/table-session.service';
+import { sizeFromHandle, snapTokenCenter } from '../../utils/geometry';
+import { TOKEN_DRAG_TYPE, TokenPointerDown, TokensLayer } from '../map-layers/tokens-layer/tokens-layer';
 
 const MIN_SCALE = 0.1;
 const MAX_SCALE = 6;
 /** Tamanho do "papel quadriculado" quando a cena ainda não tem mapa. */
 const EMPTY_WORLD = { w: 2100, h: 1400 };
-/** Metros por quadrado da grade (padrão da maioria dos sistemas). */
-const METERS_PER_SQUARE = 1.5;
+/** Intervalo máximo entre dois cliques para contar como duplo clique (ms). */
+const DOUBLE_TAP_MS = 350;
 
-interface Point {
-  x: number;
-  y: number;
-}
+/** Gesto de ponteiro em andamento no mapa. */
+type Gesture =
+  | { kind: 'pan'; sx: number; sy: number; ox: number; oy: number }
+  | { kind: 'ruler' }
+  | { kind: 'token'; id: string; size: number; sx: number; sy: number; cx: number; cy: number }
+  | { kind: 'resize'; id: string; cx: number; cy: number };
 
 /**
- * Mapa central da mesa.
- * - Zoom com a roda do mouse (no ponto do cursor) e botões
- * - Mover o mapa: ferramenta "Mover"/"Selecionar" ou botão do meio do mouse
- * - Régua: arraste para medir em quadrados e metros
- * - Ping: clique para chamar atenção num ponto do mapa
- * - Grade sobreposta ao mapa (tamanho configurável por cena)
+ * Mapa central da mesa — orquestrador das camadas.
+ *
+ * Cuida de zoom (roda do mouse, no cursor), pan, conversão tela↔mundo e do
+ * roteamento do ponteiro conforme a ferramenta ativa. Cada camada
+ * (map-layers/) só desenha e avisa interações; as mutações passam pelo
+ * TableSessionService.
+ *
+ * Ordem das camadas no "mundo", de baixo para cima:
+ *   mapa → grade → tokens → régua e ping
  */
 @Component({
   selector: 'app-map-stage',
-  imports: [MatIconModule, MatTooltipModule],
+  imports: [MatIconModule, MatTooltipModule, TokensLayer],
   templateUrl: './map-stage.html',
   host: { class: 'block' },
 })
@@ -35,14 +45,16 @@ export class MapStage {
 
   /** Espaço reservado pelas barras (para centralizar o mapa na área livre). */
   readonly insets = input({ top: 0, right: 0, bottom: 0, left: 0 });
+  /** Duplo clique num token: abrir a janela "Token". */
+  readonly tokenOpened = output<string>();
 
   private readonly stage = viewChild.required<ElementRef<HTMLElement>>('stage');
 
-  // --- Estado da visualização ----------------------------------------------
+  // --- Vista ---------------------------------------------------------------
+  readonly view = signal<Viewport>({ x: 0, y: 0, scale: 1 });
+  readonly scale = computed(() => this.view().scale);
   readonly src = signal<string | null>(null);
   readonly world = signal(EMPTY_WORLD);
-  readonly scale = signal(1);
-  readonly offset = signal<Point>({ x: 0, y: 0 });
 
   // --- Interações ----------------------------------------------------------
   readonly panning = signal(false);
@@ -50,20 +62,20 @@ export class MapStage {
   readonly pings = signal<(Point & { id: string })[]>([]);
 
   readonly scene = this.session.activeScene;
+  readonly gridSize = computed(() => this.scene()?.gridSize ?? 70);
   /** Muda só quando troca a cena ou o mapa (não ao ajustar a grade). */
   private readonly mapKey = computed(() => ({ sceneId: this.scene()?.id, blobId: this.scene()?.blobId }), {
     equal: (a, b) => a.sceneId === b.sceneId && a.blobId === b.blobId,
   });
-  private panStart = { x: 0, y: 0, ox: 0, oy: 0 };
 
-  readonly gridSize = computed(() => this.scene()?.gridSize ?? 70);
+  /** Tokens e anotações recebem o ponteiro só na ferramenta Selecionar. */
+  readonly selecting = computed(() => this.session.tool() === 'select');
 
   /** Distância da régua em quadrados e metros. */
   readonly rulerLabel = computed(() => {
     const r = this.ruler();
-    const grid = this.scene()?.gridSize ?? 70;
     if (!r) return '';
-    const squares = Math.hypot(r.to.x - r.from.x, r.to.y - r.from.y) / grid;
+    const squares = Math.hypot(r.to.x - r.from.x, r.to.y - r.from.y) / this.gridSize();
     return `${squares.toFixed(1)} quad. · ${(squares * METERS_PER_SQUARE).toFixed(1)} m`;
   });
 
@@ -73,6 +85,9 @@ export class MapStage {
     const tool = this.session.tool();
     return tool === 'ruler' || tool === 'ping' ? 'crosshair' : 'grab';
   });
+
+  private gesture: Gesture | null = null;
+  private lastTap = { key: '', time: 0 };
 
   constructor() {
     // Carrega a imagem da cena ativa (ou usa o papel quadriculado)
@@ -98,7 +113,7 @@ export class MapStage {
     });
   }
 
-  // --- Zoom ----------------------------------------------------------------
+  // --- Zoom e enquadramento ------------------------------------------------
 
   onImageLoad(img: HTMLImageElement): void {
     this.world.set({ w: img.naturalWidth, h: img.naturalHeight });
@@ -109,23 +124,18 @@ export class MapStage {
   fit(): void {
     const el = this.stage().nativeElement;
     const i = this.insets();
-    const areaW = el.clientWidth - i.left - i.right;
-    const areaH = el.clientHeight - i.top - i.bottom;
     const { w, h } = this.world();
-    const s = Math.min(areaW / w, areaH / h) * 0.95;
-    this.scale.set(s);
-    this.offset.set({ x: i.left + (areaW - w * s) / 2, y: i.top + (areaH - h * s) / 2 });
+    this.view.set(
+      fitRect(
+        { x: 0, y: 0, width: w, height: h },
+        { x: i.left, y: i.top, width: el.clientWidth - i.left - i.right, height: el.clientHeight - i.top - i.bottom },
+      ),
+    );
   }
 
   zoomBy(factor: number, cx?: number, cy?: number): void {
     const el = this.stage().nativeElement;
-    const px = cx ?? el.clientWidth / 2;
-    const py = cy ?? el.clientHeight / 2;
-    const old = this.scale();
-    const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, old * factor));
-    const { x, y } = this.offset();
-    this.scale.set(next);
-    this.offset.set({ x: px - ((px - x) * next) / old, y: py - ((py - y) * next) / old });
+    this.view.update((v) => zoomAt(v, factor, cx ?? el.clientWidth / 2, cy ?? el.clientHeight / 2, MIN_SCALE, MAX_SCALE));
   }
 
   onWheel(event: WheelEvent): void {
@@ -134,51 +144,160 @@ export class MapStage {
     this.zoomBy(event.deltaY < 0 ? 1.12 : 1 / 1.12, event.clientX - rect.left, event.clientY - rect.top);
   }
 
-  // --- Ponteiro (ferramentas) ----------------------------------------------
+  /** Centro da área livre (entre as barras), em coordenadas do mapa. */
+  centerWorld(): Point {
+    const el = this.stage().nativeElement;
+    const i = this.insets();
+    const sx = i.left + (el.clientWidth - i.left - i.right) / 2;
+    const sy = i.top + (el.clientHeight - i.top - i.bottom) / 2;
+    return screenToWorld(this.view(), sx, sy);
+  }
+
+  // --- Ponteiro: fundo do mapa ---------------------------------------------
 
   onPointerDown(event: PointerEvent): void {
     const tool = this.session.tool();
-    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
 
-    // Botão do meio sempre move o mapa
+    // Botão do meio sempre move o mapa; Selecionar/Mover arrastam o fundo
     if (event.button === 1 || (event.button === 0 && (tool === 'pan' || tool === 'select'))) {
       event.preventDefault();
-      const { x, y } = this.offset();
-      this.panStart = { x: event.clientX, y: event.clientY, ox: x, oy: y };
-      this.panning.set(true);
+      if (tool === 'select') this.session.selectedTokenId.set(null);
+      this.startPan(event);
       return;
     }
     if (event.button !== 0) return;
 
     const p = this.toWorld(event);
-    if (tool === 'ruler') this.ruler.set({ from: p, to: p });
-    if (tool === 'ping') this.addPing(p);
+    if (tool === 'ruler') {
+      this.ruler.set({ from: p, to: p });
+      this.gesture = { kind: 'ruler' };
+      this.capture(event);
+    } else if (tool === 'ping') {
+      this.addPing(p);
+    }
   }
 
+  // --- Ponteiro: tokens ----------------------------------------------------
+
+  /** Token pressionado: seleciona, move (com snap) ou redimensiona. Duplo clique abre a janela. */
+  onTokenDown({ event, token, mode }: TokenPointerDown): void {
+    const id = token.placement.id;
+    this.session.selectedTokenId.set(id);
+    const { x: cx, y: cy } = token.placement;
+
+    if (mode === 'resize') {
+      this.gesture = { kind: 'resize', id, cx, cy };
+    } else {
+      if (this.isDoubleTap(id)) {
+        this.tokenOpened.emit(id);
+        return;
+      }
+      this.gesture = { kind: 'token', id, size: token.size, sx: event.clientX, sy: event.clientY, cx, cy };
+    }
+    this.capture(event);
+  }
+
+  // --- Ponteiro: movimento e fim -------------------------------------------
+
   onPointerMove(event: PointerEvent): void {
-    if (this.panning()) {
-      this.offset.set({
-        x: this.panStart.ox + event.clientX - this.panStart.x,
-        y: this.panStart.oy + event.clientY - this.panStart.y,
-      });
-    } else if (this.ruler()) {
+    const g = this.gesture;
+    if (!g) return;
+
+    if (g.kind === 'pan') {
+      this.view.update((v) => ({ ...v, x: g.ox + event.clientX - g.sx, y: g.oy + event.clientY - g.sy }));
+    } else if (g.kind === 'ruler') {
       this.ruler.update((r) => (r ? { ...r, to: this.toWorld(event) } : r));
+    } else if (g.kind === 'token') {
+      const s = this.scale();
+      let p = { x: g.cx + (event.clientX - g.sx) / s, y: g.cy + (event.clientY - g.sy) / s };
+      // Snap ao centro do quadrado (Shift posiciona livre)
+      if (!event.shiftKey) p = snapTokenCenter(p, g.size, this.gridSize());
+      const current = this.session.tokens().find((t) => t.id === g.id);
+      if (current && (current.x !== p.x || current.y !== p.y)) this.session.moveToken(g.id, p);
+    } else if (g.kind === 'resize') {
+      const size = sizeFromHandle({ x: g.cx, y: g.cy }, this.toWorld(event), this.gridSize());
+      if (this.session.resolvedTokenById(g.id)?.size !== size) this.session.updateToken(g.id, { size });
     }
   }
 
   onPointerUp(): void {
+    this.gesture = null;
     this.panning.set(false);
     this.ruler.set(null);
   }
 
+  // --- Teclado (encaminhado pela página da mesa) ---------------------------
+
+  /** Trata Delete/Esc conforme a seleção. Retorna true se a tecla foi usada. */
+  handleKey(event: KeyboardEvent): boolean {
+    const tokenId = this.session.selectedTokenId();
+    if ((event.key === 'Delete' || event.key === 'Backspace') && tokenId) {
+      this.session.removeToken(tokenId);
+      return true;
+    }
+    if (event.key === 'Escape' && tokenId) {
+      this.session.selectedTokenId.set(null);
+      return true;
+    }
+    return false;
+  }
+
+  // --- Arrastar fichas do painel para o mapa -------------------------------
+
+  onDragOver(event: DragEvent): void {
+    if (!event.dataTransfer?.types.includes(TOKEN_DRAG_TYPE)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+  }
+
+  onDrop(event: DragEvent): void {
+    const entryId = event.dataTransfer?.getData(TOKEN_DRAG_TYPE);
+    if (!entryId) return;
+    event.preventDefault();
+    this.placeToken(entryId, this.toWorld(event));
+  }
+
+  /** Coloca o token de uma ficha no centro da vista (botão da janela). */
+  placeAtCenter(entryId: string): void {
+    this.placeToken(entryId, this.centerWorld());
+  }
+
   // --- Internos ------------------------------------------------------------
 
+  private placeToken(entryId: string, p: Point): void {
+    const entry = this.session.entryById().get(entryId);
+    if (!entry) return;
+    const size = this.session.tokenOf(entry).size;
+    if (this.session.placeToken(entryId, snapTokenCenter(p, size, this.gridSize()))) this.session.tool.set('select');
+  }
+
+  private startPan(event: PointerEvent): void {
+    const { x, y } = this.view();
+    this.gesture = { kind: 'pan', sx: event.clientX, sy: event.clientY, ox: x, oy: y };
+    this.panning.set(true);
+    this.capture(event);
+  }
+
+  /** Mantém o gesto no mapa mesmo se o ponteiro passar por cima de outras camadas. */
+  private capture(event: PointerEvent): void {
+    this.stage().nativeElement.setPointerCapture(event.pointerId);
+  }
+
   /** Converte a posição do mouse para coordenadas do mapa. */
-  private toWorld(event: PointerEvent): Point {
+  private toWorld(event: MouseEvent): Point {
     const rect = this.stage().nativeElement.getBoundingClientRect();
-    const { x, y } = this.offset();
-    const s = this.scale();
-    return { x: (event.clientX - rect.left - x) / s, y: (event.clientY - rect.top - y) / s };
+    return screenToWorld(this.view(), event.clientX - rect.left, event.clientY - rect.top);
+  }
+
+  /**
+   * Duplo clique detectado manualmente: com a captura do ponteiro, o `dblclick`
+   * nativo é redirecionado para o mapa e perderia o token clicado.
+   */
+  private isDoubleTap(key: string): boolean {
+    const now = performance.now();
+    const hit = this.lastTap.key === key && now - this.lastTap.time < DOUBLE_TAP_MS;
+    this.lastTap = hit ? { key: '', time: 0 } : { key, time: now };
+    return hit;
   }
 
   private addPing(p: Point): void {

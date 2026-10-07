@@ -1,6 +1,6 @@
 @if (table(); as t) {
   <!-- ===== Camada 0: mapa (ocupa a tela inteira) ===== -->
-  <app-map-stage #map class="absolute inset-0" [insets]="insets()" />
+  <app-map-stage #map class="absolute inset-0" [insets]="insets()" (tokenOpened)="openToken($event)" />
 
   <!-- ===== Camada 1: barras sobrepostas (todas escondíveis) ===== -->
   @let panels = session.panels();
@@ -71,7 +71,10 @@
         >
           @switch (c.type) {
             @case ('entry') {
-              <app-entry-window [entryId]="win.id" />
+              <app-entry-window [entryId]="win.id" (placeOnMap)="placeOnMap($event)" />
+            }
+            @case ('token') {
+              <app-token-window [placementId]="placementOf(win.id)" (openEntry)="open($event)" />
             }
             @case ('document') {
               <app-document-editor [itemId]="win.id" />

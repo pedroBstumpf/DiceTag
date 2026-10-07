@@ -20,6 +20,7 @@
     @case ('sheets') {
       <ng-container *ngTemplateOutlet="section; context: { title: 'Personagens', kind: 'character', list: characters() }" />
       <ng-container *ngTemplateOutlet="section; context: { title: 'NPCs', kind: 'npc', list: npcs() }" />
+      <p class="px-2 text-[11px] leading-relaxed text-slate-500">Arraste uma ficha até o mapa para colocar o token.</p>
     }
 
     <!-- Lore: itens do worldbuild -->
@@ -91,12 +92,18 @@
     @for (entry of list; track entry.id) {
       <div
         class="group flex h-9 cursor-pointer items-center gap-2 rounded-lg pl-2 pr-1 text-sm text-slate-300 transition-colors hover:bg-white/5 hover:text-white"
+        [attr.draggable]="kind === 'character' || kind === 'npc' ? 'true' : null"
+        (dragstart)="onDragStart($event, entry)"
         (click)="renamingId() !== entry.id && opened.emit(entry.id)"
         (dblclick)="renamingId.set(entry.id)"
       >
-        <mat-icon class="!size-5 shrink-0 !text-[20px]" [class]="metaOf(entry.kind).color">
-          {{ entry.icon ?? metaOf(entry.kind).icon }}
-        </mat-icon>
+        @if (tokenImage(entry); as src) {
+          <img [src]="src" alt="" draggable="false" class="size-5 shrink-0 rounded-full object-cover ring-1 ring-white/30" />
+        } @else {
+          <mat-icon class="!size-5 shrink-0 !text-[20px]" [class]="metaOf(entry.kind).color">
+            {{ entry.icon ?? metaOf(entry.kind).icon }}
+          </mat-icon>
+        }
 
         @if (renamingId() === entry.id) {
           <input

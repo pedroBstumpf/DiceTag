@@ -8,7 +8,9 @@ import { WORLD_ITEM_META, WorldItem } from '../../../../core/models/world-item.m
 import { TABLE_ENTRY_META, TableEntry, TableEntryKind, TableRole } from '../../../../core/models/table-session.model';
 import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
 import { WorldbuildService } from '../../../worldbuild/services/worldbuild.service';
+import { BlobUrlService } from '../../services/blob-url.service';
 import { TableSessionService } from '../../services/table-session.service';
+import { TOKEN_DRAG_TYPE } from '../map-layers/tokens-layer/tokens-layer';
 import { SoundList } from '../sound-list/sound-list';
 
 /** Abas do painel lateral direito. */
@@ -31,6 +33,7 @@ type PanelTab = 'sheets' | 'lore' | 'sounds' | 'automations';
 export class SidePanel {
   readonly session = inject(TableSessionService);
   private readonly worldbuild = inject(WorldbuildService);
+  private readonly blobs = inject(BlobUrlService);
 
   readonly worldMeta = WORLD_ITEM_META;
 
@@ -77,6 +80,18 @@ export class SidePanel {
     if (this.renamingId() !== entry.id) return;
     if (value.trim()) this.session.updateEntry(entry.id, { name: value.trim() });
     this.renamingId.set(null);
+  }
+
+  /** Personagens/NPCs podem ser arrastados até o mapa para colocar o token. */
+  onDragStart(event: DragEvent, entry: TableEntry): void {
+    if (!event.dataTransfer || (entry.kind !== 'character' && entry.kind !== 'npc')) return;
+    event.dataTransfer.setData(TOKEN_DRAG_TYPE, entry.id);
+    event.dataTransfer.effectAllowed = 'copy';
+  }
+
+  /** Imagem do token da ficha (para o avatar da lista). */
+  tokenImage(entry: TableEntry): string | null {
+    return this.blobs.url(entry.token?.blobId);
   }
 
   remove(entry: TableEntry): void {

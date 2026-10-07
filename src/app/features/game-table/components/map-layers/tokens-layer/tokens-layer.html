@@ -1,0 +1,92 @@
+@for (t of tokens(); track t.placement.id) {
+  @let px = t.size * gridSize();
+  @let selected = selectedId() === t.placement.id;
+  <div
+    class="absolute"
+    [class]="interactive() ? 'pointer-events-auto cursor-grab active:cursor-grabbing' : 'pointer-events-none'"
+    [style.left.px]="t.placement.x - px / 2"
+    [style.top.px]="t.placement.y - px / 2"
+    [style.width.px]="px"
+    [style.height.px]="px"
+    (pointerdown)="onDown($event, t, 'move')"
+  >
+    <!-- Barras (acima do token) -->
+    @if (t.bars.length) {
+      <div
+        class="absolute bottom-full left-1/2 flex -translate-x-1/2 flex-col"
+        [style.width.px]="legible(px, 36)"
+        [style.gap.px]="ui(2)"
+        [style.margin-bottom.px]="ui(4)"
+      >
+        @for (bar of t.bars; track bar.id) {
+          <div
+            class="overflow-hidden rounded-full bg-black/70"
+            [style.height.px]="legible(px * 0.07, 5)"
+            [matTooltip]="bar.label + ': ' + bar.value + '/' + bar.max"
+            matTooltipPosition="above"
+          >
+            <div class="h-full" [style.width.%]="percent(bar)" [style.background]="bar.color"></div>
+          </div>
+        }
+      </div>
+    }
+
+    <!-- Imagem circular (ou inicial do nome) -->
+    <div
+      class="size-full overflow-hidden rounded-full border-white/80 shadow-[0_2px_10px_rgb(0_0_0/0.6)]"
+      [style.border-width.px]="ui(2)"
+      [style.background]="initialBg(t)"
+    >
+      @if (blobs.url(t.blobId); as src) {
+        <img [src]="src" alt="" draggable="false" class="pointer-events-none size-full select-none object-cover" />
+      } @else {
+        <span class="grid size-full place-items-center font-display font-semibold text-white" [style.font-size.px]="px * 0.45">
+          {{ t.entry.name.charAt(0).toUpperCase() }}
+        </span>
+      }
+    </div>
+
+    <!-- Anel de seleção -->
+    @if (selected) {
+      <span
+        class="pointer-events-none absolute rounded-full border-astral-400 shadow-[0_0_12px_rgb(122_167_255/0.7)]"
+        [style.inset.px]="ui(-4)"
+        [style.border-width.px]="ui(2.5)"
+      ></span>
+    }
+
+    <!-- Etiquetas (abaixo do token) -->
+    @if (t.tags.length) {
+      <div
+        class="absolute left-1/2 top-full flex -translate-x-1/2 flex-wrap justify-center"
+        [style.width.px]="legible(px * 2, 140)"
+        [style.gap.px]="ui(3)"
+        [style.margin-top.px]="ui(5)"
+      >
+        @for (tag of t.tags; track tag.id) {
+          <span
+            class="whitespace-nowrap rounded-full font-semibold leading-none text-ink-950 shadow"
+            [style.background]="tag.color"
+            [style.font-size.px]="legible(px * 0.15, 10)"
+            [style.padding]="ui(3) + 'px ' + ui(7) + 'px'"
+          >
+            {{ tag.text }}
+          </span>
+        }
+      </div>
+    }
+
+    <!-- Alça de redimensionar -->
+    @if (selected && interactive()) {
+      <span
+        class="absolute cursor-nwse-resize rounded-sm border-white bg-astral-500"
+        [style.width.px]="ui(12)"
+        [style.height.px]="ui(12)"
+        [style.right.px]="ui(-6)"
+        [style.bottom.px]="ui(-6)"
+        [style.border-width.px]="ui(1.5)"
+        (pointerdown)="onDown($event, t, 'resize')"
+      ></span>
+    }
+  </div>
+}

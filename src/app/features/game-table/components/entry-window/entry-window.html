@@ -18,6 +18,49 @@
     </div>
   </div>
 
+  <!-- Token (personagens e NPCs) -->
+  @if (hasToken() && token(); as t) {
+    <section class="mt-6 rounded-xl border border-white/5 bg-ink-900/60 p-4">
+      <h3 class="mb-4 flex items-center gap-2 font-display text-sm tracking-wide text-star-300">
+        <mat-icon class="!size-5 !text-[20px] text-astral-300">token</mat-icon>
+        Token
+      </h3>
+
+      <!-- Imagem (preview circular) + ações -->
+      <div class="mb-5 flex items-center gap-4">
+        <div class="grid size-20 shrink-0 place-items-center overflow-hidden rounded-full border-2 border-white/70 bg-ink-700 shadow-lg">
+          @if (blobs.url(t.blobId); as src) {
+            <img [src]="src" alt="" class="size-full object-cover" />
+          } @else {
+            <span class="font-display text-3xl text-white">{{ e.name.charAt(0).toUpperCase() }}</span>
+          }
+        </div>
+        <div class="flex flex-col items-start gap-2">
+          <button mat-stroked-button (click)="imageInput.click()">
+            <mat-icon>add_photo_alternate</mat-icon>
+            {{ t.blobId ? 'Trocar imagem' : 'Enviar imagem' }}
+          </button>
+          <button mat-flat-button (click)="placeOnMap.emit(e.id)">
+            <mat-icon>add_location_alt</mat-icon>
+            Colocar no mapa
+          </button>
+        </div>
+        <input #imageInput type="file" accept="image/*" hidden (change)="onImagePicked(imageInput)" />
+      </div>
+
+      <app-token-editor [value]="t" (changed)="session.updateEntryToken(e.id, $event)" />
+
+      <p class="mt-4 text-xs leading-relaxed text-slate-500">
+        @if (e.kind === 'character') {
+          Os tokens de personagem são vinculados: alterar um token altera a ficha e todos os tokens dela.
+        } @else {
+          Cada token de NPC é independente: ao ser colocado, copia estes valores (ex.: cinco goblins com PV separados).
+        }
+        Dica: arraste a ficha do painel direito para o mapa.
+      </p>
+    </section>
+  }
+
   <!-- Escolha de ícone (automações) -->
   @if (e.kind === 'automation') {
     <div class="mt-6">
