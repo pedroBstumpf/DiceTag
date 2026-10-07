@@ -195,6 +195,7 @@ export class GameTablePage {
     const tool = TABLE_TOOLS.find((t) => t.key.toLowerCase() === key && !t.soon);
 
     if (tool) this.session.tool.set(tool.id);
+    else if (key === 'w') this.startWalls();
     else if (key === '\\') this.session.toggleImmersive();
     else if (key === 'g') this.toggleGrid();
     else if (key === '=' || key === '+') this.map()?.zoomBy(1.2);
@@ -203,6 +204,12 @@ export class GameTablePage {
     else return;
 
     event.preventDefault();
+  }
+
+  /** Atalho W: ferramenta Névoa já no modo "Parede — linha". */
+  private startWalls(): void {
+    this.session.tool.set('fog');
+    this.session.wallMode.set('line');
   }
 
   private toggleGrid(): void {

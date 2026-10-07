@@ -2,6 +2,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { Point } from '../../../core/models/geometry.model';
 import {
   DEFAULT_SOUND_VOLUME,
+  METERS_PER_SQUARE,
   Scene,
   TABLE_ENTRY_META,
   TableEntry,
@@ -14,10 +15,12 @@ import {
   TokenSettings,
   TokenTag,
   TokenVision,
+  Wall,
   defaultToken,
 } from '../../../core/models/table-session.model';
 import { StorageService } from '../../../core/services/storage.service';
 import { newId } from '../../../core/utils/id';
+import { computeVisibilityPolygon, pointInPolygon, wallsToSegments } from '../utils/visibility';
 
 /** Barras da mesa que podem ser escondidas. */
 export interface TablePanels {
@@ -46,8 +49,15 @@ export interface ResolvedToken {
 /** Campos do token editáveis pela ficha ou pela janela "Token". */
 export type TokenPatch = Partial<Pick<TokenSettings, 'size' | 'vision' | 'bars' | 'tags'>>;
 
+/** Modo da ferramenta Névoa. */
+export type WallMode = 'line' | 'circle' | 'erase';
+
+/** Omit que preserva cada membro de uma união (ex.: Wall sem o id). */
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+
 const EMPTY_STATE: TableState = { scenes: [], activeSceneId: null, entries: [] };
 const NO_TOKENS: TokenPlacement[] = [];
+const NO_WALLS: Wall[] = [];
 
 /**
  * Estado da mesa aberta: cenas, arquivos (fichas, sons, automações),
@@ -82,11 +92,57 @@ export class TableSessionService {
     return this.tokens().flatMap((p) => this.resolveToken(p, byId) ?? []);
   });
 
+  // --- Névoa de guerra e paredes (cena ativa) ------------------------------
+  readonly walls = computed(() => this.activeScene()?.walls ?? NO_WALLS);
+  readonly fogEnabled = computed(() => this.activeScene()?.fog?.enabled ?? false);
+  private readonly wallSegments = computed(() => wallsToSegments(this.walls()));
+
+  /**
+   * Origens de visão (tokens com visão ligada), com o alcance em px do mapa.
+   * Igualdade por valor: editar algo que não afeta a visão (ex.: volume de um som)
+   * não dispara novo cálculo.
+   */
+  private readonly visionSources = computed(
+    () => {
+      const grid = this.activeScene()?.gridSize ?? 70;
+      return this.resolvedTokens()
+        .filter((t) => t.vision.enabled)
+        .map((t) => ({ x: t.placement.x, y: t.placement.y, range: (t.vision.range / METERS_PER_SQUARE) * grid }));
+    },
+    { equal: (a, b) => a.length === b.length && a.every((s, i) => s.x === b[i].x && s.y === b[i].y && s.range === b[i].range) },
+  );
+
+  /** Áreas visíveis dos tokens (recalculadas só quando token, parede ou cena mudam). */
+  readonly visionPolygons = computed(() => {
+    if (!this.fogEnabled()) return [];
+    const segments = this.wallSegments();
+    return this.visionSources().map((s) => computeVisibilityPolygon(s, s.range, segments));
+  });
+
+  /** Visão de jogador com névoa: a área fora da visão fica escondida. */
+  readonly playerFog = computed(() => this.fogEnabled() && this.role() === 'player');
+
+  /** Tokens exibidos: na visão de jogador com névoa, só os visíveis (personagens sempre aparecem). */
+  readonly visibleTokens = computed(() => {
+    const tokens = this.resolvedTokens();
+    if (!this.playerFog()) return tokens;
+    const polys = this.visionPolygons();
+    return tokens.filter((t) => t.entry.kind === 'character' || this.isVisible(t.placement, polys));
+  });
+
   // --- Estado da sessão (não persistido) -----------------------------------
   readonly tool = signal<TableTool>('select');
   readonly role = signal<TableRole>('gm');
   /** Token selecionado no mapa (anel azul). */
   readonly selectedTokenId = signal<string | null>(null);
+  /** Modo da ferramenta Névoa: desenhar parede em linha, em círculo ou apagar. */
+  readonly wallMode = signal<WallMode>('line');
+  /** Mestre: mostrar paredes mesmo fora da ferramenta Névoa. */
+  readonly showWallsAlways = signal(false);
+  /** Paredes visíveis: durante a ferramenta Névoa ou, para o mestre, sempre (se ligado). */
+  readonly wallsVisible = computed(
+    () => this.tool() === 'fog' || (this.showWallsAlways() && this.role() === 'gm'),
+  );
 
   /** Barras visíveis da mesa (todas podem ser escondidas). */
   readonly panels = signal<TablePanels>({ scenes: true, tools: true, side: true, actions: true });
@@ -135,6 +191,8 @@ export class TableSessionService {
       gridSize: 70,
       showGrid: true,
       tokens: [],
+      fog: { enabled: false },
+      walls: [],
     };
     this.patchState((s) => ({ ...s, scenes: [...s.scenes, scene], activeSceneId: scene.id }));
     this.selectedTokenId.set(null);
@@ -339,6 +397,31 @@ export class TableSessionService {
     if (this.selectedTokenId() === placementId) this.selectedTokenId.set(null);
   }
 
+  // --- Névoa e paredes -----------------------------------------------------
+
+  /** Liga/desliga a névoa de guerra na cena ativa. */
+  setFog(enabled: boolean): void {
+    const scene = this.activeScene();
+    if (scene) this.updateScene(scene.id, { fog: { enabled } });
+  }
+
+  /** Adiciona uma parede à cena ativa. */
+  addWall(wall: DistributiveOmit<Wall, 'id'>): void {
+    const scene = this.activeScene();
+    if (scene) this.updateScene(scene.id, { walls: [...(scene.walls ?? []), { ...wall, id: newId() } as Wall] });
+  }
+
+  removeWall(wallId: string): void {
+    const scene = this.activeScene();
+    if (scene) this.updateScene(scene.id, { walls: (scene.walls ?? []).filter((w) => w.id !== wallId) });
+  }
+
+  /** O ponto está em alguma área visível? (sem névoa, tudo é visível) */
+  isVisible(p: Point, polys = this.visionPolygons()): boolean {
+    if (!this.fogEnabled()) return true;
+    return polys.some((poly) => pointInPolygon(p, poly));
+  }
+
   private findPlacement(placementId: string): TokenPlacement | undefined {
     for (const scene of this.scenes()) {
       const found = scene.tokens?.find((t) => t.id === placementId);
@@ -389,7 +472,12 @@ function normalizeState(raw: TableState | undefined): TableState {
   if (!raw) return EMPTY_STATE;
   return {
     ...raw,
-    scenes: raw.scenes.map((sc) => ({ ...sc, tokens: sc.tokens ?? [] })),
+    scenes: raw.scenes.map((sc) => ({
+      ...sc,
+      tokens: sc.tokens ?? [],
+      fog: sc.fog ?? { enabled: false },
+      walls: sc.walls ?? [],
+    })),
     entries: raw.entries.map((e) =>
       e.kind === 'sound' ? { ...e, volume: e.volume ?? DEFAULT_SOUND_VOLUME, loop: e.loop ?? true } : e,
     ),

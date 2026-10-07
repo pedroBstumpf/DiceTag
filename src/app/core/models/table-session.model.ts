@@ -1,3 +1,5 @@
+import { Point } from './geometry.model';
+
 /** Papel de quem está usando a mesa. */
 export type TableRole = 'gm' | 'player';
 
@@ -15,7 +17,32 @@ export interface Scene {
   showGrid: boolean;
   /** Tokens colocados nesta cena. Padrão: []. */
   tokens?: TokenPlacement[];
+  /** Névoa de guerra desta cena. Padrão: desligada. */
+  fog?: { enabled: boolean };
+  /** Paredes que bloqueiam a visão quando a névoa está ativa. Padrão: []. */
+  walls?: Wall[];
 }
+
+// --- Paredes -----------------------------------------------------------------
+
+/** Parede em linha (polilinha, ponto a ponto). */
+export interface LineWall {
+  id: string;
+  kind: 'line';
+  points: Point[];
+}
+
+/** Parede circular (pilar, árvore…), centro e raio em px do mapa. */
+export interface CircleWall {
+  id: string;
+  kind: 'circle';
+  cx: number;
+  cy: number;
+  r: number;
+}
+
+/** Parede que bloqueia a visão dos tokens. */
+export type Wall = LineWall | CircleWall;
 
 /** Tipos de arquivo que vivem dentro de uma mesa (painel direito). */
 export type TableEntryKind = 'character' | 'npc' | 'sound' | 'automation';
