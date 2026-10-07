@@ -4,6 +4,7 @@ import {
   BRUSH_COLORS,
   BRUSH_WIDTHS,
   DEFAULT_SOUND_VOLUME,
+  DoorWall,
   METERS_PER_SQUARE,
   MapNote,
   NOTE_COLORS,
@@ -25,7 +26,7 @@ import {
 } from '../../../core/models/table-session.model';
 import { StorageService } from '../../../core/services/storage.service';
 import { newId } from '../../../core/utils/id';
-import { computeVisibilityPolygon, pointInPolygon, wallsToSegments } from '../utils/visibility';
+import { computeVisibilityPolygon, doorSeen, pointInPolygon, wallsToSegments } from '../utils/visibility';
 
 /** Barras da mesa que podem ser escondidas. */
 export interface TablePanels {
@@ -55,7 +56,7 @@ export interface ResolvedToken {
 export type TokenPatch = Partial<Pick<TokenSettings, 'size' | 'vision' | 'bars' | 'tags'>>;
 
 /** Modo da ferramenta Névoa. */
-export type WallMode = 'line' | 'circle' | 'edit' | 'erase';
+export type WallMode = 'line' | 'circle' | 'door' | 'edit' | 'erase';
 
 /** Configuração atual do pincel (sessão). */
 export interface Brush {
@@ -152,6 +153,17 @@ export class TableSessionService {
     if (!this.fogEnabled()) return [];
     const segments = this.wallSegments();
     return this.visionSources().map((s) => computeVisibilityPolygon(s, s.range, segments));
+  });
+
+  /** Portas da cena ativa. */
+  readonly doors = computed(() => this.walls().filter((w): w is DoorWall => w.kind === 'door'));
+
+  /** Portas exibidas: o jogador, com névoa, só vê as portas que algum token já enxerga. */
+  readonly visibleDoors = computed(() => {
+    const doors = this.doors();
+    if (!this.playerFog()) return doors;
+    const polys = this.visionPolygons();
+    return doors.filter((d) => doorSeen(d.points, polys));
   });
 
   /** Visão de jogador com névoa: a área fora da visão fica escondida. */
@@ -458,6 +470,12 @@ export class TableSessionService {
   updateWall(wall: Wall): void {
     const scene = this.activeScene();
     if (scene) this.updateScene(scene.id, { walls: (scene.walls ?? []).map((w) => (w.id === wall.id ? wall : w)) });
+  }
+
+  /** Abre ou fecha uma porta (a visão é recalculada automaticamente). */
+  toggleDoor(doorId: string): void {
+    const door = this.doors().find((d) => d.id === doorId);
+    if (door) this.updateWall({ ...door, open: !door.open });
   }
 
   removeWall(wallId: string): void {

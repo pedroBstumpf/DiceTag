@@ -83,8 +83,17 @@ export interface CircleWall {
   r: number;
 }
 
-/** Parede que bloqueia a visão dos tokens. */
-export type Wall = LineWall | CircleWall;
+/** Porta: segmento entre dois batentes. Fechada bloqueia a visão; aberta deixa passar. */
+export interface DoorWall {
+  id: string;
+  kind: 'door';
+  /** Os dois batentes [a, b]. */
+  points: Point[];
+  open: boolean;
+}
+
+/** Parede que bloqueia a visão dos tokens (portas só quando fechadas). */
+export type Wall = LineWall | CircleWall | DoorWall;
 
 /** Tipos de arquivo que vivem dentro de uma mesa (painel direito). */
 export type TableEntryKind = 'character' | 'npc' | 'sound' | 'automation';

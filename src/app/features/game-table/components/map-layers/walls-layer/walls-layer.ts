@@ -6,7 +6,8 @@ import { wallHandles } from '../../../utils/walls';
 /** Parede em construção (ainda não salva). */
 export type WallDraft =
   | { kind: 'line'; points: Point[]; cursor: Point | null }
-  | { kind: 'circle'; cx: number; cy: number; r: number };
+  | { kind: 'circle'; cx: number; cy: number; r: number }
+  | { kind: 'door'; a: Point; b: Point };
 
 /**
  * Camada de paredes (SVG, dentro do "mundo"): linhas e círculos em azul
@@ -30,7 +31,8 @@ export type WallDraft =
             [attr.stroke-width]="ui(selected ? 3.5 : 2.5)"
             [attr.stroke-dasharray]="selected ? null : dash()"
           />
-        } @else {
+        } @else if (wall.kind === 'line' || selected) {
+          <!-- Portas têm camada própria; aqui só aparecem selecionadas para edição -->
           <polyline
             [attr.points]="pointsAttr(wall.points)"
             [attr.stroke]="selected ? selectedColor : color"
@@ -52,8 +54,10 @@ export type WallDraft =
           @for (p of d.points; track $index) {
             <circle [attr.cx]="p.x" [attr.cy]="p.y" [attr.r]="ui($first ? 6 : 4)" [attr.fill]="$first ? '#7aa7ff' : '#f5f8ff'" />
           }
-        } @else {
+        } @else if (d.kind === 'circle') {
           <circle [attr.cx]="d.cx" [attr.cy]="d.cy" [attr.r]="d.r" stroke="#f5f8ff" [attr.stroke-width]="ui(2.5)" />
+        } @else {
+          <line [attr.x1]="d.a.x" [attr.y1]="d.a.y" [attr.x2]="d.b.x" [attr.y2]="d.b.y" stroke="#f59e0b" [attr.stroke-width]="ui(5)" />
         }
       }
     </svg>

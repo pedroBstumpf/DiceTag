@@ -73,6 +73,9 @@
       (tokenDown)="onTokenDown($event)"
     />
 
+    <!-- 7. Portas (sempre visíveis; o jogador só vê as que algum token enxerga) -->
+    <app-doors-layer [doors]="session.visibleDoors()" [scale]="scale()" [interactive]="selecting()" (toggled)="session.toggleDoor($event)" />
+
     <!-- 7. Paredes (durante a ferramenta Névoa ou sempre, para o mestre) -->
     @if (session.wallsVisible() || wallDraft()) {
       <app-walls-layer

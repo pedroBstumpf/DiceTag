@@ -6,6 +6,7 @@ import { TableSessionService, WallMode } from '../../services/table-session.serv
 const WALL_MODES: { id: WallMode; icon: string; label: string; hint: string }[] = [
   { id: 'line', icon: 'polyline', label: 'Parede — linha (W)', hint: 'Clique ponto a ponto. Enter, duplo clique ou clicar no início finaliza; Esc cancela. Shift: sem grade.' },
   { id: 'circle', icon: 'circle', label: 'Parede — círculo', hint: 'Arraste do centro para definir o raio (pilares, árvores).' },
+  { id: 'door', icon: 'door_front', label: 'Porta', hint: 'Arraste de um batente ao outro. Com a ferramenta Selecionar, clique no ícone da porta para abrir ou fechar.' },
   { id: 'edit', icon: 'open_with', label: 'Editar paredes', hint: 'Clique numa parede para selecionar. Arraste o corpo para mover tudo ou um ponto para movê-lo. Delete remove.' },
   { id: 'erase', icon: 'ink_eraser', label: 'Apagar parede', hint: 'Clique numa parede para removê-la.' },
 ];

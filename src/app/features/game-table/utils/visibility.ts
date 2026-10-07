@@ -28,18 +28,30 @@ export function circleToPolygon(cx: number, cy: number, r: number, sides = CIRCL
   });
 }
 
-/** Converte paredes (polilinhas e círculos) em segmentos. */
+/** Converte paredes (polilinhas, círculos e portas fechadas) em segmentos. */
 export function wallsToSegments(walls: Wall[]): Segment[] {
   const segments: Segment[] = [];
   for (const wall of walls) {
-    if (wall.kind === 'line') {
-      for (let i = 1; i < wall.points.length; i++) segments.push({ a: wall.points[i - 1], b: wall.points[i] });
-    } else {
+    if (wall.kind === 'circle') {
       const poly = circleToPolygon(wall.cx, wall.cy, wall.r);
       poly.forEach((p, i) => segments.push({ a: p, b: poly[(i + 1) % poly.length] }));
+    } else if (wall.kind === 'line' || !wall.open) {
+      // Porta aberta não bloqueia nada
+      for (let i = 1; i < wall.points.length; i++) segments.push({ a: wall.points[i - 1], b: wall.points[i] });
     }
   }
   return segments;
+}
+
+/**
+ * A porta foi vista? (para mostrá-la ao jogador sob a névoa)
+ * Vista se o meio dela está numa área visível ou se a visão "encosta" nela
+ * (porta fechada: os raios param exatamente sobre o segmento da porta).
+ */
+export function doorSeen(points: Point[], polygons: Point[][]): boolean {
+  const [a, b] = points;
+  const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  return polygons.some((poly) => pointInPolygon(mid, poly) || poly.some((p) => distanceToSegment(p, a, b) < 1.5));
 }
 
 /**

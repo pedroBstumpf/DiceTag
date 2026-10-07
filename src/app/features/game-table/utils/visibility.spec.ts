@@ -1,5 +1,5 @@
 import { Wall } from '../../../core/models/table-session.model';
-import { circleToPolygon, computeVisibilityPolygon, pointInPolygon, wallsToSegments } from './visibility';
+import { circleToPolygon, computeVisibilityPolygon, doorSeen, pointInPolygon, wallsToSegments } from './visibility';
 
 const origin = { x: 0, y: 0 };
 
@@ -42,6 +42,21 @@ describe('visibility', () => {
   it('alcance limita a visão', () => {
     expect(sees([], 100, { x: 90, y: 0 })).toBe(true);
     expect(sees([], 100, { x: 150, y: 0 })).toBe(false);
+  });
+
+  it('porta fechada bloqueia; porta aberta deixa ver', () => {
+    const door = (open: boolean): Wall => ({ id: 'd', kind: 'door', points: [{ x: 50, y: -100 }, { x: 50, y: 100 }], open });
+    expect(sees([door(false)], 300, { x: 100, y: 0 })).toBe(false);
+    expect(sees([door(true)], 300, { x: 100, y: 0 })).toBe(true);
+  });
+
+  it('doorSeen: porta fechada à vista é reconhecida; porta fora do alcance não', () => {
+    const near = [{ x: 50, y: -20 }, { x: 50, y: 20 }];
+    const far = [{ x: 500, y: -20 }, { x: 500, y: 20 }];
+    const walls: Wall[] = [{ id: 'd', kind: 'door', points: near, open: false }];
+    const poly = computeVisibilityPolygon(origin, 200, wallsToSegments(walls));
+    expect(doorSeen(near, [poly])).toBe(true);
+    expect(doorSeen(far, [poly])).toBe(false);
   });
 
   it('círculo vira polígono de 24 lados', () => {

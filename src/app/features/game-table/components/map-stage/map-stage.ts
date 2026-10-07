@@ -9,6 +9,7 @@ import { TableSessionService } from '../../services/table-session.service';
 import { distanceToPolyline, sizeFromHandle, snapToCorner, snapTokenCenter } from '../../utils/geometry';
 import { simplifyPath } from '../../utils/simplify';
 import { distanceToWall, handleAt, moveWallHandle, translateWall } from '../../utils/walls';
+import { DoorsLayer } from '../map-layers/doors-layer/doors-layer';
 import { DrawingsLayer, StrokeDraft } from '../map-layers/drawings-layer/drawings-layer';
 import { FogLayer } from '../map-layers/fog-layer/fog-layer';
 import { NotePointerDown, NotesLayer } from '../map-layers/notes-layer/notes-layer';
@@ -33,6 +34,7 @@ type Gesture =
   | { kind: 'token'; id: string; size: number; sx: number; sy: number; cx: number; cy: number }
   | { kind: 'resize'; id: string; cx: number; cy: number }
   | { kind: 'circle'; cx: number; cy: number }
+  | { kind: 'door'; a: Point }
   /** Editar parede: `handle` = índice da alça arrastada, ou -1 para mover a parede inteira. */
   | { kind: 'wall'; sx: number; sy: number; original: Wall; handle: number }
   | { kind: 'draw' }
@@ -51,12 +53,12 @@ const POPOVER_WIDTH = 288;
  * TableSessionService.
  *
  * Ordem das camadas no "mundo", de baixo para cima:
- *   mapa → grade → desenhos → notas → névoa → tokens visíveis → paredes → régua e ping
+ *   mapa → grade → desenhos → notas → névoa → tokens visíveis → portas → paredes → régua e ping
  * Acima do mundo fica a interface (popover de anotação, avisos).
  */
 @Component({
   selector: 'app-map-stage',
-  imports: [MatIconModule, MatTooltipModule, DrawingsLayer, NotesLayer, FogLayer, TokensLayer, WallsLayer, NotePopover],
+  imports: [MatIconModule, MatTooltipModule, DrawingsLayer, NotesLayer, FogLayer, TokensLayer, DoorsLayer, WallsLayer, NotePopover],
   templateUrl: './map-stage.html',
   host: { class: 'block' },
 })
@@ -306,6 +308,12 @@ export class MapStage {
       this.wallDraft.set({ kind: 'circle', cx: p.x, cy: p.y, r: 0 });
       this.gesture = { kind: 'circle', cx: p.x, cy: p.y };
       this.capture(event);
+    } else if (mode === 'door') {
+      // Porta: arrasta de um batente ao outro
+      const a = this.snapCorner(p, event);
+      this.wallDraft.set({ kind: 'door', a, b: a });
+      this.gesture = { kind: 'door', a };
+      this.capture(event);
     } else if (mode === 'edit') {
       this.onWallEditDown(event, p);
     } else {
@@ -432,6 +440,8 @@ export class MapStage {
     } else if (g.kind === 'circle') {
       const p = this.toWorld(event);
       this.wallDraft.set({ kind: 'circle', cx: g.cx, cy: g.cy, r: Math.hypot(p.x - g.cx, p.y - g.cy) });
+    } else if (g.kind === 'door') {
+      this.wallDraft.set({ kind: 'door', a: g.a, b: this.snapCorner(this.toWorld(event), event) });
     } else if (g.kind === 'wall') {
       this.session.updateWall(this.editedWall(g, event));
     } else if (g.kind === 'draw') {
@@ -469,6 +479,13 @@ export class MapStage {
     const draft = this.wallDraft();
     if (g?.kind === 'circle' && draft?.kind === 'circle') {
       if (draft.r * this.scale() > 4) this.session.addWall({ kind: 'circle', cx: draft.cx, cy: draft.cy, r: draft.r });
+      this.wallDraft.set(null);
+    }
+    // Porta: salva ao soltar (começa fechada)
+    if (g?.kind === 'door' && draft?.kind === 'door') {
+      if (Math.hypot(draft.b.x - draft.a.x, draft.b.y - draft.a.y) * this.scale() > 6) {
+        this.session.addWall({ kind: 'door', points: [draft.a, draft.b], open: false });
+      }
       this.wallDraft.set(null);
     }
   }
