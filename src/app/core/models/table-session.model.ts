@@ -234,6 +234,8 @@ export interface InventoryEntry {
   itemId: string;
   /** O item vem da Lore geral (senão, do worldbuild do usuário). */
   global?: boolean;
+  /** O item foi criado nesta mesa (`TableState.items`), fora do Worldbuild. */
+  table?: boolean;
   /** Nome personalizado (ausente = nome do original). */
   name?: string;
   /** Etiquetas personalizadas (ausente = as do original). */
@@ -515,6 +517,26 @@ export interface TableState {
   chat?: ChatMessage[];
   /** Pastas da barra de cenas. Padrão: []. */
   sceneFolders?: SceneFolder[];
+  /** Itens criados na mesa (ex.: por um jogador no inventário), fora do Worldbuild. Padrão: []. */
+  items?: TableItem[];
+}
+
+/**
+ * Item que existe só nesta mesa: criado por um jogador no inventário do personagem.
+ * Não vai para o Worldbuild; os inventários o referenciam com `InventoryEntry.table`
+ * e ele aparece na aba Lore da mesa, visível aos jogadores (registro dos feitos deles).
+ * Quem criou (e o mestre) edita o próprio item; os demais só personalizam a cópia.
+ */
+export interface TableItem {
+  id: string;
+  name: string;
+  /** Etiquetas do cartão. Padrão: []. */
+  tags?: Tag[];
+  /** Imagem do cartão no IndexedDB (apagada ao excluir a mesa). */
+  blobId?: string;
+  /** Conta de quem criou o item. */
+  ownerUserId?: string;
+  createdAt: number;
 }
 
 // --- Lore da mesa ------------------------------------------------------------

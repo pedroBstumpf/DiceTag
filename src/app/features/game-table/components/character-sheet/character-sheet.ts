@@ -27,7 +27,7 @@ import { LevelPips } from '../level-pips/level-pips';
 import { LoreService } from '../../../worldbuild/services/lore.service';
 import { WorldbuildService } from '../../../worldbuild/services/worldbuild.service';
 import { equippedWindowId } from '../equipped-item-window/equipped-item-window';
-import { SheetInventory, inventoryRow } from '../sheet-inventory/sheet-inventory';
+import { SheetInventory, inventoryRow, itemSources } from '../sheet-inventory/sheet-inventory';
 import { SheetNotes } from '../sheet-notes/sheet-notes';
 
 /** Abas da ficha. */
@@ -301,9 +301,8 @@ export class CharacterSheetView {
 
   /** Itens marcados como equipados no inventário (com a personalização da ficha). */
   readonly equipped = computed(() => {
-    const global = this.loreGeneral.byId();
-    const own = this.worldbuild.byId();
-    return (this.sheet()?.inventory ?? []).filter((i) => i.equipped).map((i) => inventoryRow(i, global, own));
+    const sources = itemSources(this.loreGeneral, this.worldbuild, this.session);
+    return (this.sheet()?.inventory ?? []).filter((i) => i.equipped).map((i) => inventoryRow(i, sources));
   });
 
   /** Abre o cartão do item equipado numa janela. */

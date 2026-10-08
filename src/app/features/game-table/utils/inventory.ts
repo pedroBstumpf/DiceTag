@@ -36,6 +36,7 @@ function sameStack(a: InventoryEntry, b: Omit<InventoryEntry, 'id'>): boolean {
   return (
     a.itemId === b.itemId &&
     !!a.global === !!b.global &&
+    !!a.table === !!b.table &&
     !a.blobId &&
     a.name === b.name &&
     JSON.stringify(a.tags) === JSON.stringify(b.tags)

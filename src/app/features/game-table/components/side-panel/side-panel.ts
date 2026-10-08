@@ -23,20 +23,26 @@ export const WORLDBUILD_WINDOW = 'worldbuild:explorer';
 /** Id da janela que mostra as pastas da Lore geral dentro da mesa. */
 export const LORE_WINDOW = 'lore:explorer';
 
+/** O que a aba Lore usa de cada item (do mundo ou criado na mesa). */
+type LoreRowItem = Pick<WorldItem, 'id' | 'name' | 'type'>;
+
 /** Item da aba Lore com o nome desta mesa. */
 interface LoreRow {
-  item: WorldItem;
+  item: LoreRowItem;
   name: string;
   /** Vem da Lore geral (e não do worldbuild do usuário). */
   global: boolean;
+  /** Item criado nesta mesa por um jogador (TableState.items). */
+  table: boolean;
 }
 
 /**
  * Painel lateral direito da mesa, com abas:
  * - Chat: mensagens e resultados das rolagens
  * - Fichas: personagens e NPCs
- * - Lore: documentos, linhas do tempo e mapas do worldbuild e da Lore geral,
- *   organizados em pastas próprias da mesa (renomear/remover vale só aqui)
+ * - Lore: documentos, linhas do tempo e mapas do worldbuild e da Lore geral, mais os
+ *   itens criados na mesa pelos jogadores, organizados em pastas próprias da mesa
+ *   (renomear/remover vale só aqui)
  * - Sons: mixer de trilhas e ambientação (tocam direto na lista)
  * - Ações: automações agrupadas por dono (gerais do mestre, cada personagem, cada NPC)
  * Fichas, lore e automações abrem numa janela flutuante.
@@ -99,18 +105,22 @@ export class SidePanel {
   readonly isGm = computed(() => this.session.role() === 'gm');
 
   /**
-   * Itens (exceto pastas) da Lore geral e do worldbuild que não foram removidos desta mesa.
-   * Jogador: só os que estão em pastas reveladas pelo mestre.
+   * Itens (exceto pastas) da Lore geral, do worldbuild e os criados na mesa pelos jogadores,
+   * que não foram removidos desta mesa. Jogador: os que estão em pastas reveladas pelo
+   * mestre e os itens criados na mesa (registro dos feitos dos jogadores).
    */
   private readonly loreRows = computed<LoreRow[]>(() => {
     const overrides = this.session.lore().items;
-    const rows = (items: WorldItem[], global: boolean) =>
+    const rows = (items: LoreRowItem[], global: boolean, table = false) =>
       items
         .filter((i) => i.type !== 'folder' && !overrides[i.id]?.hidden && this.session.canSeeLoreItem(i.id))
-        .map((item) => ({ item, name: overrides[item.id]?.name ?? item.name, global }));
-    return [...rows(this.loreGeneral.items(), true), ...rows(this.worldbuild.items(), false)].sort((a, b) =>
-      a.name.localeCompare(b.name, 'pt-BR', { numeric: true }),
-    );
+        .map((item) => ({ item, name: overrides[item.id]?.name ?? item.name, global, table }));
+    const tableItems = this.session.tableItems().map((i): LoreRowItem => ({ id: i.id, name: i.name, type: 'item' }));
+    return [
+      ...rows(this.loreGeneral.items(), true),
+      ...rows(this.worldbuild.items(), false),
+      ...rows(tableItems, false, true),
+    ].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { numeric: true }));
   });
 
   /** Pastas da mesa, em ordem alfabética (jogador: só as reveladas). */
@@ -238,9 +248,10 @@ export class SidePanel {
     this.renamingId.set(null);
   }
 
-  /** Remove o item só desta mesa (o original continua no worldbuild / Lore geral). */
+  /** Remove o item só da aba Lore desta mesa (o original continua no worldbuild / Lore geral / inventários). */
   hideLore(row: LoreRow): void {
-    if (!confirm(`Remover "${row.name}" desta mesa? O original continua ${row.global ? 'na Lore geral' : 'no Worldbuild'}.`)) return;
+    const where = row.table ? 'nos inventários dos personagens' : row.global ? 'na Lore geral' : 'no Worldbuild';
+    if (!confirm(`Remover "${row.name}" da aba Lore desta mesa? O item continua ${where}.`)) return;
     this.session.hideLoreItem(row.item.id);
     this.removed.emit(row.item.id);
   }
@@ -290,7 +301,7 @@ export class SidePanel {
     return TABLE_ENTRY_META[kind];
   }
 
-  loreMeta(item: WorldItem) {
+  loreMeta(item: LoreRowItem) {
     return WORLD_ITEM_META[item.type];
   }
 

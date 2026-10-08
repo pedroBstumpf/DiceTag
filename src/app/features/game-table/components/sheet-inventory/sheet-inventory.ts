@@ -16,11 +16,40 @@ import { SheetStore } from '../../../../core/services/sheet-store';
 import { TableSessionService } from '../../services/table-session.service';
 import { quantityOf } from '../../utils/inventory';
 
+/** O que o inventário usa do item original (do mundo ou da mesa). */
+type CardItem = Pick<WorldItem, 'id' | 'name' | 'tags' | 'blobId'>;
+
+/** De onde vem o original de um item do inventário. */
+type ItemSource = 'global' | 'own' | 'table';
+
+/** Onde procurar os originais: Lore geral, worldbuild do usuário e itens da mesa. */
+export interface ItemSources {
+  global: Map<string, CardItem>;
+  own: Map<string, CardItem>;
+  table: Map<string, CardItem>;
+}
+
+const NO_ITEMS = new Map<string, CardItem>();
+
+/** Fontes dos itens (lê signals: use dentro de computed). Fora da mesa não há itens da mesa. */
+export function itemSources(lore: LoreService, worldbuild: WorldbuildService, session: TableSessionService | null): ItemSources {
+  return { global: lore.byId(), own: worldbuild.byId(), table: session?.tableItemById() ?? NO_ITEMS };
+}
+
+function sourceOf(entry: InventoryEntry): ItemSource {
+  return entry.table ? 'table' : entry.global ? 'global' : 'own';
+}
+
+/** "desta mesa", "da Lore geral" ou "do Worldbuild" (texto do item excluído). */
+export function itemOrigin(entry: InventoryEntry): string {
+  return { table: 'desta mesa', global: 'da Lore geral', own: 'do Worldbuild' }[sourceOf(entry)];
+}
+
 /** Linha do inventário: o que o cartão mostra (personalização ou original). */
 export interface InventoryRow {
   entry: InventoryEntry;
   /** Item original (ausente quando foi excluído do worldbuild / Lore geral). */
-  item?: WorldItem;
+  item?: CardItem;
   name: string;
   tags: Tag[];
   blobId?: string;
@@ -34,10 +63,10 @@ export interface InventoryRow {
 
 /**
  * Monta a linha de um item do inventário: a personalização da ficha vale no lugar do
- * original (Lore geral, se `global`, ou worldbuild do usuário).
+ * original (item da mesa, da Lore geral ou do worldbuild do usuário).
  */
-export function inventoryRow(entry: InventoryEntry, global: Map<string, WorldItem>, own: Map<string, WorldItem>): InventoryRow {
-  const item = (entry.global ? global : own).get(entry.itemId);
+export function inventoryRow(entry: InventoryEntry, sources: ItemSources): InventoryRow {
+  const item = sources[sourceOf(entry)].get(entry.itemId);
   const custom = entry.name !== undefined || entry.tags !== undefined || entry.blobId !== undefined;
   return {
     entry,
@@ -51,10 +80,10 @@ export function inventoryRow(entry: InventoryEntry, global: Map<string, WorldIte
   };
 }
 
-/** Item do mundo que pode ser adicionado ao inventário. */
+/** Item (do mundo ou da mesa) que pode ser adicionado ao inventário. */
 interface ItemOption {
-  item: WorldItem;
-  global: boolean;
+  item: CardItem;
+  source: ItemSource;
 }
 
 /**
@@ -62,7 +91,8 @@ interface ItemOption {
  * do item selecionado (imagem, nome e etiquetas).
  *
  * Os itens vêm do worldbuild do usuário ou da Lore geral (aba "Itens" do
- * Worldbuild). Editar o cartão aqui personaliza só a cópia desta ficha
+ * Worldbuild) ou são itens da mesa: o jogador que cria um item no inventário o
+ * cria só nesta mesa (TableState.items), nunca no Worldbuild. Editar o cartão aqui personaliza só a cópia desta ficha
  * (InventoryEntry guarda o que mudou); o original e os outros inventários não mudam.
  * `readonly`: jogador vendo o inventário público de um NPC (só seleciona e vê os cartões).
  *
@@ -100,10 +130,14 @@ export class SheetInventory {
   private readonly inventory = computed(() => this.data()?.sheet.inventory ?? []);
 
   readonly rows = computed<InventoryRow[]>(() => {
-    const global = this.loreGeneral.byId();
-    const own = this.worldbuild.byId();
-    return this.inventory().map((entry) => inventoryRow(entry, global, own));
+    const sources = itemSources(this.loreGeneral, this.worldbuild, this.session);
+    return this.inventory().map((entry) => inventoryRow(entry, sources));
   });
+
+  /** Texto do item excluído (de onde ele sumiu). */
+  origin(row: InventoryRow): string {
+    return itemOrigin(row.entry);
+  }
 
   /** Linha selecionada (padrão: a primeira). */
   private readonly selectedId = signal<string | null>(null);
@@ -126,16 +160,26 @@ export class SheetInventory {
 
   // --- Cópia do personagem (não altera o original) -------------------------
 
+  // (exceto o item da mesa criado por quem edita: aí muda o próprio item, que aparece na aba Lore)
+
   rename(row: InventoryRow, name: string): void {
-    this.store.updateInventoryItem(this.sheetId(), row.entry.id, { name });
+    if (this.editsTableItem(row)) this.session?.updateTableItem(row.entry.itemId, { name });
+    else this.store.updateInventoryItem(this.sheetId(), row.entry.id, { name });
   }
 
   setTags(row: InventoryRow, tags: Tag[]): void {
-    this.store.updateInventoryItem(this.sheetId(), row.entry.id, { tags });
+    if (this.editsTableItem(row)) this.session?.updateTableItem(row.entry.itemId, { tags });
+    else this.store.updateInventoryItem(this.sheetId(), row.entry.id, { tags });
   }
 
   setImage(row: InventoryRow, file: File): void {
-    this.store.setInventoryImage(this.sheetId(), row.entry.id, file);
+    if (this.editsTableItem(row)) this.session?.setTableItemImage(row.entry.itemId, file);
+    else this.store.setInventoryImage(this.sheetId(), row.entry.id, file);
+  }
+
+  /** O cartão edita o item da mesa (criado por quem edita, ou mestre) e não uma cópia? */
+  editsTableItem(row: InventoryRow): boolean {
+    return !!row.entry.table && !row.custom && !!this.session?.canEditTableItem(row.entry.itemId);
   }
 
   /** Quantidade digitada (inteiro ≥ 0; texto inválido é ignorado). */
@@ -239,26 +283,56 @@ export class SheetInventory {
   readonly picking = signal(false);
   readonly query = signal('');
 
-  /** Itens do mundo (Lore geral + worldbuild) filtrados pela busca. */
+  /** Na mesa, no papel de jogador (o Worldbuild é só do mestre). */
+  readonly isPlayer = computed(() => this.session?.role() === 'player');
+  /**
+   * A ficha pode ter itens da mesa: fichas que moram na mesa. A ficha base do bestiário
+   * (`npc-base` / `world`) não, porque fica no Worldbuild, fora desta mesa.
+   */
+  readonly tableItemsAllowed = computed(() => {
+    const level = this.data()?.level;
+    return !!this.session && level !== 'npc-base' && level !== 'world';
+  });
+  /** "Criar item": o jogador cria só nesta mesa; o mestre, no Worldbuild. */
+  readonly createsInTable = computed(() => this.isPlayer() && this.tableItemsAllowed());
+  readonly canCreate = computed(() => !this.isPlayer() || this.tableItemsAllowed());
+
+  /** Itens que podem entrar no inventário (Lore geral, Worldbuild e itens da mesa), filtrados pela busca. */
   readonly options = computed<ItemOption[]>(() => {
     const q = this.query().trim().toLowerCase();
-    return [
-      ...this.loreGeneral.worldItems().map((item) => ({ item, global: true })),
-      ...this.worldbuild.worldItems().map((item) => ({ item, global: false })),
-    ].filter((o) => !q || o.item.name.toLowerCase().includes(q));
+    const options: ItemOption[] = this.loreGeneral.worldItems().map((item) => ({ item, source: 'global' }));
+    // O jogador não vê o Worldbuild na mesa
+    if (!this.isPlayer()) options.push(...this.worldbuild.worldItems().map((item) => ({ item, source: 'own' as const })));
+    if (this.tableItemsAllowed() && this.session) {
+      options.push(...this.session.tableItems().map((item) => ({ item, source: 'table' as const })));
+    }
+    return options.filter((o) => !q || o.item.name.toLowerCase().includes(q));
   });
 
   add(option: ItemOption): void {
-    const entry: InventoryEntry = { id: newId(), itemId: option.item.id, ...(option.global && { global: true }) };
+    const entry: InventoryEntry = {
+      id: newId(),
+      itemId: option.item.id,
+      ...(option.source === 'global' && { global: true }),
+      ...(option.source === 'table' && { table: true }),
+    };
     this.store.updateSheet(this.sheetId(), { inventory: [...this.inventory(), entry] });
     this.selectedId.set(entry.id);
     this.closePicker();
   }
 
-  /** Cria um item novo no worldbuild do usuário, adiciona e abre o cartão original para editar. */
+  /**
+   * Cria um item novo e o adiciona. Jogador: item só desta mesa (o cartão ao lado já fica
+   * editável). Mestre: item no worldbuild do usuário, com o cartão original aberto para editar.
+   */
   createItem(): void {
-    const item = this.worldbuild.create('item', null, this.query().trim() || undefined);
-    this.add({ item, global: false });
+    const name = this.query().trim();
+    if (this.createsInTable() && this.session) {
+      this.add({ item: this.session.createTableItem(name), source: 'table' });
+      return;
+    }
+    const item = this.worldbuild.create('item', null, name || undefined);
+    this.add({ item, source: 'own' });
     this.openItem.emit(item.id);
   }
 

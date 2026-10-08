@@ -83,6 +83,9 @@
               @let eq = equippedOf(win.id);
               <app-equipped-item-window [sheetId]="eq.sheetId" [inventoryId]="eq.inventoryId" />
             }
+            @case ('table-item') {
+              <app-table-item-window [itemId]="win.id" />
+            }
           }
           <!-- Lore: mesmos componentes do worldbuild; itens da Lore geral usam o LoreService (appLoreScope). Jogador: só leitura -->
           @if (c.global) {

@@ -58,7 +58,7 @@
       @if (isGm()) {
         <p class="mb-2 flex items-center gap-1.5 px-1 text-[11px] leading-relaxed text-slate-500">
           <mat-icon class="!size-3.5 shrink-0 !text-[14px]">visibility_off</mat-icon>
-          Os jogadores só veem as pastas com o olho aberto (e só para ler).
+          Os jogadores só veem as pastas com o olho aberto (e só para ler) e os itens criados por eles nesta mesa.
         </p>
       }
 
@@ -151,7 +151,7 @@
             <ng-container *ngTemplateOutlet="loreItem; context: { $implicit: row, depth: 0 }" />
           } @empty {
             @if (!loreFolders().length) {
-              <p class="px-2 py-6 text-center text-sm text-slate-500">{{ isGm() ? 'A lore está vazia.' : 'O mestre ainda não revelou nada da lore.' }}</p>
+              <p class="px-2 py-6 text-center text-sm text-slate-500">{{ isGm() ? 'A lore está vazia.' : 'Nada na lore ainda: o mestre não revelou nada e nenhum item foi criado nesta mesa.' }}</p>
             }
           }
         </div>
@@ -244,6 +244,8 @@
       <span class="min-w-0 flex-1 truncate">{{ row.name }}</span>
       @if (row.global) {
         <mat-icon class="!size-3.5 shrink-0 !text-[14px] text-star-400/70" matTooltip="Lore geral">auto_stories</mat-icon>
+      } @else if (row.table) {
+        <mat-icon class="!size-3.5 shrink-0 !text-[14px] text-emerald-300/70" matTooltip="Criado nesta mesa por um jogador">table_restaurant</mat-icon>
       }
     }
 

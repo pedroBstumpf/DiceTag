@@ -7,7 +7,7 @@ import { LoreService } from '../../../worldbuild/services/lore.service';
 import { WorldbuildService } from '../../../worldbuild/services/worldbuild.service';
 import { BlobUrlService } from '../../services/blob-url.service';
 import { TableSessionService } from '../../services/table-session.service';
-import { inventoryRow } from '../sheet-inventory/sheet-inventory';
+import { inventoryRow, itemOrigin, itemSources } from '../sheet-inventory/sheet-inventory';
 
 /** Prefixo do id das janelas de item equipado (equip:<id da ficha>:<id do item no inventário>). */
 export const EQUIPPED_WINDOW = 'equip:';
@@ -38,7 +38,7 @@ export function parseEquippedWindow(id: string): { sheetId: string; inventoryId:
   template: `
     @if (row(); as r) {
       @if (r.missing) {
-        <p class="py-10 text-center text-sm text-slate-500">Este item foi excluído {{ r.entry.global ? 'da Lore geral' : 'do Worldbuild' }}.</p>
+        <p class="py-10 text-center text-sm text-slate-500">Este item foi excluído {{ origin() }}.</p>
       } @else {
         <fieldset class="mx-auto w-full min-w-0 max-w-sm" [disabled]="!canEdit()">
           <app-item-card-view
@@ -74,18 +74,34 @@ export class EquippedItemWindow {
   /** O item como o inventário da ficha o mostra (personalização ou original). */
   readonly row = computed(() => {
     const entry = this.store.inventoryOf(this.sheetId()).find((i) => i.id === this.inventoryId());
-    return entry ? inventoryRow(entry, this.loreGeneral.byId(), this.worldbuild.byId()) : null;
+    return entry ? inventoryRow(entry, itemSources(this.loreGeneral, this.worldbuild, this.session)) : null;
+  });
+  /** Texto do item excluído (de onde ele sumiu). */
+  readonly origin = computed(() => {
+    const row = this.row();
+    return row ? itemOrigin(row.entry) : '';
   });
   readonly ownerName = computed(() => this.store.sheetData(this.sheetId())?.name ?? '');
   readonly canEdit = computed(() => this.session.sheetAccess(this.sheetId()).edit);
 
   // --- Cópia da ficha (não altera o original) ------------------------------
+  // (exceto o item da mesa criado por quem edita: aí muda o próprio item, como no inventário)
+
+  /** Id do item da mesa editado diretamente (null = edita a cópia da ficha). */
+  private readonly tableItemId = computed(() => {
+    const row = this.row();
+    return row?.entry.table && !row.custom && this.session.canEditTableItem(row.entry.itemId) ? row.entry.itemId : null;
+  });
 
   update(patch: { name?: string; tags?: Tag[] }): void {
-    this.store.updateInventoryItem(this.sheetId(), this.inventoryId(), patch);
+    const itemId = this.tableItemId();
+    if (itemId) this.session.updateTableItem(itemId, patch);
+    else this.store.updateInventoryItem(this.sheetId(), this.inventoryId(), patch);
   }
 
   setImage(file: File): void {
-    this.store.setInventoryImage(this.sheetId(), this.inventoryId(), file);
+    const itemId = this.tableItemId();
+    if (itemId) this.session.setTableItemImage(itemId, file);
+    else this.store.setInventoryImage(this.sheetId(), this.inventoryId(), file);
   }
 }

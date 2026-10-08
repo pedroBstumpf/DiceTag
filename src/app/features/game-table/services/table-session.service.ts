@@ -29,6 +29,7 @@ import {
   TableEntry,
   TableEntryKind,
   TableRole,
+  TableItem,
   TableLore,
   TableState,
   TableTool,
@@ -162,6 +163,7 @@ const EMPTY_STATE: TableState = { scenes: [], activeSceneId: null, entries: [] }
 const EMPTY_LORE: TableLore = { folders: [], items: {} };
 const NO_TOKENS: TokenPlacement[] = [];
 const NO_WALLS: Wall[] = [];
+const NO_TABLE_ITEMS: TableItem[] = [];
 const NO_STROKES: Stroke[] = [];
 const NO_NOTES: MapNote[] = [];
 const NO_MESSAGES: ChatMessage[] = [];
@@ -1132,7 +1134,7 @@ export class TableSessionService extends SheetStore {
   // Nada aqui altera ou apaga os itens do worldbuild / Lore geral.
 
   /** Nome do item da lore nesta mesa (o local, se renomeado aqui). */
-  loreName(item: WorldItem): string {
+  loreName(item: { id: string; name: string }): string {
     return this.lore().items[item.id]?.name ?? item.name;
   }
 
@@ -1164,8 +1166,11 @@ export class TableSessionService extends SheetStore {
   canSeeLoreItem(itemId: string): boolean {
     if (this.role() === 'gm') return true;
     const override = this.lore().items[itemId];
-    if (!override?.folderId || override.hidden) return false;
-    return !!this.lore().folders.find((f) => f.id === override.folderId)?.public;
+    if (override?.hidden) return false;
+    const folder = override?.folderId ? this.lore().folders.find((f) => f.id === override.folderId) : undefined;
+    // Itens criados na mesa pelos jogadores ficam à vista (na raiz ou em pasta revelada)
+    if (this.tableItemById().has(itemId)) return !folder || !!folder.public;
+    return !!folder?.public;
   }
 
   /** Exclui a pasta da mesa; os itens dela voltam para a raiz da aba Lore. */
@@ -1179,7 +1184,7 @@ export class TableSessionService extends SheetStore {
   }
 
   /** Renomeia o item só nesta mesa (nome vazio ou igual ao original volta ao original). */
-  renameLoreItem(item: WorldItem, name: string): void {
+  renameLoreItem(item: { id: string; name: string }, name: string): void {
     const trimmed = name.trim();
     this.patchLoreItem(item.id, { name: trimmed && trimmed !== item.name ? trimmed : undefined });
   }
@@ -1208,6 +1213,43 @@ export class TableSessionService extends SheetStore {
 
   private patchLore(fn: (l: TableLore) => TableLore): void {
     this.patchState((s) => ({ ...s, lore: fn(s.lore ?? EMPTY_LORE) }));
+  }
+
+  // --- Itens da mesa (criados por jogadores, fora do Worldbuild) -----------
+
+  readonly tableItems = computed(() => this.state().items ?? NO_TABLE_ITEMS);
+  readonly tableItemById = computed(() => new Map(this.tableItems().map((i) => [i.id, i])));
+
+  /** Cria um item só nesta mesa (o jogador não grava no Worldbuild de ninguém). Aparece na aba Lore. */
+  createTableItem(name = ''): TableItem {
+    const item: TableItem = {
+      id: newId(),
+      name: name.trim() || 'Novo item',
+      tags: [],
+      ownerUserId: this.auth.user()?.id,
+      createdAt: Date.now(),
+    };
+    this.patchState((s) => ({ ...s, items: [...(s.items ?? []), item] }));
+    return item;
+  }
+
+  /** Quem criou o item da mesa (e o mestre) edita o original; os demais só a cópia do inventário. */
+  canEditTableItem(itemId: string): boolean {
+    const item = this.tableItemById().get(itemId);
+    return !!item && (this.role() === 'gm' || item.ownerUserId === this.auth.user()?.id);
+  }
+
+  updateTableItem(itemId: string, patch: Partial<Pick<TableItem, 'name' | 'tags'>>): void {
+    this.patchState((s) => ({ ...s, items: (s.items ?? []).map((i) => (i.id === itemId ? { ...i, ...patch } : i)) }));
+  }
+
+  /** Troca a imagem do item da mesa (apaga a anterior). */
+  async setTableItemImage(itemId: string, file: File): Promise<void> {
+    const old = this.tableItemById().get(itemId)?.blobId;
+    const blobId = newId();
+    await this.storage.set(`blob:${blobId}`, file);
+    this.patchState((s) => ({ ...s, items: (s.items ?? []).map((i) => (i.id === itemId ? { ...i, blobId } : i)) }));
+    if (old) this.storage.delete(`blob:${old}`);
   }
 
   // --- Tokens: regra de vínculo --------------------------------------------

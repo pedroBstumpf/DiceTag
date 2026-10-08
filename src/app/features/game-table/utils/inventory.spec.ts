@@ -30,6 +30,13 @@ describe('inventário: quantidades', () => {
     expect(stacked).toEqual([{ id: 'a', itemId: 'x', name: 'Poção', quantity: 3 }]);
   });
 
+  it('addOne não empilha item da mesa com item do Worldbuild de mesmo id', () => {
+    const base: InventoryEntry[] = [{ id: 'a', itemId: 'x' }];
+    const added = addOne(base, { id: 'b', itemId: 'x', table: true }, id);
+    expect(added).toHaveLength(2);
+    expect(added[1].table).toBe(true);
+  });
+
   it('addOne não leva o "equipado" de quem deu', () => {
     const given = addOne([], { id: 'a', itemId: 'x', equipped: true }, id);
     expect(given[0].equipped).toBeUndefined();

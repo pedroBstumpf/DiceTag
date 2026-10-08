@@ -22,7 +22,8 @@ import { ActionBar } from './components/action-bar/action-bar';
 import { CharacterSheetView } from './components/character-sheet/character-sheet';
 import { EntryWindow } from './components/entry-window/entry-window';
 import { EquippedItemWindow, parseEquippedWindow } from './components/equipped-item-window/equipped-item-window';
-import { inventoryRow } from './components/sheet-inventory/sheet-inventory';
+import { inventoryRow, itemSources } from './components/sheet-inventory/sheet-inventory';
+import { TableItemWindow } from './components/table-item-window/table-item-window';
 import { MapStage } from './components/map-stage/map-stage';
 import { SceneBar } from './components/scene-bar/scene-bar';
 import { LORE_WINDOW, SidePanel, WORLDBUILD_WINDOW } from './components/side-panel/side-panel';
@@ -40,7 +41,7 @@ interface WindowContent {
   icon: string;
   color: string;
   /** Tipo de conteúdo, usado para escolher o componente. */
-  type: 'entry' | 'sheet' | 'token' | 'equipped' | 'explorer' | 'document' | 'timeline' | 'image' | 'item' | 'npc';
+  type: 'entry' | 'sheet' | 'token' | 'equipped' | 'table-item' | 'explorer' | 'document' | 'timeline' | 'image' | 'item' | 'npc';
   /** O conteúdo vem da Lore geral (os editores usam o LoreService). */
   global?: boolean;
 }
@@ -54,6 +55,7 @@ const WINDOW_SIZES: Record<WindowContent['type'], { width: number; height: numbe
   sheet: { width: 880, height: 700 },
   token: { width: 460, height: 560 },
   equipped: { width: 420, height: 600 },
+  'table-item': { width: 420, height: 600 },
   explorer: { width: 340, height: 540 },
   document: { width: 720, height: 600 },
   timeline: { width: 620, height: 560 },
@@ -93,6 +95,7 @@ const PANEL_SPACE = { top: 60, left: 76, right: 344, bottom: 100 };
     CharacterSheetView,
     TokenWindow,
     EquippedItemWindow,
+    TableItemWindow,
     LoreScope,
     WorldNpcSheet,
     Explorer,
@@ -187,7 +190,7 @@ export class GameTablePage {
     if (equipped) {
       const item = this.session.inventoryOf(equipped.sheetId).find((i) => i.id === equipped.inventoryId);
       if (!item || !this.session.canOpenSheet(equipped.sheetId)) return null;
-      const name = inventoryRow(item, this.loreGeneral.byId(), this.worldbuild.byId()).name;
+      const name = inventoryRow(item, itemSources(this.loreGeneral, this.worldbuild, this.session)).name;
       return { title: name, icon: 'inventory_2', color: 'text-amber-300', type: 'equipped' };
     }
     // Ficha própria de um token de NPC (cópia individual)
@@ -205,6 +208,12 @@ export class GameTablePage {
       // Personagem e NPC abrem a ficha completa (abas); automação, a janela de configuração
       const type = hasSheet(entry.kind) ? 'sheet' : 'entry';
       return { title: entry.name, icon: entry.icon ?? meta.icon, color: meta.color, type };
+    }
+    // Item criado na mesa por um jogador (aba Lore; visível aos jogadores)
+    const tableItem = this.session.tableItemById().get(id);
+    if (tableItem) {
+      if (!this.session.canSeeLoreItem(id)) return null;
+      return { title: this.session.loreName(tableItem), icon: 'inventory_2', color: 'text-amber-300', type: 'table-item' };
     }
     // Itens da lore: o título usa o nome desta mesa (pode ter sido renomeado só aqui).
     // O jogador só abre itens de pastas da aba Lore que o mestre revelou.
