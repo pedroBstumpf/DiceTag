@@ -6,7 +6,7 @@
   },
   "newProjectRoot": "projects",
   "projects": {
-    "dicetag": {
+    "zehenia": {
       "projectType": "application",
       "schematics": {
         "@schematics/angular:component": {
@@ -70,10 +70,10 @@
           "builder": "@angular/build:dev-server",
           "configurations": {
             "production": {
-              "buildTarget": "dicetag:build:production"
+              "buildTarget": "zehenia:build:production"
             },
             "development": {
-              "buildTarget": "dicetag:build:development"
+              "buildTarget": "zehenia:build:development"
             }
           },
           "defaultConfiguration": "development"

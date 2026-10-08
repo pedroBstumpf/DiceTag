@@ -1,4 +1,4 @@
-# CLAUDE.md — DiceTag
+# CLAUDE.md — Crônicas de Zehenia
 
 Contexto do projeto para o Claude Code. Leia antes de qualquer alteração.
 Idioma de trabalho: **português do Brasil** (respostas, comentários no código e textos da interface).
@@ -7,7 +7,8 @@ Idioma de trabalho: **português do Brasil** (respostas, comentários no código
 
 ## 1. Resumo executivo
 
-**DiceTag** é um VTT (Virtual Tabletop): um aplicativo web para jogar RPG de mesa online com amigos.
+**Crônicas de Zehenia** (antigo DiceTag) é um VTT (Virtual Tabletop): um aplicativo web para jogar RPG de mesa
+online com amigos, no mundo de Zehenia.
 A meta final inclui simular eventos, calcular rolagens, manter fichas, criar mapas, tocar sons e
 organizar toda a atmosfera de uma campanha.
 
@@ -240,7 +241,8 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - **Interface dentro do mapa** (tokens, paredes, marcadores): tamanhos em px de tela convertidos com
   `ui(px) = px / scale`; textos com mínimo legível `legible(mundo, mínimoTela)`.
 - Material: primary = `astral-400`, superfícies = `ink-*`, snackbar/menu/dialog escuros (overrides em `styles.scss`).
-- Logo: `public/images/dicetag-banner.webp` (banner) e `dicetag-emblem.webp` (ícone 96px); `public/favicon.png`.
+- Logo: `public/images/zehenia-banner.jpg` (banner 1024×572) e `zehenia-emblem.png` (monograma "Z", 96px);
+  `public/favicon.png` (o mesmo "Z", 64px). Na barra lateral o nome aparece em duas linhas ("Crônicas de" / "Zehenia").
 
 ---
 
@@ -480,6 +482,9 @@ O `MapStage` recebe `insets` para enquadrar o mapa só na área livre entre as b
 | `blob:<id>` | `Blob` de imagem/mapa/áudio/imagem de token |
 | `localStorage: dicetag.session` | id do usuário logado |
 | `localStorage: dicetag.sidebarCollapsed` | preferência da barra lateral |
+
+O banco e as chaves do `localStorage` mantêm o prefixo `dicetag` (nome antigo do projeto) — assim como o prefixo
+do hash das senhas — para não perder dados, sessões e contas já salvos. **Não renomear.**
 
 Para conectar um backend no futuro: trocar `StorageService` e `AuthService` mantendo as interfaces públicas.
 

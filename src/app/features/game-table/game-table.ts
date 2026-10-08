@@ -56,7 +56,7 @@ const WINDOW_SIZES: Record<WindowContent['type'], { width: number; height: numbe
 const PANEL_SPACE = { top: 60, left: 76, right: 344, bottom: 100 };
 
 /**
- * Tela da mesa de jogo — a mais importante do DiceTag.
+ * Tela da mesa de jogo — a mais importante do app.
  *
  * O mapa ocupa a tela inteira e as barras flutuam sobre ele:
  * - topo: cenas/mapas         - esquerda: ferramentas

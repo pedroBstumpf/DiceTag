@@ -1,6 +1,6 @@
-# DiceTag
+# Crônicas de Zehenia
 
-Mesa virtual (VTT) para jogar RPG de mesa online com amigos.
+Mesa virtual (VTT) para jogar RPG de mesa online com amigos no mundo de Zehenia (projeto antes chamado DiceTag).
 Angular 21 · Angular Material (M3) · Tailwind CSS 4 · Tiptap (editor de texto) · Vitest.
 
 Visual: tema espacial (preto, azul e branco), fontes angulares inspiradas em runas

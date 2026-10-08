@@ -14,23 +14,23 @@ export const routes: Routes = [
     children: [
       {
         path: '',
-        title: 'DiceTag — Início',
+        title: 'Zehenia — Início',
         loadComponent: () => import('./features/home/home').then((m) => m.Home),
       },
       {
         path: 'mesas',
-        title: 'DiceTag — Minhas mesas',
+        title: 'Zehenia — Minhas mesas',
         loadComponent: () => import('./features/tables/tables').then((m) => m.Tables),
       },
       {
         path: 'worldbuild',
-        title: 'DiceTag — Worldbuild',
+        title: 'Zehenia — Worldbuild',
         loadComponent: () => import('./features/worldbuild/worldbuild').then((m) => m.Worldbuild),
       },
       {
         // Lore geral do mundo: mesma página do worldbuild, com dados globais
         path: 'lore',
-        title: 'DiceTag — Lore geral',
+        title: 'Zehenia — Lore geral',
         loadChildren: () => import('./features/worldbuild/lore.routes').then((m) => m.LORE_ROUTES),
       },
     ],
@@ -38,7 +38,7 @@ export const routes: Routes = [
   {
     // Mesa de jogo: tela cheia, fora do Shell, para máxima imersão
     path: 'mesa/:id',
-    title: 'DiceTag — Mesa',
+    title: 'Zehenia — Mesa',
     loadComponent: () => import('./features/game-table/game-table').then((m) => m.GameTablePage),
   },
   { path: '**', redirectTo: '' },

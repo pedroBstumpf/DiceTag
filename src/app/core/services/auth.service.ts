@@ -5,6 +5,8 @@ import { newId } from '../utils/id';
 import { StorageService } from './storage.service';
 
 const USERS_KEY = 'users';
+// O prefixo "dicetag" (nome antigo do projeto) é mantido na sessão e no hash da senha:
+// trocá-lo desconectaria todos e invalidaria as senhas já salvas.
 const SESSION_KEY = 'dicetag.session';
 
 /** Usuário usado no modo de teste (sem exigência de conta). */

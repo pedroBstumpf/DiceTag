@@ -3,7 +3,7 @@ import { Injectable } from '@angular/core';
 /**
  * Armazenamento local chave/valor sobre IndexedDB.
  *
- * Usado enquanto o DiceTag não tem backend: guarda usuários, mesas,
+ * Usado enquanto o app não tem backend: guarda usuários, mesas,
  * itens do worldbuild e arquivos (imagens/mapas) no próprio navegador.
  * IndexedDB foi escolhido no lugar do localStorage porque suporta
  * Blobs e volumes grandes (mapas em alta resolução).
@@ -12,7 +12,7 @@ import { Injectable } from '@angular/core';
  */
 @Injectable({ providedIn: 'root' })
 export class StorageService {
-  private readonly dbName = 'dicetag';
+  private readonly dbName = 'dicetag'; // nome antigo do projeto, mantido para não perder os dados salvos
   private readonly storeName = 'kv';
   private dbPromise?: Promise<IDBDatabase>;
 

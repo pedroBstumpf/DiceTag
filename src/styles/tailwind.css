@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Tailwind CSS — configuração e design tokens do DiceTag
+   Tailwind CSS — configuração e design tokens de Crônicas de Zehenia
    (Tailwind v4: o tema é definido aqui via @theme, sem tailwind.config.js)
    "static" garante que as variáveis existam sempre, pois também são usadas
    no styles.scss (tema do Angular Material).
