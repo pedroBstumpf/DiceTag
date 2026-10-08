@@ -196,11 +196,37 @@
           Alterações aqui valem só para esta ficha — o item no Worldbuild e nos outros inventários não muda.
         </p>
       }
-      @if (row.custom && !readonly()) {
-        <button type="button" class="flex items-center gap-1 rounded-md px-3 py-1.5 text-xs text-astral-300 hover:bg-white/5" (click)="reset(row)">
-          <mat-icon class="!size-4 !text-[16px]">restart_alt</mat-icon>
-          Voltar ao item original
-        </button>
+      @if (!readonly()) {
+        <div class="flex flex-wrap justify-center gap-1">
+          <!-- Dar uma unidade a outro personagem da mesa (vai com a personalização) -->
+          @if (!isShop() && row.quantity > 0) {
+            <button type="button" class="flex items-center gap-1 rounded-md px-3 py-1.5 text-xs text-emerald-300 hover:bg-white/5" [matMenuTriggerFor]="giveMenu">
+              <mat-icon class="!size-4 !text-[16px]">volunteer_activism</mat-icon>
+              Dar para…
+            </button>
+            <mat-menu #giveMenu="matMenu">
+              <p class="px-4 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-widest text-slate-500">Dar 1 × {{ row.name }} para</p>
+              @for (target of recipients(); track target.id) {
+                <button mat-menu-item (click)="give(row, target)">
+                  @if (blobs.url(target.token?.blobId); as src) {
+                    <img [src]="src" alt="" class="mr-3 inline-block size-6 rounded-full object-cover ring-1 ring-white/30" />
+                  } @else {
+                    <mat-icon class="text-astral-300">person</mat-icon>
+                  }
+                  <span>{{ target.name }}</span>
+                </button>
+              } @empty {
+                <p class="px-4 pb-3 text-xs text-slate-500">Não há outros personagens na mesa.</p>
+              }
+            </mat-menu>
+          }
+          @if (row.custom) {
+            <button type="button" class="flex items-center gap-1 rounded-md px-3 py-1.5 text-xs text-astral-300 hover:bg-white/5" (click)="reset(row)">
+              <mat-icon class="!size-4 !text-[16px]">restart_alt</mat-icon>
+              Voltar ao item original
+            </button>
+          }
+        </div>
       }
     } @else {
       <p class="py-10 text-center text-sm text-slate-500">Este item foi excluído {{ row.entry.global ? 'da Lore geral' : 'do Worldbuild' }}.</p>

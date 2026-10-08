@@ -1,9 +1,10 @@
 import { Component, computed, inject, input, output, signal } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
+import { MatMenuModule } from '@angular/material/menu';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { Tag } from '../../../../core/models/tag.model';
-import { CURRENCY, InventoryEntry } from '../../../../core/models/table-session.model';
+import { CURRENCY, InventoryEntry, TableEntry } from '../../../../core/models/table-session.model';
 import { WorldItem } from '../../../../core/models/world-item.model';
 import { newId } from '../../../../core/utils/id';
 import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
@@ -46,11 +47,13 @@ interface ItemOption {
  * `readonly`: jogador vendo o inventário público de um NPC (só seleciona e vê os cartões).
  *
  * Loja: no inventário de NPC há uma coluna de preço em Eiros (editável por quem edita
- * o NPC); o jogador que vê o inventário compra um item com os Eiros do personagem dele.
+ * o NPC); o jogador que vê o inventário compra um item com os Eiros do personagem dele
+ * (ou o pega de graça, se o NPC estiver derrotado).
+ * "Dar para…": personagens passam itens uns aos outros, com a personalização.
  */
 @Component({
   selector: 'app-sheet-inventory',
-  imports: [MatIconModule, MatTooltipModule, AutoFocus, ItemCardView],
+  imports: [MatIconModule, MatMenuModule, MatTooltipModule, AutoFocus, ItemCardView],
   templateUrl: './sheet-inventory.html',
   host: { class: 'flex min-h-full flex-col gap-4 @xl:flex-row' },
 })
@@ -159,6 +162,19 @@ export class SheetInventory {
     const n = Number(raw);
     if (raw.trim() === '') this.session.updateInventoryItem(this.entryId(), row.entry.id, { price: undefined });
     else if (Number.isFinite(n) && n >= 0) this.session.updateInventoryItem(this.entryId(), row.entry.id, { price: Math.round(n) });
+  }
+
+  // --- Dar itens a outros personagens --------------------------------------
+
+  /** Personagens da mesa que podem receber itens desta ficha (menos ela mesma). */
+  readonly recipients = computed(() =>
+    this.isShop() ? [] : this.session.entries().filter((e) => e.kind === 'character' && e.id !== this.entryId()),
+  );
+
+  /** Dá uma unidade do item (com nome, etiquetas e imagem personalizados) a outro personagem. */
+  async give(row: InventoryRow, target: TableEntry): Promise<void> {
+    const ok = await this.session.transferItem(this.entryId(), row.entry.id, target.id);
+    if (ok) this.snackBar.open(`${row.name} foi para o inventário de ${target.name}.`, undefined, { duration: 3000 });
   }
 
   /** NPC derrotado (alguma barra de status em 0): os itens podem ser looteados sem pagar. */
