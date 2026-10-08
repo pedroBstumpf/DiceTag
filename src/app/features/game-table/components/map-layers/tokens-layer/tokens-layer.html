@@ -39,7 +39,7 @@
       [style.background]="initialBg(t)"
     >
       @if (blobs.url(t.blobId); as src) {
-        <img [src]="src" alt="" draggable="false" class="pointer-events-none size-full select-none object-cover" />
+        <img [src]="src" alt="" draggable="false" class="pointer-events-none size-full select-none object-cover object-top" />
       } @else {
         <span class="grid size-full place-items-center font-display font-semibold text-white" [style.font-size.px]="px * 0.45">
           {{ t.name.charAt(0).toUpperCase() }}

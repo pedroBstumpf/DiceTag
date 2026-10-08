@@ -29,7 +29,7 @@ import { TokenEditor } from '../token-editor/token-editor';
           (click)="imageInput.click()"
         >
           @if (blobs.url(t.blobId); as src) {
-            <img [src]="src" alt="" class="size-full object-cover" />
+            <img [src]="src" alt="" class="size-full object-cover object-top" />
           } @else {
             <span class="font-display text-2xl text-white">{{ t.entry.name.charAt(0).toUpperCase() }}</span>
           }

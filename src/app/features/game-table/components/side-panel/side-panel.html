@@ -284,7 +284,7 @@
         (dblclick)="renamingId.set(entry.id)"
       >
         @if (tokenImage(entry); as src) {
-          <img [src]="src" alt="" draggable="false" class="size-5 shrink-0 rounded-full object-cover ring-1 ring-white/30" />
+          <img [src]="src" alt="" draggable="false" class="size-5 shrink-0 rounded-full object-cover object-top ring-1 ring-white/30" />
         } @else {
           <mat-icon class="!size-5 shrink-0 !text-[20px]" [class]="metaOf(entry.kind).color">
             {{ entry.icon ?? metaOf(entry.kind).icon }}

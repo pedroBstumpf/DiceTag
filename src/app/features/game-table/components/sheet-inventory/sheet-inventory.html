@@ -216,7 +216,7 @@
               @for (target of recipients(); track target.id) {
                 <button mat-menu-item (click)="give(row, target)">
                   @if (blobs.url(target.token?.blobId); as src) {
-                    <img [src]="src" alt="" class="mr-3 inline-block size-6 rounded-full object-cover ring-1 ring-white/30" />
+                    <img [src]="src" alt="" class="mr-3 inline-block size-6 rounded-full object-cover object-top ring-1 ring-white/30" />
                   } @else {
                     <mat-icon class="text-astral-300">person</mat-icon>
                   }
