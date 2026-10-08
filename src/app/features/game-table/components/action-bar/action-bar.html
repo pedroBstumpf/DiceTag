@@ -21,11 +21,42 @@
     </button>
   </div>
 
-  <!-- Quem está agindo (muda com o token selecionado) -->
-  <div class="flex w-20 shrink-0 flex-col justify-center leading-tight" [matTooltip]="session.role() === 'gm' ? 'Selecione um token para usar as ações dele' : ''">
-    <span class="text-[10px] uppercase tracking-widest text-slate-500">Agindo</span>
-    <span class="truncate text-xs font-semibold text-star-300">{{ actorLabel() }}</span>
-  </div>
+  <!-- Quem está agindo: o mestre escolhe (fixo ou seguindo o token selecionado) -->
+  @if (session.role() === 'gm') {
+    <button
+      type="button"
+      class="flex w-24 shrink-0 flex-col justify-center rounded-md px-1 text-left leading-tight hover:bg-white/5"
+      matTooltip="Escolher como quem o mestre age"
+      [matMenuTriggerFor]="actingMenu"
+    >
+      <span class="flex items-center gap-0.5 text-[10px] uppercase tracking-widest text-slate-500">
+        Agindo
+        <mat-icon class="!size-3.5 !text-[14px]">{{ following() ? 'ads_click' : 'push_pin' }}</mat-icon>
+      </span>
+      <span class="truncate text-xs font-semibold text-star-300">{{ actorLabel() }}</span>
+    </button>
+    <mat-menu #actingMenu="matMenu">
+      <button mat-menu-item (click)="session.gmActing.set(selection)">
+        <mat-icon>ads_click</mat-icon>
+        <span>Token selecionado (segue a seleção)</span>
+      </button>
+      <button mat-menu-item (click)="session.gmActing.set(null)">
+        <mat-icon>bolt</mat-icon>
+        <span>Ações gerais do mestre</span>
+      </button>
+      @for (e of actingOptions(); track e.id) {
+        <button mat-menu-item (click)="session.gmActing.set(e.id)">
+          <mat-icon [class]="e.kind === 'npc' ? 'text-violet-300' : 'text-astral-300'">{{ e.kind === 'npc' ? 'smart_toy' : 'person' }}</mat-icon>
+          <span>{{ e.name }}</span>
+        </button>
+      }
+    </mat-menu>
+  } @else {
+    <div class="flex w-20 shrink-0 flex-col justify-center leading-tight">
+      <span class="text-[10px] uppercase tracking-widest text-slate-500">Agindo</span>
+      <span class="truncate text-xs font-semibold text-star-300">{{ actorLabel() }}</span>
+    </div>
+  }
 
   <!-- Espaços de ação -->
   <div class="flex gap-1.5 overflow-x-auto">

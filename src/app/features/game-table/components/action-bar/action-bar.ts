@@ -1,21 +1,23 @@
 import { Component, computed, inject, output, signal } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
+import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { TableEntry } from '../../../../core/models/table-session.model';
-import { TableSessionService } from '../../services/table-session.service';
+import { TableEntry, hasSheet } from '../../../../core/models/table-session.model';
+import { ACT_SELECTION, TableSessionService } from '../../services/table-session.service';
 
 /** Quantidade de espaços na barra (atalhos 1–9 e 0). */
 const SLOT_COUNT = 10;
 
 /**
  * Barra de ações (inferior da mesa).
- * Mostra as ações de quem está agindo (`session.actor`): para o mestre, a ficha do
- * token selecionado (NPC ou personagem) ou, sem seleção, as ações gerais; para o
- * jogador, o personagem dele. Espaços numerados, usáveis com clique ou teclas 1–0.
+ * Mostra as ações de quem está agindo (`session.actor`): o mestre escolhe no menu
+ * "Agindo" — uma ficha fixa (personagem ou NPC), as ações gerais ou seguir o token
+ * selecionado; o jogador age com o personagem dele. Espaços numerados, usáveis com
+ * clique ou teclas 1–0.
  */
 @Component({
   selector: 'app-action-bar',
-  imports: [MatIconModule, MatTooltipModule],
+  imports: [MatIconModule, MatMenuModule, MatTooltipModule],
   templateUrl: './action-bar.html',
 })
 export class ActionBar {
@@ -45,8 +47,17 @@ export class ActionBar {
   readonly actorLabel = computed(() => {
     const actor = this.session.actor();
     if (actor) return actor.name;
-    return this.session.role() === 'gm' ? 'Ações gerais' : 'Sem personagem';
+    if (this.session.role() !== 'gm') return 'Sem personagem';
+    return this.following() ? 'Nenhum token' : 'Ações gerais';
   });
+
+  // --- Mestre: escolher quem age -------------------------------------------
+
+  readonly selection = ACT_SELECTION;
+  /** O mestre está seguindo o token selecionado (senão, a escolha é fixa). */
+  readonly following = computed(() => this.session.gmActing() === ACT_SELECTION);
+  /** Personagens e NPCs da mesa, para o mestre agir como eles. */
+  readonly actingOptions = computed(() => this.session.entries().filter((e) => hasSheet(e.kind)));
 
   /** Usa a ação do espaço (ou cria uma nova para quem está agindo, se vazio). */
   trigger(index: number): void {

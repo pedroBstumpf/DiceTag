@@ -105,6 +105,9 @@ export interface ActionUse {
 }
 
 
+/** Mestre agindo como "o token selecionado" (muda a cada seleção). */
+export const ACT_SELECTION = 'selection';
+
 /** Tag de tema da ficha que uma ação pode usar no modificador. */
 export interface SheetTagOption {
   id: string;
@@ -363,14 +366,26 @@ export class TableSessionService {
   readonly myNpcs = computed(() => this.entries().filter((e) => e.kind === 'npc' && this.controlsNpc(e)));
 
   /**
+   * Mestre: como quem está agindo na barra de ações (sessão).
+   * ACT_SELECTION = segue o token selecionado; null = ações gerais; id = ficha fixa
+   * (personagem ou NPC), que não muda ao clicar em outros tokens.
+   */
+  readonly gmActing = signal<string | null>(ACT_SELECTION);
+
+  /**
    * Ficha que está agindo (dona das ações da barra inferior):
-   * - Mestre: a ficha do token selecionado (NPC ou personagem); sem seleção, ninguém (ações gerais).
+   * - Mestre: a ficha escolhida na barra ou, no modo "seguir seleção", a do token selecionado
+   *   (sem seleção, ninguém = ações gerais).
    * - Jogador: o personagem dele ou NPC que controla, se selecionado; senão, o primeiro personagem dele.
    */
   readonly actor = computed<TableEntry | null>(() => {
     const id = this.selectedTokenId();
     const selected = id ? (this.resolvedTokenById(id)?.entry ?? null) : null;
-    if (this.role() === 'gm') return selected;
+    if (this.role() === 'gm') {
+      const acting = this.gmActing();
+      if (acting === ACT_SELECTION) return selected;
+      return acting ? (this.entryById().get(acting) ?? null) : null;
+    }
     if (selected?.kind === 'character' && this.ownsCharacter(selected)) return selected;
     if (selected?.kind === 'npc' && this.controlsNpc(selected)) return selected;
     return this.myCharacters()[0] ?? null;
