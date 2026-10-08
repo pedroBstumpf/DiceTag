@@ -48,6 +48,7 @@ import { AuthService } from '../../../core/services/auth.service';
 import { StorageService } from '../../../core/services/storage.service';
 import { newId } from '../../../core/utils/id';
 import { TagLevels, formatRoll, rollDice } from '../utils/dice';
+import { addOne, quantityOf, takeOne } from '../utils/inventory';
 import { FxDrawing, buildFx, seededRandom } from '../utils/effects';
 import { createMask, decodeMask, encodeMask, isExploredAt, markPolygons, maskFits } from '../utils/fog-memory';
 import { computeVisibilityPolygon, doorSeen, pointInPolygon, wallsToSegments } from '../utils/visibility';
@@ -841,8 +842,8 @@ export class TableSessionService {
     return entry ? this.sheetOf(entry).inventory : [];
   }
 
-  /** Personaliza o item só neste inventário (nome/etiquetas/preço; o original não muda). */
-  updateInventoryItem(entryId: string, inventoryId: string, patch: Pick<InventoryEntry, 'name' | 'tags' | 'price'>): void {
+  /** Personaliza o item só neste inventário (nome/etiquetas/preço/quantidade; o original não muda). */
+  updateInventoryItem(entryId: string, inventoryId: string, patch: Pick<InventoryEntry, 'name' | 'tags' | 'price' | 'quantity'>): void {
     this.updateSheet(entryId, {
       inventory: this.inventoryOf(entryId).map((i) => (i.id === inventoryId ? { ...i, ...patch } : i)),
     });
@@ -859,13 +860,13 @@ export class TableSessionService {
     if (old) this.storage.delete(`blob:${old}`);
   }
 
-  /** Volta o item ao original (descarta nome, etiquetas e imagem personalizados). */
+  /** Volta o item ao original (descarta nome, etiquetas e imagem personalizados; mantém preço e quantidade). */
   resetInventoryItem(entryId: string, inventoryId: string): void {
     const item = this.inventoryOf(entryId).find((i) => i.id === inventoryId);
     if (!item) return;
-    const { id, itemId, global } = item;
+    const { name: _name, tags: _tags, blobId: _blobId, ...kept } = item;
     this.updateSheet(entryId, {
-      inventory: this.inventoryOf(entryId).map((i) => (i.id === inventoryId ? { id, itemId, ...(global && { global }) } : i)),
+      inventory: this.inventoryOf(entryId).map((i) => (i.id === inventoryId ? kept : i)),
     });
     if (item.blobId) this.storage.delete(`blob:${item.blobId}`);
   }
@@ -882,38 +883,46 @@ export class TableSessionService {
     return this.myCharacters()[0] ?? null;
   });
 
-  /**
-   * Compra um item da loja de um NPC: desconta o preço dos Eiros do comprador e
-   * põe uma cópia do item (com a personalização da loja, sem o preço) no inventário dele.
-   * A imagem personalizada é duplicada, para cada inventário cuidar da sua.
-   * Retorna false se o item não estiver à venda ou faltarem Eiros.
-   */
-  async buyItem(shopId: string, inventoryId: string, buyerId: string): Promise<boolean> {
-    const item = this.inventoryOf(shopId).find((i) => i.id === inventoryId);
-    const buyer = this.entryById().get(buyerId);
-    if (!item || item.price === undefined || !buyer) return false;
-    const eiros = this.sheetOf(buyer).eiros;
-    if (eiros < item.price) return false;
-
-    let blobId: string | undefined;
-    if (item.blobId) {
-      const blob = await this.storage.get<Blob>(`blob:${item.blobId}`);
-      if (blob) {
-        blobId = newId();
-        await this.storage.set(`blob:${blobId}`, blob);
-      }
-    }
-    const { price, ...copy } = item;
-    const bought: InventoryEntry = { ...copy, id: newId(), blobId };
-    if (!blobId) delete bought.blobId;
-    // Relê o comprador depois do await (o inventário pode ter mudado no meio)
-    this.updateSheet(buyerId, { eiros: this.inventoryOwnerEiros(buyerId) - price, inventory: [...this.inventoryOf(buyerId), bought] });
-    return true;
+  /** Compra uma unidade da loja de um NPC com os Eiros do comprador (false = não está à venda ou faltam Eiros). */
+  buyItem(shopId: string, inventoryId: string, buyerId: string): Promise<boolean> {
+    const price = this.inventoryOf(shopId).find((i) => i.id === inventoryId)?.price;
+    return price === undefined ? Promise.resolve(false) : this.transferItem(shopId, inventoryId, buyerId, price);
   }
 
-  private inventoryOwnerEiros(entryId: string): number {
-    const entry = this.entryById().get(entryId);
-    return entry ? this.sheetOf(entry).eiros : 0;
+  /**
+   * Passa uma unidade de um item de um inventário para outro (compra, loot ou "Dar para"),
+   * com a personalização (nome, etiquetas, imagem) e sem o preço. `cost` sai dos Eiros de quem recebe.
+   * - Origem NPC (loja): a quantidade baixa 1 e a linha fica, mesmo em 0.
+   * - Origem personagem: a linha some ao zerar (a imagem personalizada vai junto);
+   *   enquanto sobrar unidade, a imagem é duplicada para cada inventário cuidar da sua.
+   */
+  async transferItem(fromId: string, inventoryId: string, toId: string, cost = 0): Promise<boolean> {
+    const from = this.entryById().get(fromId);
+    const item = this.inventoryOf(fromId).find((i) => i.id === inventoryId);
+    const to = this.entryById().get(toId);
+    if (!from || !to || !item || fromId === toId || quantityOf(item) < 1) return false;
+    if (cost > 0 && this.sheetOf(to).eiros < cost) return false;
+
+    const keepEmpty = from.kind === 'npc';
+    const leavesList = !keepEmpty && quantityOf(item) === 1;
+    let blobId = item.blobId;
+    if (blobId && !leavesList) {
+      const blob = await this.storage.get<Blob>(`blob:${blobId}`);
+      blobId = blob ? newId() : undefined;
+      if (blob && blobId) await this.storage.set(`blob:${blobId}`, blob);
+    }
+
+    // Relê os inventários depois do await (podem ter mudado no meio)
+    const taken = takeOne(this.inventoryOf(fromId), inventoryId, keepEmpty);
+    const unit: InventoryEntry = { ...item, blobId };
+    if (!blobId) delete unit.blobId;
+    this.updateSheet(fromId, { inventory: taken.list });
+    const receiver = this.entryById().get(toId);
+    this.updateSheet(toId, {
+      inventory: addOne(this.inventoryOf(toId), unit, newId),
+      ...(cost > 0 && receiver && { eiros: this.sheetOf(receiver).eiros - cost }),
+    });
+    return true;
   }
 
   /** Tira o item do inventário (e apaga a imagem personalizada, se houver). */

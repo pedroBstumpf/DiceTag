@@ -234,6 +234,8 @@ export interface InventoryEntry {
   blobId?: string;
   /** Inventário de NPC (loja): preço em Eiros (ausente = não está à venda). */
   price?: number;
+  /** Quantidade (ausente = 1). Na loja de NPC pode ficar em 0 (esgotado). */
+  quantity?: number;
 }
 
 /** Nome da moeda do mundo. */

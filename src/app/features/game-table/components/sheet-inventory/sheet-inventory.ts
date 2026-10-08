@@ -12,6 +12,7 @@ import { LoreService } from '../../../worldbuild/services/lore.service';
 import { WorldbuildService } from '../../../worldbuild/services/worldbuild.service';
 import { BlobUrlService } from '../../services/blob-url.service';
 import { TableSessionService } from '../../services/table-session.service';
+import { quantityOf } from '../../utils/inventory';
 
 /** Linha do inventário: o que o cartão mostra (personalização ou original). */
 interface InventoryRow {
@@ -21,6 +22,8 @@ interface InventoryRow {
   name: string;
   tags: Tag[];
   blobId?: string;
+  /** Unidades (na loja, 0 = esgotado). */
+  quantity: number;
   /** Tem nome, etiquetas ou imagem próprios deste personagem. */
   custom: boolean;
   /** Original excluído e nada personalizado: não há o que mostrar. */
@@ -83,6 +86,7 @@ export class SheetInventory {
         name: entry.name ?? item?.name ?? 'Item excluído',
         tags: entry.tags ?? item?.tags ?? [],
         blobId: entry.blobId ?? item?.blobId,
+        quantity: quantityOf(entry),
         custom,
         missing: !item && !custom,
       };
@@ -122,6 +126,14 @@ export class SheetInventory {
     this.session.setInventoryImage(this.entryId(), row.entry.id, file);
   }
 
+  /** Quantidade digitada (inteiro ≥ 0; texto inválido é ignorado). */
+  setQuantity(row: InventoryRow, raw: string): void {
+    const n = Number(raw);
+    if (raw.trim() !== '' && Number.isFinite(n)) {
+      this.session.updateInventoryItem(this.entryId(), row.entry.id, { quantity: Math.max(0, Math.round(n)) });
+    }
+  }
+
   reset(row: InventoryRow): void {
     this.session.resetInventoryItem(this.entryId(), row.entry.id);
   }
@@ -149,8 +161,9 @@ export class SheetInventory {
     else if (Number.isFinite(n) && n >= 0) this.session.updateInventoryItem(this.entryId(), row.entry.id, { price: Math.round(n) });
   }
 
+  /** À venda, com estoque e Eiros suficientes. */
   canAfford(row: InventoryRow): boolean {
-    return row.entry.price !== undefined && this.buyerEiros() >= row.entry.price;
+    return row.entry.price !== undefined && row.quantity > 0 && this.buyerEiros() >= row.entry.price;
   }
 
   async buy(row: InventoryRow): Promise<void> {
