@@ -187,19 +187,25 @@ export interface CharacterRelation {
   description: string;
 }
 
-/** Tag de um tema, com nível de 1 a 6. */
+/** Tag de um tema: nível de 1 a 6 (tags) ou de -1 a -6 (defeitos). */
 export interface ThemeTag {
   id: string;
   text: string;
   level: number;
 }
 
-/** Card de tema: nome + tags com nível. */
+/** Card de tema: nome + tags e defeitos com nível. */
 export interface CharacterTheme {
   id: string;
   name: string;
+  /** Tags positivas (nível 1 a 6). */
   tags: ThemeTag[];
+  /** Defeitos (nível -1 a -6). Fichas antigas ganham [] em `sheetOf`. */
+  flaws: ThemeTag[];
 }
+
+/** Lista de tags de um tema: positivas ou defeitos. */
+export type ThemeTagList = 'tags' | 'flaws';
 
 /**
  * Item no inventário do personagem: referência a um item do mundo (tipo `item` do
@@ -244,7 +250,7 @@ export function defaultSheet(): CharacterSheet {
     subrace: '',
     labels: [],
     relations: [],
-    themes: Array.from({ length: SHEET_THEME_COUNT }, (_, i) => ({ id: `theme-${i + 1}`, name: '', tags: [] })),
+    themes: Array.from({ length: SHEET_THEME_COUNT }, (_, i) => ({ id: `theme-${i + 1}`, name: '', tags: [], flaws: [] })),
     inventory: [],
     notes: [{ id: 'page-1', title: 'Página 1', content: '' }],
   };

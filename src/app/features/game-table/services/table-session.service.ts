@@ -735,7 +735,7 @@ export class TableSessionService {
   sheetOf(entry: TableEntry): CharacterSheet {
     const empty = defaultSheet();
     const sheet = { ...empty, ...entry.sheet };
-    const themes = empty.themes.map((theme, i) => sheet.themes[i] ?? theme);
+    const themes = empty.themes.map((theme, i) => ({ ...theme, ...sheet.themes[i], flaws: sheet.themes[i]?.flaws ?? [] }));
     return { ...sheet, themes: themes.slice(0, SHEET_THEME_COUNT), notes: sheet.notes.length ? sheet.notes : empty.notes };
   }
 

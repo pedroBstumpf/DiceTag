@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { Component, computed, inject, input, output, signal } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -10,6 +11,7 @@ import {
   SHEET_MAX_LEVEL,
   TableEntry,
   ThemeTag,
+  ThemeTagList,
   TokenBar,
   isStatusBar,
 } from '../../../../core/models/table-session.model';
@@ -29,7 +31,8 @@ type SheetTab = 'sheet' | 'inventory' | 'notes' | 'abilities';
 /**
  * Ficha do personagem jogador, com abas:
  * - Ficha: cards Básico (imagem, nome, raça, sub-raça, rótulos), Status (barras
- *   Corpo/Mente/Espírito e etiquetas — as mesmas do token no mapa), Relações e três Temas.
+ *   Corpo/Mente/Espírito e etiquetas — as mesmas do token no mapa), Relações e três Temas
+ *   (tags de nível 1 a 6 e defeitos de -1 a -6).
  * - Inventário: itens do mundo que o personagem possui, com o cartão ao lado (SheetInventory).
  * - Anotações: caderno de texto rico em páginas (SheetNotes).
  * - Habilidades: as ações (automações) do personagem, criadas por ele ou pelo mestre.
@@ -37,7 +40,7 @@ type SheetTab = 'sheet' | 'inventory' | 'notes' | 'abilities';
  */
 @Component({
   selector: 'app-character-sheet',
-  imports: [MatIconModule, MatTooltipModule, TagEditor, LevelPips, SheetInventory, SheetNotes],
+  imports: [NgTemplateOutlet, MatIconModule, MatTooltipModule, TagEditor, LevelPips, SheetInventory, SheetNotes],
   templateUrl: './character-sheet.html',
   host: { class: 'flex h-full flex-col' },
 })
@@ -163,17 +166,23 @@ export class CharacterSheetView {
     this.update({ themes: (this.sheet()?.themes ?? []).map((t) => (t.id === id ? { ...t, ...patch } : t)) });
   }
 
-  addThemeTag(theme: CharacterTheme): void {
-    const tag: ThemeTag = { id: newId(), text: '', level: 1 };
-    this.updateTheme(theme.id, { tags: [...theme.tags, tag] });
+  /** Tags positivas ou defeitos do tema (tipado para o template). */
+  tagsOf(theme: CharacterTheme, list: ThemeTagList): ThemeTag[] {
+    return theme[list];
   }
 
-  updateThemeTag(theme: CharacterTheme, tagId: string, patch: Partial<ThemeTag>): void {
-    this.updateTheme(theme.id, { tags: theme.tags.map((t) => (t.id === tagId ? { ...t, ...patch } : t)) });
+  /** Nova tag (nível 1) ou novo defeito (nível -1). */
+  addThemeTag(theme: CharacterTheme, list: ThemeTagList): void {
+    const tag: ThemeTag = { id: newId(), text: '', level: list === 'flaws' ? -1 : 1 };
+    this.updateTheme(theme.id, { [list]: [...theme[list], tag] });
   }
 
-  removeThemeTag(theme: CharacterTheme, tagId: string): void {
-    this.updateTheme(theme.id, { tags: theme.tags.filter((t) => t.id !== tagId) });
+  updateThemeTag(theme: CharacterTheme, list: ThemeTagList, tagId: string, patch: Partial<ThemeTag>): void {
+    this.updateTheme(theme.id, { [list]: theme[list].map((t) => (t.id === tagId ? { ...t, ...patch } : t)) });
+  }
+
+  removeThemeTag(theme: CharacterTheme, list: ThemeTagList, tagId: string): void {
+    this.updateTheme(theme.id, { [list]: theme[list].filter((t) => t.id !== tagId) });
   }
 
   // --- Habilidades (ações do personagem) -----------------------------------
