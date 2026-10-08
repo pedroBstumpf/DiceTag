@@ -75,7 +75,7 @@ O mapa ocupa a tela inteira e as barras flutuam por cima — todas escondíveis:
   token; personagens abrem a ficha completa), Lore (itens da Lore geral e do worldbuild, com pastas próprias da mesa; renomear e remover valem
   só para a mesa), Sons (mixer), Ações (automações por personagem, NPC ou gerais do mestre).
 - **Baixo — ações:** 10 espaços (teclas 1–0) com as ações de quem está agindo: o jogador vê as do personagem
-  dele; o mestre, as do token selecionado (NPC ou personagem) ou as gerais.
+  dele; o mestre escolhe no menu "Agindo" um personagem ou NPC fixo, as ações gerais ou seguir o token selecionado.
 - **Janelas:** todo arquivo abre numa janela que pode ser movida, redimensionada, minimizada, maximizada e fixada.
 - **Modo imersivo:** tecla `\` esconde/mostra todas as barras.
 
@@ -91,8 +91,11 @@ Clicar num personagem no painel abre a ficha, com quatro abas:
 - **Habilidades:** as ações do personagem, criadas por ele ou pelo mestre, com botão para usar. Cada ação pode
   usar tags e defeitos dos temas: o nível atual delas entra no modificador e acompanha a ficha automaticamente.
 
-### Ficha de NPC e lojas
-A ficha de NPC é igual à de personagem, sem Anotações e sem Relações. NPCs são do mestre, que pode:
+### Ficha de NPC, bestiário e lojas
+A ficha de NPC é igual à de personagem, sem Anotações e sem Relações. As fichas base ficam no **bestiário**
+(aba "NPCs" do Worldbuild); o NPC no painel da mesa é só uma referência a ela. Cada **token** de NPC colocado no
+mapa é uma cópia individual — duplo clique abre a ficha daquele token, com status, etiquetas, temas e inventário
+próprios, sem mexer no NPC do painel nem no bestiário. NPCs são do mestre, que pode:
 - dar o **controle** de um NPC a um jogador específico (ele passa a ver, editar e usar o NPC);
 - deixar a **ficha** e/ou o **inventário** do NPC visíveis para os jogadores (só leitura);
 - pôr **preços em Eiros** nos itens do inventário do NPC, criando uma loja. Com o inventário visível, o jogador
@@ -159,6 +162,7 @@ igual para todos — mesma página e mesmos editores, com dados globais.
 - **Linhas do tempo em mapa mental**: cartões livres ligados por setas (ramificações e eventos paralelos),
   criação de eventos conectados pelas alças, rótulos nas setas e organização automática.
 - **Mapas e imagens**: envio por botão ou arrastando arquivos; zoom com a roda do mouse e navegação arrastando.
+- **NPCs (bestiário)**: aba própria no explorador com as fichas base dos NPCs, usadas pelas mesas.
 - **Itens**: aba própria no explorador para criar e listar os itens do mundo; cada item tem um cartão com
   imagem, nome e etiquetas e pode ir para o inventário dos personagens. Também acessível dentro da mesa.
 

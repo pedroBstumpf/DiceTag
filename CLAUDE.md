@@ -99,6 +99,7 @@ src/
     │   ├── services/
     │   │   ├── storage.service.ts      # wrapper chave/valor do IndexedDB (get/set/delete)
     │   │   ├── auth.service.ts         # contas locais + visitante
+    │   │   ├── sheet-store.ts          # SheetStore: contrato da fonte de dados da ficha + inventário em comum
     │   │   ├── game-tables.service.ts  # CRUD de mesas (excluir apaga table-state e blobs)
     │   │   ├── layout.service.ts       # barra lateral (recolhida/mobile)
     │   │   └── news.service.ts         # notícias (vazio por enquanto)
@@ -126,9 +127,12 @@ src/
         │   ├── lore.routes.ts          # rota /lore: página do worldbuild com LoreService
         │   ├── services/worldbuild.service.ts   # inclui a migração de linhas do tempo antigas; keyFor() define a chave
         │   ├── services/lore.service.ts         # Lore geral: estende WorldbuildService, chave global
+        │   ├── services/world-npc.store.ts      # SheetStore das fichas base do bestiário (NPCs do Worldbuild)
         │   ├── directives/lore-scope.directive.ts  # appLoreScope: troca WorldbuildService → LoreService no elemento
+        │   ├── directives/world-npc-sheet.directive.ts  # appWorldNpcSheet: a ficha usa o WorldNpcStore
         │   ├── utils/timeline-layout.ts         # layouts, setas e hit test do mapa mental + spec
-        │   └── components/ explorer (abas Arquivos/Itens), document-editor, timeline-editor, image-viewer, item-card
+        │   └── components/ explorer (abas Arquivos/Itens/NPCs), document-editor, timeline-editor, image-viewer,
+        │                   item-card (ItemCard + ItemCardView)
         └── game-table/         # MESA DE JOGO (rota /mesa/:id, tela cheia, fora do Shell)
             ├── game-table.ts           # página: orquestra barras, janelas e atalhos
             ├── services/
@@ -278,7 +282,11 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 
 ### Worldbuild (`WorldbuildService`)
 - Tipos: `folder`, `document` (HTML do Tiptap em `content`), `timeline` (`events[]` + `links[]`), `image` (`blobId`),
-  `item` (cartão: `blobId` opcional = imagem, nome e `tags: Tag[]`).
+  `item` (cartão: `blobId` opcional = imagem, nome e `tags: Tag[]`), `npc` (bestiário: `sheet` + `token` padrão;
+  padrões em `npcSheetOf` / `npcTokenOf`).
+- **Bestiário (NPCs):** aba **NPCs** do explorador (e "NPC" no menu Criar). A ficha base abre com a mesma
+  `CharacterSheetView` + `WorldNpcStore` (diretiva `appWorldNpcSheet`), sem Relações, Anotações nem Habilidades.
+  Excluir um NPC do Worldbuild apaga a imagem e as imagens personalizadas do inventário dele.
 - **Itens do mundo:** o explorador tem as abas **Arquivos** (árvore) e **Itens** (lista plana de `worldItems()`, com
   busca e "Novo item"); itens também ficam na árvore. O cartão (`ItemCard`) é editável na janela do item e só
   leitura no inventário da ficha. Trocar a imagem usa `setImage` (apaga a anterior). Como os demais itens, aparecem
@@ -340,8 +348,9 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   `automation` (`role: 'gm' | 'player'` + `icon`). Excluir a ficha remove os tokens dela e apaga os Blobs.
 - **Ficha x imagem:** personagem (card Básico) e NPC (topo da janela) mostram a imagem; enviar ali usa
   `setTokenImage` (a imagem da ficha **é** a do token).
-- **Janela por tipo:** personagem e NPC abrem a ficha completa (`CharacterSheetView`, janela `sheet`, 880×700);
-  automação abre a `EntryWindow`. NPC que o jogador não pode abrir não gera janela (`content()` → null).
+- **Janela por tipo:** personagem, NPC e token de NPC (`npc:<id do token>`) abrem a ficha completa
+  (`CharacterSheetView`, janela `sheet`, 880×700); NPC do bestiário aberto pelo explorador = janela `npc`
+  (`appWorldNpcSheet`); automação abre a `EntryWindow`. Sem permissão, `content()` → null (não abre).
 - **Lore** não é duplicada: a aba Lore lista os itens (exceto pastas) da **Lore geral** (marcados com
   `auto_stories`) e do **Worldbuild** do usuário e os abre com os mesmos editores.
   "Abrir Lore geral" / "Abrir pastas do Worldbuild" abrem o `Explorer` numa janela (`lore:explorer` /
@@ -389,8 +398,21 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 
 ### Ficha de NPC (mesma `CharacterSheetView`, `isNpc`)
 - Igual à do personagem, **sem a aba Anotações e sem o card Relações** (abas Ficha, Inventário, Habilidades).
-  NPCs também têm as barras de status (`hasSheet`); na ficha, barras e etiquetas são o **padrão dos próximos tokens**
-  (cada token colocado continua independente). Ações de NPC também usam as tags dos temas dele.
+  NPCs também têm as barras de status (`hasSheet`). Ações de NPC também usam as tags dos temas.
+- **Três níveis** (`SheetData.level`), todos pela mesma tela e pelo `SheetStore`:
+  1. **Bestiário** (`world`): a ficha base no Worldbuild/Lore geral.
+  2. **NPC da mesa** (`npc-base`): `TableEntry.worldNpcId` (+ `worldNpcGlobal`) é **só uma referência** — ficha,
+     imagem e token padrão vêm da base (`worldNpcOf`, `tokenOf`, `sheetOf`, `updateSheet`, `updateEntryToken` gravam
+     lá); o nome acompanha o original (`entries` substitui pelo nome atual). Ações, controle e visibilidade são da
+     mesa. "+" de NPCs no painel = bestiário (`session.bestiary`) ou "Novo NPC no Worldbuild". Tirar da mesa não apaga
+     a base. NPCs antigos, com dados na entrada, continuam (`level: 'npc'`).
+  3. **Token** (`npc-token`, id `npc:<id do token>`): ao colocar, o token copia a ficha (`TokenPlacement.sheet`, com
+     imagens do inventário duplicadas), além de tamanho, barras e etiquetas; nome próprio em `TokenPlacement.name`.
+     **Duplo clique** no token de NPC abre essa ficha (atalhos para "Opções do token" e "Ficha do NPC"). Alterar a
+     cópia não mexe no NPC do painel nem no bestiário. Tokens antigos usam a ficha do NPC até a primeira alteração.
+- **Loja e loot** só nos tokens e em NPCs antigos (`trades`); na ficha base o inventário é o "molde" das cópias.
+- O bestiário é lido na sessão por `worldNpcMap` (computed com igualdade por referência dos NPCs): editar outros
+  itens do Worldbuild não recalcula tokens e fichas da mesa.
 - **Do mestre:** só o mestre cria, exclui e configura NPCs. "Controle" (topo da aba Ficha, só mestre) =
   `TableEntry.controllerUserId`: um jogador (conta dona de personagens da mesa, `session.players`) que passa a ver,
   editar e controlar o NPC (barra de ações ao selecionar o token, aba Ações, arrastar para o mapa).
@@ -420,8 +442,11 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   (vale para cada token dele); ausente = ação geral do mestre. O papel **deriva do dono** (`role` é legado:
   automações antigas sem dono aparecem como gerais do mestre). Excluir a ficha exclui as ações dela.
 - **Personagem x conta:** `ownerUserId` = conta que criou (ausente = de qualquer um); "Vincular à minha conta" na ficha.
-- **Quem age** (`session.actor`, único lugar da regra): mestre = ficha do token selecionado (NPC **ou** personagem)
-  ou, sem seleção, ninguém (ações gerais); jogador = personagem dele selecionado ou o primeiro personagem dele.
+- **Quem age** (`session.actor`, único lugar da regra): mestre = o que ele escolhe no menu "Agindo" da barra
+  (`gmActing`): uma ficha **fixa** (não muda ao clicar em tokens), "Ações gerais" (null) ou "Token selecionado"
+  (`ACT_SELECTION`, o padrão: segue a seleção); jogador = personagem dele ou NPC que controla, se selecionado, ou o
+  primeiro personagem dele. `actorSheetId` = a ficha cujas tags valem (com o token do NPC que age selecionado, a cópia
+  dele); "Usar" numa ficha rola com as tags daquela ficha (`useAction(action, sheetId)`), em nome dela no chat.
   A barra de baixo (`hotbar`, até 10; teclas 1–9 e 0) mostra as ações de quem age; espaço vazio cria uma ação
   já com esse dono.
 - **Rolagem** (`RollConfig { dice: '2d12' | '3d6', modifier, attributes? }`, puro em `utils/dice.ts`):
@@ -470,11 +495,13 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   Padrão (`defaultToken`): tamanho 1, visão 18 m (ligada para personagem, desligada para NPC).
 - `Scene.tokens: TokenPlacement { id, entryId, x, y (centro), size?, bars?, tags? }`.
 - **Personagem:** vinculado — tamanho, barras e etiquetas vêm da ficha; alterar qualquer token altera a ficha e todos.
-- **NPC:** ao ser colocado, copia tamanho, barras e etiquetas para a própria colocação (cada goblin tem seu PV).
+- **NPC:** ao ser colocado, copia tamanho, barras, etiquetas **e a ficha** para a própria colocação (cada goblin tem
+  seu PV, seus temas e seu inventário — ver "Ficha de NPC").
 - Imagem e visão vêm **sempre da ficha** (inclusive para NPC).
 - **Ficha x token:** clicar na ficha no painel abre só a ficha. Colocar no mapa **só arrastando** a ficha
-  do painel. Opções do token **só** pelo duplo clique no token (janela "Token": imagem, tamanho, visão,
-  barras, etiquetas e, para NPC, "Usar como padrão do NPC" → `saveTokenAsDefault`).
+  do painel. Duplo clique: personagem → janela "Token" (imagem, tamanho, visão, barras, etiquetas); NPC → ficha do
+  token, com o botão "Opções do token" (na janela "Token", "Usar como padrão do NPC" → `saveTokenAsDefault` grava no
+  token padrão — no bestiário, se for referência).
 - Selecionar: clique seleciona, arrastar move com snap (Shift livre), alça redimensiona em passos de 0,5,
   Delete remove do mapa. **WASD/setas** com token selecionado: desliza na velocidade da ficha
   (`TokenSettings.speed`, padrão 2 quadrados/s, 0,5–12, editada na janela "Token"; como a visão, vem sempre da ficha; Shift ×2,5);
@@ -556,9 +583,9 @@ O `MapStage` recebe `insets` para enquadrar o mapa só na área livre entre as b
 |---|---|
 | `users` | `StoredUser[]` |
 | `tables` | `GameTable[]` (todas; filtradas por `ownerId`) |
-| `worldbuild:<userId>` | `WorldItem[]` (inclui os itens do mundo com cartão) |
+| `worldbuild:<userId>` | `WorldItem[]` (inclui os itens do mundo com cartão e os NPCs do bestiário) |
 | `lore:global` | `WorldItem[]` da Lore geral (igual para todos) |
-| `table-state:<tableId>` | `TableState` (cenas com tokens/névoa/memória/paredes/portas/desenhos/anotações/camadas/vista, pastas de cenas, cena ativa, arquivos — com a ficha do personagem em `sheet` —, volume mestre, chat, organização da Lore) |
+| `table-state:<tableId>` | `TableState` (cenas com tokens/névoa/memória/paredes/portas/desenhos/anotações/camadas/vista, pastas de cenas, cena ativa, arquivos — com a ficha do personagem em `sheet` e os NPCs como referência ao bestiário —, tokens de NPC com ficha própria, volume mestre, chat, organização da Lore) |
 | `blob:<id>` | `Blob` de imagem/mapa/áudio/imagem de token |
 | `localStorage: dicetag.session` | id do usuário logado |
 | `localStorage: dicetag.sidebarCollapsed` | preferência da barra lateral |
