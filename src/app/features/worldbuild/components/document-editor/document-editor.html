@@ -1,46 +1,25 @@
-<!-- ===== Barra de formatação ===== -->
-<div class="flex shrink-0 items-center gap-0.5 overflow-x-auto border-b border-white/5 bg-ink-900/60 px-2 py-1.5">
-  @for (group of toolbar; track $index; let last = $last) {
-    @for (btn of group; track btn.icon) {
-      <button
-        type="button"
-        class="grid size-8 shrink-0 place-items-center rounded-md text-slate-400 transition-colors hover:bg-white/10 hover:text-slate-100"
-        [class.!bg-astral-500/20]="isActive(btn)"
-        [class.!text-astral-300]="isActive(btn)"
-        [matTooltip]="btn.label"
-        [attr.aria-label]="btn.label"
-        (mousedown)="$event.preventDefault()"
-        (click)="exec(btn)"
-      >
-        <mat-icon class="!size-5 !text-[20px]">{{ btn.icon }}</mat-icon>
-      </button>
-    }
-    @if (!last) {
-      <span class="mx-1 h-5 w-px shrink-0 bg-white/10"></span>
-    }
-  }
-</div>
-
-<!-- ===== Página do documento ===== -->
-<div class="min-h-0 flex-1 overflow-y-auto">
-  <div class="mx-auto max-w-3xl px-6 py-8 sm:px-10">
-    <!-- Título do documento (renomeia o item) -->
-    <input
-      #titleInput
-      class="mb-6 w-full bg-transparent font-display text-3xl text-slate-100 outline-none placeholder:text-slate-600"
-      placeholder="Título"
-      [value]="item()?.name ?? ''"
-      (blur)="rename(titleInput.value)"
-      (keydown.enter)="titleInput.blur()"
-    />
-    <!-- Área editável (Tiptap) -->
-    <div #editorHost></div>
-  </div>
-</div>
+<!-- ===== Texto rico (o conteúdo inicial é lido uma vez, ao abrir) ===== -->
+<app-rich-text-editor
+  #editor
+  class="flex-1"
+  [content]="item()?.content ?? ''"
+  placeholder="Comece a escrever a história do seu mundo…"
+  (contentChange)="save($event)"
+>
+  <!-- Título do documento (renomeia o item) -->
+  <input
+    #titleInput
+    class="mb-6 w-full bg-transparent font-display text-3xl text-slate-100 outline-none placeholder:text-slate-600"
+    placeholder="Título"
+    [value]="item()?.name ?? ''"
+    (blur)="rename(titleInput.value)"
+    (keydown.enter)="titleInput.blur()"
+  />
+</app-rich-text-editor>
 
 <!-- ===== Rodapé ===== -->
 <footer class="flex h-8 shrink-0 items-center justify-end gap-3 border-t border-white/5 px-4 text-[11px] text-slate-500">
-  <span>{{ words() }} palavra(s)</span>
+  <span>{{ editor.words() }} palavra(s)</span>
   <span class="flex items-center gap-1">
     <mat-icon class="!size-3.5 !text-[14px]">cloud_done</mat-icon>
     Salvo automaticamente
