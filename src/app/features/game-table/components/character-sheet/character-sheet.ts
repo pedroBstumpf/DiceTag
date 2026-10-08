@@ -20,20 +20,22 @@ import { BlobUrlService } from '../../services/blob-url.service';
 import { TableSessionService } from '../../services/table-session.service';
 import { formatRoll } from '../../utils/dice';
 import { LevelPips } from '../level-pips/level-pips';
+import { SheetInventory } from '../sheet-inventory/sheet-inventory';
 
 /** Abas da ficha de personagem. */
-type SheetTab = 'sheet' | 'abilities';
+type SheetTab = 'sheet' | 'inventory' | 'abilities';
 
 /**
  * Ficha do personagem jogador, com abas:
  * - Ficha: cards Básico (imagem, nome, raça, sub-raça, rótulos), Status (barras
  *   Corpo/Mente/Espírito e etiquetas — as mesmas do token no mapa), Relações e três Temas.
+ * - Inventário: itens do mundo que o personagem possui, com o cartão ao lado (SheetInventory).
  * - Habilidades: as ações (automações) do personagem, criadas por ele ou pelo mestre.
  * Tudo é gravado na ficha (`TableEntry.sheet`) ou no token dela (barras e etiquetas).
  */
 @Component({
   selector: 'app-character-sheet',
-  imports: [MatIconModule, MatTooltipModule, TagEditor, LevelPips],
+  imports: [MatIconModule, MatTooltipModule, TagEditor, LevelPips, SheetInventory],
   templateUrl: './character-sheet.html',
   host: { class: 'flex h-full flex-col' },
 })
@@ -51,6 +53,7 @@ export class CharacterSheetView {
   // --- Abas ----------------------------------------------------------------
   readonly tabs: { id: SheetTab; icon: string; label: string }[] = [
     { id: 'sheet', icon: 'badge', label: 'Ficha' },
+    { id: 'inventory', icon: 'backpack', label: 'Inventário' },
     { id: 'abilities', icon: 'bolt', label: 'Habilidades' },
   ];
   readonly tab = signal<SheetTab>('sheet');
@@ -69,6 +72,8 @@ export class CharacterSheetView {
   readonly statusBars = computed(() => (this.token()?.bars ?? []).filter(isStatusBar));
   /** Etiquetas do personagem (as mesmas exibidas abaixo do token). */
   readonly tags = computed(() => this.token()?.tags ?? []);
+  /** Quantidade de itens no inventário (contador da aba). */
+  readonly inventoryCount = computed(() => this.sheet()?.inventory.length ?? 0);
   /** O personagem é da conta atual? */
   readonly isMine = computed(() => this.entry()?.ownerUserId === this.auth.user()?.id);
 

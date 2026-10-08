@@ -202,6 +202,17 @@ export interface CharacterTheme {
 }
 
 /**
+ * Item no inventário do personagem: referência a um item do mundo (tipo `item` do
+ * worldbuild do usuário ou da Lore geral). O cartão é sempre o do item original.
+ */
+export interface InventoryEntry {
+  id: string;
+  itemId: string;
+  /** O item vem da Lore geral (senão, do worldbuild do usuário). */
+  global?: boolean;
+}
+
+/**
  * Ficha do personagem jogador. As etiquetas e as barras de status (Corpo, Mente,
  * Espírito) ficam no token da ficha (`TableEntry.token`), assim aparecem também no mapa.
  */
@@ -213,6 +224,8 @@ export interface CharacterSheet {
   relations: CharacterRelation[];
   /** Sempre SHEET_THEME_COUNT temas. */
   themes: CharacterTheme[];
+  /** Itens que o personagem possui. */
+  inventory: InventoryEntry[];
 }
 
 /** Ficha vazia de um personagem. */
@@ -223,6 +236,7 @@ export function defaultSheet(): CharacterSheet {
     labels: [],
     relations: [],
     themes: Array.from({ length: SHEET_THEME_COUNT }, (_, i) => ({ id: `theme-${i + 1}`, name: '', tags: [] })),
+    inventory: [],
   };
 }
 

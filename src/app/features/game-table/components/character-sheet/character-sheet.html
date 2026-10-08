@@ -12,6 +12,8 @@
         {{ t.label }}
         @if (t.id === 'abilities') {
           <span class="text-[10px] text-slate-500">{{ abilities().length }}</span>
+        } @else if (t.id === 'inventory') {
+          <span class="text-[10px] text-slate-500">{{ inventoryCount() }}</span>
         }
       </button>
     }
@@ -256,6 +258,13 @@
             }
           </div>
         }
+      }
+
+      <!-- ================================================================= -->
+      <!-- Inventário: lista de itens + cartão do item selecionado           -->
+      <!-- ================================================================= -->
+      @case ('inventory') {
+        <app-sheet-inventory [entryId]="e.id" (openItem)="openEntry.emit($event)" />
       }
 
       <!-- ================================================================= -->

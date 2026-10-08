@@ -1,0 +1,109 @@
+<!-- ===== Lista de itens do personagem ===== -->
+<section class="sheet-card flex shrink-0 flex-col @xl:w-64">
+  <div class="mb-2 flex items-center justify-between">
+    <h3 class="sheet-title !mb-0">
+      <mat-icon class="!size-4 !text-[16px]">backpack</mat-icon>
+      Itens
+      <span class="font-sans text-xs text-slate-500">{{ rows().length }}</span>
+    </h3>
+    <button type="button" class="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-astral-300 hover:bg-white/5" (click)="picking.set(!picking())">
+      <mat-icon class="!size-4 !text-[16px]">{{ picking() ? 'close' : 'add' }}</mat-icon>
+      {{ picking() ? 'Fechar' : 'Item' }}
+    </button>
+  </div>
+
+  @if (picking()) {
+    <!-- Escolher um item do mundo (Lore geral e Worldbuild) -->
+    <div class="mb-3 rounded-lg bg-ink-950/70 p-2 ring-1 ring-astral-400/25 animate-fade-in">
+      <label class="flex h-8 items-center gap-2 rounded-md bg-ink-900 px-2 text-sm ring-1 ring-white/10 focus-within:ring-astral-500/60">
+        <mat-icon class="!size-4 !text-[16px] text-slate-500">search</mat-icon>
+        <input
+          appAutoFocus
+          class="min-w-0 flex-1 bg-transparent text-slate-200 outline-none placeholder:text-slate-500"
+          placeholder="Buscar item…"
+          [value]="query()"
+          (input)="query.set($any($event.target).value)"
+          (keydown.escape)="closePicker()"
+        />
+      </label>
+      <div class="mt-1.5 max-h-48 overflow-y-auto">
+        @for (option of options(); track option.item.id) {
+          <button
+            type="button"
+            class="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-slate-300 hover:bg-white/5 hover:text-white"
+            (click)="add(option)"
+          >
+            <mat-icon class="!size-4 shrink-0 !text-[16px] text-amber-300">inventory_2</mat-icon>
+            <span class="min-w-0 flex-1 truncate">{{ option.item.name }}</span>
+            @if (option.global) {
+              <mat-icon class="!size-3.5 shrink-0 !text-[14px] text-star-400/70" matTooltip="Lore geral">auto_stories</mat-icon>
+            }
+          </button>
+        } @empty {
+          <p class="px-2 py-2 text-xs text-slate-500">{{ query() ? 'Nenhum item com esse nome.' : 'Nenhum item criado ainda.' }}</p>
+        }
+      </div>
+      <button
+        type="button"
+        class="mt-1.5 flex h-8 w-full items-center gap-2 rounded-md border border-dashed border-white/10 px-2 text-xs text-astral-300 hover:border-astral-400/40 hover:bg-astral-500/10"
+        (click)="createItem()"
+      >
+        <mat-icon class="!size-4 !text-[16px]">add</mat-icon>
+        Criar item {{ query() ? '"' + query() + '"' : 'novo' }} no Worldbuild
+      </button>
+    </div>
+  }
+
+  <!-- Itens do personagem -->
+  <div class="flex flex-col gap-0.5">
+    @for (row of rows(); track row.entry.id) {
+      <div
+        class="group flex h-9 cursor-pointer items-center gap-2 rounded-lg pl-2 pr-1 text-sm transition-colors"
+        [class]="isSelected(row) ? 'bg-astral-500/15 text-astral-200 ring-1 ring-astral-400/30' : 'text-slate-300 hover:bg-white/5 hover:text-white'"
+        (click)="select(row)"
+      >
+        <mat-icon class="!size-4 shrink-0 !text-[16px]" [class]="row.item ? 'text-amber-300' : 'text-slate-600'">inventory_2</mat-icon>
+        <span class="min-w-0 flex-1 truncate" [class.italic]="!row.item" [class.text-slate-500]="!row.item">
+          {{ row.item?.name ?? 'Item excluído' }}
+        </span>
+        <button
+          type="button"
+          class="grid size-7 shrink-0 place-items-center rounded-md text-slate-500 opacity-0 hover:bg-white/10 hover:text-red-300 group-hover:opacity-100 max-lg:opacity-100"
+          aria-label="Tirar do inventário"
+          matTooltip="Tirar do inventário"
+          (click)="$event.stopPropagation(); remove(row)"
+        >
+          <mat-icon class="!text-[16px]">close</mat-icon>
+        </button>
+      </div>
+    } @empty {
+      <p class="px-1 py-4 text-xs leading-relaxed text-slate-500">
+        O inventário está vazio. Adicione itens criados na aba "Itens" do Worldbuild ou da Lore geral.
+      </p>
+    }
+  </div>
+</section>
+
+<!-- ===== Cartão do item selecionado ===== -->
+<section class="flex min-w-0 flex-1 flex-col items-center gap-3">
+  @if (selected(); as row) {
+    @if (row.item; as item) {
+      @if (row.entry.global) {
+        <app-item-card appLoreScope class="w-full max-w-sm !h-auto" [itemId]="item.id" [readonly]="true" />
+      } @else {
+        <app-item-card class="w-full max-w-sm !h-auto" [itemId]="item.id" [readonly]="true" />
+      }
+      <button type="button" class="flex items-center gap-1 rounded-md px-3 py-1.5 text-xs text-astral-300 hover:bg-white/5" (click)="openItem.emit(item.id)">
+        <mat-icon class="!size-4 !text-[16px]">edit</mat-icon>
+        Editar cartão
+      </button>
+    } @else {
+      <p class="py-10 text-center text-sm text-slate-500">Este item foi excluído {{ row.entry.global ? 'da Lore geral' : 'do Worldbuild' }}.</p>
+    }
+  } @else {
+    <div class="flex flex-1 flex-col items-center justify-center gap-2 py-10 text-center text-slate-600">
+      <mat-icon class="!size-10 !text-[40px]">style</mat-icon>
+      <p class="text-sm">Selecione um item para ver o cartão.</p>
+    </div>
+  }
+</section>
