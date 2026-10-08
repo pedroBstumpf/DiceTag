@@ -109,6 +109,17 @@ export interface ActionUse {
 }
 
 
+/** O que a conta atual pode fazer com uma ficha (sheetAccess). */
+export interface SheetAccess {
+  edit: boolean;
+  /** Ver a aba Ficha. */
+  sheet: boolean;
+  /** Ver o inventário (e comprar/lootear, se for token de NPC). */
+  inventory: boolean;
+}
+const FULL_ACCESS: SheetAccess = { edit: true, sheet: true, inventory: true };
+const NO_ACCESS: SheetAccess = { edit: false, sheet: false, inventory: false };
+
 /** Id do token se `sheetId` for a ficha de um token de NPC ("npc:<id>"); senão null. */
 export function tokenSheetPlacement(sheetId: string): string | null {
   return sheetId.startsWith(NPC_TOKEN_SHEET) ? sheetId.slice(NPC_TOKEN_SHEET.length) : null;
@@ -421,19 +432,40 @@ export class TableSessionService extends SheetStore {
     return entry.kind === 'npc' ? this.controlsNpc(entry) : true;
   }
 
-  /** Pode ver a aba Ficha (NPC: só quem edita ou se o mestre a deixou pública). */
-  canViewSheet(entry: TableEntry): boolean {
-    return this.canEdit(entry) || (entry.kind === 'npc' && !!entry.sheetPublic);
-  }
-
-  /** Pode ver o inventário (NPC: só quem edita ou se o mestre o deixou público). */
-  canViewInventory(entry: TableEntry): boolean {
-    return this.canEdit(entry) || (entry.kind === 'npc' && !!entry.inventoryPublic);
+  /**
+   * O que a conta atual pode fazer com a ficha `sheetId`:
+   * - quem edita (mestre; NPC: o jogador autorizado) vê e edita tudo;
+   * - token de NPC: os jogadores veem a ficha e/ou o inventário que o mestre deixou
+   *   públicos naquele token — e o inventário de um token derrotado sempre;
+   * - NPC do painel (ficha base): só quem edita.
+   */
+  sheetAccess(sheetId: string): SheetAccess {
+    const data = this.sheetData(sheetId);
+    if (!data) return NO_ACCESS;
+    if (!data.entry || this.canEdit(data.entry)) return FULL_ACCESS;
+    const placementId = tokenSheetPlacement(sheetId);
+    const placement = placementId ? this.findPlacement(placementId) : undefined;
+    if (!placement) return NO_ACCESS;
+    return { edit: false, sheet: !!placement.sheetPublic, inventory: !!placement.inventoryPublic || isDown(data.bars) };
   }
 
   /** Pode abrir a ficha (ao menos uma parte visível). */
-  canOpen(entry: TableEntry): boolean {
-    return this.canViewSheet(entry) || this.canViewInventory(entry);
+  canOpenSheet(sheetId: string): boolean {
+    const access = this.sheetAccess(sheetId);
+    return access.sheet || access.inventory;
+  }
+
+  /** Mestre: deixa a ficha ou o inventário de um token de NPC visível (só leitura) para os jogadores, ou não. */
+  toggleTokenPublic(placementId: string, part: 'sheet' | 'inventory'): void {
+    const placement = this.findPlacement(placementId);
+    if (!placement) return;
+    if (part === 'sheet') this.patchPlacement(placementId, { sheetPublic: !placement.sheetPublic || undefined });
+    else this.patchPlacement(placementId, { inventoryPublic: !placement.inventoryPublic || undefined });
+  }
+
+  /** Token colocado (em qualquer cena), sem resolver a ficha. */
+  placementById(placementId: string): TokenPlacement | undefined {
+    return this.findPlacement(placementId);
   }
 
   /**

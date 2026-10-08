@@ -179,13 +179,13 @@ export class GameTablePage {
     const placementId = tokenSheetPlacement(id);
     if (placementId) {
       const token = this.session.resolvedTokenById(placementId);
-      if (!token || !this.session.canOpen(token.entry)) return null;
+      if (!token || !this.session.canOpenSheet(id)) return null;
       return { title: `${token.name} (token)`, icon: 'smart_toy', color: TABLE_ENTRY_META.npc.color, type: 'sheet' };
     }
     const entry = this.session.entryById().get(id);
     // Sons não abrem janela: são controlados direto no mixer da aba Sons.
-    // NPC sem permissão (nem ficha/inventário públicos) não aparece para o jogador.
-    if (entry && entry.kind !== 'sound' && this.session.canOpen(entry)) {
+    // NPC do painel só abre para quem o edita (os jogadores veem NPCs pelos tokens).
+    if (entry && entry.kind !== 'sound' && (!hasSheet(entry.kind) || this.session.canOpenSheet(entry.id))) {
       const meta = TABLE_ENTRY_META[entry.kind];
       // Personagem e NPC abrem a ficha completa (abas); automação, a janela de configuração
       const type = hasSheet(entry.kind) ? 'sheet' : 'entry';
@@ -215,7 +215,7 @@ export class GameTablePage {
   openToken(placementId: string): void {
     const entry = this.session.resolvedTokenById(placementId)?.entry;
     if (entry?.kind === 'npc') {
-      if (this.session.canOpen(entry)) this.open(NPC_TOKEN_SHEET + placementId);
+      if (this.session.canOpenSheet(NPC_TOKEN_SHEET + placementId)) this.open(NPC_TOKEN_SHEET + placementId);
       return;
     }
     this.open(TOKEN_WINDOW + placementId);

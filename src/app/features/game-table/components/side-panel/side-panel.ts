@@ -90,8 +90,8 @@ export class SidePanel {
 
   // --- Listas --------------------------------------------------------------
   readonly characters = computed(() => this.byKind('character'));
-  /** NPCs visíveis: o jogador só vê os que controla ou cuja ficha/inventário o mestre liberou. */
-  readonly npcs = computed(() => this.byKind('npc').filter((e) => this.session.canOpen(e)));
+  /** NPCs visíveis: o jogador só vê os que controla (os demais, só pelos tokens no mapa). */
+  readonly npcs = computed(() => this.byKind('npc').filter((e) => this.session.canEdit(e)));
 
   // --- Lore da mesa --------------------------------------------------------
 

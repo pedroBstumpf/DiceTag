@@ -14,6 +14,7 @@ import {
   ThemeTag,
   ThemeTagList,
   TokenBar,
+  isDown,
   isStatusBar,
 } from '../../../../core/models/table-session.model';
 import { AuthService } from '../../../../core/services/auth.service';
@@ -87,8 +88,22 @@ export class CharacterSheetView {
   });
   /** O mestre configura controle e visibilidade do NPC (só na mesa). */
   readonly isGm = computed(() => !!this.session && !!this.entry() && this.session.role() === 'gm');
-  /** Controle e visibilidade ficam na ficha do NPC da mesa (valem para todos os tokens dele). */
-  readonly npcSettings = computed(() => this.isNpc() && this.isGm() && this.data()?.level !== 'npc-token');
+  /** Controle por jogador fica na ficha do NPC da mesa (vale para todos os tokens dele). */
+  readonly controllerSettings = computed(() => this.isNpc() && this.isGm() && this.data()?.level !== 'npc-token');
+  /** Visibilidade para os jogadores é de cada token. */
+  readonly publicSettings = computed(() => this.isGm() && this.data()?.level === 'npc-token');
+  /** O que a conta atual pode ver/editar nesta ficha (fora da mesa: tudo). */
+  readonly access = computed(() => this.session?.sheetAccess(this.sheetId()) ?? { edit: true, sheet: true, inventory: true });
+  /** Token desta ficha (só fichas de token de NPC). */
+  private readonly placement = computed(() => {
+    const id = this.sheetId();
+    return id.startsWith(NPC_TOKEN_SHEET) ? this.session?.placementById(id.slice(NPC_TOKEN_SHEET.length)) : undefined;
+  });
+  /** Ficha / inventário deste token visíveis para os jogadores (botões do mestre). */
+  readonly sheetPublic = computed(() => !!this.placement()?.sheetPublic);
+  readonly inventoryPublic = computed(() => !!this.placement()?.inventoryPublic);
+  /** Token derrotado: o inventário fica aberto aos jogadores de qualquer forma. */
+  readonly tokenDown = computed(() => this.data()?.level === 'npc-token' && isDown(this.data()?.bars ?? []));
 
   /** Texto sob o card de Status, conforme onde a ficha mora. */
   readonly statusHint = computed(() => {
@@ -111,10 +126,8 @@ export class CharacterSheetView {
     let ids: SheetTab[] = this.isNpc() ? ['sheet', 'inventory', 'abilities'] : ['sheet', 'inventory', 'notes', 'abilities'];
     // Ações só existem na mesa
     if (!data.entry || !this.session) ids = ids.filter((id) => id !== 'abilities');
-    const entry = data.entry;
-    if (entry && !this.canEdit()) {
-      ids = ids.filter((id) => (id === 'sheet' && entry.sheetPublic) || (id === 'inventory' && entry.inventoryPublic));
-    }
+    const access = this.access();
+    if (!access.edit) ids = ids.filter((id) => (id === 'sheet' && access.sheet) || (id === 'inventory' && access.inventory));
     return ids.map((id) => ({ id, ...TAB_META[id] }));
   });
   private readonly chosenTab = signal<SheetTab>('sheet');
@@ -144,12 +157,10 @@ export class CharacterSheetView {
     if (entry) this.session?.updateEntry(entry.id, { controllerUserId: userId || undefined });
   }
 
-  /** Deixa a ficha ou o inventário do NPC visível (só leitura) para os jogadores, ou não. */
+  /** Deixa a ficha ou o inventário deste token visível (só leitura) para os jogadores, ou não. */
   togglePublic(part: 'sheet' | 'inventory'): void {
-    const entry = this.entry();
-    if (!entry) return;
-    if (part === 'sheet') this.session?.updateEntry(entry.id, { sheetPublic: !entry.sheetPublic || undefined });
-    else this.session?.updateEntry(entry.id, { inventoryPublic: !entry.inventoryPublic || undefined });
+    const placement = this.placement();
+    if (placement) this.session?.toggleTokenPublic(placement.id, part);
   }
 
   /** Barras Corpo, Mente e Espírito (ficam no token da ficha). */

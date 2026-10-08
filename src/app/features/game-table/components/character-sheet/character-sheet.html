@@ -61,8 +61,8 @@
       <!-- Ficha: cards                                                      -->
       <!-- ================================================================= -->
       @case ('sheet') {
-        @if (npcSettings()) {
-          <!-- NPC: controle por um jogador e visibilidade da ficha (só o mestre; valem para todos os tokens) -->
+        @if (controllerSettings()) {
+          <!-- NPC do painel: controle por um jogador (só o mestre; vale para todos os tokens dele) -->
           <div class="mb-3 flex flex-wrap items-center gap-2 rounded-lg bg-violet-500/10 px-3 py-2 ring-1 ring-violet-400/20">
             <mat-icon class="!size-4 !text-[16px] text-violet-300">shield_person</mat-icon>
             <label class="flex items-center gap-2 text-xs text-slate-300">
@@ -78,8 +78,13 @@
                 }
               </select>
             </label>
-            <span class="flex-1"></span>
-            <ng-container *ngTemplateOutlet="publicToggle; context: { on: !!entry()?.sheetPublic, part: 'sheet' }" />
+            <span class="flex-1 text-right text-[11px] text-slate-500">A visibilidade para os jogadores é definida em cada token.</span>
+          </div>
+        }
+        @if (publicSettings()) {
+          <!-- Token de NPC: ficha visível (só leitura) para os jogadores, ou não -->
+          <div class="mb-3 flex justify-end">
+            <ng-container *ngTemplateOutlet="publicToggle; context: { on: sheetPublic(), part: 'sheet' }" />
           </div>
         }
         @if (sheet(); as s) {
@@ -96,7 +101,7 @@
                   (click)="imageInput.click()"
                 >
                   @if (blobs.url(d.blobId); as src) {
-                    <img [src]="src" alt="" class="size-full object-cover" />
+                    <img [src]="src" alt="" class="absolute inset-0 size-full object-cover object-top" />
                   } @else {
                     <span class="flex flex-col items-center gap-1 text-slate-500">
                       <mat-icon class="!size-8 !text-[32px]" [class]="isNpc() ? 'text-violet-300' : 'text-astral-300'">{{ isNpc() ? 'smart_toy' : 'person' }}</mat-icon>
@@ -313,10 +318,17 @@
       <!-- Inventário: lista de itens + cartão do item selecionado           -->
       <!-- ================================================================= -->
       @case ('inventory') {
-        @if (npcSettings()) {
-          <!-- NPC: inventário visível para os jogadores (vira loja com os preços em Eiros) -->
-          <div class="mb-3 flex justify-end">
-            <ng-container *ngTemplateOutlet="publicToggle; context: { on: !!entry()?.inventoryPublic, part: 'inventory' }" />
+        @if (publicSettings()) {
+          <!-- Token de NPC: inventário visível para os jogadores (loja com os preços em Eiros); derrotado = sempre visível -->
+          <div class="mb-3 flex items-center justify-end gap-2">
+            @if (tokenDown()) {
+              <span class="flex items-center gap-1 text-[11px] text-red-300/80">
+                <mat-icon class="!size-4 !text-[16px]">skull</mat-icon>
+                Token derrotado: inventário aberto aos jogadores para loot.
+              </span>
+            } @else {
+              <ng-container *ngTemplateOutlet="publicToggle; context: { on: inventoryPublic(), part: 'inventory' }" />
+            }
           </div>
         }
         @if (!isNpc()) {
