@@ -29,7 +29,7 @@ organizar toda a atmosfera de uma campanha.
 | **Névoa de guerra + paredes + portas** (visão por ray casting, por papel, memória de áreas exploradas) | Pronto |
 | **Pincel** (desenho livre, borracha, Ctrl+Z) e **anotações** no mapa | Pronto |
 | **Ficha de personagem** (abas Ficha, Inventário, Anotações, Habilidades; cards Básico, Status, Relações, 3 Temas) | Pronto |
-| Ficha de NPC | **Placeholder** (não estruturar sem pedido); nome + imagem (= imagem do token) + lista de ações |
+| **Ficha de NPC** (igual à de personagem, sem Anotações nem Relações; controle por jogador; ficha/inventário públicos; **loja em Eiros**) | Pronto |
 | **Automações** (dono personagem/NPC/geral, ícone, rolagem 2d12/3d6 + modificador, efeito especial) | Pronto |
 | **Rolagem de dados** (2d12: falha crítica…sucesso crítico; 3d6: azar/neutro/sorte) + **chat** da mesa | Pronto |
 | **Efeitos especiais** no mapa (20 efeitos em 4 grupos; 13 cores por elemento) | Pronto |
@@ -156,9 +156,9 @@ src/
                 ├── chat-panel/         # aba Chat: mensagens e cartões de rolagem
                 ├── sound-list/         # aba Sons: mixer
                 ├── action-bar/         # barra inferior: 10 espaços de ações (teclas 1–0)
-                ├── entry-window/       # ficha de NPC (placeholder) e configuração da automação
-                ├── character-sheet/    # FICHA DE PERSONAGEM (abas; cards Básico, Status, Relações, Temas; Habilidades)
-                ├── sheet-inventory/    # aba Inventário: lista de itens + cartão do item
+                ├── entry-window/       # configuração da automação (dono, rolagem, tags, ícone, efeito)
+                ├── character-sheet/    # FICHA de personagem e de NPC (abas; cards Básico, Status, Relações, Temas; Habilidades)
+                ├── sheet-inventory/    # aba Inventário: lista de itens + cartão; no NPC, preços e compra (loja)
                 ├── sheet-notes/        # aba Anotações: caderno com páginas (RichTextEditor)
                 ├── level-pips/         # seletor de nível 1–6 em losangos (relações e tags de tema)
                 ├── token-editor/       # editor de tamanho, visão, barras e etiquetas
@@ -339,8 +339,8 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   `automation` (`role: 'gm' | 'player'` + `icon`). Excluir a ficha remove os tokens dela e apaga os Blobs.
 - **Ficha x imagem:** personagem (card Básico) e NPC (topo da janela) mostram a imagem; enviar ali usa
   `setTokenImage` (a imagem da ficha **é** a do token).
-- **Janela por tipo:** personagem abre a ficha completa (`CharacterSheetView`, janela `sheet`, 880×700);
-  NPC e automação abrem a `EntryWindow`.
+- **Janela por tipo:** personagem e NPC abrem a ficha completa (`CharacterSheetView`, janela `sheet`, 880×700);
+  automação abre a `EntryWindow`. NPC que o jogador não pode abrir não gera janela (`content()` → null).
 - **Lore** não é duplicada: a aba Lore lista os itens (exceto pastas) da **Lore geral** (marcados com
   `auto_stories`) e do **Worldbuild** do usuário e os abre com os mesmos editores.
   "Abrir Lore geral" / "Abrir pastas do Worldbuild" abrem o `Explorer` numa janela (`lore:explorer` /
@@ -352,12 +352,13 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   original. Itens entram nas pastas arrastando.
 - **Grade:** escondida (G ou menu da cena) = tokens e paredes se movem livres; visível = alinham (Shift = livre).
 - **Papel (`role`)**: alternado manualmente na barra de ações (Mestre/Jogador) — não há permissões reais ainda.
+  As regras de acesso às fichas já usam o papel + a conta (`canEdit`, `canOpen`…; ver "Ficha de NPC").
 - Estado de sessão **não persistido**: ferramenta ativa, papel, visibilidade das barras, janelas abertas,
   token selecionado, pincel, modo de parede, sons tocando, pilha de desfazer dos desenhos, efeitos na tela.
 
 ### Ficha de personagem (`CharacterSheetView`, `TableEntry.sheet`)
-- Só para personagens jogadores (`character`). Dados em `CharacterSheet { race, subrace, labels, relations, themes,
-  inventory, notes }`, lidos sempre por `session.sheetOf(entry)` (preenche padrões: **3 temas** e **1+ página**) e
+- Personagens jogadores (`character`) e NPCs (ver "Ficha de NPC"). Dados em `CharacterSheet { race, subrace, labels,
+  relations, themes, inventory, notes, eiros }`, lidos sempre por `session.sheetOf(entry)` (preenche padrões: **3 temas** e **1+ página**) e
   gravados por `updateSheet(entryId, patch)`.
 - **Aba Ficha** — cards em grade (container query):
   - **Básico:** imagem (= token), nome, raça, sub-raça, jogador dono ("Vincular à minha conta") e **rótulos** (texto livre, Enter adiciona).
@@ -384,6 +385,25 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   (`RollConfig.attributes` = ids das tags). O **nível atual** é lido na hora (`tagLevelsOf` → `effectiveModifier`),
   então subir a tag na ficha atualiza todas as ações que a usam. Fórmulas exibidas usam `session.formulaOf(action)`.
   Tag apagada vale 0; trocar o dono da ação limpa as tags ligadas.
+
+### Ficha de NPC (mesma `CharacterSheetView`, `isNpc`)
+- Igual à do personagem, **sem a aba Anotações e sem o card Relações** (abas Ficha, Inventário, Habilidades).
+  NPCs também têm as barras de status (`hasSheet`); na ficha, barras e etiquetas são o **padrão dos próximos tokens**
+  (cada token colocado continua independente). Ações de NPC também usam as tags dos temas dele.
+- **Do mestre:** só o mestre cria, exclui e configura NPCs. "Controle" (topo da aba Ficha, só mestre) =
+  `TableEntry.controllerUserId`: um jogador (conta dona de personagens da mesa, `session.players`) que passa a ver,
+  editar e controlar o NPC (barra de ações ao selecionar o token, aba Ações, arrastar para o mapa).
+- **Público:** botões "visível para os jogadores / só do mestre" na aba Ficha (`sheetPublic`) e na aba Inventário
+  (`inventoryPublic`). Jogador sem permissão não vê o NPC no painel, não abre a ficha e o duplo clique no token não abre
+  nada; com partes públicas, vê só essas abas em **somente leitura**.
+- **Regras (único lugar, `TableSessionService`):** `canEdit` (mestre; NPC → só `controlsNpc`; personagens seguem livres),
+  `canViewSheet`, `canViewInventory`, `canOpen`, `myNpcs`; o `actor` do jogador inclui o NPC que ele controla.
+- **Somente leitura** = `<fieldset [disabled]>` em volta do conteúdo editável (desabilita inputs/botões nativos;
+  `styles.scss` tira os eventos de mouse). A lista do inventário fica fora, para poder selecionar e comprar.
+- **Loja:** `InventoryEntry.price` (Eiros, `CURRENCY`) na coluna ao lado dos itens do NPC (vazio = não está à venda).
+  O personagem tem `CharacterSheet.eiros` (topo da aba Inventário). Jogador vendo a loja compra com o personagem dele
+  (`session.buyer`: o selecionado ou o primeiro da conta): `buyItem` desconta os Eiros e copia o item (com a
+  personalização da loja, sem o preço; imagem personalizada duplicada) para o inventário dele.
 
 ### Ações automatizadas (automações)
 - **Dono** (`TableEntry.ownerEntryId`): personagem = ação do jogador dele; NPC = ação do mestre para aquele NPC
@@ -542,8 +562,10 @@ Para conectar um backend no futuro: trocar `StorageService` e `AuthService` mant
 
 ## 10. Pendências e próximos passos sugeridos
 
-- Estruturar a **ficha de NPC** (aguardar definição do dono).
-- Inventário sem quantidade/peso; relações por nome livre (sem vínculo com fichas da mesa).
+- Inventário sem quantidade/peso (comprar o mesmo item duas vezes cria duas linhas); a loja não tem estoque
+  (o item continua no NPC); relações por nome livre (sem vínculo com fichas da mesa).
+- Permissões de NPC dependem do papel escolhido na mesa; com backend, "jogador" deve vir da conta e do convite.
+  A lista de jogadores para o controle do NPC vem dos donos dos personagens (`session.players`).
 - Efeitos e chat ainda são locais (sem multiplayer, outros jogadores não veem); efeitos não saem do token automaticamente.
 - Persistir janelas abertas, visibilidade das barras e pincel por mesa.
 - Imagens de token substituídas durante a sessão só liberam a URL antiga ao sair da mesa (`BlobUrlService`).

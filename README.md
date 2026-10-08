@@ -91,6 +91,14 @@ Clicar num personagem no painel abre a ficha, com quatro abas:
 - **Habilidades:** as ações do personagem, criadas por ele ou pelo mestre, com botão para usar. Cada ação pode
   usar tags e defeitos dos temas: o nível atual delas entra no modificador e acompanha a ficha automaticamente.
 
+### Ficha de NPC e lojas
+A ficha de NPC é igual à de personagem, sem Anotações e sem Relações. NPCs são do mestre, que pode:
+- dar o **controle** de um NPC a um jogador específico (ele passa a ver, editar e usar o NPC);
+- deixar a **ficha** e/ou o **inventário** do NPC visíveis para os jogadores (só leitura);
+- pôr **preços em Eiros** nos itens do inventário do NPC, criando uma loja. Com o inventário visível, o jogador
+  seleciona um item e compra com os Eiros do personagem dele (campo no topo da aba Inventário da ficha); uma cópia
+  do item vai para o inventário do personagem.
+
 ### Tokens
 Arraste a ficha de um personagem ou NPC do painel para o mapa para colocar o token. Ele tem imagem
 circular, tamanho, visão, barras (ex.: PV 12/20) e etiquetas com cor e nível (ex.: Exaustão 2), tudo
