@@ -42,7 +42,7 @@ interface ItemOption {
  * o NPC); o jogador que vê o inventário compra um item com os Eiros do personagem dele
  * (ou o pega de graça, se o NPC estiver derrotado).
  * "Dar para…": personagens passam itens uns aos outros, com a personalização.
- * Personagem: a caixa à esquerda de cada item marca se ele está equipado.
+ * A caixa à esquerda de cada item marca se ele está equipado (personagens e NPCs).
  */
 @Component({
   selector: 'app-sheet-inventory',
@@ -136,10 +136,10 @@ export class SheetInventory {
     this.store.resetInventoryItem(this.sheetId(), row.entry.id);
   }
 
-  // --- Equipados (só personagem) -------------------------------------------
+  // --- Equipados (personagens e NPCs) --------------------------------------
 
-  /** Inventário de personagem: cada item tem a caixa "equipado" (listados na aba Ficha). */
-  readonly canEquip = computed(() => this.data()?.level === 'character');
+  /** Toda ficha (personagem ou NPC) tem a caixa "equipado" em cada item (listados na aba Ficha). */
+  readonly canEquip = computed(() => !!this.data());
 
   setEquipped(row: InventoryRow, equipped: boolean): void {
     this.store.updateInventoryItem(this.sheetId(), row.entry.id, { equipped: equipped || undefined });
