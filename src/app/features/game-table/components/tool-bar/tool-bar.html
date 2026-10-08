@@ -44,18 +44,7 @@
     </button>
   }
 
-  <!-- Grade e zoom -->
-  <button
-    type="button"
-    class="grid size-10 place-items-center rounded-lg text-slate-300 transition-colors hover:bg-white/10 hover:text-white disabled:text-slate-600"
-    [class.!text-astral-300]="session.activeScene()?.showGrid"
-    [disabled]="!session.activeScene()"
-    [matTooltip]="session.activeScene()?.showGrid ? 'Remover grade: tokens e paredes se movem livres (G)' : 'Mostrar grade e alinhar a ela (G)'"
-    matTooltipPosition="right"
-    (click)="toggleGrid()"
-  >
-    <mat-icon>grid_4x4</mat-icon>
-  </button>
+  <!-- Zoom -->
   <button type="button" class="grid size-10 place-items-center rounded-lg text-slate-300 hover:bg-white/10 hover:text-white" matTooltip="Aproximar (+)" matTooltipPosition="right" (click)="zoomIn.emit()">
     <mat-icon>zoom_in</mat-icon>
   </button>

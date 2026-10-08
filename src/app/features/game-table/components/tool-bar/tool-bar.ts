@@ -40,7 +40,7 @@ export function toolAllowed(tool: ToolDef, role: TableRole): boolean {
 
 /**
  * Barra de ferramentas (lateral esquerda da mesa):
- * ferramentas de mapa, grade e controles de zoom.
+ * ferramentas de mapa e controles de zoom (a grade fica nas opções da cena).
  * Ferramentas com opções (ex.: Névoa) abrem um submenu ao lado da barra.
  */
 @Component({
@@ -57,10 +57,4 @@ export class ToolBar {
   readonly zoomOut = output<void>();
   readonly fit = output<void>();
   readonly hide = output<void>();
-
-  /** Liga/desliga a grade da cena ativa. */
-  toggleGrid(): void {
-    const scene = this.session.activeScene();
-    if (scene) this.session.updateScene(scene.id, { showGrid: !scene.showGrid });
-  }
 }

@@ -294,7 +294,6 @@ export class GameTablePage {
     if (tool) this.session.tool.set(tool.id);
     else if (key === 'w' && this.isGm()) this.startWalls();
     else if (key === '\\') this.session.toggleImmersive();
-    else if (key === 'g') this.toggleGrid();
     else if (key === '=' || key === '+') this.map()?.zoomBy(1.2);
     else if (key === '-') this.map()?.zoomBy(1 / 1.2);
     else if (/^[0-9]$/.test(key)) this.useSlot(key === '0' ? 9 : Number(key) - 1);
@@ -307,11 +306,6 @@ export class GameTablePage {
   private startWalls(): void {
     this.session.tool.set('fog');
     this.session.wallMode.set('line');
-  }
-
-  private toggleGrid(): void {
-    const scene = this.session.activeScene();
-    if (scene) this.session.updateScene(scene.id, { showGrid: !scene.showGrid });
   }
 
   private useSlot(index: number): void {
