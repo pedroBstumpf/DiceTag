@@ -5,7 +5,6 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { Tag } from '../../../../core/models/tag.model';
 import { CURRENCY, InventoryEntry, TableEntry } from '../../../../core/models/table-session.model';
-import { WorldItem } from '../../../../core/models/world-item.model';
 import { newId } from '../../../../core/utils/id';
 import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
 import { ItemCardView } from '../../../worldbuild/components/item-card/item-card-view';
@@ -14,70 +13,13 @@ import { WorldbuildService } from '../../../worldbuild/services/worldbuild.servi
 import { BlobUrlService } from '../../services/blob-url.service';
 import { SheetStore } from '../../../../core/services/sheet-store';
 import { TableSessionService } from '../../services/table-session.service';
-import { quantityOf } from '../../utils/inventory';
-
-/** O que o inventário usa do item original (do mundo ou da mesa). */
-type CardItem = Pick<WorldItem, 'id' | 'name' | 'tags' | 'blobId'>;
-
-/** De onde vem o original de um item do inventário. */
-type ItemSource = 'global' | 'own' | 'table';
-
-/** Onde procurar os originais: Lore geral, worldbuild do usuário e itens da mesa. */
-export interface ItemSources {
-  global: Map<string, CardItem>;
-  own: Map<string, CardItem>;
-  table: Map<string, CardItem>;
-}
+import { CardItem, InventoryRow, ItemSource, ItemSources, inventoryRow, itemOrigin } from '../../utils/inventory';
 
 const NO_ITEMS = new Map<string, CardItem>();
 
 /** Fontes dos itens (lê signals: use dentro de computed). Fora da mesa não há itens da mesa. */
 export function itemSources(lore: LoreService, worldbuild: WorldbuildService, session: TableSessionService | null): ItemSources {
   return { global: lore.byId(), own: worldbuild.byId(), table: session?.tableItemById() ?? NO_ITEMS };
-}
-
-function sourceOf(entry: InventoryEntry): ItemSource {
-  return entry.table ? 'table' : entry.global ? 'global' : 'own';
-}
-
-/** "desta mesa", "da Lore geral" ou "do Worldbuild" (texto do item excluído). */
-export function itemOrigin(entry: InventoryEntry): string {
-  return { table: 'desta mesa', global: 'da Lore geral', own: 'do Worldbuild' }[sourceOf(entry)];
-}
-
-/** Linha do inventário: o que o cartão mostra (personalização ou original). */
-export interface InventoryRow {
-  entry: InventoryEntry;
-  /** Item original (ausente quando foi excluído do worldbuild / Lore geral). */
-  item?: CardItem;
-  name: string;
-  tags: Tag[];
-  blobId?: string;
-  /** Unidades (na loja, 0 = esgotado). */
-  quantity: number;
-  /** Tem nome, etiquetas ou imagem próprios deste personagem. */
-  custom: boolean;
-  /** Original excluído e nada personalizado: não há o que mostrar. */
-  missing: boolean;
-}
-
-/**
- * Monta a linha de um item do inventário: a personalização da ficha vale no lugar do
- * original (item da mesa, da Lore geral ou do worldbuild do usuário).
- */
-export function inventoryRow(entry: InventoryEntry, sources: ItemSources): InventoryRow {
-  const item = sources[sourceOf(entry)].get(entry.itemId);
-  const custom = entry.name !== undefined || entry.tags !== undefined || entry.blobId !== undefined;
-  return {
-    entry,
-    item,
-    name: entry.name ?? item?.name ?? 'Item excluído',
-    tags: entry.tags ?? item?.tags ?? [],
-    blobId: entry.blobId ?? item?.blobId,
-    quantity: quantityOf(entry),
-    custom,
-    missing: !item && !custom,
-  };
 }
 
 /** Item (do mundo ou da mesa) que pode ser adicionado ao inventário. */

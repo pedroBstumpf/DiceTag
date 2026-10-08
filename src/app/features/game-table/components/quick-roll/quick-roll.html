@@ -83,6 +83,38 @@
       </section>
     }
 
+    <!-- ===== Etiquetas dos itens equipados (somam o nível) ===== -->
+    @if (itemGroups().length) {
+      <section>
+        <h4 class="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-500">Itens equipados</h4>
+        <div class="flex flex-col gap-2">
+          @for (group of itemGroups(); track group.theme) {
+            <div>
+              <p class="mb-1 flex items-center gap-1 truncate text-[11px] text-emerald-300/80">
+                <mat-icon class="!size-3.5 !text-[14px]">shield</mat-icon>
+                {{ group.theme }}
+              </p>
+              <div class="flex flex-wrap gap-1">
+                @for (tag of group.tags; track tag.id) {
+                  @let on = isPicked(tag);
+                  <button
+                    type="button"
+                    class="flex h-7 items-center gap-1 rounded-md px-2 text-xs ring-1 transition-colors"
+                    [class]="on ? 'bg-emerald-500/15 text-emerald-100 ring-emerald-400/50' : 'bg-white/[0.03] text-slate-400 ring-white/10 hover:text-slate-200'"
+                    [attr.aria-pressed]="on"
+                    (click)="toggleTheme(tag)"
+                  >
+                    {{ tag.text }}
+                    <span class="font-semibold tabular-nums text-emerald-300">{{ formatLevel(tag.level) }}</span>
+                  </button>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      </section>
+    }
+
     <!-- ===== Etiquetas de status (bônus ou penalidade) ===== -->
     @if (statusTags().length) {
       <section>
@@ -114,7 +146,7 @@
       </section>
     }
 
-    @if (!themeGroups().length && !statusTags().length) {
+    @if (!themeGroups().length && !itemGroups().length && !statusTags().length) {
       <p class="text-[11px] leading-relaxed text-slate-500">
         Sem tags para somar: selecione o token de quem rola (ou escolha em "Agindo") para usar as tags e etiquetas da ficha.
       </p>

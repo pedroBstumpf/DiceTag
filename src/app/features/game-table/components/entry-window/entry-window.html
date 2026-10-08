@@ -112,22 +112,23 @@
             <button
               type="button"
               class="flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs transition-colors"
-              [class]="tagClass(tag.flaw, on)"
+              [class]="tagClass(tag, on)"
               [attr.aria-pressed]="on"
-              [matTooltip]="tag.theme + (tag.flaw ? ' · defeito' : '')"
+              [matTooltip]="tagHint(tag)"
               (click)="toggleTag(tag.id)"
             >
-              <mat-icon class="!size-4 !text-[16px]">{{ on ? 'check' : 'add' }}</mat-icon>
+              <mat-icon class="!size-4 !text-[16px]">{{ on ? 'check' : tag.item ? 'shield' : 'add' }}</mat-icon>
               {{ tag.text }}
               <span class="font-semibold tabular-nums">{{ modifierText(tag.level) }}</span>
             </button>
           } @empty {
-            <p class="text-xs text-slate-600">A ficha ainda não tem tags nos temas (aba Ficha).</p>
+            <p class="text-xs text-slate-600">A ficha ainda não tem tags nos temas nem itens equipados.</p>
           }
         </div>
         <p class="mt-2 text-[11px] leading-relaxed text-slate-500">
           O nível atual de cada tag ligada é somado ao modificador fixo (defeitos subtraem). Quando a tag sobe ou desce
-          na ficha, esta ação acompanha sozinha.
+          na ficha, esta ação acompanha sozinha. Etiquetas de itens equipados (verdes) somam o nível delas (sem nível, +1)
+          e saem da ação se o item for desequipado.
         </p>
       </section>
     }

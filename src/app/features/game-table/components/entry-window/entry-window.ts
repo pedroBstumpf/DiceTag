@@ -15,7 +15,7 @@ import {
   TableEntry,
   hasSheet,
 } from '../../../../core/models/table-session.model';
-import { TableSessionService } from '../../services/table-session.service';
+import { SheetTagOption, TableSessionService } from '../../services/table-session.service';
 import { formatModifier } from '../../utils/dice';
 import { FxPicker } from '../fx-picker/fx-picker';
 
@@ -79,8 +79,8 @@ export class EntryWindow {
     const owner = this.session.entryById().get(this.entry()?.ownerEntryId ?? '');
     return !!owner && hasSheet(owner.kind);
   });
-  /** Tags e defeitos dos temas do dono. */
-  readonly ownerTags = computed(() => this.session.themeTagsOf(this.entry()?.ownerEntryId));
+  /** Tags e defeitos dos temas do dono + etiquetas dos itens que ele tem equipados. */
+  readonly ownerTags = computed(() => this.session.rollTagsOf(this.entry()?.ownerEntryId));
   /** Tags ligadas a esta ação que ainda existem na ficha. */
   readonly linkedTags = computed(() => {
     const ids = new Set(this.roll().attributes ?? []);
@@ -105,9 +105,15 @@ export class EntryWindow {
     this.patchRoll({ attributes: attributes.length ? attributes : undefined });
   }
 
-  tagClass(flaw: boolean, on: boolean): string {
+  tagClass(tag: SheetTagOption, on: boolean): string {
     if (!on) return 'bg-white/5 text-slate-400 ring-1 ring-white/10 hover:bg-white/10 hover:text-slate-200';
-    return flaw ? 'bg-red-500/15 text-red-200 ring-1 ring-red-400/50' : 'bg-astral-500/20 text-astral-200 ring-1 ring-astral-400/50';
+    if (tag.item) return 'bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-400/50';
+    return tag.flaw ? 'bg-red-500/15 text-red-200 ring-1 ring-red-400/50' : 'bg-astral-500/20 text-astral-200 ring-1 ring-astral-400/50';
+  }
+
+  /** Dica da tag: tema (ou item equipado) de origem. */
+  tagHint(tag: SheetTagOption): string {
+    return tag.item ? `Item equipado · ${tag.theme}` : tag.theme + (tag.flaw ? ' · defeito' : '');
   }
 
   setDice(dice: DiceKind): void {

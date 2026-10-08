@@ -8,16 +8,23 @@ import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
 import { SheetTagOption, TableSessionService } from '../../services/table-session.service';
 import { formatModifier, quickModifier } from '../../utils/dice';
 
-/** Tags e defeitos de um tema, para agrupar no painel. */
+/** Tags e defeitos de um tema (ou etiquetas de um item equipado), para agrupar no painel. */
 interface ThemeGroup {
   theme: string;
   tags: SheetTagOption[];
 }
 
+/** Agrupa as tags pela origem (tema ou item), na ordem da ficha. */
+function groupByTheme(tags: SheetTagOption[]): ThemeGroup[] {
+  const groups = new Map<string, SheetTagOption[]>();
+  for (const tag of tags) groups.set(tag.theme, [...(groups.get(tag.theme) ?? []), tag]);
+  return [...groups].map(([theme, list]) => ({ theme, tags: list }));
+}
+
 /**
  * Painel da rolagem básica (botão "Rolar" da barra de ações): 2d12 ou 3d6 + um modificador
- * escolhido na hora, sem automação. Pode somar as tags e defeitos dos temas e as etiquetas
- * de status da ficha de quem age (`session.actorSheetId`): cada etiqueta vira bônus ou
+ * escolhido na hora, sem automação. Pode somar as tags e defeitos dos temas, as etiquetas
+ * dos itens equipados e as etiquetas de status da ficha de quem age (`session.actorSheetId`): cada etiqueta vira bônus ou
  * penalidade (clique alterna desligada → + → −). Nada é salvo: ao abrir de novo, começa do zero.
  */
 @Component({
@@ -49,13 +56,9 @@ export class QuickRoll {
   readonly author = computed(() => this.data()?.name ?? (this.session.role() === 'gm' ? 'Mestre' : 'Sem personagem'));
 
   /** Tags e defeitos dos temas, por tema (só temas com alguma tag). */
-  readonly themeGroups = computed<ThemeGroup[]>(() => {
-    const groups = new Map<string, SheetTagOption[]>();
-    for (const tag of this.session.themeTagsOf(this.sheetId() ?? undefined)) {
-      groups.set(tag.theme, [...(groups.get(tag.theme) ?? []), tag]);
-    }
-    return [...groups].map(([theme, tags]) => ({ theme, tags }));
-  });
+  readonly themeGroups = computed(() => groupByTheme(this.session.themeTagsOf(this.sheetId() ?? undefined)));
+  /** Etiquetas dos itens equipados, por item (somam o nível; sem nível, +1). */
+  readonly itemGroups = computed(() => groupByTheme(this.session.itemTagsOf(this.sheetId() ?? undefined)));
   /** Etiquetas de status da ficha (as mesmas do token). */
   readonly statusTags = computed<Tag[]>(() => this.data()?.tags ?? []);
 
@@ -100,7 +103,7 @@ export class QuickRoll {
 
   /** Modificador total desta rolagem. */
   readonly modifier = computed(() => {
-    const levels = this.themeGroups()
+    const levels = [...this.themeGroups(), ...this.itemGroups()]
       .flatMap((g) => g.tags)
       .filter((t) => this.themePicks().has(t.id))
       .map((t) => t.level);

@@ -52,7 +52,7 @@ import {
 import { AuthService } from '../../../core/services/auth.service';
 import { newId } from '../../../core/utils/id';
 import { TagLevels, formatRoll, rollDice } from '../utils/dice';
-import { addOne, quantityOf, takeOne } from '../utils/inventory';
+import { addOne, inventoryRow, itemTagId, itemTagLevel, keepValidItemTags, quantityOf, takeOne } from '../utils/inventory';
 import { SheetData, SheetStore } from '../../../core/services/sheet-store';
 import { FxDrawing, buildFx, seededRandom } from '../utils/effects';
 import { createMask, decodeMask, encodeMask, isExploredAt, markPolygons, maskFits } from '../utils/fog-memory';
@@ -136,10 +136,12 @@ export interface SheetTagOption {
   text: string;
   /** Nível atual (1 a 6; defeitos de -1 a -6). */
   level: number;
-  /** Nome do tema de origem. */
+  /** Nome do tema de origem (etiqueta de item: o nome do item). */
   theme: string;
   /** É um defeito (nível negativo). */
   flaw: boolean;
+  /** Etiqueta de um item equipado (nível dela, sem nível = 1). */
+  item?: boolean;
 }
 
 /** Modo da ferramenta Névoa. */
@@ -1022,6 +1024,8 @@ export class TableSessionService extends SheetStore {
     const base = this.worldNpcOf(entry);
     if (base) this.worldServiceOf(entry).update(base.id, { sheet: { ...npcSheetOf(base), ...patch } });
     else this.updateEntry(id, { sheet: { ...this.sheetOf(entry), ...patch } });
+    // Item desequipado ou fora do inventário sai das ações que usavam as etiquetas dele
+    if (patch.inventory) this.pruneItemTags(id);
   }
 
   updateStatus(id: string, patch: { bars?: TokenBar[]; tags?: TokenTag[] }): void {
@@ -1063,9 +1067,51 @@ export class TableSessionService extends SheetStore {
     });
   }
 
+  /**
+   * Etiquetas dos itens equipados na ficha (com a personalização do inventário). O id é
+   * por linha do inventário (`itemTagId`): desequipar ou tirar o item a tira das rolagens.
+   */
+  itemTagsOf(sheetId: string | undefined): SheetTagOption[] {
+    const data = sheetId ? this.sheetData(sheetId) : null;
+    if (!data) return [];
+    const sources = { global: this.loreGeneral.byId(), own: this.worldbuild.byId(), table: this.tableItemById() };
+    return data.sheet.inventory
+      .filter((i) => i.equipped)
+      .flatMap((i) => {
+        const row = inventoryRow(i, sources);
+        return row.tags.map((t) => ({
+          id: itemTagId(i.id, t.id),
+          text: t.text.trim() || 'Etiqueta sem nome',
+          level: itemTagLevel(t),
+          theme: row.name,
+          flaw: false,
+          item: true,
+        }));
+      });
+  }
+
+  /** Tudo o que pode entrar no modificador de uma rolagem: tags dos temas + etiquetas dos itens equipados. */
+  rollTagsOf(sheetId: string | undefined): SheetTagOption[] {
+    return [...this.themeTagsOf(sheetId), ...this.itemTagsOf(sheetId)];
+  }
+
   /** Nível atual de cada tag do personagem (somado ao modificador das ações que a usam). */
   tagLevelsOf(entryId: string | undefined): TagLevels {
-    return new Map(this.themeTagsOf(entryId).map((t) => [t.id, t.level]));
+    return new Map(this.rollTagsOf(entryId).map((t) => [t.id, t.level]));
+  }
+
+  /**
+   * Tira das ações da ficha as etiquetas de itens que não estão mais equipados (desequipou,
+   * tirou do inventário, deu o item…). Só fichas de entrada: tokens de NPC compartilham as
+   * ações do NPC, então a cópia de um token não mexe nelas.
+   */
+  private pruneItemTags(entryId: string): void {
+    const valid = new Set(this.itemTagsOf(entryId).map((t) => t.id));
+    for (const action of this.automationsOf(entryId)) {
+      const attributes = action.roll?.attributes;
+      const kept = attributes ? keepValidItemTags(attributes, valid) : null;
+      if (action.roll && kept) this.updateEntry(action.id, { roll: { ...action.roll, attributes: kept.length ? kept : undefined } });
+    }
   }
 
   /**

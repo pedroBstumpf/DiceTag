@@ -1,5 +1,5 @@
 import { InventoryEntry } from '../../../core/models/table-session.model';
-import { addOne, quantityOf, takeOne } from './inventory';
+import { addOne, itemTagId, itemTagLevel, keepValidItemTags, quantityOf, takeOne } from './inventory';
 
 let n = 0;
 const id = () => `novo-${++n}`;
@@ -49,5 +49,19 @@ describe('inventário: quantidades', () => {
     expect(withImage).toHaveLength(2);
     expect(withImage[1]).toMatchObject({ itemId: 'x', blobId: 'img' });
     expect(withImage[1].price).toBeUndefined();
+  });
+});
+
+describe('etiquetas de itens equipados nas rolagens', () => {
+  it('id por linha do inventário e valor = nível (sem nível vale 1)', () => {
+    expect(itemTagId('linha', 'tag')).toBe('item:linha:tag');
+    expect(itemTagLevel({ id: 't', text: 'Afiada', color: '#fff', level: 2 })).toBe(2);
+    expect(itemTagLevel({ id: 't', text: 'Mágica', color: '#fff' })).toBe(1);
+  });
+
+  it('keepValidItemTags tira só as etiquetas de itens que saíram e mantém as dos temas', () => {
+    const attrs = ['tema-1', itemTagId('espada', 'a'), itemTagId('escudo', 'b')];
+    expect(keepValidItemTags(attrs, new Set([itemTagId('espada', 'a')]))).toEqual(['tema-1', itemTagId('espada', 'a')]);
+    expect(keepValidItemTags(attrs, new Set([itemTagId('espada', 'a'), itemTagId('escudo', 'b')]))).toBeNull();
   });
 });

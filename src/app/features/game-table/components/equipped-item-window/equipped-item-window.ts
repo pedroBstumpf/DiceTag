@@ -7,7 +7,8 @@ import { LoreService } from '../../../worldbuild/services/lore.service';
 import { WorldbuildService } from '../../../worldbuild/services/worldbuild.service';
 import { BlobUrlService } from '../../services/blob-url.service';
 import { TableSessionService } from '../../services/table-session.service';
-import { inventoryRow, itemOrigin, itemSources } from '../sheet-inventory/sheet-inventory';
+import { inventoryRow, itemOrigin } from '../../utils/inventory';
+import { itemSources } from '../sheet-inventory/sheet-inventory';
 
 /** Prefixo do id das janelas de item equipado (equip:<id da ficha>:<id do item no inventário>). */
 export const EQUIPPED_WINDOW = 'equip:';

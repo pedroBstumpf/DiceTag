@@ -27,7 +27,8 @@ import { LevelPips } from '../level-pips/level-pips';
 import { LoreService } from '../../../worldbuild/services/lore.service';
 import { WorldbuildService } from '../../../worldbuild/services/worldbuild.service';
 import { equippedWindowId } from '../equipped-item-window/equipped-item-window';
-import { SheetInventory, inventoryRow, itemSources } from '../sheet-inventory/sheet-inventory';
+import { inventoryRow } from '../../utils/inventory';
+import { SheetInventory, itemSources } from '../sheet-inventory/sheet-inventory';
 import { SheetNotes } from '../sheet-notes/sheet-notes';
 
 /** Abas da ficha. */
