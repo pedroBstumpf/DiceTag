@@ -15,7 +15,7 @@ const HEADER_HEIGHT = 44;
  * Janela flutuante reutilizável.
  *
  * - Arrastar pela barra de título; redimensionar pelas bordas
- * - Minimizar (fica só a barra de título)
+ * - Minimizar (fica só a barra de título, estreita: título + botões)
  * - Maximizar (duplo clique na barra ou botão)
  * - Fixar (trava posição e tamanho onde o usuário deixou)
  *
@@ -40,7 +40,8 @@ const HEADER_HEIGHT = 44;
     '[style.z-index]': 'zIndex()',
     '[style.left.px]': 'maximized() ? null : geometry().x',
     '[style.top.px]': 'maximized() ? null : geometry().y',
-    '[style.width.px]': 'maximized() ? null : geometry().width',
+    // Minimizada: só a largura do título + botões (até 22rem, ver stateClass), para não cobrir o mapa
+    '[style.width.px]': 'maximized() || minimized() ? null : geometry().width',
     '[style.height.px]': 'maximized() ? null : minimized() ? headerHeight : geometry().height',
     '(pointerdown)': 'focused.emit()',
   },
@@ -73,8 +74,8 @@ export class FloatingWindow {
     [
       this.active() ? 'border-astral-400/50' : 'border-white/10',
       this.maximized() ? 'inset-0 rounded-none' : '',
-      // No mobile a janela aberta ocupa a tela; minimizada continua compacta
-      this.minimized() ? '' : 'max-md:inset-0! max-md:w-auto! max-md:h-auto! max-md:rounded-none',
+      // No mobile a janela aberta ocupa a tela; minimizada continua compacta (largura do conteúdo, até 22rem)
+      this.minimized() ? 'w-max max-w-[22rem]' : 'max-md:inset-0! max-md:w-auto! max-md:h-auto! max-md:rounded-none',
     ].join(' '),
   );
 
