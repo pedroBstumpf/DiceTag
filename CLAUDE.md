@@ -397,14 +397,16 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
     Barras e etiquetas ficam no **token da ficha** (`TableEntry.token.bars/tags`), então aparecem no mapa.
     `withStatusBars` garante as três barras (ids `status-*`, rótulo e cor fixos) em personagens novos (`defaultToken`),
     antigos (`normalizeState`) e em toda gravação (`updateEntryToken`); a janela "Token" não as renomeia nem remove.
+    Fichas novas (personagem e NPC) começam com as três barras em **24/24** (`DEFAULT_STATUS_MAX`).
   - **Relações:** nome, nível **1–6** (`LevelPips`) e descrição.
   - **Temas (3):** nome + tags com nível **1–6** e, embaixo, **Defeitos** (`flaws`) com nível **-1 a -6**
     (`LevelPips` com `negative`). Fichas antigas ganham `flaws: []` em `sheetOf`.
-  - **Equipados** (só personagem, abaixo dos temas): itens com `InventoryEntry.equipped` (caixa à esquerda de cada
-    item na aba Inventário, `canEquip`). Clique abre a janela `equip:<id da ficha>:<id no inventário>`
-    (`EquippedItemWindow`: o mesmo `ItemCardView` do inventário, editável por quem edita a ficha). A linha do
-    inventário (personalização x original) é montada por `inventoryRow` (exportada de `sheet-inventory`).
-    Transferir um item (`addOne`) não leva o "equipado".
+  - **Equipados** (personagem e NPC, abaixo dos temas, fora do `fieldset` para quem só lê também abrir): itens com
+    `InventoryEntry.equipped` (caixa à esquerda de cada item na aba Inventário, `canEquip`). Clique (só na mesa) abre a
+    janela `equip:<id da ficha>:<id no inventário>` (`EquippedItemWindow`: o mesmo `ItemCardView` do inventário,
+    editável por quem edita a ficha). A linha do inventário (personalização x original) é montada por `inventoryRow`
+    (`utils/inventory.ts`; as fontes vêm de `itemSources` em `sheet-inventory`). Transferir um item (`addOne`) não leva
+    o "equipado".
 - **Aba Inventário** (`SheetInventory`): `InventoryEntry { itemId, global?, table? }` referencia um item do mundo (Worldbuild do
   usuário ou Lore geral) ou da mesa (`TableState.items`); a lista mostra os nomes e, ao lado, o cartão **editável** (`ItemCardView`). Editar ali é
   **cópia sob demanda**: só o que mudou vai para a entrada (`name`, `tags`, `blobId`) e vale no lugar do original —
@@ -428,6 +430,10 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   (`RollConfig.attributes` = ids das tags). O **nível atual** é lido na hora (`tagLevelsOf` → `effectiveModifier`),
   então subir a tag na ficha atualiza todas as ações que a usam. Fórmulas exibidas usam `session.formulaOf(action)`.
   Tag apagada vale 0; trocar o dono da ação limpa as tags ligadas.
+- **Etiquetas de itens equipados na rolagem** (ações e botão "Rolar"): `session.itemTagsOf` (id `itemTagId` =
+  `item:<linha do inventário>:<etiqueta>`, valor = nível, sem nível 1); `rollTagsOf` = temas + itens, usado por
+  `tagLevelsOf`. Ao mudar o inventário de uma ficha de entrada (`updateSheet` com `inventory`), `pruneItemTags` tira das
+  ações dela as etiquetas de itens que não estão mais equipados (`keepValidItemTags`, puro + spec).
 
 ### Ficha de NPC (mesma `CharacterSheetView`, `isNpc`)
 - Igual à do personagem, **sem a aba Anotações e sem o card Relações** (abas Ficha, Inventário, Habilidades).
@@ -486,7 +492,7 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   A barra de baixo (`hotbar`, até 10; teclas 1–9 e 0) mostra as ações de quem age; espaço vazio (só mestre) cria
   uma ação já com esse dono; o jogador cria as dele na aba Habilidades da ficha.
 - **Rolagem básica** ("Rolar", à direita da barra de baixo, mestre e jogador; `QuickRoll` num overlay do CDK): 2d12 ou
-  3d6 + modificador escolhido na hora, **não salvo**. Soma tags/defeitos dos temas e etiquetas de status da ficha de
+  3d6 + modificador escolhido na hora, **não salvo**. Soma tags/defeitos dos temas, etiquetas dos itens equipados e etiquetas de status da ficha de
   quem age (`actorSheetId`); cada etiqueta vira bônus ou penalidade (clique: + → − → fora; sem nível vale 1), regra
   pura em `quickModifier` (`utils/dice.ts`). `session.quickRoll` grava no chat ("Rolagem", ícone `casino`).
 - **Rolagem** (`RollConfig { dice: '2d12' | '3d6', modifier, attributes? }`, puro em `utils/dice.ts`):

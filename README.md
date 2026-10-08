@@ -79,7 +79,9 @@ O mapa ocupa a tela inteira e as barras flutuam por cima — todas escondíveis:
 - **Baixo — ações:** 10 espaços (teclas 1–0) com as ações de quem está agindo: o jogador vê as do personagem
   dele; o mestre escolhe no menu "Agindo" um personagem ou NPC fixo, as ações gerais ou seguir o token selecionado.
   À direita, o botão **Rolar** faz a rolagem básica (2d12 ou 3d6 + modificador na hora), somando se quiser as tags e
-  defeitos dos temas e as etiquetas de status (como bônus ou penalidade) de quem está agindo — nada fica salvo.
+  defeitos dos temas, as etiquetas dos itens equipados e as etiquetas de status (como bônus ou penalidade) de quem
+  está agindo — nada fica salvo. Ações automatizadas também podem usar as etiquetas dos itens equipados; se o item for
+  desequipado, a etiqueta sai da ação.
 - **Janelas:** todo arquivo abre numa janela que pode ser movida, redimensionada, minimizada (vira uma barra
   estreita), maximizada e fixada.
 - **Visão de Jogador:** sem a ferramenta Névoa, sem as cenas da barra superior e sem as abas Sons e Ações; move
@@ -89,7 +91,7 @@ O mapa ocupa a tela inteira e as barras flutuam por cima — todas escondíveis:
 ### Ficha de personagem
 Clicar num personagem no painel abre a ficha, com quatro abas:
 - **Ficha:** cards de tamanhos diferentes — **Básico** (imagem, nome, raça, sub-raça e rótulos), **Status**
-  (barras Corpo, Mente e Espírito e as etiquetas do personagem, que também aparecem no token), **Relações**
+  (barras Corpo, Mente e Espírito, começando em 24, e as etiquetas do personagem, que também aparecem no token), **Relações**
   (personagens com nível de 1 a 6 e descrição) e três **Temas** (nome, tags com nível de 1 a 6 e **Defeitos**
   com nível de -1 a -6) e, abaixo deles, os itens **Equipados** (clique abre o cartão do item numa janela).
 - **Inventário:** lista dos itens do personagem e, ao lado, o cartão do item selecionado (imagem, nome e etiquetas).
@@ -102,7 +104,7 @@ Clicar num personagem no painel abre a ficha, com quatro abas:
   usar tags e defeitos dos temas: o nível atual delas entra no modificador e acompanha a ficha automaticamente.
 
 ### Ficha de NPC, bestiário e lojas
-A ficha de NPC é igual à de personagem, sem Anotações e sem Relações. As fichas base ficam no **bestiário**
+A ficha de NPC é igual à de personagem (inclusive os itens **equipados**), sem Anotações e sem Relações. As fichas base ficam no **bestiário**
 (aba "NPCs" do Worldbuild); o NPC no painel da mesa é só uma referência a ela. Cada **token** de NPC colocado no
 mapa é uma cópia individual — duplo clique abre a ficha daquele token, com status, etiquetas, temas e inventário
 próprios, sem mexer no NPC do painel nem no bestiário. NPCs são do mestre, que pode:
