@@ -165,11 +165,42 @@
           </span>
         }
       </div>
-      <p class="mt-2 flex items-center gap-1.5 text-[11px] text-slate-500">
-        <mat-icon class="!size-3.5 !text-[14px]">link</mat-icon>
-        Em breve: somar ao modificador um ou mais atributos da ficha do personagem.
-      </p>
     </section>
+
+    <!-- ===== Tags do personagem somadas ao modificador ===== -->
+    @if (ownerIsCharacter()) {
+      <section class="mt-6">
+        <div class="mb-2 flex items-baseline justify-between gap-2">
+          <h4 class="text-xs text-slate-400">Tags do personagem no modificador</h4>
+          @if (linkedTags().length) {
+            <span class="text-[11px] tabular-nums text-slate-500">{{ breakdown() }}</span>
+          }
+        </div>
+        <div class="flex flex-wrap gap-1.5">
+          @for (tag of ownerTags(); track tag.id) {
+            @let on = isLinked(tag.id);
+            <button
+              type="button"
+              class="flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs transition-colors"
+              [class]="tagClass(tag.flaw, on)"
+              [attr.aria-pressed]="on"
+              [matTooltip]="tag.theme + (tag.flaw ? ' · defeito' : '')"
+              (click)="toggleTag(tag.id)"
+            >
+              <mat-icon class="!size-4 !text-[16px]">{{ on ? 'check' : 'add' }}</mat-icon>
+              {{ tag.text }}
+              <span class="font-semibold tabular-nums">{{ modifierText(tag.level) }}</span>
+            </button>
+          } @empty {
+            <p class="text-xs text-slate-600">Este personagem ainda não tem tags nos temas (aba Ficha).</p>
+          }
+        </div>
+        <p class="mt-2 text-[11px] leading-relaxed text-slate-500">
+          O nível atual de cada tag ligada é somado ao modificador fixo (defeitos subtraem). Quando a tag sobe ou desce
+          na ficha, esta ação acompanha sozinha.
+        </p>
+      </section>
+    }
 
     <!-- ===== Ícone ===== -->
     <section class="mt-6">

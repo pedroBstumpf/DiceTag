@@ -16,7 +16,7 @@ import {
 } from '../../../../core/models/table-session.model';
 import { BlobUrlService } from '../../services/blob-url.service';
 import { TableSessionService } from '../../services/table-session.service';
-import { formatModifier, formatRoll } from '../../utils/dice';
+import { formatModifier } from '../../utils/dice';
 import { FxPicker } from '../fx-picker/fx-picker';
 
 /** Faixas de resultado de cada dado (legenda da configuração da rolagem). */
@@ -85,8 +85,48 @@ export class EntryWindow {
   readonly roll = computed<RollConfig>(() => this.entry()?.roll ?? DEFAULT_ROLL);
   readonly guide = computed(() => OUTCOME_GUIDE[this.roll().dice]);
 
+  /** Trocar o dono desliga as tags do dono anterior. */
   setOwner(value: string): void {
-    this.session.updateEntry(this.entryId(), { ownerEntryId: value || undefined });
+    const { attributes: _, ...roll } = this.roll();
+    this.session.updateEntry(this.entryId(), { ownerEntryId: value || undefined, roll });
+  }
+
+  // --- Tags do personagem no modificador -----------------------------------
+
+  /** O dono da ação é um personagem (só personagens têm temas com tags). */
+  readonly ownerIsCharacter = computed(() => {
+    const ownerId = this.entry()?.ownerEntryId;
+    return !!ownerId && this.session.entryById().get(ownerId)?.kind === 'character';
+  });
+  /** Tags e defeitos dos temas do dono. */
+  readonly ownerTags = computed(() => this.session.themeTagsOf(this.entry()?.ownerEntryId));
+  /** Tags ligadas a esta ação que ainda existem na ficha. */
+  readonly linkedTags = computed(() => {
+    const ids = new Set(this.roll().attributes ?? []);
+    return this.ownerTags().filter((t) => ids.has(t.id));
+  });
+  /** Composição do modificador, ex.: "+1 fixo +3 Esgrima −2 Medo = +2". */
+  readonly breakdown = computed(() => {
+    const parts = [`${this.modifierText(this.roll().modifier)} fixo`, ...this.linkedTags().map((t) => `${this.modifierText(t.level)} ${t.text}`)];
+    const total = this.linkedTags().reduce((sum, t) => sum + t.level, this.roll().modifier);
+    return `${parts.join(' ')} = ${this.modifierText(total)}`;
+  });
+
+  isLinked(tagId: string): boolean {
+    return (this.roll().attributes ?? []).includes(tagId);
+  }
+
+  /** Liga/desliga a tag (ids de tags apagadas da ficha são descartados aqui). */
+  toggleTag(tagId: string): void {
+    const valid = new Set(this.ownerTags().map((t) => t.id));
+    const current = (this.roll().attributes ?? []).filter((id) => valid.has(id));
+    const attributes = current.includes(tagId) ? current.filter((id) => id !== tagId) : [...current, tagId];
+    this.patchRoll({ attributes: attributes.length ? attributes : undefined });
+  }
+
+  tagClass(flaw: boolean, on: boolean): string {
+    if (!on) return 'bg-white/5 text-slate-400 ring-1 ring-white/10 hover:bg-white/10 hover:text-slate-200';
+    return flaw ? 'bg-red-500/15 text-red-200 ring-1 ring-red-400/50' : 'bg-astral-500/20 text-astral-200 ring-1 ring-astral-400/50';
   }
 
   setDice(dice: DiceKind): void {
@@ -139,8 +179,9 @@ export class EntryWindow {
     return ROLL_OUTCOMES[outcome];
   }
 
+  /** Fórmula com o modificador efetivo (fixo + tags do personagem). */
   formula(entry: TableEntry): string {
-    return formatRoll(entry.roll ?? DEFAULT_ROLL);
+    return this.session.formulaOf(entry);
   }
 
   modifierText(modifier: number): string {

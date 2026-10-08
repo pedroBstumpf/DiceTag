@@ -7,7 +7,6 @@ import {
   CharacterRelation,
   CharacterSheet,
   CharacterTheme,
-  DEFAULT_ROLL,
   SHEET_MAX_LEVEL,
   TableEntry,
   ThemeTag,
@@ -20,7 +19,6 @@ import { newId } from '../../../../core/utils/id';
 import { TagEditor } from '../../../../shared/components/tag-editor/tag-editor';
 import { BlobUrlService } from '../../services/blob-url.service';
 import { TableSessionService } from '../../services/table-session.service';
-import { formatRoll } from '../../utils/dice';
 import { LevelPips } from '../level-pips/level-pips';
 import { SheetInventory } from '../sheet-inventory/sheet-inventory';
 import { SheetNotes } from '../sheet-notes/sheet-notes';
@@ -196,7 +194,8 @@ export class CharacterSheetView {
     this.openEntry.emit(created.id);
   }
 
+  /** Fórmula com o nível atual das tags ligadas à habilidade. */
   formula(entry: TableEntry): string {
-    return formatRoll(entry.roll ?? DEFAULT_ROLL);
+    return this.session.formulaOf(entry);
   }
 }

@@ -46,7 +46,7 @@ import {
 import { AuthService } from '../../../core/services/auth.service';
 import { StorageService } from '../../../core/services/storage.service';
 import { newId } from '../../../core/utils/id';
-import { rollDice } from '../utils/dice';
+import { TagLevels, formatRoll, rollDice } from '../utils/dice';
 import { FxDrawing, buildFx, seededRandom } from '../utils/effects';
 import { createMask, decodeMask, encodeMask, isExploredAt, markPolygons, maskFits } from '../utils/fog-memory';
 import { computeVisibilityPolygon, doorSeen, pointInPolygon, wallsToSegments } from '../utils/visibility';
@@ -101,6 +101,18 @@ export interface ActionUse {
   armed: boolean;
 }
 
+
+/** Tag de tema da ficha que uma ação pode usar no modificador. */
+export interface SheetTagOption {
+  id: string;
+  text: string;
+  /** Nível atual (1 a 6; defeitos de -1 a -6). */
+  level: number;
+  /** Nome do tema de origem. */
+  theme: string;
+  /** É um defeito (nível negativo). */
+  flaw: boolean;
+}
 
 /** Modo da ferramenta Névoa. */
 export type WallMode = 'line' | 'circle' | 'door' | 'edit' | 'erase';
@@ -381,7 +393,9 @@ export class TableSessionService {
    */
   useAction(entry: TableEntry): ActionUse {
     const config = entry.roll ?? DEFAULT_ROLL;
-    const roll: RollResult = { action: entry.name, icon: entry.icon ?? 'bolt', dice: config.dice, ...rollDice(config) };
+    // O nível atual das tags ligadas à ação entra no modificador
+    const levels = this.tagLevelsOf(entry.ownerEntryId);
+    const roll: RollResult = { action: entry.name, icon: entry.icon ?? 'bolt', dice: config.dice, ...rollDice(config, Math.random, levels) };
     const actor = this.actor() ?? (entry.ownerEntryId ? this.entryById().get(entry.ownerEntryId) : undefined);
     const author = actor?.name ?? this.userName();
     this.pushChat({ author, roll });
@@ -748,6 +762,31 @@ export class TableSessionService {
   updateSheet(entryId: string, patch: Partial<CharacterSheet>): void {
     const entry = this.entryById().get(entryId);
     if (entry) this.updateEntry(entryId, { sheet: { ...this.sheetOf(entry), ...patch } });
+  }
+
+  // --- Tags dos temas nas ações --------------------------------------------
+
+  /** Tags e defeitos dos temas do personagem (vazio para NPC, ação geral ou ficha sem tags). */
+  themeTagsOf(entryId: string | undefined): SheetTagOption[] {
+    const entry = entryId ? this.entryById().get(entryId) : undefined;
+    if (entry?.kind !== 'character') return [];
+    return this.sheetOf(entry).themes.flatMap((theme, i) => {
+      const themeName = theme.name.trim() || `Tema ${i + 1}`;
+      return [
+        ...theme.tags.map((t) => ({ id: t.id, text: t.text.trim() || 'Tag sem nome', level: t.level, theme: themeName, flaw: false })),
+        ...theme.flaws.map((t) => ({ id: t.id, text: t.text.trim() || 'Defeito sem nome', level: t.level, theme: themeName, flaw: true })),
+      ];
+    });
+  }
+
+  /** Nível atual de cada tag do personagem (somado ao modificador das ações que a usam). */
+  tagLevelsOf(entryId: string | undefined): TagLevels {
+    return new Map(this.themeTagsOf(entryId).map((t) => [t.id, t.level]));
+  }
+
+  /** Fórmula da ação com o modificador efetivo (fixo + tags do dono), ex.: "2d12+5". */
+  formulaOf(action: TableEntry): string {
+    return formatRoll(action.roll ?? DEFAULT_ROLL, this.tagLevelsOf(action.ownerEntryId));
   }
 
   // --- Inventário (cópias dos itens por personagem) ------------------------

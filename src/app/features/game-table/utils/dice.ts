@@ -9,20 +9,25 @@ const DICE: Record<DiceKind, { count: number; sides: number }> = {
 /** Fonte de aleatoriedade (0 ≤ x < 1); injetável nos testes. */
 export type Random = () => number;
 
+/** Nível atual de cada tag do personagem, por id (tags e defeitos dos temas da ficha). */
+export type TagLevels = ReadonlyMap<string, number>;
+const NO_LEVELS: TagLevels = new Map();
+
 /**
- * Modificador efetivo da rolagem.
- * Hoje é só o valor fixo; quando a ficha existir, os atributos em `roll.attributes`
- * serão somados aqui (ex.: `attributeValue(id)`), sem mudar quem chama.
+ * Modificador efetivo da rolagem: o valor fixo + o nível atual de cada tag ligada
+ * (`roll.attributes`, ids de tags dos temas; defeitos têm nível negativo).
+ * Tags que não existem mais valem 0. Como o nível é lido na hora, subir uma tag
+ * na ficha já muda todas as ações que a usam.
  */
-export function effectiveModifier(roll: RollConfig): number {
-  return roll.modifier;
+export function effectiveModifier(roll: RollConfig, levels: TagLevels = NO_LEVELS): number {
+  return (roll.attributes ?? []).reduce((sum, id) => sum + (levels.get(id) ?? 0), roll.modifier);
 }
 
 /** Rola os dados de `roll` e classifica o total. */
-export function rollDice(roll: RollConfig, random: Random = Math.random) {
+export function rollDice(roll: RollConfig, random: Random = Math.random, levels: TagLevels = NO_LEVELS) {
   const { count, sides } = DICE[roll.dice];
   const rolls = Array.from({ length: count }, () => 1 + Math.floor(random() * sides));
-  const modifier = effectiveModifier(roll);
+  const modifier = effectiveModifier(roll, levels);
   const total = rolls.reduce((sum, r) => sum + r, 0) + modifier;
   return { rolls, modifier, total, outcome: rollOutcome(roll.dice, total) };
 }
@@ -47,7 +52,7 @@ export function formatModifier(modifier: number): string {
   return modifier > 0 ? `+${modifier}` : `−${Math.abs(modifier)}`;
 }
 
-/** Fórmula legível: "2d12+3". */
-export function formatRoll(roll: RollConfig): string {
-  return roll.dice + formatModifier(effectiveModifier(roll));
+/** Fórmula legível com o modificador efetivo: "2d12+3". */
+export function formatRoll(roll: RollConfig, levels: TagLevels = NO_LEVELS): string {
+  return roll.dice + formatModifier(effectiveModifier(roll, levels));
 }

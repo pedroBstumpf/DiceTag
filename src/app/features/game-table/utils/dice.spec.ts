@@ -1,4 +1,4 @@
-import { formatModifier, formatRoll, rollDice, rollOutcome } from './dice';
+import { effectiveModifier, formatModifier, formatRoll, rollDice, rollOutcome } from './dice';
 
 /** Random que devolve os valores na ordem (para dados previsíveis). */
 function sequence(...values: number[]) {
@@ -61,5 +61,30 @@ describe('formatação', () => {
     expect(formatModifier(4)).toBe('+4');
     expect(formatModifier(-2)).toBe('−2');
     expect(formatRoll({ dice: '3d6', modifier: 1 })).toBe('3d6+1');
+  });
+});
+
+describe('tags do personagem no modificador', () => {
+  const levels = new Map([
+    ['esgrima', 3],
+    ['medo', -2],
+  ]);
+
+  it('soma o nível atual das tags ligadas (defeitos subtraem)', () => {
+    const roll = { dice: '2d12' as const, modifier: 1, attributes: ['esgrima', 'medo'] };
+    expect(effectiveModifier(roll, levels)).toBe(2);
+    expect(formatRoll(roll, levels)).toBe('2d12+2');
+  });
+
+  it('tag removida vale 0; subir a tag muda o modificador', () => {
+    const roll = { dice: '2d12' as const, modifier: 0, attributes: ['esgrima', 'apagada'] };
+    expect(effectiveModifier(roll, levels)).toBe(3);
+    expect(effectiveModifier(roll, new Map([['esgrima', 5]]))).toBe(5);
+  });
+
+  it('rollDice usa o modificador efetivo', () => {
+    const r = rollDice({ dice: '2d12', modifier: 0, attributes: ['esgrima'] }, sequence(0), levels);
+    expect(r.modifier).toBe(3);
+    expect(r.total).toBe(5);
   });
 });
