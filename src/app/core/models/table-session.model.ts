@@ -297,6 +297,11 @@ export function isStatusBar(bar: TokenBar): boolean {
   return STATUS_BARS.some((s) => s.id === bar.id);
 }
 
+/** Alguma barra de status (Corpo, Mente ou Espírito) está zerada? (NPC derrotado: X no token e loot.) */
+export function isDown(bars: TokenBar[]): boolean {
+  return bars.some((b) => isStatusBar(b) && b.value <= 0);
+}
+
 /**
  * Garante as três barras de status no início da lista, com rótulo e cor fixos
  * (mantém valor e máximo já salvos). As demais barras continuam depois delas.

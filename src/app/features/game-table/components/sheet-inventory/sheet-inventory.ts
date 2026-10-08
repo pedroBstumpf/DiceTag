@@ -161,6 +161,19 @@ export class SheetInventory {
     else if (Number.isFinite(n) && n >= 0) this.session.updateInventoryItem(this.entryId(), row.entry.id, { price: Math.round(n) });
   }
 
+  /** NPC derrotado (alguma barra de status em 0): os itens podem ser looteados sem pagar. */
+  readonly defeated = computed(() => {
+    const npc = this.session.entryById().get(this.entryId());
+    return !!npc && this.session.isDefeated(npc);
+  });
+
+  async loot(row: InventoryRow): Promise<void> {
+    const buyer = this.buyer();
+    if (!buyer) return;
+    const ok = await this.session.lootItem(this.entryId(), row.entry.id, buyer.id);
+    if (ok) this.snackBar.open(`${buyer.name} pegou ${row.name}.`, undefined, { duration: 3000 });
+  }
+
   /** À venda, com estoque e Eiros suficientes. */
   canAfford(row: InventoryRow): boolean {
     return row.entry.price !== undefined && row.quantity > 0 && this.buyerEiros() >= row.entry.price;

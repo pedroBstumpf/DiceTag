@@ -140,7 +140,24 @@
 <section class="flex min-w-0 flex-1 flex-col items-center gap-3">
   @if (selected(); as row) {
     @if (!row.missing) {
-      @if (buyer(); as b) {
+      @if (buyer() && defeated()) {
+        <!-- NPC derrotado: o jogador pega o item sem pagar -->
+        <div class="flex w-full max-w-sm flex-col items-center gap-1.5 rounded-xl bg-red-500/10 p-3 ring-1 ring-red-400/30">
+          @if (!row.quantity) {
+            <p class="text-xs font-semibold text-red-300/80">Não sobrou nenhum.</p>
+          } @else {
+            <button
+              type="button"
+              class="flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-red-500/20 text-sm font-semibold text-red-200 transition-colors hover:bg-red-500/30"
+              (click)="loot(row)"
+            >
+              <mat-icon class="!size-5 !text-[20px]">back_hand</mat-icon>
+              Lootear
+            </button>
+          }
+          <p class="text-[11px] text-slate-400">NPC derrotado: os itens podem ser pegos sem pagar.</p>
+        </div>
+      } @else if (buyer(); as b) {
         <!-- Loja: comprar com os Eiros do personagem do jogador -->
         <div class="flex w-full max-w-sm flex-col items-center gap-1.5 rounded-xl bg-amber-400/10 p-3 ring-1 ring-amber-300/25">
           @if (row.entry.price === undefined) {

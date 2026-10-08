@@ -1,4 +1,4 @@
-import { DEFAULT_STATUS_MAX, STATUS_BARS, TokenBar, defaultSheet, defaultToken, isStatusBar, withStatusBars } from './table-session.model';
+import { DEFAULT_STATUS_MAX, STATUS_BARS, TokenBar, defaultSheet, defaultToken, isDown, isStatusBar, withStatusBars } from './table-session.model';
 
 describe('withStatusBars', () => {
   it('cria Corpo, Mente e Espírito quando não há barras', () => {
@@ -18,6 +18,15 @@ describe('withStatusBars', () => {
     const bars = withStatusBars([extra, { ...STATUS_BARS[2], value: 1, max: 2 }]);
     expect(bars.map((b) => b.id)).toEqual([...STATUS_BARS.map((s) => s.id), 'pv']);
     expect(isStatusBar(bars[3])).toBe(false);
+  });
+});
+
+describe('isDown', () => {
+  it('só barras de status zeradas contam', () => {
+    const bars = withStatusBars([]);
+    expect(isDown(bars)).toBe(false);
+    expect(isDown(bars.map((b, i) => (i === 1 ? { ...b, value: 0 } : b)))).toBe(true);
+    expect(isDown([...bars, { id: 'pv', label: 'PV', value: 0, max: 5, color: '#fff' }])).toBe(false);
   });
 });
 

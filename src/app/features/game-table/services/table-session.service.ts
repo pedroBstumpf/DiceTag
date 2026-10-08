@@ -42,6 +42,7 @@ import {
   defaultSheet,
   defaultToken,
   hasSheet,
+  isDown,
   withStatusBars,
 } from '../../../core/models/table-session.model';
 import { AuthService } from '../../../core/services/auth.service';
@@ -882,6 +883,25 @@ export class TableSessionService {
     if (actor?.kind === 'character' && this.ownsCharacter(actor)) return actor;
     return this.myCharacters()[0] ?? null;
   });
+
+  /**
+   * NPC derrotado: alguma barra de status zerada na ficha ou em qualquer token dele no mapa.
+   * Os jogadores com acesso ao inventário podem lootear (pegar sem pagar).
+   */
+  isDefeated(entry: TableEntry): boolean {
+    if (entry.kind !== 'npc') return false;
+    if (isDown(this.tokenOf(entry).bars)) return true;
+    const byId = this.entryById();
+    return this.scenes().some((sc) =>
+      (sc.tokens ?? []).some((p) => p.entryId === entry.id && isDown(this.resolveToken(p, byId)?.bars ?? [])),
+    );
+  }
+
+  /** Pega uma unidade do inventário de um NPC derrotado, sem pagar. */
+  lootItem(npcId: string, inventoryId: string, toId: string): Promise<boolean> {
+    const npc = this.entryById().get(npcId);
+    return npc && this.isDefeated(npc) ? this.transferItem(npcId, inventoryId, toId) : Promise.resolve(false);
+  }
 
   /** Compra uma unidade da loja de um NPC com os Eiros do comprador (false = não está à venda ou faltam Eiros). */
   buyItem(shopId: string, inventoryId: string, buyerId: string): Promise<boolean> {

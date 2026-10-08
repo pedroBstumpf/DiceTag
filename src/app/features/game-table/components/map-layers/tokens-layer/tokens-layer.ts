@@ -1,6 +1,6 @@
 import { Component, inject, input, output } from '@angular/core';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { TokenBar } from '../../../../../core/models/table-session.model';
+import { TokenBar, isDown } from '../../../../../core/models/table-session.model';
 import { BlobUrlService } from '../../../services/blob-url.service';
 import { ResolvedToken } from '../../../services/table-session.service';
 
@@ -19,7 +19,8 @@ const INITIAL_BG = { character: '#3462d6', npc: '#7c4dcc' } as Record<string, st
 
 /**
  * Camada de tokens do mapa (dentro do "mundo" transformado).
- * Desenha imagem circular, barras acima e etiquetas abaixo. Só exibe e
+ * Desenha imagem circular, barras acima e etiquetas abaixo; NPC derrotado
+ * (barra de status em 0) ganha um X vermelho. Só exibe e
  * avisa o ponteiro pressionado — o map-stage decide mover/redimensionar.
  * Elementos de interface usam tamanho mínimo legível independente do zoom.
  */
@@ -55,6 +56,11 @@ export class TokensLayer {
 
   percent(bar: TokenBar): number {
     return bar.max > 0 ? Math.min(100, Math.max(0, (bar.value / bar.max) * 100)) : 0;
+  }
+
+  /** NPC com alguma barra de status zerada: recebe o X vermelho. */
+  isDefeated(token: ResolvedToken): boolean {
+    return token.entry.kind === 'npc' && isDown(token.bars);
   }
 
   initialBg(token: ResolvedToken): string {
