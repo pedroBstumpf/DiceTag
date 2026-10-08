@@ -176,9 +176,14 @@ export interface LevelView {
   blobId?: string;
 }
 
-/** Camada de um token (tokens antigos ficam no térreo). */
-export function levelOf(placement: TokenPlacement): number {
-  return placement.level ?? 0;
+/** Camada de um token ou parede (dados antigos ficam no térreo). */
+export function levelOf(item: { level?: number }): number {
+  return item.level ?? 0;
+}
+
+/** Mesmos itens, na mesma ordem (igualdade de listas filtradas: evita recálculos). */
+function sameItems<T>(a: readonly T[], b: readonly T[]): boolean {
+  return a.length === b.length && a.every((item, i) => item === b[i]);
 }
 
 /**
@@ -268,7 +273,15 @@ export class TableSessionService extends SheetStore {
   });
 
   // --- Névoa de guerra e paredes (cena ativa) ------------------------------
-  readonly walls = computed(() => this.activeScene()?.walls ?? NO_WALLS);
+
+  /** Paredes e portas da camada em foco (cada camada do mapa tem as suas). */
+  readonly walls = computed(
+    () => {
+      const level = this.currentLevel();
+      return (this.activeScene()?.walls ?? NO_WALLS).filter((w) => levelOf(w) === level);
+    },
+    { equal: sameItems },
+  );
   readonly fogEnabled = computed(() => this.activeScene()?.fog?.enabled ?? false);
   private readonly wallSegments = computed(() => wallsToSegments(this.walls()));
 
@@ -774,7 +787,7 @@ export class TableSessionService extends SheetStore {
     this.storage.delete(`blob:${old}`);
   }
 
-  /** Exclui uma camada de cima; os tokens dela descem uma camada. */
+  /** Exclui uma camada de cima; os tokens dela descem uma camada e as paredes dela são apagadas. */
   removeLevel(index: number): void {
     const scene = this.activeScene();
     const level = scene?.levels?.[index - 1];
@@ -783,6 +796,9 @@ export class TableSessionService extends SheetStore {
     this.updateScene(scene.id, {
       levels: (scene.levels ?? []).filter((l) => l.id !== level.id),
       tokens: (scene.tokens ?? []).map((t) => (levelOf(t) >= index ? { ...t, level: levelOf(t) - 1 } : t)),
+      walls: (scene.walls ?? [])
+        .filter((w) => levelOf(w) !== index)
+        .map((w) => (levelOf(w) > index ? { ...w, level: levelOf(w) - 1 } : w)),
       playerLevel: shift(scene.playerLevel ?? 0),
     });
     this.gmLevel.update(shift);
@@ -1360,10 +1376,12 @@ export class TableSessionService extends SheetStore {
     if (scene) this.updateScene(scene.id, { fog: { ...scene.fog, enabled } });
   }
 
-  /** Adiciona uma parede à cena ativa. */
+  /** Adiciona uma parede à cena ativa, na camada em foco. */
   addWall(wall: DistributiveOmit<Wall, 'id'>): void {
     const scene = this.activeScene();
-    if (scene) this.updateScene(scene.id, { walls: [...(scene.walls ?? []), { ...wall, id: newId() } as Wall] });
+    const level = this.currentLevel();
+    const created = { ...wall, id: newId(), ...(level > 0 && { level }) } as Wall;
+    if (scene) this.updateScene(scene.id, { walls: [...(scene.walls ?? []), created] });
   }
 
   /** Substitui uma parede da cena ativa (mover parede ou ponto). */

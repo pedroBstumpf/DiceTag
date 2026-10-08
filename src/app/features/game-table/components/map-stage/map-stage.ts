@@ -706,7 +706,9 @@ export class MapStage {
     }
 
     // Editar paredes: Delete remove a parede selecionada, Esc desmarca
-    const wallId = this.editingWalls() ? this.session.selectedWallId() : null;
+    // (só se a parede for da camada em foco: a seleção pode ter ficado em outra camada)
+    const selectedWall = this.editingWalls() ? this.session.selectedWallId() : null;
+    const wallId = this.session.walls().some((w) => w.id === selectedWall) ? selectedWall : null;
     if (wallId && (event.key === 'Delete' || event.key === 'Backspace')) {
       this.session.removeWall(wallId);
       return true;

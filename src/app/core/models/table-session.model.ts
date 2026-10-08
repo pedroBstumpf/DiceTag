@@ -108,16 +108,21 @@ export interface ExploredData {
 
 // --- Paredes -----------------------------------------------------------------
 
-/** Parede em linha (polilinha, ponto a ponto). */
-export interface LineWall {
+/** Campos comuns das paredes. */
+interface WallBase {
   id: string;
+  /** Camada do mapa a que a parede pertence (0 = térreo). Padrão: 0. */
+  level?: number;
+}
+
+/** Parede em linha (polilinha, ponto a ponto). */
+export interface LineWall extends WallBase {
   kind: 'line';
   points: Point[];
 }
 
 /** Parede circular (pilar, árvore…), centro e raio em px do mapa. */
-export interface CircleWall {
-  id: string;
+export interface CircleWall extends WallBase {
   kind: 'circle';
   cx: number;
   cy: number;
@@ -125,8 +130,7 @@ export interface CircleWall {
 }
 
 /** Porta: segmento entre dois batentes. Fechada bloqueia a visão; aberta deixa passar. */
-export interface DoorWall {
-  id: string;
+export interface DoorWall extends WallBase {
   kind: 'door';
   /** Os dois batentes [a, b]. */
   points: Point[];
