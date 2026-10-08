@@ -294,6 +294,25 @@
             <ng-container *ngTemplateOutlet="publicToggle; context: { on: !!e.inventoryPublic, part: 'inventory' }" />
           </div>
         }
+        @if (!isNpc()) {
+          <!-- Eiros do personagem (gastos nas lojas dos NPCs) -->
+          <fieldset class="mb-3 min-w-0" [disabled]="!canEdit()">
+            <label class="flex items-center gap-3 rounded-lg bg-amber-400/10 px-3 py-2 ring-1 ring-amber-300/25">
+              <mat-icon class="!size-5 !text-[20px] text-amber-300">paid</mat-icon>
+              <span class="font-display text-sm tracking-wide text-amber-200">{{ currency }}</span>
+              <input
+                #eirosInput
+                type="number"
+                min="0"
+                class="h-8 w-28 rounded-md bg-ink-950 px-2 text-right text-sm font-semibold tabular-nums text-amber-100 outline-none ring-1 ring-white/10 focus:ring-amber-400/60"
+                [attr.aria-label]="currency + ' do personagem'"
+                [value]="sheet()?.eiros ?? 0"
+                (change)="setEiros(eirosInput.value)"
+              />
+              <span class="text-[11px] text-slate-500">Gastos ao comprar itens nas lojas dos NPCs.</span>
+            </label>
+          </fieldset>
+        }
         <app-sheet-inventory [entryId]="e.id" [readonly]="!canEdit()" (openItem)="openEntry.emit($event)" />
       }
 

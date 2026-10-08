@@ -7,6 +7,7 @@ import {
   CharacterRelation,
   CharacterSheet,
   CharacterTheme,
+  CURRENCY,
   SHEET_MAX_LEVEL,
   TableEntry,
   ThemeTag,
@@ -164,6 +165,16 @@ export class CharacterSheetView {
 
   removeLabel(label: string): void {
     this.update({ labels: (this.sheet()?.labels ?? []).filter((l) => l !== label) });
+  }
+
+  // --- Eiros (moeda do personagem) -----------------------------------------
+
+  readonly currency = CURRENCY;
+
+  /** Eiros digitados (inteiro, nunca negativo; texto inválido é ignorado). */
+  setEiros(raw: string): void {
+    const n = Number(raw);
+    if (raw.trim() !== '' && Number.isFinite(n)) this.update({ eiros: Math.max(0, Math.round(n)) });
   }
 
   // --- Status --------------------------------------------------------------

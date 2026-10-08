@@ -1,8 +1,9 @@
 import { Component, computed, inject, input, output, signal } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { Tag } from '../../../../core/models/tag.model';
-import { InventoryEntry } from '../../../../core/models/table-session.model';
+import { CURRENCY, InventoryEntry } from '../../../../core/models/table-session.model';
 import { WorldItem } from '../../../../core/models/world-item.model';
 import { newId } from '../../../../core/utils/id';
 import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
@@ -40,6 +41,9 @@ interface ItemOption {
  * Worldbuild). Editar o cartão aqui personaliza só a cópia desta ficha
  * (InventoryEntry guarda o que mudou); o original e os outros inventários não mudam.
  * `readonly`: jogador vendo o inventário público de um NPC (só seleciona e vê os cartões).
+ *
+ * Loja: no inventário de NPC há uma coluna de preço em Eiros (editável por quem edita
+ * o NPC); o jogador que vê o inventário compra um item com os Eiros do personagem dele.
  */
 @Component({
   selector: 'app-sheet-inventory',
@@ -51,6 +55,7 @@ export class SheetInventory {
   private readonly session = inject(TableSessionService);
   private readonly worldbuild = inject(WorldbuildService);
   private readonly loreGeneral = inject(LoreService);
+  private readonly snackBar = inject(MatSnackBar);
   readonly blobs = inject(BlobUrlService);
 
   readonly entryId = input.required<string>();
@@ -119,6 +124,44 @@ export class SheetInventory {
 
   reset(row: InventoryRow): void {
     this.session.resetInventoryItem(this.entryId(), row.entry.id);
+  }
+
+  // --- Loja (inventário de NPC com preços em Eiros) ------------------------
+
+  readonly currency = CURRENCY;
+  /** Inventário de NPC: tem a coluna de preço e pode virar loja para os jogadores. */
+  readonly isShop = computed(() => this.session.entryById().get(this.entryId())?.kind === 'npc');
+  /** Personagem do jogador que compra (só no papel de jogador, em loja de outro). */
+  readonly buyer = computed(() => {
+    const buyer = this.session.buyer();
+    return this.isShop() && this.session.role() === 'player' && buyer ? buyer : null;
+  });
+  /** Eiros do comprador. */
+  readonly buyerEiros = computed(() => {
+    const buyer = this.buyer();
+    return buyer ? this.session.sheetOf(buyer).eiros : 0;
+  });
+
+  /** Preço digitado (vazio = não está à venda). */
+  setPrice(row: InventoryRow, raw: string): void {
+    const n = Number(raw);
+    if (raw.trim() === '') this.session.updateInventoryItem(this.entryId(), row.entry.id, { price: undefined });
+    else if (Number.isFinite(n) && n >= 0) this.session.updateInventoryItem(this.entryId(), row.entry.id, { price: Math.round(n) });
+  }
+
+  canAfford(row: InventoryRow): boolean {
+    return row.entry.price !== undefined && this.buyerEiros() >= row.entry.price;
+  }
+
+  async buy(row: InventoryRow): Promise<void> {
+    const buyer = this.buyer();
+    if (!buyer || row.entry.price === undefined) return;
+    const ok = await this.session.buyItem(this.entryId(), row.entry.id, buyer.id);
+    this.snackBar.open(
+      ok ? `${buyer.name} comprou ${row.name} por ${row.entry.price} ${CURRENCY}.` : `${buyer.name} não tem ${CURRENCY} suficientes.`,
+      undefined,
+      { duration: 3000 },
+    );
   }
 
   // --- Adicionar itens -----------------------------------------------------

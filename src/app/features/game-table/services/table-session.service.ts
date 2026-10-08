@@ -841,8 +841,8 @@ export class TableSessionService {
     return entry ? this.sheetOf(entry).inventory : [];
   }
 
-  /** Personaliza o item só neste inventário (nome/etiquetas; o original não muda). */
-  updateInventoryItem(entryId: string, inventoryId: string, patch: Pick<InventoryEntry, 'name' | 'tags'>): void {
+  /** Personaliza o item só neste inventário (nome/etiquetas/preço; o original não muda). */
+  updateInventoryItem(entryId: string, inventoryId: string, patch: Pick<InventoryEntry, 'name' | 'tags' | 'price'>): void {
     this.updateSheet(entryId, {
       inventory: this.inventoryOf(entryId).map((i) => (i.id === inventoryId ? { ...i, ...patch } : i)),
     });
@@ -868,6 +868,52 @@ export class TableSessionService {
       inventory: this.inventoryOf(entryId).map((i) => (i.id === inventoryId ? { id, itemId, ...(global && { global }) } : i)),
     });
     if (item.blobId) this.storage.delete(`blob:${item.blobId}`);
+  }
+
+  // --- Lojas (inventário de NPC com preços em Eiros) -----------------------
+
+  /**
+   * Personagem que compra nas lojas: o personagem da conta selecionado no mapa
+   * ou, senão, o primeiro personagem da conta.
+   */
+  readonly buyer = computed<TableEntry | null>(() => {
+    const actor = this.actor();
+    if (actor?.kind === 'character' && this.ownsCharacter(actor)) return actor;
+    return this.myCharacters()[0] ?? null;
+  });
+
+  /**
+   * Compra um item da loja de um NPC: desconta o preço dos Eiros do comprador e
+   * põe uma cópia do item (com a personalização da loja, sem o preço) no inventário dele.
+   * A imagem personalizada é duplicada, para cada inventário cuidar da sua.
+   * Retorna false se o item não estiver à venda ou faltarem Eiros.
+   */
+  async buyItem(shopId: string, inventoryId: string, buyerId: string): Promise<boolean> {
+    const item = this.inventoryOf(shopId).find((i) => i.id === inventoryId);
+    const buyer = this.entryById().get(buyerId);
+    if (!item || item.price === undefined || !buyer) return false;
+    const eiros = this.sheetOf(buyer).eiros;
+    if (eiros < item.price) return false;
+
+    let blobId: string | undefined;
+    if (item.blobId) {
+      const blob = await this.storage.get<Blob>(`blob:${item.blobId}`);
+      if (blob) {
+        blobId = newId();
+        await this.storage.set(`blob:${blobId}`, blob);
+      }
+    }
+    const { price, ...copy } = item;
+    const bought: InventoryEntry = { ...copy, id: newId(), blobId };
+    if (!blobId) delete bought.blobId;
+    // Relê o comprador depois do await (o inventário pode ter mudado no meio)
+    this.updateSheet(buyerId, { eiros: this.inventoryOwnerEiros(buyerId) - price, inventory: [...this.inventoryOf(buyerId), bought] });
+    return true;
+  }
+
+  private inventoryOwnerEiros(entryId: string): number {
+    const entry = this.entryById().get(entryId);
+    return entry ? this.sheetOf(entry).eiros : 0;
   }
 
   /** Tira o item do inventário (e apaga a imagem personalizada, se houver). */

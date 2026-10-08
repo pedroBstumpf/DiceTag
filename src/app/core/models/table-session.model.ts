@@ -232,7 +232,12 @@ export interface InventoryEntry {
   tags?: Tag[];
   /** Imagem personalizada no IndexedDB (ausente = a do original). Apagada ao tirar o item. */
   blobId?: string;
+  /** Inventário de NPC (loja): preço em Eiros (ausente = não está à venda). */
+  price?: number;
 }
+
+/** Nome da moeda do mundo. */
+export const CURRENCY = 'Eiros';
 
 /** Página das anotações do personagem (texto rico, HTML do Tiptap). */
 export interface NotePage {
@@ -257,6 +262,8 @@ export interface CharacterSheet {
   inventory: InventoryEntry[];
   /** Anotações do jogador, em páginas (sempre pelo menos uma). */
   notes: NotePage[];
+  /** Personagem: Eiros (moeda) que possui, gastos ao comprar itens de NPCs. */
+  eiros: number;
 }
 
 /** Ficha vazia de um personagem. */
@@ -269,6 +276,7 @@ export function defaultSheet(): CharacterSheet {
     themes: Array.from({ length: SHEET_THEME_COUNT }, (_, i) => ({ id: `theme-${i + 1}`, name: '', tags: [], flaws: [] })),
     inventory: [],
     notes: [{ id: 'page-1', title: 'Página 1', content: '' }],
+    eiros: 0,
   };
 }
 

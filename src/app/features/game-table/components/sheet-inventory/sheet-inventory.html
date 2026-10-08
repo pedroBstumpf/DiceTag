@@ -1,5 +1,5 @@
 <!-- ===== Lista de itens do personagem ===== -->
-<section class="sheet-card flex shrink-0 flex-col @xl:w-64">
+<section class="sheet-card flex shrink-0 flex-col" [class]="isShop() ? '@xl:w-80' : '@xl:w-64'">
   <div class="mb-2 flex items-center justify-between">
     <h3 class="sheet-title !mb-0">
       <mat-icon class="!size-4 !text-[16px]">backpack</mat-icon>
@@ -56,7 +56,13 @@
     </div>
   }
 
-  <!-- Itens do personagem -->
+  <!-- Itens da ficha (NPC: com a coluna de preço da loja) -->
+  @if (isShop() && rows().length) {
+    <div class="flex items-center justify-between px-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-600">
+      <span>Item</span>
+      <span class="mr-9">Preço ({{ currency }})</span>
+    </div>
+  }
   <div class="flex flex-col gap-0.5">
     @for (row of rows(); track row.entry.id) {
       <div
@@ -67,7 +73,27 @@
         <mat-icon class="!size-4 shrink-0 !text-[16px]" [class]="row.missing ? 'text-slate-600' : 'text-amber-300'">inventory_2</mat-icon>
         <span class="min-w-0 flex-1 truncate" [class.italic]="row.missing" [class.text-slate-500]="row.missing">{{ row.name }}</span>
         @if (row.custom) {
-          <mat-icon class="!size-3.5 shrink-0 !text-[14px] text-astral-300/70" matTooltip="Personalizado para este personagem">edit</mat-icon>
+          <mat-icon class="!size-3.5 shrink-0 !text-[14px] text-astral-300/70" matTooltip="Personalizado nesta ficha">edit</mat-icon>
+        }
+        @if (isShop()) {
+          <!-- Preço em Eiros: editável por quem edita o NPC; vazio = não está à venda -->
+          @if (readonly()) {
+            <span class="w-20 shrink-0 text-right text-xs font-semibold tabular-nums" [class]="row.entry.price === undefined ? 'text-slate-600' : 'text-amber-300'">
+              {{ row.entry.price === undefined ? '—' : row.entry.price + ' ' + currency }}
+            </span>
+          } @else {
+            <input
+              #priceInput
+              type="number"
+              min="0"
+              class="h-7 w-16 shrink-0 rounded-md bg-ink-950 px-1.5 text-right text-xs tabular-nums text-amber-200 outline-none ring-1 ring-white/10 placeholder:text-slate-600 focus:ring-amber-400/60"
+              placeholder="—"
+              [attr.aria-label]="'Preço de ' + row.name + ' em ' + currency"
+              [value]="row.entry.price ?? ''"
+              (click)="$event.stopPropagation()"
+              (change)="setPrice(row, priceInput.value)"
+            />
+          }
         }
         @if (!readonly()) {
           <button
@@ -93,6 +119,27 @@
 <section class="flex min-w-0 flex-1 flex-col items-center gap-3">
   @if (selected(); as row) {
     @if (!row.missing) {
+      @if (buyer(); as b) {
+        <!-- Loja: comprar com os Eiros do personagem do jogador -->
+        <div class="flex w-full max-w-sm flex-col items-center gap-1.5 rounded-xl bg-amber-400/10 p-3 ring-1 ring-amber-300/25">
+          @if (row.entry.price === undefined) {
+            <p class="text-xs text-slate-400">Este item não está à venda.</p>
+          } @else {
+            <button
+              type="button"
+              class="flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-amber-400/20 text-sm font-semibold text-amber-200 transition-colors hover:bg-amber-400/30 disabled:cursor-not-allowed disabled:opacity-40"
+              [disabled]="!canAfford(row)"
+              (click)="buy(row)"
+            >
+              <mat-icon class="!size-5 !text-[20px]">shopping_bag</mat-icon>
+              Comprar por {{ row.entry.price }} {{ currency }}
+            </button>
+          }
+          <p class="text-[11px] text-slate-400">
+            {{ b.name }} tem <span class="font-semibold tabular-nums text-amber-200">{{ buyerEiros() }} {{ currency }}</span>
+          </p>
+        </div>
+      }
       <!-- Cartão editável (as alterações valem só para esta ficha); só leitura para quem só pode ver -->
       <fieldset class="w-full min-w-0 max-w-sm" [disabled]="readonly()">
       <app-item-card-view
