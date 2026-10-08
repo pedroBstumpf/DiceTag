@@ -164,8 +164,9 @@ export class GameTablePage {
       return token ? { title: `Token: ${token.entry.name}`, icon: 'token', color: TABLE_ENTRY_META[token.entry.kind].color, type: 'token' } : null;
     }
     const entry = this.session.entryById().get(id);
-    // Sons não abrem janela: são controlados direto no mixer da aba Sons
-    if (entry && entry.kind !== 'sound') {
+    // Sons não abrem janela: são controlados direto no mixer da aba Sons.
+    // NPC sem permissão (nem ficha/inventário públicos) não aparece para o jogador.
+    if (entry && entry.kind !== 'sound' && this.session.canOpen(entry)) {
       const meta = TABLE_ENTRY_META[entry.kind];
       // Personagem e NPC abrem a ficha completa (abas); automação, a janela de configuração
       const type = hasSheet(entry.kind) ? 'sheet' : 'entry';
@@ -187,8 +188,16 @@ export class GameTablePage {
     this.windows.open(id, { width: el?.clientWidth ?? 1200, height: el?.clientHeight ?? 800 }, WINDOW_SIZES[type]);
   }
 
-  /** Abre a janela "Token" de um token colocado no mapa. */
+  /**
+   * Duplo clique num token: abre a janela "Token". Num NPC que o jogador não controla,
+   * abre só a ficha (se o mestre a deixou pública) — ou nada.
+   */
   openToken(placementId: string): void {
+    const entry = this.session.resolvedTokenById(placementId)?.entry;
+    if (entry?.kind === 'npc' && !this.session.canEdit(entry)) {
+      if (this.session.canOpen(entry)) this.open(entry.id);
+      return;
+    }
     this.open(TOKEN_WINDOW + placementId);
   }
 

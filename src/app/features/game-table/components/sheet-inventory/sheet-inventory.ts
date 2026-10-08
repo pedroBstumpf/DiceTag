@@ -37,8 +37,9 @@ interface ItemOption {
  * do item selecionado (imagem, nome e etiquetas).
  *
  * Os itens vêm do worldbuild do usuário ou da Lore geral (aba "Itens" do
- * Worldbuild). Editar o cartão aqui personaliza só a cópia deste personagem
+ * Worldbuild). Editar o cartão aqui personaliza só a cópia desta ficha
  * (InventoryEntry guarda o que mudou); o original e os outros inventários não mudam.
+ * `readonly`: jogador vendo o inventário público de um NPC (só seleciona e vê os cartões).
  */
 @Component({
   selector: 'app-sheet-inventory',
@@ -53,6 +54,8 @@ export class SheetInventory {
   readonly blobs = inject(BlobUrlService);
 
   readonly entryId = input.required<string>();
+  /** Só ver (jogador olhando o inventário público de um NPC): sem adicionar, tirar nem editar. */
+  readonly readonly = input(false);
   /** Pedido para abrir a janela de um item (o original, no worldbuild). */
   readonly openItem = output<string>();
 

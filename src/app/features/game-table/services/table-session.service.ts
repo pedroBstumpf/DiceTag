@@ -357,18 +357,61 @@ export class TableSessionService {
 
   /** Personagens da conta atual nesta mesa (sem dono = de qualquer um). */
   readonly myCharacters = computed(() => this.entries().filter((e) => e.kind === 'character' && this.ownsCharacter(e)));
+  /** NPCs que o mestre autorizou a conta atual a controlar. */
+  readonly myNpcs = computed(() => this.entries().filter((e) => e.kind === 'npc' && this.controlsNpc(e)));
 
   /**
    * Ficha que está agindo (dona das ações da barra inferior):
    * - Mestre: a ficha do token selecionado (NPC ou personagem); sem seleção, ninguém (ações gerais).
-   * - Jogador: o personagem dele selecionado ou, senão, o primeiro personagem dele.
+   * - Jogador: o personagem dele ou NPC que controla, se selecionado; senão, o primeiro personagem dele.
    */
   readonly actor = computed<TableEntry | null>(() => {
     const id = this.selectedTokenId();
     const selected = id ? (this.resolvedTokenById(id)?.entry ?? null) : null;
     if (this.role() === 'gm') return selected;
     if (selected?.kind === 'character' && this.ownsCharacter(selected)) return selected;
+    if (selected?.kind === 'npc' && this.controlsNpc(selected)) return selected;
     return this.myCharacters()[0] ?? null;
+  });
+
+  // --- Permissões das fichas (provisórias: o papel ainda é escolhido na mesa) --
+
+  /** O NPC foi liberado pelo mestre para a conta atual. */
+  controlsNpc(entry: TableEntry): boolean {
+    return !!entry.controllerUserId && entry.controllerUserId === this.auth.user()?.id;
+  }
+
+  /** Pode editar a ficha: o mestre sempre; NPC só o jogador autorizado; personagens seguem livres. */
+  canEdit(entry: TableEntry): boolean {
+    if (this.role() === 'gm') return true;
+    return entry.kind === 'npc' ? this.controlsNpc(entry) : true;
+  }
+
+  /** Pode ver a aba Ficha (NPC: só quem edita ou se o mestre a deixou pública). */
+  canViewSheet(entry: TableEntry): boolean {
+    return this.canEdit(entry) || (entry.kind === 'npc' && !!entry.sheetPublic);
+  }
+
+  /** Pode ver o inventário (NPC: só quem edita ou se o mestre o deixou público). */
+  canViewInventory(entry: TableEntry): boolean {
+    return this.canEdit(entry) || (entry.kind === 'npc' && !!entry.inventoryPublic);
+  }
+
+  /** Pode abrir a ficha (ao menos uma parte visível). */
+  canOpen(entry: TableEntry): boolean {
+    return this.canViewSheet(entry) || this.canViewInventory(entry);
+  }
+
+  /**
+   * Jogadores da mesa que podem receber o controle de um NPC: as contas donas de
+   * personagens daqui, com os nomes dos personagens (ainda não há lista de convidados).
+   */
+  readonly players = computed(() => {
+    const byUser = new Map<string, string[]>();
+    for (const e of this.entries()) {
+      if (e.kind === 'character' && e.ownerUserId) byUser.set(e.ownerUserId, [...(byUser.get(e.ownerUserId) ?? []), e.name]);
+    }
+    return [...byUser].map(([userId, characters]) => ({ userId, label: `Jogador de ${characters.join(', ')}` }));
   });
 
   /** Ações da barra inferior: as da ficha que está agindo (mestre sem seleção: as gerais). */

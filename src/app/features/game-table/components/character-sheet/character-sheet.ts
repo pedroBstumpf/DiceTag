@@ -66,17 +66,49 @@ export class CharacterSheetView {
   /** Ficha de NPC (sem Relações nem Anotações). */
   readonly isNpc = computed(() => this.entry()?.kind === 'npc');
 
+  // --- Permissões ----------------------------------------------------------
+
+  /** Pode editar (mestre; no NPC, também o jogador autorizado). Senão, a ficha é só leitura. */
+  readonly canEdit = computed(() => {
+    const entry = this.entry();
+    return !!entry && this.session.canEdit(entry);
+  });
+  /** O mestre configura controle e visibilidade do NPC. */
+  readonly isGm = computed(() => this.session.role() === 'gm');
+
   // --- Abas ----------------------------------------------------------------
+
+  /** Abas desta ficha que a conta atual pode ver (NPC público: só Ficha e/ou Inventário). */
   readonly tabs = computed(() => {
-    const ids: SheetTab[] = this.isNpc() ? ['sheet', 'inventory', 'abilities'] : ['sheet', 'inventory', 'notes', 'abilities'];
+    const entry = this.entry();
+    if (!entry) return [];
+    let ids: SheetTab[] = this.isNpc() ? ['sheet', 'inventory', 'abilities'] : ['sheet', 'inventory', 'notes', 'abilities'];
+    if (!this.session.canEdit(entry)) {
+      ids = ids.filter((id) => (id === 'sheet' && entry.sheetPublic) || (id === 'inventory' && entry.inventoryPublic));
+    }
     return ids.map((id) => ({ id, ...TAB_META[id] }));
   });
   private readonly chosenTab = signal<SheetTab>('sheet');
-  /** Aba aberta (volta para a primeira se a escolhida não existir nesta ficha). */
-  readonly tab = computed(() => {
+  /** Aba aberta (volta para a primeira se a escolhida não existir ou não estiver liberada). */
+  readonly tab = computed<SheetTab | null>(() => {
     const tabs = this.tabs();
-    return tabs.find((t) => t.id === this.chosenTab())?.id ?? tabs[0].id;
+    return tabs.find((t) => t.id === this.chosenTab())?.id ?? tabs[0]?.id ?? null;
   });
+
+  // --- NPC: controle e visibilidade (mestre) -------------------------------
+
+  /** Jogador autorizado a controlar o NPC ('' = só o mestre). */
+  setController(userId: string): void {
+    this.session.updateEntry(this.entryId(), { controllerUserId: userId || undefined });
+  }
+
+  /** Deixa a ficha ou o inventário do NPC visível (só leitura) para os jogadores, ou não. */
+  togglePublic(part: 'sheet' | 'inventory'): void {
+    const entry = this.entry();
+    if (!entry) return;
+    if (part === 'sheet') this.session.updateEntry(entry.id, { sheetPublic: !entry.sheetPublic || undefined });
+    else this.session.updateEntry(entry.id, { inventoryPublic: !entry.inventoryPublic || undefined });
+  }
 
   selectTab(tab: SheetTab): void {
     this.chosenTab.set(tab);

@@ -89,7 +89,8 @@ export class SidePanel {
 
   // --- Listas --------------------------------------------------------------
   readonly characters = computed(() => this.byKind('character'));
-  readonly npcs = computed(() => this.byKind('npc'));
+  /** NPCs visíveis: o jogador só vê os que controla ou cuja ficha/inventário o mestre liberou. */
+  readonly npcs = computed(() => this.byKind('npc').filter((e) => this.session.canOpen(e)));
 
   // --- Lore da mesa --------------------------------------------------------
 
@@ -153,8 +154,12 @@ export class SidePanel {
     this.renamingId.set(null);
   }
 
-  /** Personagens/NPCs podem ser arrastados até o mapa para colocar o token. */
+  /** Personagens/NPCs podem ser arrastados até o mapa para colocar o token (NPC: só quem pode editá-lo). */
   onDragStart(event: DragEvent, entry: TableEntry): void {
+    if (entry.kind === 'npc' && !this.session.canEdit(entry)) {
+      event.preventDefault();
+      return;
+    }
     if (!event.dataTransfer || (entry.kind !== 'character' && entry.kind !== 'npc')) return;
     event.dataTransfer.setData(TOKEN_DRAG_TYPE, entry.id);
     event.dataTransfer.effectAllowed = 'copy';

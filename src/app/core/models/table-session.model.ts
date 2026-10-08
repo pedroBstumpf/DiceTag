@@ -166,6 +166,12 @@ export interface TableEntry {
   effect?: FxStyle;
   /** character: conta do jogador dono do personagem (ausente = qualquer um). */
   ownerUserId?: string;
+  /** npc: conta do jogador autorizado pelo mestre a ver, editar e controlar o NPC (ausente = só o mestre). */
+  controllerUserId?: string;
+  /** npc: os jogadores podem ver (sem editar) a aba Ficha. Padrão: false. */
+  sheetPublic?: boolean;
+  /** npc: os jogadores podem ver (sem editar) o inventário — e comprar os itens com preço. Padrão: false. */
+  inventoryPublic?: boolean;
   /** character/npc: configuração do token. Padrão: defaultToken(kind). */
   token?: TokenSettings;
   /** character/npc: ficha (NPC não usa relações nem anotações). Padrão: defaultSheet(). */
