@@ -165,6 +165,7 @@ src/
                 ├── character-sheet/    # FICHA de personagem e de NPC (abas; cards Básico, Status, Relações, Temas; Habilidades)
                 ├── sheet-inventory/    # aba Inventário: lista de itens + cartão; equipado; no NPC, preços e compra (loja)
                 ├── equipped-item-window/ # janela do cartão de um item equipado (lista "Equipados" da aba Ficha)
+                ├── table-item-window/  # janela do cartão de um item criado na mesa (aba Lore)
                 ├── sheet-notes/        # aba Anotações: caderno com páginas (RichTextEditor)
                 ├── level-pips/         # seletor de nível 1–6 em losangos (relações e tags de tema)
                 ├── token-editor/       # editor de tamanho, visão, barras e etiquetas
@@ -369,6 +370,10 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   em **só leitura** (`readonly` em DocumentEditor/RichTextEditor `editable`, TimelineEditor, ItemCard e na ficha do
   NPC do bestiário). Organizar a aba (pastas, renomear, remover, arrastar) e abrir os exploradores "Lore geral" /
   "Worldbuild" é só do mestre; no papel de jogador essas janelas não abrem (`content()` → null).
+- **Itens criados na mesa** (`TableState.items`) também entram na aba Lore (ícone verde de mesa) e ficam **visíveis aos
+  jogadores** na raiz ou em pasta revelada (registro dos feitos deles, sem criar o item duas vezes). O mestre os organiza
+  como os demais (pastas, renomear, remover da aba). Abrem na janela `TableItemWindow` (tipo `table-item`): editável
+  por quem criou e pelo mestre.
 - **Grade:** escondida (G ou menu da cena) = tokens e paredes se movem livres; visível = alinham (Shift = livre).
 - **Papel (`role`)**: alternado manualmente na barra de ações (Mestre/Jogador) — não há permissões reais ainda.
   As regras de acesso às fichas já usam o papel + a conta (`canEdit`, `canOpen`…; ver "Ficha de NPC").
@@ -393,12 +398,17 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
     (`EquippedItemWindow`: o mesmo `ItemCardView` do inventário, editável por quem edita a ficha). A linha do
     inventário (personalização x original) é montada por `inventoryRow` (exportada de `sheet-inventory`).
     Transferir um item (`addOne`) não leva o "equipado".
-- **Aba Inventário** (`SheetInventory`): `InventoryEntry { itemId, global? }` referencia um item do mundo (Worldbuild do
-  usuário ou Lore geral); a lista mostra os nomes e, ao lado, o cartão **editável** (`ItemCardView`). Editar ali é
+- **Aba Inventário** (`SheetInventory`): `InventoryEntry { itemId, global?, table? }` referencia um item do mundo (Worldbuild do
+  usuário ou Lore geral) ou da mesa (`TableState.items`); a lista mostra os nomes e, ao lado, o cartão **editável** (`ItemCardView`). Editar ali é
   **cópia sob demanda**: só o que mudou vai para a entrada (`name`, `tags`, `blobId`) e vale no lugar do original —
   o item do mundo e os outros inventários não mudam. "Voltar ao item original" limpa a personalização; imagens
-  personalizadas são apagadas ao trocar, voltar, tirar o item ou excluir o personagem. "+ Item" busca itens das duas
-  fontes ou cria um novo no Worldbuild. Original excluído sem personalização aparece como "Item excluído".
+  personalizadas são apagadas ao trocar, voltar, tirar o item ou excluir o personagem. "+ Item" busca itens das
+  fontes (Lore geral, Worldbuild — escondido no papel de jogador — e itens da mesa) ou cria um novo: o **mestre** cria
+  no Worldbuild; o **jogador** cria só **nesta mesa** (`session.createTableItem`, `InventoryEntry.table`), nunca no
+  Worldbuild. Fichas base do bestiário (`npc-base`/`world`) não usam itens da mesa. Item da mesa (`TableItem`, com
+  `ownerUserId` e imagem própria): quem o criou e o mestre editam **o próprio item** pelo cartão do inventário
+  (`canEditTableItem`, `updateTableItem`, `setTableItemImage`); os demais personalizam a cópia, como sempre. A origem de cada entrada é resolvida
+  por `inventoryRow(entry, itemSources(...))`. Original excluído sem personalização aparece como "Item excluído".
   Etiquetas novas de item começam **verdes** (`ITEM_TAG_COLOR`).
 - **Aba Anotações** (`SheetNotes`): caderno de texto rico em páginas (`NotePage { title, content }`). As páginas fixas
   **Background** e **Jornal** (`FIXED_NOTE_PAGES`, ids `background`/`journal`) ficam sempre no topo, sem excluir, mover
@@ -604,7 +614,7 @@ O `MapStage` recebe `insets` para enquadrar o mapa só na área livre entre as b
 | `tables` | `GameTable[]` (todas; filtradas por `ownerId`) |
 | `worldbuild:<userId>` | `WorldItem[]` (inclui os itens do mundo com cartão e os NPCs do bestiário) |
 | `lore:global` | `WorldItem[]` da Lore geral (igual para todos) |
-| `table-state:<tableId>` | `TableState` (cenas com tokens/névoa/memória/paredes/portas/desenhos/anotações/camadas/vista, pastas de cenas, cena ativa, arquivos — com a ficha do personagem em `sheet` e os NPCs como referência ao bestiário —, tokens de NPC com ficha própria, volume mestre, chat, organização da Lore) |
+| `table-state:<tableId>` | `TableState` (cenas com tokens/névoa/memória/paredes/portas/desenhos/anotações/camadas/vista, pastas de cenas, cena ativa, arquivos — com a ficha do personagem em `sheet` e os NPCs como referência ao bestiário —, tokens de NPC com ficha própria, volume mestre, chat, organização da Lore, itens criados na mesa por jogadores) |
 | `blob:<id>` | `Blob` de imagem/mapa/áudio/imagem de token |
 | `localStorage: dicetag.session` | id do usuário logado |
 | `localStorage: dicetag.sidebarCollapsed` | preferência da barra lateral |

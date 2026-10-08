@@ -88,7 +88,8 @@ Clicar num personagem no painel abre a ficha, com quatro abas:
   com nível de -1 a -6) e, abaixo deles, os itens **Equipados** (clique abre o cartão do item numa janela).
 - **Inventário:** lista dos itens do personagem e, ao lado, o cartão do item selecionado (imagem, nome e etiquetas).
   Editar o cartão aqui vale só para aquele personagem (o item do Worldbuild não muda). A caixa à esquerda de cada
-  item marca se ele está **equipado**.
+  item marca se ele está **equipado**. Itens que um jogador cria no inventário ficam só naquela mesa (não vão para o
+  Worldbuild) e aparecem na aba **Lore** da mesa, visíveis a todos os jogadores.
 - **Anotações:** caderno de texto rico com páginas. **Background** e **Jornal** são fixas (sempre as primeiras);
   as demais podem ser criadas, excluídas e arrastadas para reorganizar.
 - **Habilidades:** as ações do personagem, criadas por ele ou pelo mestre, com botão para usar. Cada ação pode
