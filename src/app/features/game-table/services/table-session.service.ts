@@ -37,6 +37,7 @@ import {
   TokenVision,
   Wall,
   CharacterSheet,
+  InventoryEntry,
   SHEET_THEME_COUNT,
   defaultSheet,
   defaultToken,
@@ -723,6 +724,10 @@ export class TableSessionService {
     }));
     if (entry?.blobId) this.storage.delete(`blob:${entry.blobId}`);
     if (entry?.token?.blobId) this.storage.delete(`blob:${entry.token.blobId}`);
+    // Imagens personalizadas dos itens do inventário
+    for (const item of entry?.sheet?.inventory ?? []) {
+      if (item.blobId) this.storage.delete(`blob:${item.blobId}`);
+    }
   }
 
   getBlob(blobId: string): Promise<Blob | undefined> {
@@ -743,6 +748,50 @@ export class TableSessionService {
   updateSheet(entryId: string, patch: Partial<CharacterSheet>): void {
     const entry = this.entryById().get(entryId);
     if (entry) this.updateEntry(entryId, { sheet: { ...this.sheetOf(entry), ...patch } });
+  }
+
+  // --- Inventário (cópias dos itens por personagem) ------------------------
+
+  /** Itens do inventário do personagem. */
+  inventoryOf(entryId: string): InventoryEntry[] {
+    const entry = this.entryById().get(entryId);
+    return entry ? this.sheetOf(entry).inventory : [];
+  }
+
+  /** Personaliza o item só neste inventário (nome/etiquetas; o original não muda). */
+  updateInventoryItem(entryId: string, inventoryId: string, patch: Pick<InventoryEntry, 'name' | 'tags'>): void {
+    this.updateSheet(entryId, {
+      inventory: this.inventoryOf(entryId).map((i) => (i.id === inventoryId ? { ...i, ...patch } : i)),
+    });
+  }
+
+  /** Troca a imagem do item só neste inventário (apaga a personalizada anterior). */
+  async setInventoryImage(entryId: string, inventoryId: string, file: File): Promise<void> {
+    const old = this.inventoryOf(entryId).find((i) => i.id === inventoryId)?.blobId;
+    const blobId = newId();
+    await this.storage.set(`blob:${blobId}`, file);
+    this.updateSheet(entryId, {
+      inventory: this.inventoryOf(entryId).map((i) => (i.id === inventoryId ? { ...i, blobId } : i)),
+    });
+    if (old) this.storage.delete(`blob:${old}`);
+  }
+
+  /** Volta o item ao original (descarta nome, etiquetas e imagem personalizados). */
+  resetInventoryItem(entryId: string, inventoryId: string): void {
+    const item = this.inventoryOf(entryId).find((i) => i.id === inventoryId);
+    if (!item) return;
+    const { id, itemId, global } = item;
+    this.updateSheet(entryId, {
+      inventory: this.inventoryOf(entryId).map((i) => (i.id === inventoryId ? { id, itemId, ...(global && { global }) } : i)),
+    });
+    if (item.blobId) this.storage.delete(`blob:${item.blobId}`);
+  }
+
+  /** Tira o item do inventário (e apaga a imagem personalizada, se houver). */
+  removeInventoryItem(entryId: string, inventoryId: string): void {
+    const item = this.inventoryOf(entryId).find((i) => i.id === inventoryId);
+    this.updateSheet(entryId, { inventory: this.inventoryOf(entryId).filter((i) => i.id !== inventoryId) });
+    if (item?.blobId) this.storage.delete(`blob:${item.blobId}`);
   }
 
   // --- Lore da mesa (pastas e ajustes locais) -----------------------------

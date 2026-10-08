@@ -209,13 +209,23 @@ export type ThemeTagList = 'tags' | 'flaws';
 
 /**
  * Item no inventário do personagem: referência a um item do mundo (tipo `item` do
- * worldbuild do usuário ou da Lore geral). O cartão é sempre o do item original.
+ * worldbuild do usuário ou da Lore geral) + personalização própria.
+ *
+ * Cópia sob demanda: `name`, `tags` e `blobId` só existem depois que o jogador edita
+ * o cartão no inventário e, quando presentes, valem no lugar dos do original — sem
+ * alterar o item do worldbuild nem o inventário de outros personagens.
  */
 export interface InventoryEntry {
   id: string;
   itemId: string;
   /** O item vem da Lore geral (senão, do worldbuild do usuário). */
   global?: boolean;
+  /** Nome personalizado (ausente = nome do original). */
+  name?: string;
+  /** Etiquetas personalizadas (ausente = as do original). */
+  tags?: Tag[];
+  /** Imagem personalizada no IndexedDB (ausente = a do original). Apagada ao tirar o item. */
+  blobId?: string;
 }
 
 /** Página das anotações do personagem (texto rico, HTML do Tiptap). */

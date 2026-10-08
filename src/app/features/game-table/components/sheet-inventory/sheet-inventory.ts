@@ -1,21 +1,29 @@
 import { Component, computed, inject, input, output, signal } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { Tag } from '../../../../core/models/tag.model';
 import { InventoryEntry } from '../../../../core/models/table-session.model';
 import { WorldItem } from '../../../../core/models/world-item.model';
 import { newId } from '../../../../core/utils/id';
 import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
-import { ItemCard } from '../../../worldbuild/components/item-card/item-card';
-import { LoreScope } from '../../../worldbuild/directives/lore-scope.directive';
+import { ItemCardView } from '../../../worldbuild/components/item-card/item-card-view';
 import { LoreService } from '../../../worldbuild/services/lore.service';
 import { WorldbuildService } from '../../../worldbuild/services/worldbuild.service';
+import { BlobUrlService } from '../../services/blob-url.service';
 import { TableSessionService } from '../../services/table-session.service';
 
-/** Linha do inventário com o item do mundo já encontrado. */
+/** Linha do inventário: o que o cartão mostra (personalização ou original). */
 interface InventoryRow {
   entry: InventoryEntry;
-  /** Ausente quando o item foi excluído do worldbuild / Lore geral. */
+  /** Item original (ausente quando foi excluído do worldbuild / Lore geral). */
   item?: WorldItem;
+  name: string;
+  tags: Tag[];
+  blobId?: string;
+  /** Tem nome, etiquetas ou imagem próprios deste personagem. */
+  custom: boolean;
+  /** Original excluído e nada personalizado: não há o que mostrar. */
+  missing: boolean;
 }
 
 /** Item do mundo que pode ser adicionado ao inventário. */
@@ -29,12 +37,12 @@ interface ItemOption {
  * do item selecionado (imagem, nome e etiquetas).
  *
  * Os itens vêm do worldbuild do usuário ou da Lore geral (aba "Itens" do
- * Worldbuild); o inventário guarda só a referência, e o cartão é editado no
- * item original ("Editar cartão" abre a janela do item).
+ * Worldbuild). Editar o cartão aqui personaliza só a cópia deste personagem
+ * (InventoryEntry guarda o que mudou); o original e os outros inventários não mudam.
  */
 @Component({
   selector: 'app-sheet-inventory',
-  imports: [MatIconModule, MatTooltipModule, AutoFocus, ItemCard, LoreScope],
+  imports: [MatIconModule, MatTooltipModule, AutoFocus, ItemCardView],
   templateUrl: './sheet-inventory.html',
   host: { class: 'flex min-h-full flex-col gap-4 @xl:flex-row' },
 })
@@ -42,9 +50,10 @@ export class SheetInventory {
   private readonly session = inject(TableSessionService);
   private readonly worldbuild = inject(WorldbuildService);
   private readonly loreGeneral = inject(LoreService);
+  readonly blobs = inject(BlobUrlService);
 
   readonly entryId = input.required<string>();
-  /** Pedido para abrir a janela de um item (cartão editável). */
+  /** Pedido para abrir a janela de um item (o original, no worldbuild). */
   readonly openItem = output<string>();
 
   // --- Inventário ----------------------------------------------------------
@@ -57,7 +66,19 @@ export class SheetInventory {
   readonly rows = computed<InventoryRow[]>(() => {
     const global = this.loreGeneral.byId();
     const own = this.worldbuild.byId();
-    return this.inventory().map((entry) => ({ entry, item: (entry.global ? global : own).get(entry.itemId) }));
+    return this.inventory().map((entry) => {
+      const item = (entry.global ? global : own).get(entry.itemId);
+      const custom = entry.name !== undefined || entry.tags !== undefined || entry.blobId !== undefined;
+      return {
+        entry,
+        item,
+        name: entry.name ?? item?.name ?? 'Item excluído',
+        tags: entry.tags ?? item?.tags ?? [],
+        blobId: entry.blobId ?? item?.blobId,
+        custom,
+        missing: !item && !custom,
+      };
+    });
   });
 
   /** Linha selecionada (padrão: a primeira). */
@@ -76,7 +97,25 @@ export class SheetInventory {
   }
 
   remove(row: InventoryRow): void {
-    this.save(this.inventory().filter((e) => e.id !== row.entry.id));
+    this.session.removeInventoryItem(this.entryId(), row.entry.id);
+  }
+
+  // --- Cópia do personagem (não altera o original) -------------------------
+
+  rename(row: InventoryRow, name: string): void {
+    this.session.updateInventoryItem(this.entryId(), row.entry.id, { name });
+  }
+
+  setTags(row: InventoryRow, tags: Tag[]): void {
+    this.session.updateInventoryItem(this.entryId(), row.entry.id, { tags });
+  }
+
+  setImage(row: InventoryRow, file: File): void {
+    this.session.setInventoryImage(this.entryId(), row.entry.id, file);
+  }
+
+  reset(row: InventoryRow): void {
+    this.session.resetInventoryItem(this.entryId(), row.entry.id);
   }
 
   // --- Adicionar itens -----------------------------------------------------
@@ -96,12 +135,12 @@ export class SheetInventory {
 
   add(option: ItemOption): void {
     const entry: InventoryEntry = { id: newId(), itemId: option.item.id, ...(option.global && { global: true }) };
-    this.save([...this.inventory(), entry]);
+    this.session.updateSheet(this.entryId(), { inventory: [...this.inventory(), entry] });
     this.selectedId.set(entry.id);
     this.closePicker();
   }
 
-  /** Cria um item novo no worldbuild do usuário, adiciona e abre o cartão para editar. */
+  /** Cria um item novo no worldbuild do usuário, adiciona e abre o cartão original para editar. */
   createItem(): void {
     const item = this.worldbuild.create('item', null, this.query().trim() || undefined);
     this.add({ item, global: false });
@@ -111,9 +150,5 @@ export class SheetInventory {
   closePicker(): void {
     this.picking.set(false);
     this.query.set('');
-  }
-
-  private save(inventory: InventoryEntry[]): void {
-    this.session.updateSheet(this.entryId(), { inventory });
   }
 }

@@ -53,6 +53,8 @@ export class TagEditor {
   readonly emptyText = input('Nenhuma etiqueta.');
   /** Nível máximo (ausente = sem limite). */
   readonly maxLevel = input<number>();
+  /** Cor das etiquetas novas. */
+  readonly defaultColor = input<string>(TAG_COLORS[1]);
 
   /** Lista alterada. */
   readonly changed = output<Tag[]>();
@@ -61,7 +63,7 @@ export class TagEditor {
 
   /** Adiciona uma etiqueta nova no fim da lista. */
   add(text = 'Etiqueta'): void {
-    this.changed.emit([...this.tags(), { id: newId(), text, color: TAG_COLORS[1] }]);
+    this.changed.emit([...this.tags(), { id: newId(), text, color: this.defaultColor() }]);
   }
 
   update(id: string, patch: Partial<Tag>): void {
