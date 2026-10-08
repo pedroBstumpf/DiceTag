@@ -72,7 +72,8 @@ O mapa ocupa a tela inteira e as barras flutuam por cima — todas escondíveis:
 - **Esquerda — ferramentas:** selecionar (V), mover (M), régua em quadrados e metros (R), ping (P),
   desenhar (D), névoa de guerra (F) com paredes (W), anotação (N), efeitos especiais (E), grade (G), zoom.
 - **Direita — painel:** Chat (mensagens e rolagens), Fichas (personagens e NPCs — arraste para o mapa; a imagem enviada na ficha é a do
-  token; personagens abrem a ficha completa), Lore (itens da Lore geral e do worldbuild, com pastas próprias da mesa; renomear e remover valem
+  token; personagens abrem a ficha completa), Lore (cada pasta tem um olho: os jogadores só leem as pastas que o
+  mestre revelar; o Worldbuild e a Lore geral inteiros ficam só com o mestre), Lore (itens da Lore geral e do worldbuild, com pastas próprias da mesa; renomear e remover valem
   só para a mesa), Sons (mixer), Ações (automações por personagem, NPC ou gerais do mestre).
 - **Baixo — ações:** 10 espaços (teclas 1–0) com as ações de quem está agindo: o jogador vê as do personagem
   dele; o mestre escolhe no menu "Agindo" um personagem ou NPC fixo, as ações gerais ou seguir o token selecionado.

@@ -360,6 +360,11 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   (vazio = volta ao original; o título da janela usa `loreName`); a lixeira **esconde** o item desta mesa
   ("Restaurar N itens" traz de volta); excluir pasta devolve os itens à raiz. **Nunca** altera nem apaga o
   original. Itens entram nas pastas arrastando.
+- **Lore x jogadores:** cada pasta da mesa tem um **olho** (`LoreFolder.public`, fechado por padrão). O jogador só vê
+  as pastas reveladas e os itens dentro delas (`canSeeLoreItem`; itens soltos na raiz são só do mestre) e os abre
+  em **só leitura** (`readonly` em DocumentEditor/RichTextEditor `editable`, TimelineEditor, ItemCard e na ficha do
+  NPC do bestiário). Organizar a aba (pastas, renomear, remover, arrastar) e abrir os exploradores "Lore geral" /
+  "Worldbuild" é só do mestre; no papel de jogador essas janelas não abrem (`content()` → null).
 - **Grade:** escondida (G ou menu da cena) = tokens e paredes se movem livres; visível = alinham (Shift = livre).
 - **Papel (`role`)**: alternado manualmente na barra de ações (Mestre/Jogador) — não há permissões reais ainda.
   As regras de acesso às fichas já usam o papel + a conta (`canEdit`, `canOpen`…; ver "Ficha de NPC").
