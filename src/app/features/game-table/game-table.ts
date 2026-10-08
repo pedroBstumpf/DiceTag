@@ -26,6 +26,7 @@ import { LORE_WINDOW, SidePanel, WORLDBUILD_WINDOW } from './components/side-pan
 import { TABLE_TOOLS, ToolBar } from './components/tool-bar/tool-bar';
 import { TokenWindow } from './components/token-window/token-window';
 import { BlobUrlService } from './services/blob-url.service';
+import { SheetStore } from './services/sheet-store';
 import { SoundMixerService } from './services/sound-mixer.service';
 import { TableSessionService } from './services/table-session.service';
 import { formatModifier } from './utils/dice';
@@ -93,7 +94,14 @@ const PANEL_SPACE = { top: 60, left: 76, right: 344, bottom: 100 };
     ImageViewer,
     ItemCard,
   ],
-  providers: [TableSessionService, SoundMixerService, BlobUrlService, WindowManagerService],
+  providers: [
+    TableSessionService,
+    // As fichas da mesa leem e gravam pela sessão
+    { provide: SheetStore, useExisting: TableSessionService },
+    SoundMixerService,
+    BlobUrlService,
+    WindowManagerService,
+  ],
   templateUrl: './game-table.html',
   host: {
     class: 'relative block h-dvh overflow-hidden',

@@ -1,4 +1,4 @@
-@if (entry(); as e) {
+@if (data(); as d) {
   <!-- ===== Abas da ficha ===== -->
   <nav class="flex shrink-0 gap-1 overflow-x-auto border-b border-white/5 bg-ink-900/60 px-2 py-1.5">
     @for (t of tabs(); track t.id) {
@@ -47,14 +47,14 @@
                 class="h-8 rounded-md bg-ink-950 px-2 text-xs text-slate-100 outline-none ring-1 ring-white/10 focus:ring-astral-500/60"
                 (change)="setController(controllerSelect.value)"
               >
-                <option value="" [selected]="!e.controllerUserId">Somente o mestre</option>
-                @for (p of session.players(); track p.userId) {
-                  <option [value]="p.userId" [selected]="e.controllerUserId === p.userId">{{ p.label }}</option>
+                <option value="" [selected]="!entry()?.controllerUserId">Somente o mestre</option>
+                @for (p of players(); track p.userId) {
+                  <option [value]="p.userId" [selected]="entry()?.controllerUserId === p.userId">{{ p.label }}</option>
                 }
               </select>
             </label>
             <span class="flex-1"></span>
-            <ng-container *ngTemplateOutlet="publicToggle; context: { on: !!e.sheetPublic, part: 'sheet' }" />
+            <ng-container *ngTemplateOutlet="publicToggle; context: { on: !!entry()?.sheetPublic, part: 'sheet' }" />
           </div>
         }
         @if (sheet(); as s) {
@@ -67,10 +67,10 @@
                 <button
                   type="button"
                   class="group relative grid size-28 shrink-0 place-items-center overflow-hidden rounded-lg bg-ink-700 ring-1 ring-white/15"
-                  [matTooltip]="e.token?.blobId ? 'Trocar imagem (também usada no token)' : 'Enviar imagem (também usada no token)'"
+                  [matTooltip]="d.blobId ? 'Trocar imagem (também usada no token)' : 'Enviar imagem (também usada no token)'"
                   (click)="imageInput.click()"
                 >
-                  @if (blobs.url(e.token?.blobId); as src) {
+                  @if (blobs.url(d.blobId); as src) {
                     <img [src]="src" alt="" class="size-full object-cover" />
                   } @else {
                     <span class="flex flex-col items-center gap-1 text-slate-500">
@@ -90,7 +90,7 @@
                     <input
                       #nameInput
                       class="w-full bg-transparent font-display text-2xl normal-case tracking-normal text-star-300 outline-none"
-                      [value]="e.name"
+                      [value]="d.name"
                       (blur)="rename(nameInput.value)"
                       (keydown.enter)="nameInput.blur()"
                     />
@@ -109,7 +109,7 @@
                   @if (!isNpc()) {
                   <p class="flex items-center gap-1.5 text-xs text-slate-400">
                     <mat-icon class="!size-4 !text-[16px]">account_circle</mat-icon>
-                    @if (!e.ownerUserId) {
+                    @if (!entry()?.ownerUserId) {
                       Sem jogador definido
                     } @else if (isMine()) {
                       Seu personagem
@@ -291,7 +291,7 @@
         @if (isNpc() && isGm()) {
           <!-- NPC: inventário visível para os jogadores (vira loja com os preços em Eiros) -->
           <div class="mb-3 flex justify-end">
-            <ng-container *ngTemplateOutlet="publicToggle; context: { on: !!e.inventoryPublic, part: 'inventory' }" />
+            <ng-container *ngTemplateOutlet="publicToggle; context: { on: !!entry()?.inventoryPublic, part: 'inventory' }" />
           </div>
         }
         @if (!isNpc()) {
@@ -313,14 +313,14 @@
             </label>
           </fieldset>
         }
-        <app-sheet-inventory [entryId]="e.id" [readonly]="!canEdit()" (openItem)="openEntry.emit($event)" />
+        <app-sheet-inventory [sheetId]="d.id" [readonly]="!canEdit()" (openItem)="openEntry.emit($event)" />
       }
 
       <!-- ================================================================= -->
       <!-- Anotações: caderno com páginas                                    -->
       <!-- ================================================================= -->
       @case ('notes') {
-        <app-sheet-notes [entryId]="e.id" />
+        <app-sheet-notes [entryId]="d.id" />
       }
 
       <!-- ================================================================= -->

@@ -19,6 +19,7 @@ import { AuthService } from '../../../../core/services/auth.service';
 import { newId } from '../../../../core/utils/id';
 import { TagEditor } from '../../../../shared/components/tag-editor/tag-editor';
 import { BlobUrlService } from '../../services/blob-url.service';
+import { SheetStore } from '../../services/sheet-store';
 import { TableSessionService } from '../../services/table-session.service';
 import { LevelPips } from '../level-pips/level-pips';
 import { SheetInventory } from '../sheet-inventory/sheet-inventory';
@@ -41,9 +42,11 @@ const TAB_META: Record<SheetTab, { icon: string; label: string }> = {
  *   personagem) e três Temas (tags de nível 1 a 6 e defeitos de -1 a -6).
  * - Inventário: itens do mundo que a ficha possui, com o cartão ao lado (SheetInventory).
  * - Anotações (só personagem): caderno de texto rico em páginas (SheetNotes).
- * - Habilidades: as ações (automações) da ficha.
- * Tudo é gravado na ficha (`TableEntry.sheet`) ou no token dela (barras e etiquetas).
- * No NPC, barras e etiquetas da ficha são o padrão dos próximos tokens (cada token tem os seus).
+ * - Habilidades (só na mesa): as ações (automações) da ficha.
+ *
+ * Lê e grava pelo `SheetStore` fornecido por quem exibe (a mesa ou o Worldbuild), pelo
+ * id da ficha. Recursos da mesa (ações, permissões, controle, visibilidade, Eiros) só
+ * aparecem quando a ficha pertence a uma entrada da mesa (`SheetData.entry`).
  */
 @Component({
   selector: 'app-character-sheet',
@@ -52,39 +55,48 @@ const TAB_META: Record<SheetTab, { icon: string; label: string }> = {
   host: { class: 'flex h-full flex-col' },
 })
 export class CharacterSheetView {
-  readonly session = inject(TableSessionService);
+  readonly store = inject(SheetStore);
+  /** Presente só na mesa. */
+  readonly session = inject(TableSessionService, { optional: true });
   readonly blobs = inject(BlobUrlService);
   private readonly auth = inject(AuthService);
 
-  readonly entryId = input.required<string>();
-  /** Pedido para abrir outra ficha/ação numa janela. */
+  /** Id da ficha no SheetStore. */
+  readonly sheetId = input.required<string>();
+  /** Pedido para abrir outra ficha/ação/item numa janela. */
   readonly openEntry = output<string>();
   /** Uma habilidade foi usada pela ficha. */
   readonly used = output<TableEntry>();
 
   // --- Dados ---------------------------------------------------------------
-  readonly entry = computed(() => this.session.entryById().get(this.entryId()));
+  readonly data = computed(() => this.store.sheetData(this.sheetId()));
+  /** Entrada da mesa (ausente no Worldbuild). */
+  readonly entry = computed(() => this.data()?.entry);
+  readonly sheet = computed(() => this.data()?.sheet ?? null);
   /** Ficha de NPC (sem Relações nem Anotações). */
-  readonly isNpc = computed(() => this.entry()?.kind === 'npc');
+  readonly isNpc = computed(() => this.data()?.kind === 'npc');
 
   // --- Permissões ----------------------------------------------------------
 
-  /** Pode editar (mestre; no NPC, também o jogador autorizado). Senão, a ficha é só leitura. */
+  /** Pode editar (fora da mesa: sempre; na mesa: mestre e, no NPC, o jogador autorizado). */
   readonly canEdit = computed(() => {
     const entry = this.entry();
-    return !!entry && this.session.canEdit(entry);
+    return !this.session || !entry || this.session.canEdit(entry);
   });
-  /** O mestre configura controle e visibilidade do NPC. */
-  readonly isGm = computed(() => this.session.role() === 'gm');
+  /** O mestre configura controle e visibilidade do NPC (só na mesa). */
+  readonly isGm = computed(() => !!this.session && !!this.entry() && this.session.role() === 'gm');
 
   // --- Abas ----------------------------------------------------------------
 
   /** Abas desta ficha que a conta atual pode ver (NPC público: só Ficha e/ou Inventário). */
   readonly tabs = computed(() => {
-    const entry = this.entry();
-    if (!entry) return [];
+    const data = this.data();
+    if (!data) return [];
     let ids: SheetTab[] = this.isNpc() ? ['sheet', 'inventory', 'abilities'] : ['sheet', 'inventory', 'notes', 'abilities'];
-    if (!this.session.canEdit(entry)) {
+    // Ações só existem na mesa
+    if (!data.entry || !this.session) ids = ids.filter((id) => id !== 'abilities');
+    const entry = data.entry;
+    if (entry && !this.canEdit()) {
       ids = ids.filter((id) => (id === 'sheet' && entry.sheetPublic) || (id === 'inventory' && entry.inventoryPublic));
     }
     return ids.map((id) => ({ id, ...TAB_META[id] }));
@@ -96,37 +108,33 @@ export class CharacterSheetView {
     return tabs.find((t) => t.id === this.chosenTab())?.id ?? tabs[0]?.id ?? null;
   });
 
+  selectTab(tab: SheetTab): void {
+    this.chosenTab.set(tab);
+  }
+
   // --- NPC: controle e visibilidade (mestre) -------------------------------
+
+  /** Jogadores da mesa que podem receber o controle do NPC. */
+  readonly players = computed(() => this.session?.players() ?? []);
 
   /** Jogador autorizado a controlar o NPC ('' = só o mestre). */
   setController(userId: string): void {
-    this.session.updateEntry(this.entryId(), { controllerUserId: userId || undefined });
+    const entry = this.entry();
+    if (entry) this.session?.updateEntry(entry.id, { controllerUserId: userId || undefined });
   }
 
   /** Deixa a ficha ou o inventário do NPC visível (só leitura) para os jogadores, ou não. */
   togglePublic(part: 'sheet' | 'inventory'): void {
     const entry = this.entry();
     if (!entry) return;
-    if (part === 'sheet') this.session.updateEntry(entry.id, { sheetPublic: !entry.sheetPublic || undefined });
-    else this.session.updateEntry(entry.id, { inventoryPublic: !entry.inventoryPublic || undefined });
+    if (part === 'sheet') this.session?.updateEntry(entry.id, { sheetPublic: !entry.sheetPublic || undefined });
+    else this.session?.updateEntry(entry.id, { inventoryPublic: !entry.inventoryPublic || undefined });
   }
 
-  selectTab(tab: SheetTab): void {
-    this.chosenTab.set(tab);
-  }
-
-  readonly sheet = computed(() => {
-    const entry = this.entry();
-    return entry ? this.session.sheetOf(entry) : null;
-  });
-  private readonly token = computed(() => {
-    const entry = this.entry();
-    return entry ? this.session.tokenOf(entry) : null;
-  });
   /** Barras Corpo, Mente e Espírito (ficam no token da ficha). */
-  readonly statusBars = computed(() => (this.token()?.bars ?? []).filter(isStatusBar));
-  /** Etiquetas do personagem (as mesmas exibidas abaixo do token). */
-  readonly tags = computed(() => this.token()?.tags ?? []);
+  readonly statusBars = computed(() => (this.data()?.bars ?? []).filter(isStatusBar));
+  /** Etiquetas (as mesmas exibidas abaixo do token). */
+  readonly tags = computed(() => this.data()?.tags ?? []);
   /** Quantidade de itens no inventário (contador da aba). */
   readonly inventoryCount = computed(() => this.sheet()?.inventory.length ?? 0);
   /** O personagem é da conta atual? */
@@ -137,22 +145,23 @@ export class CharacterSheetView {
   // --- Básico --------------------------------------------------------------
 
   rename(value: string): void {
-    if (value.trim()) this.session.updateEntry(this.entryId(), { name: value.trim() });
+    this.store.renameSheet(this.sheetId(), value);
   }
 
-  /** Envia (ou troca) a imagem da ficha — é a mesma do token, em todos os mapas. */
+  /** Envia (ou troca) a imagem da ficha — é a mesma do token. */
   async onImagePicked(input: HTMLInputElement): Promise<void> {
     const file = input.files?.[0];
     input.value = '';
-    if (file?.type.startsWith('image/')) await this.session.setTokenImage(this.entryId(), file);
+    if (file?.type.startsWith('image/')) await this.store.setSheetImage(this.sheetId(), file);
   }
 
   claim(): void {
-    this.session.updateEntry(this.entryId(), { ownerUserId: this.auth.user()?.id });
+    const entry = this.entry();
+    if (entry) this.session?.updateEntry(entry.id, { ownerUserId: this.auth.user()?.id });
   }
 
   update(patch: Partial<CharacterSheet>): void {
-    this.session.updateSheet(this.entryId(), patch);
+    this.store.updateSheet(this.sheetId(), patch);
   }
 
   /** Adiciona o rótulo digitado (ignora vazio e repetido) e limpa o campo. */
@@ -196,12 +205,12 @@ export class CharacterSheetView {
   }
 
   setTags(tags: Tag[]): void {
-    this.session.updateEntryToken(this.entryId(), { tags });
+    this.store.updateStatus(this.sheetId(), { tags });
   }
 
   private patchBar(id: string, patch: Partial<TokenBar>): void {
-    const bars = this.token()?.bars ?? [];
-    this.session.updateEntryToken(this.entryId(), { bars: bars.map((b) => (b.id === id ? { ...b, ...patch } : b)) });
+    const bars = this.data()?.bars ?? [];
+    this.store.updateStatus(this.sheetId(), { bars: bars.map((b) => (b.id === id ? { ...b, ...patch } : b)) });
   }
 
   // --- Relações ------------------------------------------------------------
@@ -244,19 +253,24 @@ export class CharacterSheetView {
     this.updateTheme(theme.id, { [list]: theme[list].filter((t) => t.id !== tagId) });
   }
 
-  // --- Habilidades (ações do personagem) -----------------------------------
+  // --- Habilidades (ações da ficha, só na mesa) ----------------------------
 
-  /** Ações deste personagem (criadas pelo jogador ou pelo mestre). */
-  readonly abilities = computed(() => this.session.automationsOf(this.entryId()));
+  /** Ações da entrada dona desta ficha (criadas pelo jogador ou pelo mestre). */
+  readonly abilities = computed(() => {
+    const entry = this.entry();
+    return entry && this.session ? this.session.automationsOf(entry.id) : [];
+  });
 
-  /** Cria uma habilidade do personagem e a abre para configurar. */
+  /** Cria uma habilidade e a abre para configurar. */
   addAbility(): void {
-    const created = this.session.addEntry('automation', { ownerEntryId: this.entryId() });
+    const entry = this.entry();
+    if (!entry || !this.session) return;
+    const created = this.session.addEntry('automation', { ownerEntryId: entry.id });
     this.openEntry.emit(created.id);
   }
 
-  /** Fórmula com o nível atual das tags ligadas à habilidade. */
-  formula(entry: TableEntry): string {
-    return this.session.formulaOf(entry);
+  /** Fórmula com o nível atual das tags ligadas à habilidade (as desta ficha). */
+  formula(action: TableEntry): string {
+    return this.session?.formulaOf(action, this.sheetId()) ?? '';
   }
 }

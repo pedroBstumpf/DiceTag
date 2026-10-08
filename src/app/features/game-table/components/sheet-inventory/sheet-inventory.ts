@@ -12,6 +12,7 @@ import { ItemCardView } from '../../../worldbuild/components/item-card/item-card
 import { LoreService } from '../../../worldbuild/services/lore.service';
 import { WorldbuildService } from '../../../worldbuild/services/worldbuild.service';
 import { BlobUrlService } from '../../services/blob-url.service';
+import { SheetStore } from '../../services/sheet-store';
 import { TableSessionService } from '../../services/table-session.service';
 import { quantityOf } from '../../utils/inventory';
 
@@ -58,13 +59,16 @@ interface ItemOption {
   host: { class: 'flex min-h-full flex-col gap-4 @xl:flex-row' },
 })
 export class SheetInventory {
-  private readonly session = inject(TableSessionService);
+  private readonly store = inject(SheetStore);
+  /** Presente só na mesa (loja, loot e "Dar para"). */
+  private readonly session = inject(TableSessionService, { optional: true });
   private readonly worldbuild = inject(WorldbuildService);
   private readonly loreGeneral = inject(LoreService);
   private readonly snackBar = inject(MatSnackBar);
   readonly blobs = inject(BlobUrlService);
 
-  readonly entryId = input.required<string>();
+  /** Id da ficha no SheetStore. */
+  readonly sheetId = input.required<string>();
   /** Só ver (jogador olhando o inventário público de um NPC): sem adicionar, tirar nem editar. */
   readonly readonly = input(false);
   /** Pedido para abrir a janela de um item (o original, no worldbuild). */
@@ -72,10 +76,8 @@ export class SheetInventory {
 
   // --- Inventário ----------------------------------------------------------
 
-  private readonly inventory = computed(() => {
-    const entry = this.session.entryById().get(this.entryId());
-    return entry ? this.session.sheetOf(entry).inventory : [];
-  });
+  private readonly data = computed(() => this.store.sheetData(this.sheetId()));
+  private readonly inventory = computed(() => this.data()?.sheet.inventory ?? []);
 
   readonly rows = computed<InventoryRow[]>(() => {
     const global = this.loreGeneral.byId();
@@ -112,81 +114,78 @@ export class SheetInventory {
   }
 
   remove(row: InventoryRow): void {
-    this.session.removeInventoryItem(this.entryId(), row.entry.id);
+    this.store.removeInventoryItem(this.sheetId(), row.entry.id);
   }
 
   // --- Cópia do personagem (não altera o original) -------------------------
 
   rename(row: InventoryRow, name: string): void {
-    this.session.updateInventoryItem(this.entryId(), row.entry.id, { name });
+    this.store.updateInventoryItem(this.sheetId(), row.entry.id, { name });
   }
 
   setTags(row: InventoryRow, tags: Tag[]): void {
-    this.session.updateInventoryItem(this.entryId(), row.entry.id, { tags });
+    this.store.updateInventoryItem(this.sheetId(), row.entry.id, { tags });
   }
 
   setImage(row: InventoryRow, file: File): void {
-    this.session.setInventoryImage(this.entryId(), row.entry.id, file);
+    this.store.setInventoryImage(this.sheetId(), row.entry.id, file);
   }
 
   /** Quantidade digitada (inteiro ≥ 0; texto inválido é ignorado). */
   setQuantity(row: InventoryRow, raw: string): void {
     const n = Number(raw);
     if (raw.trim() !== '' && Number.isFinite(n)) {
-      this.session.updateInventoryItem(this.entryId(), row.entry.id, { quantity: Math.max(0, Math.round(n)) });
+      this.store.updateInventoryItem(this.sheetId(), row.entry.id, { quantity: Math.max(0, Math.round(n)) });
     }
   }
 
   reset(row: InventoryRow): void {
-    this.session.resetInventoryItem(this.entryId(), row.entry.id);
+    this.store.resetInventoryItem(this.sheetId(), row.entry.id);
   }
 
   // --- Loja (inventário de NPC com preços em Eiros) ------------------------
 
   readonly currency = CURRENCY;
   /** Inventário de NPC: tem a coluna de preço e pode virar loja para os jogadores. */
-  readonly isShop = computed(() => this.session.entryById().get(this.entryId())?.kind === 'npc');
-  /** Personagem do jogador que compra (só no papel de jogador, em loja de outro). */
+  readonly isShop = computed(() => this.data()?.kind === 'npc');
+  /** Personagem do jogador que compra (só na mesa, no papel de jogador, em loja de NPC). */
   readonly buyer = computed(() => {
-    const buyer = this.session.buyer();
-    return this.isShop() && this.session.role() === 'player' && buyer ? buyer : null;
+    const buyer = this.session?.buyer();
+    return this.isShop() && this.session?.role() === 'player' && buyer ? buyer : null;
   });
   /** Eiros do comprador. */
   readonly buyerEiros = computed(() => {
     const buyer = this.buyer();
-    return buyer ? this.session.sheetOf(buyer).eiros : 0;
+    return buyer && this.session ? this.session.sheetOf(buyer).eiros : 0;
   });
 
   /** Preço digitado (vazio = não está à venda). */
   setPrice(row: InventoryRow, raw: string): void {
     const n = Number(raw);
-    if (raw.trim() === '') this.session.updateInventoryItem(this.entryId(), row.entry.id, { price: undefined });
-    else if (Number.isFinite(n) && n >= 0) this.session.updateInventoryItem(this.entryId(), row.entry.id, { price: Math.round(n) });
+    if (raw.trim() === '') this.store.updateInventoryItem(this.sheetId(), row.entry.id, { price: undefined });
+    else if (Number.isFinite(n) && n >= 0) this.store.updateInventoryItem(this.sheetId(), row.entry.id, { price: Math.round(n) });
   }
 
   // --- Dar itens a outros personagens --------------------------------------
 
   /** Personagens da mesa que podem receber itens desta ficha (menos ela mesma). */
   readonly recipients = computed(() =>
-    this.isShop() ? [] : this.session.entries().filter((e) => e.kind === 'character' && e.id !== this.entryId()),
+    this.isShop() || !this.session ? [] : this.session.entries().filter((e) => e.kind === 'character' && e.id !== this.sheetId()),
   );
 
   /** Dá uma unidade do item (com nome, etiquetas e imagem personalizados) a outro personagem. */
   async give(row: InventoryRow, target: TableEntry): Promise<void> {
-    const ok = await this.session.transferItem(this.entryId(), row.entry.id, target.id);
+    const ok = await this.session?.transferItem(this.sheetId(), row.entry.id, target.id);
     if (ok) this.snackBar.open(`${row.name} foi para o inventário de ${target.name}.`, undefined, { duration: 3000 });
   }
 
   /** NPC derrotado (alguma barra de status em 0): os itens podem ser looteados sem pagar. */
-  readonly defeated = computed(() => {
-    const npc = this.session.entryById().get(this.entryId());
-    return !!npc && this.session.isDefeated(npc);
-  });
+  readonly defeated = computed(() => !!this.session?.isDefeated(this.sheetId()));
 
   async loot(row: InventoryRow): Promise<void> {
     const buyer = this.buyer();
     if (!buyer) return;
-    const ok = await this.session.lootItem(this.entryId(), row.entry.id, buyer.id);
+    const ok = await this.session?.lootItem(this.sheetId(), row.entry.id, buyer.id);
     if (ok) this.snackBar.open(`${buyer.name} pegou ${row.name}.`, undefined, { duration: 3000 });
   }
 
@@ -197,8 +196,8 @@ export class SheetInventory {
 
   async buy(row: InventoryRow): Promise<void> {
     const buyer = this.buyer();
-    if (!buyer || row.entry.price === undefined) return;
-    const ok = await this.session.buyItem(this.entryId(), row.entry.id, buyer.id);
+    if (!buyer || !this.session || row.entry.price === undefined) return;
+    const ok = await this.session.buyItem(this.sheetId(), row.entry.id, buyer.id);
     this.snackBar.open(
       ok ? `${buyer.name} comprou ${row.name} por ${row.entry.price} ${CURRENCY}.` : `${buyer.name} não tem ${CURRENCY} suficientes.`,
       undefined,
@@ -223,7 +222,7 @@ export class SheetInventory {
 
   add(option: ItemOption): void {
     const entry: InventoryEntry = { id: newId(), itemId: option.item.id, ...(option.global && { global: true }) };
-    this.session.updateSheet(this.entryId(), { inventory: [...this.inventory(), entry] });
+    this.store.updateSheet(this.sheetId(), { inventory: [...this.inventory(), entry] });
     this.selectedId.set(entry.id);
     this.closePicker();
   }

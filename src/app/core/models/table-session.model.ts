@@ -282,6 +282,17 @@ export function defaultSheet(): CharacterSheet {
   };
 }
 
+/**
+ * Ficha salva com os valores padrão dos campos ausentes: sempre SHEET_THEME_COUNT temas
+ * (com `flaws`) e pelo menos uma página de anotações. Fichas antigas sempre abrem.
+ */
+export function normalizeSheet(raw: Partial<CharacterSheet> | undefined): CharacterSheet {
+  const empty = defaultSheet();
+  const sheet = { ...empty, ...raw };
+  const themes = empty.themes.map((theme, i) => ({ ...theme, ...sheet.themes[i], flaws: sheet.themes[i]?.flaws ?? [] }));
+  return { ...sheet, themes, notes: sheet.notes.length ? sheet.notes : empty.notes };
+}
+
 /** Barras de status fixas do personagem, na ordem da ficha (também exibidas sobre o token). */
 export const STATUS_BARS = [
   { id: 'status-body', label: 'Corpo', color: '#ef4444' },

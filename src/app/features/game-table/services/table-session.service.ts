@@ -38,18 +38,17 @@ import {
   Wall,
   CharacterSheet,
   InventoryEntry,
-  SHEET_THEME_COUNT,
-  defaultSheet,
+  normalizeSheet,
   defaultToken,
   hasSheet,
   isDown,
   withStatusBars,
 } from '../../../core/models/table-session.model';
 import { AuthService } from '../../../core/services/auth.service';
-import { StorageService } from '../../../core/services/storage.service';
 import { newId } from '../../../core/utils/id';
 import { TagLevels, formatRoll, rollDice } from '../utils/dice';
 import { addOne, quantityOf, takeOne } from '../utils/inventory';
+import { SheetData, SheetStore } from './sheet-store';
 import { FxDrawing, buildFx, seededRandom } from '../utils/effects';
 import { createMask, decodeMask, encodeMask, isExploredAt, markPolygons, maskFits } from '../utils/fog-memory';
 import { computeVisibilityPolygon, doorSeen, pointInPolygon, wallsToSegments } from '../utils/visibility';
@@ -170,8 +169,7 @@ export function levelOf(placement: TokenPlacement): number {
  * por patchState (gravação agrupada com debounce de 300ms).
  */
 @Injectable()
-export class TableSessionService {
-  private readonly storage = inject(StorageService);
+export class TableSessionService extends SheetStore {
   private readonly auth = inject(AuthService);
 
   // --- Estado persistido ---------------------------------------------------
@@ -530,6 +528,7 @@ export class TableSessionService {
   }
 
   constructor() {
+    super();
     // Memória da névoa: tudo o que os tokens enxergam fica marcado como explorado.
     // (Salvar a máscara não altera a visão, então este efeito não se realimenta.)
     effect(() => {
@@ -800,38 +799,63 @@ export class TableSessionService {
     if (entry?.blobId) this.storage.delete(`blob:${entry.blobId}`);
     if (entry?.token?.blobId) this.storage.delete(`blob:${entry.token.blobId}`);
     // Imagens personalizadas dos itens do inventário
-    for (const item of entry?.sheet?.inventory ?? []) {
-      if (item.blobId) this.storage.delete(`blob:${item.blobId}`);
-    }
+    this.deleteInventoryBlobs(entry?.sheet?.inventory);
   }
 
   getBlob(blobId: string): Promise<Blob | undefined> {
     return this.storage.get<Blob>(`blob:${blobId}`);
   }
 
-  // --- Ficha de personagem -------------------------------------------------
+  // --- Fichas (SheetStore) -------------------------------------------------
+  // O id da ficha é o id da entrada (personagem ou NPC).
 
-  /** Ficha do personagem com os valores padrão dos campos ausentes (sempre 3 temas e 1+ página). */
+  /** Ficha da entrada com os valores padrão dos campos ausentes (sempre 3 temas e 1+ página). */
   sheetOf(entry: TableEntry): CharacterSheet {
-    const empty = defaultSheet();
-    const sheet = { ...empty, ...entry.sheet };
-    const themes = empty.themes.map((theme, i) => ({ ...theme, ...sheet.themes[i], flaws: sheet.themes[i]?.flaws ?? [] }));
-    return { ...sheet, themes: themes.slice(0, SHEET_THEME_COUNT), notes: sheet.notes.length ? sheet.notes : empty.notes };
+    return normalizeSheet(entry.sheet);
   }
 
-  /** Altera campos da ficha do personagem. */
-  updateSheet(entryId: string, patch: Partial<CharacterSheet>): void {
-    const entry = this.entryById().get(entryId);
-    if (entry) this.updateEntry(entryId, { sheet: { ...this.sheetOf(entry), ...patch } });
+  sheetData(id: string): SheetData | null {
+    const entry = this.entryById().get(id);
+    if (!entry || !hasSheet(entry.kind)) return null;
+    const token = this.tokenOf(entry);
+    return {
+      id,
+      kind: entry.kind === 'character' ? 'character' : 'npc',
+      level: entry.kind === 'character' ? 'character' : 'npc',
+      name: entry.name,
+      blobId: token.blobId,
+      sheet: this.sheetOf(entry),
+      bars: token.bars,
+      tags: token.tags,
+      entry,
+    };
+  }
+
+  renameSheet(id: string, name: string): void {
+    if (name.trim()) this.updateEntry(id, { name: name.trim() });
+  }
+
+  setSheetImage(id: string, file: File): Promise<void> {
+    return this.setTokenImage(id, file);
+  }
+
+  /** Altera campos da ficha. */
+  updateSheet(id: string, patch: Partial<CharacterSheet>): void {
+    const entry = this.entryById().get(id);
+    if (entry) this.updateEntry(id, { sheet: { ...this.sheetOf(entry), ...patch } });
+  }
+
+  updateStatus(id: string, patch: { bars?: TokenBar[]; tags?: TokenTag[] }): void {
+    this.updateEntryToken(id, patch);
   }
 
   // --- Tags dos temas nas ações --------------------------------------------
 
-  /** Tags e defeitos dos temas do personagem/NPC (vazio para ação geral ou ficha sem tags). */
-  themeTagsOf(entryId: string | undefined): SheetTagOption[] {
-    const entry = entryId ? this.entryById().get(entryId) : undefined;
-    if (!entry || !hasSheet(entry.kind)) return [];
-    return this.sheetOf(entry).themes.flatMap((theme, i) => {
+  /** Tags e defeitos dos temas da ficha (vazio para ação geral ou ficha sem tags). */
+  themeTagsOf(sheetId: string | undefined): SheetTagOption[] {
+    const data = sheetId ? this.sheetData(sheetId) : null;
+    if (!data) return [];
+    return data.sheet.themes.flatMap((theme, i) => {
       const themeName = theme.name.trim() || `Tema ${i + 1}`;
       return [
         ...theme.tags.map((t) => ({ id: t.id, text: t.text.trim() || 'Tag sem nome', level: t.level, theme: themeName, flaw: false })),
@@ -845,46 +869,12 @@ export class TableSessionService {
     return new Map(this.themeTagsOf(entryId).map((t) => [t.id, t.level]));
   }
 
-  /** Fórmula da ação com o modificador efetivo (fixo + tags do dono), ex.: "2d12+5". */
-  formulaOf(action: TableEntry): string {
-    return formatRoll(action.roll ?? DEFAULT_ROLL, this.tagLevelsOf(action.ownerEntryId));
-  }
-
-  // --- Inventário (cópias dos itens por personagem) ------------------------
-
-  /** Itens do inventário do personagem. */
-  inventoryOf(entryId: string): InventoryEntry[] {
-    const entry = this.entryById().get(entryId);
-    return entry ? this.sheetOf(entry).inventory : [];
-  }
-
-  /** Personaliza o item só neste inventário (nome/etiquetas/preço/quantidade; o original não muda). */
-  updateInventoryItem(entryId: string, inventoryId: string, patch: Pick<InventoryEntry, 'name' | 'tags' | 'price' | 'quantity'>): void {
-    this.updateSheet(entryId, {
-      inventory: this.inventoryOf(entryId).map((i) => (i.id === inventoryId ? { ...i, ...patch } : i)),
-    });
-  }
-
-  /** Troca a imagem do item só neste inventário (apaga a personalizada anterior). */
-  async setInventoryImage(entryId: string, inventoryId: string, file: File): Promise<void> {
-    const old = this.inventoryOf(entryId).find((i) => i.id === inventoryId)?.blobId;
-    const blobId = newId();
-    await this.storage.set(`blob:${blobId}`, file);
-    this.updateSheet(entryId, {
-      inventory: this.inventoryOf(entryId).map((i) => (i.id === inventoryId ? { ...i, blobId } : i)),
-    });
-    if (old) this.storage.delete(`blob:${old}`);
-  }
-
-  /** Volta o item ao original (descarta nome, etiquetas e imagem personalizados; mantém preço e quantidade). */
-  resetInventoryItem(entryId: string, inventoryId: string): void {
-    const item = this.inventoryOf(entryId).find((i) => i.id === inventoryId);
-    if (!item) return;
-    const { name: _name, tags: _tags, blobId: _blobId, ...kept } = item;
-    this.updateSheet(entryId, {
-      inventory: this.inventoryOf(entryId).map((i) => (i.id === inventoryId ? kept : i)),
-    });
-    if (item.blobId) this.storage.delete(`blob:${item.blobId}`);
+  /**
+   * Fórmula da ação com o modificador efetivo (fixo + tags da ficha), ex.: "2d12+5".
+   * `sheetId`: ficha cujas tags valem (padrão: a do dono da ação).
+   */
+  formulaOf(action: TableEntry, sheetId = action.ownerEntryId): string {
+    return formatRoll(action.roll ?? DEFAULT_ROLL, this.tagLevelsOf(sheetId));
   }
 
   // --- Lojas (inventário de NPC com preços em Eiros) -----------------------
@@ -903,19 +893,19 @@ export class TableSessionService {
    * NPC derrotado: alguma barra de status zerada na ficha ou em qualquer token dele no mapa.
    * Os jogadores com acesso ao inventário podem lootear (pegar sem pagar).
    */
-  isDefeated(entry: TableEntry): boolean {
-    if (entry.kind !== 'npc') return false;
-    if (isDown(this.tokenOf(entry).bars)) return true;
+  isDefeated(sheetId: string): boolean {
+    const data = this.sheetData(sheetId);
+    if (data?.kind !== 'npc') return false;
+    if (isDown(data.bars)) return true;
     const byId = this.entryById();
     return this.scenes().some((sc) =>
-      (sc.tokens ?? []).some((p) => p.entryId === entry.id && isDown(this.resolveToken(p, byId)?.bars ?? [])),
+      (sc.tokens ?? []).some((p) => p.entryId === sheetId && isDown(this.resolveToken(p, byId)?.bars ?? [])),
     );
   }
 
   /** Pega uma unidade do inventário de um NPC derrotado, sem pagar. */
   lootItem(npcId: string, inventoryId: string, toId: string): Promise<boolean> {
-    const npc = this.entryById().get(npcId);
-    return npc && this.isDefeated(npc) ? this.transferItem(npcId, inventoryId, toId) : Promise.resolve(false);
+    return this.isDefeated(npcId) ? this.transferItem(npcId, inventoryId, toId) : Promise.resolve(false);
   }
 
   /** Compra uma unidade da loja de um NPC com os Eiros do comprador (false = não está à venda ou faltam Eiros). */
@@ -932,11 +922,11 @@ export class TableSessionService {
    *   enquanto sobrar unidade, a imagem é duplicada para cada inventário cuidar da sua.
    */
   async transferItem(fromId: string, inventoryId: string, toId: string, cost = 0): Promise<boolean> {
-    const from = this.entryById().get(fromId);
+    const from = this.sheetData(fromId);
     const item = this.inventoryOf(fromId).find((i) => i.id === inventoryId);
-    const to = this.entryById().get(toId);
+    const to = this.sheetData(toId);
     if (!from || !to || !item || fromId === toId || quantityOf(item) < 1) return false;
-    if (cost > 0 && this.sheetOf(to).eiros < cost) return false;
+    if (cost > 0 && to.sheet.eiros < cost) return false;
 
     const keepEmpty = from.kind === 'npc';
     const leavesList = !keepEmpty && quantityOf(item) === 1;
@@ -952,19 +942,12 @@ export class TableSessionService {
     const unit: InventoryEntry = { ...item, blobId };
     if (!blobId) delete unit.blobId;
     this.updateSheet(fromId, { inventory: taken.list });
-    const receiver = this.entryById().get(toId);
+    const receiver = this.sheetData(toId);
     this.updateSheet(toId, {
       inventory: addOne(this.inventoryOf(toId), unit, newId),
-      ...(cost > 0 && receiver && { eiros: this.sheetOf(receiver).eiros - cost }),
+      ...(cost > 0 && receiver && { eiros: receiver.sheet.eiros - cost }),
     });
     return true;
-  }
-
-  /** Tira o item do inventário (e apaga a imagem personalizada, se houver). */
-  removeInventoryItem(entryId: string, inventoryId: string): void {
-    const item = this.inventoryOf(entryId).find((i) => i.id === inventoryId);
-    this.updateSheet(entryId, { inventory: this.inventoryOf(entryId).filter((i) => i.id !== inventoryId) });
-    if (item?.blobId) this.storage.delete(`blob:${item.blobId}`);
   }
 
   // --- Lore da mesa (pastas e ajustes locais) -----------------------------
