@@ -83,10 +83,10 @@
       </section>
     }
 
-    <!-- ===== Etiquetas dos itens equipados (somam o nível) ===== -->
+    <!-- ===== Etiquetas dos itens equipados (bônus ou penalidade, como as de status) ===== -->
     @if (itemGroups().length) {
       <section>
-        <h4 class="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-500">Itens equipados</h4>
+        <h4 class="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-500">Itens equipados · clique: + / − / fora</h4>
         <div class="flex flex-col gap-2">
           @for (group of itemGroups(); track group.theme) {
             <div>
@@ -96,16 +96,26 @@
               </p>
               <div class="flex flex-wrap gap-1">
                 @for (tag of group.tags; track tag.id) {
-                  @let on = isPicked(tag);
+                  @let sign = statusSign(tag);
                   <button
                     type="button"
                     class="flex h-7 items-center gap-1 rounded-md px-2 text-xs ring-1 transition-colors"
-                    [class]="on ? 'bg-emerald-500/15 text-emerald-100 ring-emerald-400/50' : 'bg-white/[0.03] text-slate-400 ring-white/10 hover:text-slate-200'"
-                    [attr.aria-pressed]="on"
-                    (click)="toggleTheme(tag)"
+                    [class]="
+                      sign > 0
+                        ? 'bg-emerald-500/15 text-emerald-100 ring-emerald-400/50'
+                        : sign < 0
+                          ? 'bg-red-500/15 text-red-100 ring-red-400/50'
+                          : 'bg-white/[0.03] text-slate-400 ring-white/10 hover:text-slate-200'
+                    "
+                    [matTooltip]="sign > 0 ? 'Bônus (clique: penalidade)' : sign < 0 ? 'Penalidade (clique: tirar)' : 'Fora da rolagem (clique: bônus)'"
+                    (click)="cycleStatus(tag)"
                   >
                     {{ tag.text }}
-                    <span class="font-semibold tabular-nums text-emerald-300">{{ formatLevel(tag.level) }}</span>
+                    @if (sign) {
+                      <span class="font-semibold tabular-nums">{{ sign > 0 ? '+' : '−' }}{{ tag.level }}</span>
+                    } @else {
+                      <span class="tabular-nums text-slate-500">{{ tag.level }}</span>
+                    }
                   </button>
                 }
               </div>

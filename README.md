@@ -79,7 +79,7 @@ O mapa ocupa a tela inteira e as barras flutuam por cima — todas escondíveis:
 - **Baixo — ações:** 10 espaços (teclas 1–0) com as ações de quem está agindo: o jogador vê as do personagem
   dele; o mestre escolhe no menu "Agindo" um personagem ou NPC fixo, as ações gerais ou seguir o token selecionado.
   À direita, o botão **Rolar** faz a rolagem básica (2d12 ou 3d6 + modificador na hora), somando se quiser as tags e
-  defeitos dos temas, as etiquetas dos itens equipados e as etiquetas de status (como bônus ou penalidade) de quem
+  defeitos dos temas e as etiquetas dos itens equipados e de status (como bônus ou penalidade) de quem
   está agindo — nada fica salvo. Ações automatizadas também podem usar as etiquetas dos itens equipados; se o item for
   desequipado, a etiqueta sai da ação.
 - **Janelas:** todo arquivo abre numa janela que pode ser movida, redimensionada, minimizada (vira uma barra

@@ -24,8 +24,8 @@ function groupByTheme(tags: SheetTagOption[]): ThemeGroup[] {
 /**
  * Painel da rolagem básica (botão "Rolar" da barra de ações): 2d12 ou 3d6 + um modificador
  * escolhido na hora, sem automação. Pode somar as tags e defeitos dos temas, as etiquetas
- * dos itens equipados e as etiquetas de status da ficha de quem age (`session.actorSheetId`): cada etiqueta vira bônus ou
- * penalidade (clique alterna desligada → + → −). Nada é salvo: ao abrir de novo, começa do zero.
+ * dos itens equipados e as etiquetas de status da ficha de quem age (`session.actorSheetId`): cada etiqueta (de status ou
+ * de item) vira bônus ou penalidade (clique alterna desligada → + → −). Nada é salvo: ao abrir de novo, começa do zero.
  */
 @Component({
   selector: 'app-quick-roll',
@@ -57,7 +57,7 @@ export class QuickRoll {
 
   /** Tags e defeitos dos temas, por tema (só temas com alguma tag). */
   readonly themeGroups = computed(() => groupByTheme(this.session.themeTagsOf(this.sheetId() ?? undefined)));
-  /** Etiquetas dos itens equipados, por item (somam o nível; sem nível, +1). */
+  /** Etiquetas dos itens equipados, por item (bônus ou penalidade do nível; sem nível, 1). */
   readonly itemGroups = computed(() => groupByTheme(this.session.itemTagsOf(this.sheetId() ?? undefined)));
   /** Etiquetas de status da ficha (as mesmas do token). */
   readonly statusTags = computed<Tag[]>(() => this.data()?.tags ?? []);
@@ -79,13 +79,16 @@ export class QuickRoll {
     });
   }
 
-  /** Sinal da etiqueta de status: 1 (bônus), −1 (penalidade) ou 0 (fora da rolagem). */
-  statusSign(tag: Tag): number {
+  /**
+   * Sinal de uma etiqueta de status ou de item equipado: 1 (bônus), −1 (penalidade) ou
+   * 0 (fora da rolagem). Os ids não se misturam: os de item têm o prefixo `item:`.
+   */
+  statusSign(tag: { id: string }): number {
     return this.statusPicks().get(tag.id) ?? 0;
   }
 
-  /** Clique na etiqueta: desligada → bônus → penalidade → desligada. */
-  cycleStatus(tag: Tag): void {
+  /** Clique na etiqueta (de status ou de item): desligada → bônus → penalidade → desligada. */
+  cycleStatus(tag: { id: string }): void {
     this.statusPicks.update((map) => {
       const next = new Map(map);
       const sign = next.get(tag.id);
@@ -103,15 +106,16 @@ export class QuickRoll {
 
   /** Modificador total desta rolagem. */
   readonly modifier = computed(() => {
-    const levels = [...this.themeGroups(), ...this.itemGroups()]
+    const levels = this.themeGroups()
       .flatMap((g) => g.tags)
       .filter((t) => this.themePicks().has(t.id))
       .map((t) => t.level);
-    const status = this.statusTags().flatMap((t) => {
+    // Etiquetas de status e de itens: bônus ou penalidade, conforme o clique
+    const signed = [...this.statusTags(), ...this.itemGroups().flatMap((g) => g.tags)].flatMap((t) => {
       const sign = this.statusPicks().get(t.id);
       return sign ? [{ level: t.level, sign }] : [];
     });
-    return quickModifier(this.fixed(), levels, status);
+    return quickModifier(this.fixed(), levels, signed);
   });
   readonly formula = computed(() => this.dice() + formatModifier(this.modifier()));
 

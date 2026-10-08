@@ -493,7 +493,7 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   uma ação já com esse dono; o jogador cria as dele na aba Habilidades da ficha.
 - **Rolagem básica** ("Rolar", à direita da barra de baixo, mestre e jogador; `QuickRoll` num overlay do CDK): 2d12 ou
   3d6 + modificador escolhido na hora, **não salvo**. Soma tags/defeitos dos temas, etiquetas dos itens equipados e etiquetas de status da ficha de
-  quem age (`actorSheetId`); cada etiqueta vira bônus ou penalidade (clique: + → − → fora; sem nível vale 1), regra
+  quem age (`actorSheetId`); cada etiqueta (de status ou de item) vira bônus ou penalidade (clique: + → − → fora; sem nível vale 1), regra
   pura em `quickModifier` (`utils/dice.ts`). `session.quickRoll` grava no chat ("Rolagem", ícone `casino`).
 - **Rolagem** (`RollConfig { dice: '2d12' | '3d6', modifier, attributes? }`, puro em `utils/dice.ts`):
   2d12 → total < 0 falha crítica · < 12 falha · < 17 sucesso parcial · < 24 sucesso · **24+ sucesso crítico**;
