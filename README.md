@@ -85,10 +85,12 @@ Clicar num personagem no painel abre a ficha, com quatro abas:
 - **Ficha:** cards de tamanhos diferentes — **Básico** (imagem, nome, raça, sub-raça e rótulos), **Status**
   (barras Corpo, Mente e Espírito e as etiquetas do personagem, que também aparecem no token), **Relações**
   (personagens com nível de 1 a 6 e descrição) e três **Temas** (nome, tags com nível de 1 a 6 e **Defeitos**
-  com nível de -1 a -6).
+  com nível de -1 a -6) e, abaixo deles, os itens **Equipados** (clique abre o cartão do item numa janela).
 - **Inventário:** lista dos itens do personagem e, ao lado, o cartão do item selecionado (imagem, nome e etiquetas).
-  Editar o cartão aqui vale só para aquele personagem (o item do Worldbuild não muda).
-- **Anotações:** caderno de texto rico com páginas.
+  Editar o cartão aqui vale só para aquele personagem (o item do Worldbuild não muda). A caixa à esquerda de cada
+  item marca se ele está **equipado**.
+- **Anotações:** caderno de texto rico com páginas. **Background** e **Jornal** são fixas (sempre as primeiras);
+  as demais podem ser criadas, excluídas e arrastadas para reorganizar.
 - **Habilidades:** as ações do personagem, criadas por ele ou pelo mestre, com botão para usar. Cada ação pode
   usar tags e defeitos dos temas: o nível atual delas entra no modificador e acompanha a ficha automaticamente.
 
@@ -123,7 +125,8 @@ O mestre pode ver a cena como uma mesa vista de lado (isométrica): o mapa se in
 Nessa vista, o painel **Camadas** (barra de ferramentas) cria até 5 camadas empilhadas — térreo, telhados, céu… —
 cada uma com sua imagem. Camada sem imagem é "ar": mostra a de baixo, e os tokens nela parecem voar, com sombra
 no chão. O mestre escolhe a camada que os jogadores veem; trocar de camada desliza a pilha como um elevador.
-PageUp/PageDown sobem e descem o token selecionado.
+PageUp/PageDown sobem e descem o token selecionado. Paredes e portas são de cada camada: são desenhadas na camada
+em foco e só bloqueiam a visão nela.
 
 ### Ações, rolagens e chat
 Cada ação rola **2d12** ou **3d6** + modificador. 2d12: abaixo de 0 falha crítica, até 11 falha, até 16

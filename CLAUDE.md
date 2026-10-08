@@ -163,7 +163,8 @@ src/
                 ├── action-bar/         # barra inferior: 10 espaços de ações (teclas 1–0)
                 ├── entry-window/       # configuração da automação (dono, rolagem, tags, ícone, efeito)
                 ├── character-sheet/    # FICHA de personagem e de NPC (abas; cards Básico, Status, Relações, Temas; Habilidades)
-                ├── sheet-inventory/    # aba Inventário: lista de itens + cartão; no NPC, preços e compra (loja)
+                ├── sheet-inventory/    # aba Inventário: lista de itens + cartão; equipado; no NPC, preços e compra (loja)
+                ├── equipped-item-window/ # janela do cartão de um item equipado (lista "Equipados" da aba Ficha)
                 ├── sheet-notes/        # aba Anotações: caderno com páginas (RichTextEditor)
                 ├── level-pips/         # seletor de nível 1–6 em losangos (relações e tags de tema)
                 ├── token-editor/       # editor de tamanho, visão, barras e etiquetas
@@ -340,7 +341,10 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   Acima: camadas **com mapa** mostram só o contorno da logo acima (sem tokens, para não confundir) e somem na 2D;
   camadas **sem mapa ("ar")** mostram os tokens voando nelas (na 2D, sobre o mapa). Tokens de camadas acima
   projetam **sombra** no "chão" sólido mais próximo abaixo. Transições só durante a troca (`animating`), para pan/zoom seguirem leves.
-- Névoa, paredes, desenhos e anotações são da cena (desenhados na camada em foco); a visão usa os tokens da camada em foco.
+- Névoa, desenhos e anotações são da cena (desenhados na camada em foco); a visão usa os tokens da camada em foco.
+- **Paredes e portas são de cada camada** (`Wall.level`, ausente = térreo): `session.walls()` traz só as da camada em
+  foco (computed com igualdade por itens), `addWall` grava na camada em foco e só elas bloqueiam a visão. Excluir
+  uma camada apaga as paredes dela e desce as de cima. Delete só remove a parede selecionada se ela for da camada em foco.
 - Atalhos (mestre, isométrica): **PageUp/PageDown** sobem/descem o token selecionado (a vista acompanha) ou, sem
   seleção, a camada em foco.
 - **Régua e visão:** 1 quadrado = **1,5 m** (`METERS_PER_SQUARE`).
@@ -350,7 +354,7 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   token). Ficha, token e avatares cortam a imagem igual: `object-cover object-top` (retratos mostram o rosto).
 - **Janela por tipo:** personagem, NPC e token de NPC (`npc:<id do token>`) abrem a ficha completa
   (`CharacterSheetView`, janela `sheet`, 880×700); NPC do bestiário aberto pelo explorador = janela `npc`
-  (`appWorldNpcSheet`); automação abre a `EntryWindow`. Sem permissão, `content()` → null (não abre).
+  (`appWorldNpcSheet`); automação abre a `EntryWindow`; item equipado (`equip:…`) abre a `EquippedItemWindow`. Sem permissão, `content()` → null (não abre).
 - **Lore** não é duplicada: a aba Lore lista os itens (exceto pastas) da **Lore geral** (marcados com
   `auto_stories`) e do **Worldbuild** do usuário e os abre com os mesmos editores.
   "Abrir Lore geral" / "Abrir pastas do Worldbuild" abrem o `Explorer` numa janela (`lore:explorer` /
@@ -373,7 +377,7 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 
 ### Ficha de personagem (`CharacterSheetView`, `TableEntry.sheet`)
 - Personagens jogadores (`character`) e NPCs (ver "Ficha de NPC"). Dados em `CharacterSheet { race, subrace, labels,
-  relations, themes, inventory, notes, eiros }`, lidos sempre por `session.sheetOf(entry)` (preenche padrões: **3 temas** e **1+ página**) e
+  relations, themes, inventory, notes, eiros }`, lidos sempre por `session.sheetOf(entry)` (preenche padrões: **3 temas** e as **páginas fixas** das anotações) e
   gravados por `updateSheet(entryId, patch)`.
 - **Aba Ficha** — cards em grade (container query):
   - **Básico:** imagem (= token), nome, raça, sub-raça, jogador dono ("Vincular à minha conta") e **rótulos** (texto livre, Enter adiciona).
@@ -384,6 +388,11 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   - **Relações:** nome, nível **1–6** (`LevelPips`) e descrição.
   - **Temas (3):** nome + tags com nível **1–6** e, embaixo, **Defeitos** (`flaws`) com nível **-1 a -6**
     (`LevelPips` com `negative`). Fichas antigas ganham `flaws: []` em `sheetOf`.
+  - **Equipados** (só personagem, abaixo dos temas): itens com `InventoryEntry.equipped` (caixa à esquerda de cada
+    item na aba Inventário, `canEquip`). Clique abre a janela `equip:<id da ficha>:<id no inventário>`
+    (`EquippedItemWindow`: o mesmo `ItemCardView` do inventário, editável por quem edita a ficha). A linha do
+    inventário (personalização x original) é montada por `inventoryRow` (exportada de `sheet-inventory`).
+    Transferir um item (`addOne`) não leva o "equipado".
 - **Aba Inventário** (`SheetInventory`): `InventoryEntry { itemId, global? }` referencia um item do mundo (Worldbuild do
   usuário ou Lore geral); a lista mostra os nomes e, ao lado, o cartão **editável** (`ItemCardView`). Editar ali é
   **cópia sob demanda**: só o que mudou vai para a entrada (`name`, `tags`, `blobId`) e vale no lugar do original —
@@ -391,8 +400,10 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   personalizadas são apagadas ao trocar, voltar, tirar o item ou excluir o personagem. "+ Item" busca itens das duas
   fontes ou cria um novo no Worldbuild. Original excluído sem personalização aparece como "Item excluído".
   Etiquetas novas de item começam **verdes** (`ITEM_TAG_COLOR`).
-- **Aba Anotações** (`SheetNotes`): caderno de texto rico em páginas (`NotePage { title, content }`); a última página
-  não é excluída. O `RichTextEditor` lê o conteúdo só ao ser criado: a página aberta é renderizada num `@for` com
+- **Aba Anotações** (`SheetNotes`): caderno de texto rico em páginas (`NotePage { title, content }`). As páginas fixas
+  **Background** e **Jornal** (`FIXED_NOTE_PAGES`, ids `background`/`journal`) ficam sempre no topo, sem excluir, mover
+  nem renomear — garantidas por `withFixedNotePages` em `normalizeSheet` (a antiga "Página 1" vazia some). As demais
+  são reordenadas arrastando (CDK `cdkDropList`, estilos globais `.cdk-drag-*` em `styles.scss`). O `RichTextEditor` lê o conteúdo só ao ser criado: a página aberta é renderizada num `@for` com
   `track` pelo id para recriar o editor ao trocar de página.
 - **Aba Habilidades:** as automações do personagem (`automationsOf`), criadas por ele ou pelo mestre; "Usar" rola
   como a barra de ações (`onActionUsed`).
