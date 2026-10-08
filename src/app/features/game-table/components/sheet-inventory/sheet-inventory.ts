@@ -152,10 +152,12 @@ export class SheetInventory {
    * Inventário que vende e pode ser looteado: NPC da mesa com dados próprios ou token de NPC.
    * A ficha base do bestiário (`npc-base` / `world`) não: comprar mexeria no original.
    */
-  private readonly trades = computed(() => {
+  readonly trades = computed(() => {
     const level = this.data()?.level;
     return !!this.session && (level === 'npc' || level === 'npc-token');
   });
+  /** Ficha base de NPC vista na mesa: a loja e o loot acontecem nos tokens dele. */
+  readonly tradesInTokens = computed(() => !!this.session && this.isShop() && !this.trades());
   /** Personagem do jogador que compra (só na mesa, no papel de jogador, em loja de NPC). */
   readonly buyer = computed(() => {
     const buyer = this.session?.buyer();

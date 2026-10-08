@@ -4,7 +4,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterLink } from '@angular/router';
-import { ROLL_OUTCOMES, TABLE_ENTRY_META, TableEntry, hasSheet } from '../../core/models/table-session.model';
+import { NPC_TOKEN_SHEET, ROLL_OUTCOMES, TABLE_ENTRY_META, TableEntry, hasSheet } from '../../core/models/table-session.model';
 import { WORLD_ITEM_META } from '../../core/models/world-item.model';
 import { GameTablesService } from '../../core/services/game-tables.service';
 import { FloatingWindow } from '../../shared/components/floating-window/floating-window';
@@ -29,7 +29,7 @@ import { TokenWindow } from './components/token-window/token-window';
 import { BlobUrlService } from './services/blob-url.service';
 import { SheetStore } from '../../core/services/sheet-store';
 import { SoundMixerService } from './services/sound-mixer.service';
-import { TableSessionService } from './services/table-session.service';
+import { TableSessionService, tokenSheetPlacement } from './services/table-session.service';
 import { formatModifier } from './utils/dice';
 
 /** O que uma janela da mesa está exibindo. */
@@ -151,11 +151,12 @@ export class GameTablePage {
     });
     inject(DestroyRef).onDestroy(() => this.session.flush());
 
-    // Fecha janelas "Token" de tokens removidos do mapa
+    // Fecha janelas "Token" e fichas de token de tokens removidos do mapa
     effect(() => {
-      const stale = this.windows
-        .windows()
-        .filter((w) => w.id.startsWith(TOKEN_WINDOW) && !this.session.resolvedTokenById(w.id.slice(TOKEN_WINDOW.length)));
+      const stale = this.windows.windows().filter((w) => {
+        const placementId = w.id.startsWith(TOKEN_WINDOW) ? w.id.slice(TOKEN_WINDOW.length) : tokenSheetPlacement(w.id);
+        return placementId !== null && !this.session.resolvedTokenById(placementId);
+      });
       if (stale.length) untracked(() => this.windows.closeMany(stale.map((w) => w.id)));
     });
   }
@@ -172,7 +173,14 @@ export class GameTablePage {
     }
     if (id.startsWith(TOKEN_WINDOW)) {
       const token = this.session.resolvedTokenById(id.slice(TOKEN_WINDOW.length));
-      return token ? { title: `Token: ${token.entry.name}`, icon: 'token', color: TABLE_ENTRY_META[token.entry.kind].color, type: 'token' } : null;
+      return token ? { title: `Token: ${token.name}`, icon: 'token', color: TABLE_ENTRY_META[token.entry.kind].color, type: 'token' } : null;
+    }
+    // Ficha própria de um token de NPC (cópia individual)
+    const placementId = tokenSheetPlacement(id);
+    if (placementId) {
+      const token = this.session.resolvedTokenById(placementId);
+      if (!token || !this.session.canOpen(token.entry)) return null;
+      return { title: `${token.name} (token)`, icon: 'smart_toy', color: TABLE_ENTRY_META.npc.color, type: 'sheet' };
     }
     const entry = this.session.entryById().get(id);
     // Sons não abrem janela: são controlados direto no mixer da aba Sons.
@@ -200,13 +208,14 @@ export class GameTablePage {
   }
 
   /**
-   * Duplo clique num token: abre a janela "Token". Num NPC que o jogador não controla,
-   * abre só a ficha (se o mestre a deixou pública) — ou nada.
+   * Duplo clique num token: personagem abre a janela "Token"; NPC abre a ficha própria
+   * daquele token (status, inventário e temas individuais) — para o jogador, só se ele
+   * controla o NPC ou o mestre deixou a ficha/inventário públicos.
    */
   openToken(placementId: string): void {
     const entry = this.session.resolvedTokenById(placementId)?.entry;
-    if (entry?.kind === 'npc' && !this.session.canEdit(entry)) {
-      if (this.session.canOpen(entry)) this.open(entry.id);
+    if (entry?.kind === 'npc') {
+      if (this.session.canOpen(entry)) this.open(NPC_TOKEN_SHEET + placementId);
       return;
     }
     this.open(TOKEN_WINDOW + placementId);
@@ -223,8 +232,8 @@ export class GameTablePage {
    * Uma ação foi usada na barra inferior: rola, registra no chat e, se tiver efeito,
    * o deixa no mouse. O aviso resume o resultado (o detalhe fica no chat).
    */
-  onActionUsed(entry: TableEntry): void {
-    const { author, roll, armed } = this.session.useAction(entry);
+  onActionUsed(entry: TableEntry, sheetId?: string): void {
+    const { author, roll, armed } = this.session.useAction(entry, sheetId);
     const formula = roll.dice + formatModifier(roll.modifier);
     const text = `${author} · ${roll.action}: ${formula} = ${roll.total} — ${ROLL_OUTCOMES[roll.outcome].label}`;
     this.snackBar.open(armed ? `${text} · arraste no mapa para lançar o efeito` : text, undefined, { duration: 3500 });

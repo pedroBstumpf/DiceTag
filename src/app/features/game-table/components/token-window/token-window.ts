@@ -3,6 +3,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { NPC_TOKEN_SHEET } from '../../../../core/models/table-session.model';
 import { BlobUrlService } from '../../services/blob-url.service';
 import { TableSessionService } from '../../services/table-session.service';
 import { TokenEditor } from '../token-editor/token-editor';
@@ -39,7 +40,7 @@ import { TokenEditor } from '../token-editor/token-editor';
         <input #imageInput type="file" accept="image/*" hidden (change)="onImagePicked(imageInput, t.entry.id)" />
 
         <div class="min-w-0 flex-1">
-          <p class="truncate font-display text-lg text-star-300">{{ t.entry.name }}</p>
+          <p class="truncate font-display text-lg text-star-300">{{ t.name }}</p>
           <p class="flex items-center gap-1 text-xs" [class]="t.linked ? 'text-astral-300' : 'text-violet-300'">
             <mat-icon class="!size-4 !text-[16px]">{{ t.linked ? 'link' : 'link_off' }}</mat-icon>
             {{ t.linked ? 'Vinculado à ficha: vale para todos os tokens dele' : 'Token independente: vale só para este' }}
@@ -50,7 +51,8 @@ import { TokenEditor } from '../token-editor/token-editor';
       <app-token-editor [value]="t" (changed)="session.updateToken(t.placement.id, $event)" />
 
       <div class="mt-6 flex flex-wrap gap-2 border-t border-white/5 pt-4">
-        <button mat-stroked-button (click)="openEntry.emit(t.entry.id)">
+        <!-- NPC: a ficha própria deste token; personagem: a ficha dele -->
+        <button mat-stroked-button (click)="openEntry.emit(t.linked ? t.entry.id : tokenSheet + t.placement.id)">
           <mat-icon>badge</mat-icon>
           Abrir ficha
         </button>
@@ -79,6 +81,7 @@ export class TokenWindow {
   readonly openEntry = output<string>();
 
   readonly token = computed(() => this.session.resolvedTokenById(this.placementId()));
+  readonly tokenSheet = NPC_TOKEN_SHEET;
 
   /** Envia (ou troca) a imagem — vale para a ficha e todos os tokens dela. */
   async onImagePicked(input: HTMLInputElement, entryId: string): Promise<void> {

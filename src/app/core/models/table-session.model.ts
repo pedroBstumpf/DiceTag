@@ -573,7 +573,18 @@ export interface TokenPlacement {
   size?: number;
   bars?: TokenBar[];
   tags?: TokenTag[];
+  /**
+   * NPC: ficha própria deste token (temas, inventário…), copiada da ficha do NPC ao colocar.
+   * Alterar aqui não mexe no NPC do painel nem no bestiário. Ausente (tokens antigos) =
+   * usa a ficha do NPC até a primeira alteração.
+   */
+  sheet?: CharacterSheet;
+  /** NPC: nome próprio deste token (ausente = nome do NPC). */
+  name?: string;
 }
+
+/** Prefixo do id da ficha de um token de NPC ("npc:<id do token>"). */
+export const NPC_TOKEN_SHEET = 'npc:';
 
 /** Tamanhos oferecidos na configuração do token (em quadrados). */
 export const TOKEN_SIZES = [0.5, 1, 2, 3, 4] as const;

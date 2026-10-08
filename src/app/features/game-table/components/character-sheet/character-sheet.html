@@ -27,6 +27,31 @@
     </p>
   }
 
+  @if (d.level === 'npc-token') {
+    <!-- Ficha própria de um token de NPC (cópia individual) -->
+    <div class="flex shrink-0 flex-wrap items-center gap-2 border-b border-white/5 bg-violet-500/10 px-4 py-1.5 text-xs text-violet-200">
+      <mat-icon class="!size-4 !text-[16px]">content_copy</mat-icon>
+      <span class="flex-1">Ficha deste token: status, etiquetas, temas e inventário são só dele.</span>
+      @if (canEdit()) {
+        <button type="button" class="flex items-center gap-1 rounded-md px-2 py-1 text-violet-100 hover:bg-white/10" (click)="openEntry.emit(tokenWindowId())">
+          <mat-icon class="!size-4 !text-[16px]">token</mat-icon>
+          Opções do token
+        </button>
+      }
+      @if (isGm() && entry(); as base) {
+        <button type="button" class="flex items-center gap-1 rounded-md px-2 py-1 text-violet-100 hover:bg-white/10" (click)="openEntry.emit(base.id)">
+          <mat-icon class="!size-4 !text-[16px]">smart_toy</mat-icon>
+          Ficha do NPC
+        </button>
+      }
+    </div>
+  } @else if (d.level === 'npc-base' && isGm()) {
+    <p class="flex shrink-0 items-center gap-2 border-b border-white/5 bg-violet-500/10 px-4 py-1.5 text-xs text-violet-200">
+      <mat-icon class="!size-4 !text-[16px]">menu_book</mat-icon>
+      Ficha base do bestiário (Worldbuild): vale para os próximos tokens; cada token no mapa tem a própria cópia.
+    </p>
+  }
+
   <div class="@container min-h-0 flex-1 overflow-y-auto p-4">
     @if (!tab()) {
       <p class="py-10 text-center text-sm text-slate-500">O mestre não liberou esta ficha para os jogadores.</p>
@@ -36,8 +61,8 @@
       <!-- Ficha: cards                                                      -->
       <!-- ================================================================= -->
       @case ('sheet') {
-        @if (isNpc() && isGm()) {
-          <!-- NPC: controle por um jogador e visibilidade da ficha (só o mestre) -->
+        @if (npcSettings()) {
+          <!-- NPC: controle por um jogador e visibilidade da ficha (só o mestre; valem para todos os tokens) -->
           <div class="mb-3 flex flex-wrap items-center gap-2 rounded-lg bg-violet-500/10 px-3 py-2 ring-1 ring-violet-400/20">
             <mat-icon class="!size-4 !text-[16px] text-violet-300">shield_person</mat-icon>
             <label class="flex items-center gap-2 text-xs text-slate-300">
@@ -205,7 +230,7 @@
                 </div>
                 <app-tag-editor #tagEditor [tags]="tags()" emptyText="Ex.: Envenenado, Inspirado, Exausto." (changed)="setTags($event)" />
               </div>
-              <p class="mt-3 text-[11px] leading-relaxed text-slate-500">{{ isNpc() ? 'Barras e etiquetas são o padrão dos próximos tokens deste NPC (cada token tem os seus no mapa).' : 'Barras e etiquetas também aparecem no token do personagem.' }}</p>
+              <p class="mt-3 text-[11px] leading-relaxed text-slate-500">{{ statusHint() }}</p>
             </section>
 
             <!-- ===== Card de Relações (só personagem) ===== -->
@@ -288,7 +313,7 @@
       <!-- Inventário: lista de itens + cartão do item selecionado           -->
       <!-- ================================================================= -->
       @case ('inventory') {
-        @if (isNpc() && isGm()) {
+        @if (npcSettings()) {
           <!-- NPC: inventário visível para os jogadores (vira loja com os preços em Eiros) -->
           <div class="mb-3 flex justify-end">
             <ng-container *ngTemplateOutlet="publicToggle; context: { on: !!entry()?.inventoryPublic, part: 'inventory' }" />

@@ -8,6 +8,7 @@ import {
   CharacterSheet,
   CharacterTheme,
   CURRENCY,
+  NPC_TOKEN_SHEET,
   SHEET_MAX_LEVEL,
   TableEntry,
   ThemeTag,
@@ -45,7 +46,8 @@ const TAB_META: Record<SheetTab, { icon: string; label: string }> = {
  * - Habilidades (só na mesa): as ações (automações) da ficha.
  *
  * Lê e grava pelo `SheetStore` fornecido por quem exibe (a mesa ou o Worldbuild), pelo
- * id da ficha. Recursos da mesa (ações, permissões, controle, visibilidade, Eiros) só
+ * id da ficha: personagem, NPC da mesa (a ficha base, se vier do bestiário), token de
+ * NPC ("npc:<id>", cópia individual) ou NPC do bestiário. Recursos da mesa (ações, permissões, controle, visibilidade, Eiros) só
  * aparecem quando a ficha pertence a uma entrada da mesa (`SheetData.entry`).
  */
 @Component({
@@ -85,6 +87,20 @@ export class CharacterSheetView {
   });
   /** O mestre configura controle e visibilidade do NPC (só na mesa). */
   readonly isGm = computed(() => !!this.session && !!this.entry() && this.session.role() === 'gm');
+  /** Controle e visibilidade ficam na ficha do NPC da mesa (valem para todos os tokens dele). */
+  readonly npcSettings = computed(() => this.isNpc() && this.isGm() && this.data()?.level !== 'npc-token');
+
+  /** Texto sob o card de Status, conforme onde a ficha mora. */
+  readonly statusHint = computed(() => {
+    switch (this.data()?.level) {
+      case 'character':
+        return 'Barras e etiquetas também aparecem no token do personagem.';
+      case 'npc-token':
+        return 'Barras e etiquetas deste token (as mesmas exibidas no mapa).';
+      default:
+        return 'Barras e etiquetas são o padrão dos próximos tokens deste NPC (cada token tem os seus no mapa).';
+    }
+  });
 
   // --- Abas ----------------------------------------------------------------
 
@@ -110,6 +126,11 @@ export class CharacterSheetView {
 
   selectTab(tab: SheetTab): void {
     this.chosenTab.set(tab);
+  }
+
+  /** Id da janela "Token" (tamanho, visão…) do token desta ficha. */
+  tokenWindowId(): string {
+    return 'token:' + this.sheetId().slice(NPC_TOKEN_SHEET.length);
   }
 
   // --- NPC: controle e visibilidade (mestre) -------------------------------

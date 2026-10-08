@@ -42,6 +42,7 @@ import {
   InventoryEntry,
   normalizeSheet,
   defaultToken,
+  NPC_TOKEN_SHEET,
   hasSheet,
   isDown,
   withStatusBars,
@@ -70,6 +71,8 @@ export interface TablePanels {
 export interface ResolvedToken {
   placement: TokenPlacement;
   entry: TableEntry;
+  /** Nome exibido (NPC: o nome próprio do token, se houver). */
+  name: string;
   /** Personagem: alterações valem para a ficha e todos os tokens dela. */
   linked: boolean;
   blobId?: string;
@@ -105,6 +108,11 @@ export interface ActionUse {
   armed: boolean;
 }
 
+
+/** Id do token se `sheetId` for a ficha de um token de NPC ("npc:<id>"); senão null. */
+export function tokenSheetPlacement(sheetId: string): string | null {
+  return sheetId.startsWith(NPC_TOKEN_SHEET) ? sheetId.slice(NPC_TOKEN_SHEET.length) : null;
+}
 
 /** Mestre agindo como "o token selecionado" (muda a cada seleção). */
 export const ACT_SELECTION = 'selection';
@@ -458,16 +466,31 @@ export class TableSessionService extends SheetStore {
   }
 
   /**
+   * Ficha de quem age: com o token do NPC que age selecionado, a cópia daquele token
+   * (as tags dele valem na rolagem); senão, a ficha da entrada.
+   */
+  readonly actorSheetId = computed<string | null>(() => {
+    const actor = this.actor();
+    if (!actor) return null;
+    const selected = this.selectedTokenId();
+    if (actor.kind === 'npc' && selected && this.findPlacement(selected)?.entryId === actor.id) return NPC_TOKEN_SHEET + selected;
+    return actor.id;
+  });
+
+  /**
    * Usa uma ação: rola os dados, registra no chat em nome de quem agiu e, se a ação
    * tiver efeito especial, deixa o efeito "na mão" (ferramenta Efeitos) para o usuário lançar.
+   * `sheetId`: ficha que agiu (ex.: "Usar" na ficha de um token); padrão = quem age na barra,
+   * se for o dono da ação, ou o próprio dono.
    */
-  useAction(entry: TableEntry): ActionUse {
+  useAction(entry: TableEntry, sheetId?: string): ActionUse {
     const config = entry.roll ?? DEFAULT_ROLL;
-    // O nível atual das tags ligadas à ação entra no modificador
-    const levels = this.tagLevelsOf(entry.ownerEntryId);
+    const actorSheet = this.actor()?.id === entry.ownerEntryId ? this.actorSheetId() : null;
+    const sheet = sheetId ?? actorSheet ?? entry.ownerEntryId;
+    // O nível atual das tags da ficha que agiu entra no modificador
+    const levels = this.tagLevelsOf(sheet);
     const roll: RollResult = { action: entry.name, icon: entry.icon ?? 'bolt', dice: config.dice, ...rollDice(config, Math.random, levels) };
-    const actor = this.actor() ?? (entry.ownerEntryId ? this.entryById().get(entry.ownerEntryId) : undefined);
-    const author = actor?.name ?? this.userName();
+    const author = (sheet && this.sheetData(sheet)?.name) ?? this.actor()?.name ?? this.userName();
     this.pushChat({ author, roll });
 
     if (entry.effect) {
@@ -625,6 +648,8 @@ export class TableSessionService extends SheetStore {
     for (const blobId of [scene?.blobId, ...(scene?.levels ?? []).map((l) => l.blobId)]) {
       if (blobId) this.storage.delete(`blob:${blobId}`);
     }
+    // Imagens personalizadas dos inventários dos tokens de NPC da cena
+    for (const token of scene?.tokens ?? []) this.deleteInventoryBlobs(token.sheet?.inventory);
   }
 
   /** Liga/desliga a vista isométrica da cena ativa. */
@@ -800,6 +825,10 @@ export class TableSessionService extends SheetStore {
   /** Exclui o arquivo, as ações dele, os tokens dele em todas as cenas e os arquivos (áudio/imagem). */
   removeEntry(id: string): void {
     const entry = this.entryById().get(id);
+    // Os tokens dele saem de todas as cenas (com as cópias de inventário)
+    for (const sc of this.scenes()) {
+      for (const token of sc.tokens ?? []) if (token.entryId === id) this.deleteInventoryBlobs(token.sheet?.inventory);
+    }
     this.patchState((s) => ({
       ...s,
       entries: s.entries.filter((e) => e.id !== id && e.ownerEntryId !== id),
@@ -870,6 +899,8 @@ export class TableSessionService extends SheetStore {
   }
 
   sheetData(id: string): SheetData | null {
+    const placementId = tokenSheetPlacement(id);
+    if (placementId) return this.tokenSheetData(id, placementId);
     const entry = this.entryById().get(id);
     if (!entry || !hasSheet(entry.kind)) return null;
     const token = this.tokenOf(entry);
@@ -889,6 +920,12 @@ export class TableSessionService extends SheetStore {
 
   renameSheet(id: string, name: string): void {
     const trimmed = name.trim();
+    const placementId = tokenSheetPlacement(id);
+    if (placementId) {
+      // Nome próprio do token (vazio = volta ao nome do NPC)
+      this.patchPlacement(placementId, { name: trimmed || undefined });
+      return;
+    }
     const entry = this.entryById().get(id);
     if (!trimmed || !entry) return;
     const base = this.worldNpcOf(entry);
@@ -896,12 +933,21 @@ export class TableSessionService extends SheetStore {
     this.updateEntry(id, { name: trimmed });
   }
 
+  /** A imagem é sempre a da ficha do NPC (a mesma em todos os tokens dele). */
   setSheetImage(id: string, file: File): Promise<void> {
-    return this.setTokenImage(id, file);
+    const placementId = tokenSheetPlacement(id);
+    const entryId = placementId ? this.findPlacement(placementId)?.entryId : id;
+    return entryId ? this.setTokenImage(entryId, file) : Promise.resolve();
   }
 
-  /** Altera campos da ficha (NPC-referência: a ficha base no bestiário). */
+  /** Altera campos da ficha (NPC-referência: a ficha base no bestiário; token: a cópia dele). */
   updateSheet(id: string, patch: Partial<CharacterSheet>): void {
+    const placementId = tokenSheetPlacement(id);
+    if (placementId) {
+      const current = this.sheetData(id)?.sheet;
+      if (current) this.patchPlacement(placementId, { sheet: { ...current, ...patch } });
+      return;
+    }
     const entry = this.entryById().get(id);
     if (!entry) return;
     const base = this.worldNpcOf(entry);
@@ -910,7 +956,27 @@ export class TableSessionService extends SheetStore {
   }
 
   updateStatus(id: string, patch: { bars?: TokenBar[]; tags?: TokenTag[] }): void {
-    this.updateEntryToken(id, patch);
+    const placementId = tokenSheetPlacement(id);
+    if (!placementId) return this.updateEntryToken(id, patch);
+    // Token de NPC: barras e etiquetas são só dele
+    this.patchPlacement(placementId, { ...patch, ...(patch.bars && { bars: withStatusBars(patch.bars) }) });
+  }
+
+  /** Ficha de um token de NPC: a cópia própria (ou, em tokens antigos, a do NPC até a primeira alteração). */
+  private tokenSheetData(id: string, placementId: string): SheetData | null {
+    const token = this.resolvedTokenById(placementId);
+    if (!token || token.entry.kind !== 'npc') return null;
+    return {
+      id,
+      kind: 'npc',
+      level: 'npc-token',
+      name: token.name,
+      blobId: token.blobId,
+      sheet: token.placement.sheet ? normalizeSheet(token.placement.sheet) : this.sheetOf(token.entry),
+      bars: withStatusBars(token.bars),
+      tags: token.tags,
+      entry: token.entry,
+    };
   }
 
   // --- Tags dos temas nas ações --------------------------------------------
@@ -1103,6 +1169,7 @@ export class TableSessionService extends SheetStore {
     return {
       placement,
       entry,
+      name: placement.name ?? entry.name,
       linked,
       blobId: sheet.blobId,
       vision: sheet.vision,
@@ -1192,24 +1259,42 @@ export class TableSessionService extends SheetStore {
       y: p.y,
       // Entra na camada em foco
       ...(this.currentLevel() > 0 && { level: this.currentLevel() }),
-      // NPC: cada token colocado é independente (cópia da ficha)
+      // NPC: cada token colocado é independente (cópia do token padrão e da ficha)
       ...(entry.kind === 'npc' && {
         size: sheet.size,
         bars: sheet.bars.map((b) => ({ ...b })),
         tags: sheet.tags.map((t) => ({ ...t })),
+        sheet: structuredClone(this.sheetOf(entry)),
       }),
     };
     this.updateScene(scene.id, { tokens: [...(scene.tokens ?? []), placement] });
     this.selectedTokenId.set(placement.id);
+    // As imagens personalizadas do inventário copiado ganham cópias próprias
+    if (placement.sheet?.inventory.some((i) => i.blobId)) void this.cloneTokenInventoryBlobs(placement.id);
     return placement;
+  }
+
+  /** Duplica as imagens do inventário de um token recém-colocado (para não apagar as do original). */
+  private async cloneTokenInventoryBlobs(placementId: string): Promise<void> {
+    const inventory = this.findPlacement(placementId)?.sheet?.inventory;
+    if (!inventory) return;
+    const cloned = await this.cloneInventoryBlobs(inventory);
+    const sheet = this.findPlacement(placementId)?.sheet;
+    // Se o token sumiu no meio, apaga as cópias; senão, troca só as imagens (ids iguais)
+    if (!sheet) return this.deleteInventoryBlobs(cloned.filter((c, i) => c.blobId !== inventory[i].blobId));
+    const byId = new Map(cloned.map((c) => [c.id, c.blobId]));
+    this.patchPlacement(placementId, {
+      sheet: { ...sheet, inventory: sheet.inventory.map((i) => (byId.has(i.id) ? { ...i, blobId: byId.get(i.id) } : i)) },
+    });
   }
 
   moveToken(placementId: string, p: Point): void {
     this.patchPlacement(placementId, { x: p.x, y: p.y });
   }
 
-  /** Remove o token do mapa (a ficha continua). */
+  /** Remove o token do mapa (a ficha continua; a cópia do NPC, com o inventário dela, some). */
   removeToken(placementId: string): void {
+    this.deleteInventoryBlobs(this.findPlacement(placementId)?.sheet?.inventory);
     this.patchState((s) => ({
       ...s,
       scenes: s.scenes.map((sc) =>
