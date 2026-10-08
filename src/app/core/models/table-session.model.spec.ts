@@ -1,4 +1,15 @@
-import { DEFAULT_STATUS_MAX, STATUS_BARS, TokenBar, defaultSheet, defaultToken, isDown, isStatusBar, withStatusBars } from './table-session.model';
+import {
+  DEFAULT_STATUS_MAX,
+  STATUS_BARS,
+  TokenBar,
+  defaultSheet,
+  defaultToken,
+  isDown,
+  isStatusBar,
+  normalizeSheet,
+  withFixedNotePages,
+  withStatusBars,
+} from './table-session.model';
 
 describe('withStatusBars', () => {
   it('cria Corpo, Mente e Espírito quando não há barras', () => {
@@ -39,5 +50,26 @@ describe('padrões da ficha', () => {
 
   it('ficha vazia tem três temas', () => {
     expect(defaultSheet().themes).toHaveLength(3);
+  });
+});
+
+describe('páginas fixas das anotações', () => {
+  it('ficha nova começa com Background e Jornal', () => {
+    expect(defaultSheet().notes.map((p) => p.title)).toEqual(['Background', 'Jornal']);
+  });
+
+  it('mantém o texto das fixas, fixa o título e deixa as do jogador depois, na ordem', () => {
+    const notes = withFixedNotePages([
+      { id: 'b', title: 'Viagem', content: '<p>2</p>' },
+      { id: 'journal', title: 'Outro nome', content: '<p>dia 1</p>' },
+      { id: 'a', title: 'Mapa', content: '' },
+    ]);
+    expect(notes.map((p) => p.id)).toEqual(['background', 'journal', 'b', 'a']);
+    expect(notes[1]).toEqual({ id: 'journal', title: 'Jornal', content: '<p>dia 1</p>' });
+  });
+
+  it('descarta a antiga página padrão vazia, mas não a que tem texto', () => {
+    expect(normalizeSheet({ notes: [{ id: 'page-1', title: 'Página 1', content: '<p></p>' }] }).notes).toHaveLength(2);
+    expect(normalizeSheet({ notes: [{ id: 'page-1', title: 'Página 1', content: '<p>oi</p>' }] }).notes).toHaveLength(3);
   });
 });

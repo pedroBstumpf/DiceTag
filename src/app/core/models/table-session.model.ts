@@ -258,6 +258,26 @@ export interface NotePage {
   content: string;
 }
 
+/** Páginas fixas das anotações, sempre as primeiras: não são excluídas, movidas nem renomeadas. */
+export const FIXED_NOTE_PAGES: readonly Omit<NotePage, 'content'>[] = [
+  { id: 'background', title: 'Background' },
+  { id: 'journal', title: 'Jornal' },
+];
+
+export function isFixedNotePage(page: NotePage): boolean {
+  return FIXED_NOTE_PAGES.some((f) => f.id === page.id);
+}
+
+/**
+ * Páginas fixas no início (criadas se faltarem, com o título fixo) + as do jogador, na ordem salva.
+ * A antiga página padrão ("Página 1", id `page-1`) some se estiver vazia.
+ */
+export function withFixedNotePages(notes: NotePage[]): NotePage[] {
+  const fixed = FIXED_NOTE_PAGES.map((f) => ({ content: '', ...notes.find((p) => p.id === f.id), ...f }));
+  const others = notes.filter((p) => !isFixedNotePage(p) && !(p.id === 'page-1' && !p.content.replace(/<[^>]*>/g, '').trim()));
+  return [...fixed, ...others];
+}
+
 /**
  * Ficha do personagem jogador. As etiquetas e as barras de status (Corpo, Mente,
  * Espírito) ficam no token da ficha (`TableEntry.token`), assim aparecem também no mapa.
@@ -272,7 +292,7 @@ export interface CharacterSheet {
   themes: CharacterTheme[];
   /** Itens que o personagem possui. */
   inventory: InventoryEntry[];
-  /** Anotações do jogador, em páginas (sempre pelo menos uma). */
+  /** Anotações do jogador, em páginas (sempre começa com as fixas: Background e Jornal). */
   notes: NotePage[];
   /** Personagem: Eiros (moeda) que possui, gastos ao comprar itens de NPCs. */
   eiros: number;
@@ -287,20 +307,20 @@ export function defaultSheet(): CharacterSheet {
     relations: [],
     themes: Array.from({ length: SHEET_THEME_COUNT }, (_, i) => ({ id: `theme-${i + 1}`, name: '', tags: [], flaws: [] })),
     inventory: [],
-    notes: [{ id: 'page-1', title: 'Página 1', content: '' }],
+    notes: withFixedNotePages([]),
     eiros: 0,
   };
 }
 
 /**
  * Ficha salva com os valores padrão dos campos ausentes: sempre SHEET_THEME_COUNT temas
- * (com `flaws`) e pelo menos uma página de anotações. Fichas antigas sempre abrem.
+ * (com `flaws`) e as páginas fixas das anotações no início. Fichas antigas sempre abrem.
  */
 export function normalizeSheet(raw: Partial<CharacterSheet> | undefined): CharacterSheet {
   const empty = defaultSheet();
   const sheet = { ...empty, ...raw };
   const themes = empty.themes.map((theme, i) => ({ ...theme, ...sheet.themes[i], flaws: sheet.themes[i]?.flaws ?? [] }));
-  return { ...sheet, themes, notes: sheet.notes.length ? sheet.notes : empty.notes };
+  return { ...sheet, themes, notes: withFixedNotePages(sheet.notes) };
 }
 
 /** Barras de status fixas do personagem, na ordem da ficha (também exibidas sobre o token). */
