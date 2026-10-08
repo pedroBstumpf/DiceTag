@@ -71,7 +71,7 @@
         >
           @switch (c.type) {
             @case ('entry') {
-              <app-entry-window [entryId]="win.id" (openEntry)="open($event)" />
+              <app-entry-window [entryId]="win.id" />
             }
             @case ('sheet') {
               <app-character-sheet [entryId]="win.id" (openEntry)="open($event)" (used)="onActionUsed($event)" />

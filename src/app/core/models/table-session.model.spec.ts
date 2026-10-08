@@ -22,9 +22,10 @@ describe('withStatusBars', () => {
 });
 
 describe('padrões da ficha', () => {
-  it('personagem nasce com as barras de status; NPC sem barras', () => {
+  it('personagem e NPC nascem com as barras de status; outros tipos sem barras', () => {
     expect(defaultToken('character').bars.filter(isStatusBar)).toHaveLength(3);
-    expect(defaultToken('npc').bars).toEqual([]);
+    expect(defaultToken('npc').bars.filter(isStatusBar)).toHaveLength(3);
+    expect(defaultToken('automation').bars).toEqual([]);
   });
 
   it('ficha vazia tem três temas', () => {

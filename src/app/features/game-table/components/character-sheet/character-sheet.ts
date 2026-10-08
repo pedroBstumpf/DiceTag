@@ -23,18 +23,26 @@ import { LevelPips } from '../level-pips/level-pips';
 import { SheetInventory } from '../sheet-inventory/sheet-inventory';
 import { SheetNotes } from '../sheet-notes/sheet-notes';
 
-/** Abas da ficha de personagem. */
+/** Abas da ficha. */
 type SheetTab = 'sheet' | 'inventory' | 'notes' | 'abilities';
 
+const TAB_META: Record<SheetTab, { icon: string; label: string }> = {
+  sheet: { icon: 'badge', label: 'Ficha' },
+  inventory: { icon: 'backpack', label: 'Inventário' },
+  notes: { icon: 'edit_note', label: 'Anotações' },
+  abilities: { icon: 'bolt', label: 'Habilidades' },
+};
+
 /**
- * Ficha do personagem jogador, com abas:
+ * Ficha de personagem jogador ou de NPC, com abas:
  * - Ficha: cards Básico (imagem, nome, raça, sub-raça, rótulos), Status (barras
- *   Corpo/Mente/Espírito e etiquetas — as mesmas do token no mapa), Relações e três Temas
- *   (tags de nível 1 a 6 e defeitos de -1 a -6).
- * - Inventário: itens do mundo que o personagem possui, com o cartão ao lado (SheetInventory).
- * - Anotações: caderno de texto rico em páginas (SheetNotes).
- * - Habilidades: as ações (automações) do personagem, criadas por ele ou pelo mestre.
+ *   Corpo/Mente/Espírito e etiquetas — as mesmas do token no mapa), Relações (só
+ *   personagem) e três Temas (tags de nível 1 a 6 e defeitos de -1 a -6).
+ * - Inventário: itens do mundo que a ficha possui, com o cartão ao lado (SheetInventory).
+ * - Anotações (só personagem): caderno de texto rico em páginas (SheetNotes).
+ * - Habilidades: as ações (automações) da ficha.
  * Tudo é gravado na ficha (`TableEntry.sheet`) ou no token dela (barras e etiquetas).
+ * No NPC, barras e etiquetas da ficha são o padrão dos próximos tokens (cada token tem os seus).
  */
 @Component({
   selector: 'app-character-sheet',
@@ -53,17 +61,27 @@ export class CharacterSheetView {
   /** Uma habilidade foi usada pela ficha. */
   readonly used = output<TableEntry>();
 
-  // --- Abas ----------------------------------------------------------------
-  readonly tabs: { id: SheetTab; icon: string; label: string }[] = [
-    { id: 'sheet', icon: 'badge', label: 'Ficha' },
-    { id: 'inventory', icon: 'backpack', label: 'Inventário' },
-    { id: 'notes', icon: 'edit_note', label: 'Anotações' },
-    { id: 'abilities', icon: 'bolt', label: 'Habilidades' },
-  ];
-  readonly tab = signal<SheetTab>('sheet');
-
   // --- Dados ---------------------------------------------------------------
   readonly entry = computed(() => this.session.entryById().get(this.entryId()));
+  /** Ficha de NPC (sem Relações nem Anotações). */
+  readonly isNpc = computed(() => this.entry()?.kind === 'npc');
+
+  // --- Abas ----------------------------------------------------------------
+  readonly tabs = computed(() => {
+    const ids: SheetTab[] = this.isNpc() ? ['sheet', 'inventory', 'abilities'] : ['sheet', 'inventory', 'notes', 'abilities'];
+    return ids.map((id) => ({ id, ...TAB_META[id] }));
+  });
+  private readonly chosenTab = signal<SheetTab>('sheet');
+  /** Aba aberta (volta para a primeira se a escolhida não existir nesta ficha). */
+  readonly tab = computed(() => {
+    const tabs = this.tabs();
+    return tabs.find((t) => t.id === this.chosenTab())?.id ?? tabs[0].id;
+  });
+
+  selectTab(tab: SheetTab): void {
+    this.chosenTab.set(tab);
+  }
+
   readonly sheet = computed(() => {
     const entry = this.entry();
     return entry ? this.session.sheetOf(entry) : null;

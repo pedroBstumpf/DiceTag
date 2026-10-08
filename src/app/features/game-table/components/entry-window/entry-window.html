@@ -1,35 +1,12 @@
 @if (entry(); as e) {
-  <!-- Cabeçalho: imagem (personagem/NPC) ou ícone + nome editável -->
+  <!-- Cabeçalho: ícone + nome editável -->
   <div class="flex items-center gap-4">
-    @if (hasToken()) {
-      <!-- Imagem da ficha = imagem do token (clique para enviar/trocar) -->
-      <button
-        type="button"
-        class="group relative grid size-24 shrink-0 place-items-center overflow-hidden rounded-xl bg-ink-700 ring-1 ring-white/15"
-        [matTooltip]="e.token?.blobId ? 'Trocar imagem (também usada no token)' : 'Enviar imagem (também usada no token)'"
-        (click)="imageInput.click()"
-      >
-        @if (blobs.url(e.token?.blobId); as src) {
-          <img [src]="src" alt="" class="size-full object-cover" />
-        } @else {
-          <span class="flex flex-col items-center gap-1 text-slate-500">
-            <mat-icon class="!size-8 !text-[32px]" [class]="meta().color">{{ meta().icon }}</mat-icon>
-            <span class="text-[10px]">Enviar imagem</span>
-          </span>
-        }
-        <span class="absolute inset-0 grid place-items-center bg-black/60 opacity-0 transition-opacity group-hover:opacity-100">
-          <mat-icon class="text-white">add_photo_alternate</mat-icon>
-        </span>
-      </button>
-      <input #imageInput type="file" accept="image/*" hidden (change)="onImagePicked(imageInput)" />
-    } @else {
-      <div class="grid size-16 shrink-0 place-items-center rounded-xl bg-white/5 ring-1 ring-white/10" [class]="meta().color">
-        <mat-icon class="!size-8 !text-[32px]">{{ e.icon ?? meta().icon }}</mat-icon>
-      </div>
-    }
+    <div class="grid size-16 shrink-0 place-items-center rounded-xl bg-white/5 ring-1 ring-white/10" [class]="meta().color">
+      <mat-icon class="!size-8 !text-[32px]">{{ e.icon ?? meta().icon }}</mat-icon>
+    </div>
     <div class="min-w-0 flex-1">
       <span class="text-[11px] font-semibold uppercase tracking-widest text-slate-500">
-        {{ e.kind === 'automation' ? ownerLabel(e) : meta().label }}
+        {{ ownerLabel(e) }}
       </span>
       <input
         #nameInput
@@ -40,53 +17,6 @@
       />
     </div>
   </div>
-
-  @if (hasToken()) {
-    <!-- ===== NPC ===== -->
-    <p class="mt-4 flex items-start gap-2 rounded-lg bg-white/5 px-3 py-2 text-xs leading-relaxed text-slate-400">
-      <mat-icon class="!size-4 shrink-0 !text-[16px] text-astral-300">token</mat-icon>
-      A imagem acima também é a do token. Arraste esta ficha do painel direito até o mapa para colocá-lo e
-      dê duplo clique no token para configurar tamanho, visão, velocidade, barras e etiquetas.
-    </p>
-
-    <!-- Ações automatizadas desta ficha -->
-    <section class="mt-6">
-      <div class="mb-2 flex items-center justify-between">
-        <h4 class="text-xs text-slate-400">
-          Ações automatizadas
-          <span class="text-slate-600">· barra do mestre ao selecionar o token</span>
-        </h4>
-        <button type="button" class="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-astral-300 hover:bg-white/5" (click)="addAction()">
-          <mat-icon class="!size-4 !text-[16px]">add</mat-icon>
-          Ação
-        </button>
-      </div>
-      @for (action of actions(); track action.id) {
-        <button
-          type="button"
-          class="mb-1 flex h-10 w-full items-center gap-2.5 rounded-lg bg-white/5 px-3 text-left text-sm text-slate-200 transition-colors hover:bg-white/10"
-          (click)="openEntry.emit(action.id)"
-        >
-          <mat-icon class="!size-5 !text-[20px] text-amber-300">{{ action.icon ?? 'bolt' }}</mat-icon>
-          <span class="min-w-0 flex-1 truncate">{{ action.name }}</span>
-          <span class="font-mono text-xs text-slate-400">{{ formula(action) }}</span>
-          @if (action.effect) {
-            <span class="size-2.5 rounded-full" [style.background]="action.effect.color" matTooltip="Tem efeito especial"></span>
-          }
-        </button>
-      } @empty {
-        <p class="text-xs text-slate-600">Nenhuma ação ainda. Ex.: ataque, magia, teste de resistência.</p>
-      }
-    </section>
-
-    <!-- Espaço reservado para a estrutura futura da ficha -->
-    <div class="mt-6 flex flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/10 p-6 text-center">
-      <mat-icon class="text-slate-600">construction</mat-icon>
-      <p class="max-w-sm text-sm leading-relaxed text-slate-400">
-        A ficha de NPC (atributos, ataques e notas do mestre) será estruturada numa próxima etapa.
-      </p>
-    </div>
-  }
 
   @if (e.kind === 'automation') {
     <!-- ===== Dono da ação ===== -->
@@ -168,10 +98,10 @@
     </section>
 
     <!-- ===== Tags do personagem somadas ao modificador ===== -->
-    @if (ownerIsCharacter()) {
+    @if (ownerHasSheet()) {
       <section class="mt-6">
         <div class="mb-2 flex items-baseline justify-between gap-2">
-          <h4 class="text-xs text-slate-400">Tags do personagem no modificador</h4>
+          <h4 class="text-xs text-slate-400">Tags da ficha no modificador</h4>
           @if (linkedTags().length) {
             <span class="text-[11px] tabular-nums text-slate-500">{{ breakdown() }}</span>
           }
@@ -192,7 +122,7 @@
               <span class="font-semibold tabular-nums">{{ modifierText(tag.level) }}</span>
             </button>
           } @empty {
-            <p class="text-xs text-slate-600">Este personagem ainda não tem tags nos temas (aba Ficha).</p>
+            <p class="text-xs text-slate-600">A ficha ainda não tem tags nos temas (aba Ficha).</p>
           }
         </div>
         <p class="mt-2 text-[11px] leading-relaxed text-slate-500">

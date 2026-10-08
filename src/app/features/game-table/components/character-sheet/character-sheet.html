@@ -1,12 +1,12 @@
 @if (entry(); as e) {
   <!-- ===== Abas da ficha ===== -->
   <nav class="flex shrink-0 gap-1 overflow-x-auto border-b border-white/5 bg-ink-900/60 px-2 py-1.5">
-    @for (t of tabs; track t.id) {
+    @for (t of tabs(); track t.id) {
       <button
         type="button"
         class="flex h-8 shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors"
         [class]="tab() === t.id ? 'bg-astral-500/20 text-astral-300' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'"
-        (click)="tab.set(t.id)"
+        (click)="selectTab(t.id)"
       >
         <mat-icon class="!size-4 !text-[16px]">{{ t.icon }}</mat-icon>
         {{ t.label }}
@@ -41,7 +41,7 @@
                     <img [src]="src" alt="" class="size-full object-cover" />
                   } @else {
                     <span class="flex flex-col items-center gap-1 text-slate-500">
-                      <mat-icon class="!size-8 !text-[32px] text-astral-300">person</mat-icon>
+                      <mat-icon class="!size-8 !text-[32px]" [class]="isNpc() ? 'text-violet-300' : 'text-astral-300'">{{ isNpc() ? 'smart_toy' : 'person' }}</mat-icon>
                       <span class="text-[10px]">Enviar imagem</span>
                     </span>
                   }
@@ -73,6 +73,7 @@
                     </label>
                   </div>
                   <!-- Jogador dono do personagem -->
+                  @if (!isNpc()) {
                   <p class="flex items-center gap-1.5 text-xs text-slate-400">
                     <mat-icon class="!size-4 !text-[16px]">account_circle</mat-icon>
                     @if (!e.ownerUserId) {
@@ -86,6 +87,7 @@
                       <button type="button" class="ml-1 text-astral-300 hover:underline" (click)="claim()">Vincular à minha conta</button>
                     }
                   </p>
+                  }
                 </div>
               </div>
 
@@ -114,7 +116,7 @@
             </section>
 
             <!-- ===== Card de Status ===== -->
-            <section class="sheet-card @2xl:col-span-2 @2xl:row-span-2">
+            <section class="sheet-card @2xl:col-span-2" [class]="isNpc() ? '' : '@2xl:row-span-2'">
               <h3 class="sheet-title">
                 <mat-icon class="!size-4 !text-[16px]">monitor_heart</mat-icon>
                 Status
@@ -170,10 +172,11 @@
                 </div>
                 <app-tag-editor #tagEditor [tags]="tags()" emptyText="Ex.: Envenenado, Inspirado, Exausto." (changed)="setTags($event)" />
               </div>
-              <p class="mt-3 text-[11px] leading-relaxed text-slate-500">Barras e etiquetas também aparecem no token do personagem.</p>
+              <p class="mt-3 text-[11px] leading-relaxed text-slate-500">{{ isNpc() ? 'Barras e etiquetas são o padrão dos próximos tokens deste NPC (cada token tem os seus no mapa).' : 'Barras e etiquetas também aparecem no token do personagem.' }}</p>
             </section>
 
-            <!-- ===== Card de Relações ===== -->
+            <!-- ===== Card de Relações (só personagem) ===== -->
+            @if (!isNpc()) {
             <section class="sheet-card @2xl:col-span-4">
               <div class="mb-2 flex items-center justify-between">
                 <h3 class="sheet-title !mb-0">
@@ -217,6 +220,7 @@
                 }
               </div>
             </section>
+            }
 
             <!-- ===== Cards de Tema (três) ===== -->
             @for (theme of s.themes; track theme.id; let i = $index) {

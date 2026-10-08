@@ -4,7 +4,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterLink } from '@angular/router';
-import { ROLL_OUTCOMES, TABLE_ENTRY_META, TableEntry } from '../../core/models/table-session.model';
+import { ROLL_OUTCOMES, TABLE_ENTRY_META, TableEntry, hasSheet } from '../../core/models/table-session.model';
 import { WORLD_ITEM_META } from '../../core/models/world-item.model';
 import { GameTablesService } from '../../core/services/game-tables.service';
 import { FloatingWindow } from '../../shared/components/floating-window/floating-window';
@@ -167,8 +167,8 @@ export class GameTablePage {
     // Sons não abrem janela: são controlados direto no mixer da aba Sons
     if (entry && entry.kind !== 'sound') {
       const meta = TABLE_ENTRY_META[entry.kind];
-      // Personagem abre a ficha completa (abas); NPC e automação, a janela simples
-      const type = entry.kind === 'character' ? 'sheet' : 'entry';
+      // Personagem e NPC abrem a ficha completa (abas); automação, a janela de configuração
+      const type = hasSheet(entry.kind) ? 'sheet' : 'entry';
       return { title: entry.name, icon: entry.icon ?? meta.icon, color: meta.color, type };
     }
     // Itens da lore: o título usa o nome desta mesa (pode ter sido renomeado só aqui)

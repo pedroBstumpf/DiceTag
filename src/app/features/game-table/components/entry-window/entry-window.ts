@@ -1,4 +1,4 @@
-import { Component, computed, inject, input, output } from '@angular/core';
+import { Component, computed, inject, input } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import {
@@ -13,8 +13,8 @@ import {
   RollOutcome,
   TABLE_ENTRY_META,
   TableEntry,
+  hasSheet,
 } from '../../../../core/models/table-session.model';
-import { BlobUrlService } from '../../services/blob-url.service';
 import { TableSessionService } from '../../services/table-session.service';
 import { formatModifier } from '../../utils/dice';
 import { FxPicker } from '../fx-picker/fx-picker';
@@ -36,14 +36,11 @@ const OUTCOME_GUIDE: Record<DiceKind, { outcome: RollOutcome; range: string }[]>
 };
 
 /**
- * Janela de NPC ou automação aberta pelo painel (personagens usam a ficha
- * completa, `CharacterSheetView`).
+ * Janela de configuração de uma automação (ação). Personagens e NPCs usam a
+ * ficha completa (`CharacterSheetView`).
  *
- * - NPC: nome, imagem (a mesma do token) e as ações automatizadas dele.
- *   O resto da ficha de NPC será estruturado depois.
- * - Automação: dono (personagem, NPC ou geral do mestre), ícone, rolagem
- *   (2d12 ou 3d6 + modificador) e efeito especial lançado ao usar.
- * As demais opções do token ficam só no mapa (duplo clique no token).
+ * Dono (personagem, NPC ou geral do mestre), rolagem (2d12 ou 3d6 + modificador
+ * fixo + tags dos temas do dono), ícone e efeito especial lançado ao usar.
  */
 @Component({
   selector: 'app-entry-window',
@@ -53,29 +50,13 @@ const OUTCOME_GUIDE: Record<DiceKind, { outcome: RollOutcome; range: string }[]>
 })
 export class EntryWindow {
   readonly session = inject(TableSessionService);
-  readonly blobs = inject(BlobUrlService);
 
   readonly entryId = input.required<string>();
-  /** Pedido para abrir outra ficha/ação numa janela. */
-  readonly openEntry = output<string>();
 
   readonly entry = computed(() => this.session.entryById().get(this.entryId()));
-  readonly meta = computed(() => TABLE_ENTRY_META[this.entry()?.kind ?? 'character']);
-  /** Personagens e NPCs têm imagem (a mesma usada no token). */
-  readonly hasToken = computed(() => this.entry()?.kind === 'character' || this.entry()?.kind === 'npc');
+  readonly meta = computed(() => TABLE_ENTRY_META[this.entry()?.kind ?? 'automation']);
   readonly icons = AUTOMATION_ICONS;
   readonly diceKinds = DICE_KINDS;
-
-  // --- NPC -----------------------------------------------------------------
-
-  /** Ações automatizadas desta ficha. */
-  readonly actions = computed(() => this.session.automationsOf(this.entryId()));
-
-  /** Cria uma ação desta ficha e a abre. */
-  addAction(): void {
-    const created = this.session.addEntry('automation', { ownerEntryId: this.entryId() });
-    this.openEntry.emit(created.id);
-  }
 
   // --- Automação -----------------------------------------------------------
 
@@ -93,10 +74,10 @@ export class EntryWindow {
 
   // --- Tags do personagem no modificador -----------------------------------
 
-  /** O dono da ação é um personagem (só personagens têm temas com tags). */
-  readonly ownerIsCharacter = computed(() => {
-    const ownerId = this.entry()?.ownerEntryId;
-    return !!ownerId && this.session.entryById().get(ownerId)?.kind === 'character';
+  /** O dono da ação tem ficha com temas (personagem ou NPC). */
+  readonly ownerHasSheet = computed(() => {
+    const owner = this.session.entryById().get(this.entry()?.ownerEntryId ?? '');
+    return !!owner && hasSheet(owner.kind);
   });
   /** Tags e defeitos dos temas do dono. */
   readonly ownerTags = computed(() => this.session.themeTagsOf(this.entry()?.ownerEntryId));
@@ -159,13 +140,6 @@ export class EntryWindow {
 
   rename(value: string): void {
     if (value.trim()) this.session.updateEntry(this.entryId(), { name: value.trim() });
-  }
-
-  /** Envia (ou troca) a imagem da ficha — é a mesma do token, em todos os mapas. */
-  async onImagePicked(input: HTMLInputElement): Promise<void> {
-    const file = input.files?.[0];
-    input.value = '';
-    if (file?.type.startsWith('image/')) await this.session.setTokenImage(this.entryId(), file);
   }
 
   /** Subtítulo da automação: papel derivado do dono. */

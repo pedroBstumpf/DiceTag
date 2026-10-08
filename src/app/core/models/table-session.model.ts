@@ -168,7 +168,7 @@ export interface TableEntry {
   ownerUserId?: string;
   /** character/npc: configuração do token. Padrão: defaultToken(kind). */
   token?: TokenSettings;
-  /** character: ficha do personagem. Padrão: defaultSheet(). */
+  /** character/npc: ficha (NPC não usa relações nem anotações). Padrão: defaultSheet(). */
   sheet?: CharacterSheet;
 }
 
@@ -555,16 +555,21 @@ export const MAX_TOKEN_SPEED = 12;
 export const TOKEN_COLORS = TAG_COLORS;
 
 /**
- * Token padrão de uma ficha: personagens enxergam e têm as barras de status
- * (Corpo, Mente, Espírito); NPCs começam sem visão e sem barras.
+ * Token padrão de uma ficha: personagens e NPCs têm as barras de status
+ * (Corpo, Mente, Espírito); só personagens começam enxergando.
  */
 export function defaultToken(kind: TableEntryKind): TokenSettings {
   return {
     size: 1,
     vision: { enabled: kind === 'character', range: DEFAULT_VISION_RANGE },
-    bars: kind === 'character' ? withStatusBars([]) : [],
+    bars: hasSheet(kind) ? withStatusBars([]) : [],
     tags: [],
   };
+}
+
+/** Personagens e NPCs têm ficha completa (CharacterSheet) e barras de status. */
+export function hasSheet(kind: TableEntryKind): boolean {
+  return kind === 'character' || kind === 'npc';
 }
 
 // --- Sons --------------------------------------------------------------------

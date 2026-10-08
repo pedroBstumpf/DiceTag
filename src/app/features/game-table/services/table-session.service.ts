@@ -41,6 +41,7 @@ import {
   SHEET_THEME_COUNT,
   defaultSheet,
   defaultToken,
+  hasSheet,
   withStatusBars,
 } from '../../../core/models/table-session.model';
 import { AuthService } from '../../../core/services/auth.service';
@@ -766,10 +767,10 @@ export class TableSessionService {
 
   // --- Tags dos temas nas ações --------------------------------------------
 
-  /** Tags e defeitos dos temas do personagem (vazio para NPC, ação geral ou ficha sem tags). */
+  /** Tags e defeitos dos temas do personagem/NPC (vazio para ação geral ou ficha sem tags). */
   themeTagsOf(entryId: string | undefined): SheetTagOption[] {
     const entry = entryId ? this.entryById().get(entryId) : undefined;
-    if (entry?.kind !== 'character') return [];
+    if (!entry || !hasSheet(entry.kind)) return [];
     return this.sheetOf(entry).themes.flatMap((theme, i) => {
       const themeName = theme.name.trim() || `Tema ${i + 1}`;
       return [
@@ -968,12 +969,12 @@ export class TableSessionService {
     });
   }
 
-  /** Altera a configuração de token da ficha (personagem mantém sempre as barras de status). */
+  /** Altera a configuração de token da ficha (personagem/NPC mantém sempre as barras de status). */
   updateEntryToken(entryId: string, patch: Partial<TokenSettings>): void {
     const entry = this.entryById().get(entryId);
     if (!entry) return;
     const token = { ...this.tokenOf(entry), ...patch };
-    if (entry.kind === 'character') token.bars = withStatusBars(token.bars);
+    if (hasSheet(entry.kind)) token.bars = withStatusBars(token.bars);
     this.updateEntry(entryId, { token });
   }
 
@@ -1227,9 +1228,9 @@ function normalizeState(raw: TableState | undefined): TableState {
     })),
     entries: raw.entries.map((e) => {
       if (e.kind === 'sound') return { ...e, volume: e.volume ?? DEFAULT_SOUND_VOLUME, loop: e.loop ?? true };
-      // Personagens sempre têm as barras de status (Corpo, Mente, Espírito) no token
-      if (e.kind === 'character') {
-        const token = e.token ?? defaultToken('character');
+      // Personagens e NPCs sempre têm as barras de status (Corpo, Mente, Espírito) no token
+      if (hasSheet(e.kind)) {
+        const token = e.token ?? defaultToken(e.kind);
         return { ...e, token: { ...token, bars: withStatusBars(token.bars) } };
       }
       return e;
