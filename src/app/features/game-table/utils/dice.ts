@@ -23,6 +23,23 @@ export function effectiveModifier(roll: RollConfig, levels: TagLevels = NO_LEVEL
   return (roll.attributes ?? []).reduce((sum, id) => sum + (levels.get(id) ?? 0), roll.modifier);
 }
 
+/** Etiqueta de status ligada na rolagem básica: soma (+1) ou subtrai (−1) o nível dela. */
+export interface StatusPick {
+  /** Nível da etiqueta (ausente ou 0 = sem nível: vale 1). */
+  level?: number;
+  sign: 1 | -1;
+}
+
+/**
+ * Modificador da rolagem básica (botão "Rolar dados", não salvo como ação): valor fixo +
+ * nível das tags/defeitos dos temas escolhidos (defeitos já são negativos) + etiquetas de
+ * status escolhidas, cada uma como bônus ou penalidade.
+ */
+export function quickModifier(fixed: number, themeLevels: readonly number[], status: readonly StatusPick[]): number {
+  const themes = themeLevels.reduce((sum, level) => sum + level, 0);
+  return status.reduce((sum, pick) => sum + pick.sign * (pick.level || 1), fixed + themes);
+}
+
 /** Rola os dados de `roll` e classifica o total. */
 export function rollDice(roll: RollConfig, random: Random = Math.random, levels: TagLevels = NO_LEVELS) {
   const { count, sides } = DICE[roll.dice];

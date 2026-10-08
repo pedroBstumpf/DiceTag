@@ -1,4 +1,4 @@
-import { effectiveModifier, formatModifier, formatRoll, rollDice, rollOutcome } from './dice';
+import { effectiveModifier, formatModifier, formatRoll, quickModifier, rollDice, rollOutcome } from './dice';
 
 /** Random que devolve os valores na ordem (para dados previsíveis). */
 function sequence(...values: number[]) {
@@ -86,5 +86,16 @@ describe('tags do personagem no modificador', () => {
     const r = rollDice({ dice: '2d12', modifier: 0, attributes: ['esgrima'] }, sequence(0), levels);
     expect(r.modifier).toBe(3);
     expect(r.total).toBe(5);
+  });
+});
+
+describe('rolagem básica (quickModifier)', () => {
+  it('soma o fixo, as tags dos temas (defeitos negativos) e as etiquetas como bônus ou penalidade', () => {
+    expect(quickModifier(1, [2, -1], [{ level: 2, sign: -1 }, { sign: 1 }])).toBe(1 + 2 - 1 - 2 + 1);
+  });
+
+  it('sem nada escolhido vale só o fixo; etiqueta sem nível (ou 0) vale 1', () => {
+    expect(quickModifier(-3, [], [])).toBe(-3);
+    expect(quickModifier(0, [], [{ level: 0, sign: -1 }])).toBe(-1);
   });
 });

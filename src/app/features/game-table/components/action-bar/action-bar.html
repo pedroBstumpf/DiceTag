@@ -84,6 +84,34 @@
     }
   </div>
 
+  <!-- Ação padrão: rolagem básica (2d12/3d6 + modificador na hora), para mestre e jogador -->
+  <span class="h-10 w-px shrink-0 bg-white/10"></span>
+  <button
+    #rollButton
+    type="button"
+    cdkOverlayOrigin
+    #rollOrigin="cdkOverlayOrigin"
+    class="flex size-14 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg ring-1 transition-colors"
+    [class]="rollOpen() ? 'bg-astral-500/35 text-astral-100 ring-astral-300/70' : 'bg-astral-500/15 text-astral-200 ring-astral-400/40 hover:bg-astral-500/25'"
+    matTooltip="Rolar dados (2d12 ou 3d6 + modificador)"
+    aria-label="Rolar dados"
+    [attr.aria-expanded]="rollOpen()"
+    (click)="rollOpen.set(!rollOpen())"
+  >
+    <mat-icon>casino</mat-icon>
+    <span class="text-[9px] font-semibold uppercase tracking-wider">Rolar</span>
+  </button>
+  <ng-template
+    cdkConnectedOverlay
+    [cdkConnectedOverlayOrigin]="rollOrigin"
+    [cdkConnectedOverlayOpen]="rollOpen()"
+    [cdkConnectedOverlayPositions]="rollPositions"
+    (overlayOutsideClick)="onRollOutside($event, rollButton)"
+    (detach)="rollOpen.set(false)"
+  >
+    <app-quick-roll (done)="rollOpen.set(false)" />
+  </ng-template>
+
   <button
     type="button"
     class="grid size-8 shrink-0 place-items-center self-start rounded-md text-slate-500 hover:bg-white/10 hover:text-white"

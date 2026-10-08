@@ -9,6 +9,7 @@ import {
   ChatMessage,
   DEFAULT_FX,
   DEFAULT_ROLL,
+  DiceKind,
   DEFAULT_SOUND_VOLUME,
   DEFAULT_TOKEN_SPEED,
   DoorWall,
@@ -552,6 +553,18 @@ export class TableSessionService extends SheetStore {
       this.tool.set('fx');
     }
     return { author, roll, armed: !!entry.effect };
+  }
+
+  /**
+   * Rolagem básica (botão "Rolar dados" da barra de ações): não é uma ação salva — dado e
+   * modificador (já com as tags escolhidas) valem só para esta rolagem. Vai para o chat em
+   * nome da ficha `sheetId` (ou do mestre/conta, sem ficha).
+   */
+  quickRoll(dice: DiceKind, modifier: number, sheetId: string | null): { author: string; roll: RollResult } {
+    const roll: RollResult = { action: 'Rolagem', icon: 'casino', dice, ...rollDice({ dice, modifier }) };
+    const author = (sheetId && this.sheetData(sheetId)?.name) || this.userName();
+    this.pushChat({ author, roll });
+    return { author, roll };
   }
 
   // --- Chat ----------------------------------------------------------------
