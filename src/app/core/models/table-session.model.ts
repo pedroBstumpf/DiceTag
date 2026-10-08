@@ -333,7 +333,7 @@ export const STATUS_BARS = [
 ] as const;
 
 /** Valor máximo inicial das barras de status. */
-export const DEFAULT_STATUS_MAX = 10;
+export const DEFAULT_STATUS_MAX = 24;
 
 /** A barra é uma das barras de status fixas (não pode ser renomeada nem removida)? */
 export function isStatusBar(bar: TokenBar): boolean {
