@@ -30,6 +30,11 @@ describe('inventário: quantidades', () => {
     expect(stacked).toEqual([{ id: 'a', itemId: 'x', name: 'Poção', quantity: 3 }]);
   });
 
+  it('addOne não leva o "equipado" de quem deu', () => {
+    const given = addOne([], { id: 'a', itemId: 'x', equipped: true }, id);
+    expect(given[0].equipped).toBeUndefined();
+  });
+
   it('addOne cria linha nova se a personalização ou a imagem diferem', () => {
     const base: InventoryEntry[] = [{ id: 'a', itemId: 'x' }];
     expect(addOne(base, { id: 'b', itemId: 'x', name: 'Outra' }, id)).toHaveLength(2);

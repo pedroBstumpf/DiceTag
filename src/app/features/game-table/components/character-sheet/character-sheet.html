@@ -309,6 +309,49 @@
                 </div>
               </section>
             }
+
+            <!-- ===== Card de Equipados (só personagem; marcados no Inventário) ===== -->
+            @if (!isNpc()) {
+            <section class="sheet-card @2xl:col-span-6">
+              <h3 class="sheet-title">
+                <mat-icon class="!size-4 !text-[16px]">shield</mat-icon>
+                Equipados
+                <span class="font-sans text-xs text-slate-500">{{ equipped().length }}</span>
+              </h3>
+              <div class="grid gap-2 @xl:grid-cols-2 @2xl:grid-cols-3">
+                @for (row of equipped(); track row.entry.id) {
+                  <button
+                    type="button"
+                    class="flex min-w-0 items-center gap-2.5 rounded-lg bg-white/[0.03] p-1.5 pr-2 text-left ring-1 ring-white/5 transition-colors hover:bg-white/[0.07] hover:ring-astral-400/30"
+                    [matTooltip]="'Ver ' + row.name"
+                    (click)="openEquipped(row.entry.id)"
+                  >
+                    <span class="grid size-10 shrink-0 place-items-center overflow-hidden rounded-md bg-ink-950 ring-1 ring-white/10">
+                      @if (blobs.url(row.blobId); as src) {
+                        <img [src]="src" alt="" class="size-full object-cover" />
+                      } @else {
+                        <mat-icon class="!size-5 !text-[20px] text-amber-300">inventory_2</mat-icon>
+                      }
+                    </span>
+                    <span class="flex min-w-0 flex-1 flex-col gap-1">
+                      <span class="truncate text-sm text-slate-200" [class.italic]="row.missing">{{ row.name }}</span>
+                      @if (row.tags.length) {
+                        <span class="flex max-h-[1.125rem] flex-wrap gap-1 overflow-hidden">
+                          @for (tag of row.tags; track tag.id) {
+                            <span class="whitespace-nowrap rounded-sm px-1 text-[10px] font-semibold leading-[1.125rem] text-ink-950" [style.background]="tag.color">
+                              {{ tag.text }}{{ tag.level ? ' ' + tag.level : '' }}
+                            </span>
+                          }
+                        </span>
+                      }
+                    </span>
+                  </button>
+                } @empty {
+                  <p class="text-xs text-slate-600">Nenhum item equipado. Marque a caixa ao lado dos itens na aba Inventário.</p>
+                }
+              </div>
+            </section>
+            }
           </div>
           </fieldset>
         }

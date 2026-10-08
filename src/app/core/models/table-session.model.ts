@@ -244,6 +244,8 @@ export interface InventoryEntry {
   price?: number;
   /** Quantidade (ausente = 1). Na loja de NPC pode ficar em 0 (esgotado). */
   quantity?: number;
+  /** Personagem: o item está equipado (aparece na aba Ficha, abaixo dos temas). Padrão: false. */
+  equipped?: boolean;
 }
 
 /** Nome da moeda do mundo. */

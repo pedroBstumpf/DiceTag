@@ -24,7 +24,10 @@ import { BlobUrlService } from '../../services/blob-url.service';
 import { SheetStore } from '../../../../core/services/sheet-store';
 import { TableSessionService } from '../../services/table-session.service';
 import { LevelPips } from '../level-pips/level-pips';
-import { SheetInventory } from '../sheet-inventory/sheet-inventory';
+import { LoreService } from '../../../worldbuild/services/lore.service';
+import { WorldbuildService } from '../../../worldbuild/services/worldbuild.service';
+import { equippedWindowId } from '../equipped-item-window/equipped-item-window';
+import { SheetInventory, inventoryRow } from '../sheet-inventory/sheet-inventory';
 import { SheetNotes } from '../sheet-notes/sheet-notes';
 
 /** Abas da ficha. */
@@ -41,7 +44,8 @@ const TAB_META: Record<SheetTab, { icon: string; label: string }> = {
  * Ficha de personagem jogador ou de NPC, com abas:
  * - Ficha: cards Básico (imagem, nome, raça, sub-raça, rótulos), Status (barras
  *   Corpo/Mente/Espírito e etiquetas — as mesmas do token no mapa), Relações (só
- *   personagem) e três Temas (tags de nível 1 a 6 e defeitos de -1 a -6).
+ *   personagem), três Temas (tags de nível 1 a 6 e defeitos de -1 a -6) e, no
+ *   personagem, os itens Equipados (clique abre o cartão numa janela).
  * - Inventário: itens do mundo que a ficha possui, com o cartão ao lado (SheetInventory).
  * - Anotações (só personagem): caderno de texto rico em páginas (SheetNotes).
  * - Habilidades (só na mesa): as ações (automações) da ficha.
@@ -63,6 +67,8 @@ export class CharacterSheetView {
   readonly session = inject(TableSessionService, { optional: true });
   readonly blobs = inject(BlobUrlService);
   private readonly auth = inject(AuthService);
+  private readonly worldbuild = inject(WorldbuildService);
+  private readonly loreGeneral = inject(LoreService);
 
   /** Id da ficha no SheetStore. */
   readonly sheetId = input.required<string>();
@@ -289,6 +295,20 @@ export class CharacterSheetView {
 
   removeThemeTag(theme: CharacterTheme, list: ThemeTagList, tagId: string): void {
     this.updateTheme(theme.id, { [list]: theme[list].filter((t) => t.id !== tagId) });
+  }
+
+  // --- Equipados (personagem) ----------------------------------------------
+
+  /** Itens marcados como equipados no inventário (com a personalização da ficha). */
+  readonly equipped = computed(() => {
+    const global = this.loreGeneral.byId();
+    const own = this.worldbuild.byId();
+    return (this.sheet()?.inventory ?? []).filter((i) => i.equipped).map((i) => inventoryRow(i, global, own));
+  });
+
+  /** Abre o cartão do item equipado numa janela. */
+  openEquipped(inventoryId: string): void {
+    this.openEntry.emit(equippedWindowId(this.sheetId(), inventoryId));
   }
 
   // --- Habilidades (ações da ficha, só na mesa) ----------------------------

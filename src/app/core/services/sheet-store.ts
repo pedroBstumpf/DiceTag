@@ -58,8 +58,12 @@ export abstract class SheetStore {
     return this.sheetData(id)?.sheet.inventory ?? [];
   }
 
-  /** Personaliza o item só neste inventário (nome/etiquetas/preço/quantidade; o original não muda). */
-  updateInventoryItem(id: string, inventoryId: string, patch: Pick<InventoryEntry, 'name' | 'tags' | 'price' | 'quantity'>): void {
+  /** Personaliza o item só neste inventário (nome/etiquetas/preço/quantidade/equipado; o original não muda). */
+  updateInventoryItem(
+    id: string,
+    inventoryId: string,
+    patch: Pick<InventoryEntry, 'name' | 'tags' | 'price' | 'quantity' | 'equipped'>,
+  ): void {
     this.updateSheet(id, { inventory: this.inventoryOf(id).map((i) => (i.id === inventoryId ? { ...i, ...patch } : i)) });
   }
 

@@ -17,7 +17,7 @@ import { TableSessionService } from '../../services/table-session.service';
 import { quantityOf } from '../../utils/inventory';
 
 /** Linha do inventário: o que o cartão mostra (personalização ou original). */
-interface InventoryRow {
+export interface InventoryRow {
   entry: InventoryEntry;
   /** Item original (ausente quando foi excluído do worldbuild / Lore geral). */
   item?: WorldItem;
@@ -30,6 +30,25 @@ interface InventoryRow {
   custom: boolean;
   /** Original excluído e nada personalizado: não há o que mostrar. */
   missing: boolean;
+}
+
+/**
+ * Monta a linha de um item do inventário: a personalização da ficha vale no lugar do
+ * original (Lore geral, se `global`, ou worldbuild do usuário).
+ */
+export function inventoryRow(entry: InventoryEntry, global: Map<string, WorldItem>, own: Map<string, WorldItem>): InventoryRow {
+  const item = (entry.global ? global : own).get(entry.itemId);
+  const custom = entry.name !== undefined || entry.tags !== undefined || entry.blobId !== undefined;
+  return {
+    entry,
+    item,
+    name: entry.name ?? item?.name ?? 'Item excluído',
+    tags: entry.tags ?? item?.tags ?? [],
+    blobId: entry.blobId ?? item?.blobId,
+    quantity: quantityOf(entry),
+    custom,
+    missing: !item && !custom,
+  };
 }
 
 /** Item do mundo que pode ser adicionado ao inventário. */
@@ -51,6 +70,7 @@ interface ItemOption {
  * o NPC); o jogador que vê o inventário compra um item com os Eiros do personagem dele
  * (ou o pega de graça, se o NPC estiver derrotado).
  * "Dar para…": personagens passam itens uns aos outros, com a personalização.
+ * Personagem: a caixa à esquerda de cada item marca se ele está equipado.
  */
 @Component({
   selector: 'app-sheet-inventory',
@@ -82,20 +102,7 @@ export class SheetInventory {
   readonly rows = computed<InventoryRow[]>(() => {
     const global = this.loreGeneral.byId();
     const own = this.worldbuild.byId();
-    return this.inventory().map((entry) => {
-      const item = (entry.global ? global : own).get(entry.itemId);
-      const custom = entry.name !== undefined || entry.tags !== undefined || entry.blobId !== undefined;
-      return {
-        entry,
-        item,
-        name: entry.name ?? item?.name ?? 'Item excluído',
-        tags: entry.tags ?? item?.tags ?? [],
-        blobId: entry.blobId ?? item?.blobId,
-        quantity: quantityOf(entry),
-        custom,
-        missing: !item && !custom,
-      };
-    });
+    return this.inventory().map((entry) => inventoryRow(entry, global, own));
   });
 
   /** Linha selecionada (padrão: a primeira). */
@@ -141,6 +148,15 @@ export class SheetInventory {
 
   reset(row: InventoryRow): void {
     this.store.resetInventoryItem(this.sheetId(), row.entry.id);
+  }
+
+  // --- Equipados (só personagem) -------------------------------------------
+
+  /** Inventário de personagem: cada item tem a caixa "equipado" (listados na aba Ficha). */
+  readonly canEquip = computed(() => this.data()?.level === 'character');
+
+  setEquipped(row: InventoryRow, equipped: boolean): void {
+    this.store.updateInventoryItem(this.sheetId(), row.entry.id, { equipped: equipped || undefined });
   }
 
   // --- Loja (inventário de NPC com preços em Eiros) ------------------------

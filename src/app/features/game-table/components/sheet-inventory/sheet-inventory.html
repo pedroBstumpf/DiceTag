@@ -58,7 +58,10 @@
 
   <!-- Itens da ficha: quantidade e, no NPC, a coluna de preço da loja -->
   @if (rows().length) {
-    <div class="flex items-center gap-2 pb-1 pl-8 text-[10px] font-semibold uppercase tracking-widest text-slate-600" [class]="readonly() ? 'pr-1' : 'pr-9'">
+    <div
+      class="flex items-center gap-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-600"
+      [class]="(readonly() ? 'pr-1 ' : 'pr-9 ') + (canEquip() ? 'pl-14' : 'pl-8')"
+    >
       <span class="flex-1">Item</span>
       <span class="w-12 text-center">Qtd.</span>
       @if (isShop()) {
@@ -73,6 +76,20 @@
         [class]="isSelected(row) ? 'bg-astral-500/15 text-astral-200 ring-1 ring-astral-400/30' : 'text-slate-300 hover:bg-white/5 hover:text-white'"
         (click)="select(row)"
       >
+        @if (canEquip()) {
+          <!-- Equipado (aparece na aba Ficha, abaixo dos temas) -->
+          <input
+            #equipBox
+            type="checkbox"
+            class="size-4 shrink-0 cursor-pointer accent-astral-400 disabled:cursor-default"
+            matTooltip="Equipado"
+            [attr.aria-label]="'Equipar ' + row.name"
+            [checked]="!!row.entry.equipped"
+            [disabled]="readonly()"
+            (click)="$event.stopPropagation()"
+            (change)="setEquipped(row, equipBox.checked)"
+          />
+        }
         <mat-icon class="!size-4 shrink-0 !text-[16px]" [class]="row.missing ? 'text-slate-600' : 'text-amber-300'">inventory_2</mat-icon>
         <span class="min-w-0 flex-1 truncate" [class.italic]="row.missing" [class.text-slate-500]="row.missing">{{ row.name }}</span>
         @if (row.custom) {

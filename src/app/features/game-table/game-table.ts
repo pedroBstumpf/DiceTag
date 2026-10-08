@@ -21,6 +21,8 @@ import { WorldbuildService } from '../worldbuild/services/worldbuild.service';
 import { ActionBar } from './components/action-bar/action-bar';
 import { CharacterSheetView } from './components/character-sheet/character-sheet';
 import { EntryWindow } from './components/entry-window/entry-window';
+import { EquippedItemWindow, parseEquippedWindow } from './components/equipped-item-window/equipped-item-window';
+import { inventoryRow } from './components/sheet-inventory/sheet-inventory';
 import { MapStage } from './components/map-stage/map-stage';
 import { SceneBar } from './components/scene-bar/scene-bar';
 import { LORE_WINDOW, SidePanel, WORLDBUILD_WINDOW } from './components/side-panel/side-panel';
@@ -38,7 +40,7 @@ interface WindowContent {
   icon: string;
   color: string;
   /** Tipo de conteúdo, usado para escolher o componente. */
-  type: 'entry' | 'sheet' | 'token' | 'explorer' | 'document' | 'timeline' | 'image' | 'item' | 'npc';
+  type: 'entry' | 'sheet' | 'token' | 'equipped' | 'explorer' | 'document' | 'timeline' | 'image' | 'item' | 'npc';
   /** O conteúdo vem da Lore geral (os editores usam o LoreService). */
   global?: boolean;
 }
@@ -51,6 +53,7 @@ const WINDOW_SIZES: Record<WindowContent['type'], { width: number; height: numbe
   entry: { width: 520, height: 480 },
   sheet: { width: 880, height: 700 },
   token: { width: 460, height: 560 },
+  equipped: { width: 420, height: 600 },
   explorer: { width: 340, height: 540 },
   document: { width: 720, height: 600 },
   timeline: { width: 620, height: 560 },
@@ -89,6 +92,7 @@ const PANEL_SPACE = { top: 60, left: 76, right: 344, bottom: 100 };
     EntryWindow,
     CharacterSheetView,
     TokenWindow,
+    EquippedItemWindow,
     LoreScope,
     WorldNpcSheet,
     Explorer,
@@ -178,6 +182,14 @@ export class GameTablePage {
       const token = this.session.resolvedTokenById(id.slice(TOKEN_WINDOW.length));
       return token ? { title: `Token: ${token.name}`, icon: 'token', color: TABLE_ENTRY_META[token.entry.kind].color, type: 'token' } : null;
     }
+    // Item do inventário de uma ficha (lista "Equipados" da aba Ficha)
+    const equipped = parseEquippedWindow(id);
+    if (equipped) {
+      const item = this.session.inventoryOf(equipped.sheetId).find((i) => i.id === equipped.inventoryId);
+      if (!item || !this.session.canOpenSheet(equipped.sheetId)) return null;
+      const name = inventoryRow(item, this.loreGeneral.byId(), this.worldbuild.byId()).name;
+      return { title: name, icon: 'inventory_2', color: 'text-amber-300', type: 'equipped' };
+    }
     // Ficha própria de um token de NPC (cópia individual)
     const placementId = tokenSheetPlacement(id);
     if (placementId) {
@@ -223,6 +235,11 @@ export class GameTablePage {
       return;
     }
     this.open(TOKEN_WINDOW + placementId);
+  }
+
+  /** Ficha e item da janela de item equipado (o tipo 'equipped' garante que o id é válido). */
+  equippedOf(windowId: string): { sheetId: string; inventoryId: string } {
+    return parseEquippedWindow(windowId) ?? { sheetId: '', inventoryId: '' };
   }
 
   /** Id do token colocado a partir do id da janela "Token". */

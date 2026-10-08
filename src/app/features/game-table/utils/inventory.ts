@@ -22,10 +22,10 @@ export function takeOne(list: InventoryEntry[], inventoryId: string, keepEmpty: 
 /**
  * Põe uma unidade de `unit` no inventário: soma à pilha de um item idêntico (mesmo item
  * do mundo e mesma personalização, sem imagem própria) ou cria uma linha nova.
- * O preço (de loja) nunca vai junto.
+ * O preço (de loja) e o "equipado" nunca vão junto.
  */
 export function addOne(list: InventoryEntry[], unit: InventoryEntry, newId: () => string): InventoryEntry[] {
-  const { price: _price, quantity: _quantity, id: _id, ...item } = unit;
+  const { price: _price, quantity: _quantity, id: _id, equipped: _equipped, ...item } = unit;
   const stack = item.blobId ? undefined : list.find((i) => sameStack(i, item));
   if (stack) return list.map((i) => (i === stack ? { ...i, quantity: quantityOf(i) + 1 } : i));
   return [...list, { ...item, id: newId() }];
