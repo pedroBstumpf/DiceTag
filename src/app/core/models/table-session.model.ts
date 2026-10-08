@@ -166,6 +166,14 @@ export interface TableEntry {
   effect?: FxStyle;
   /** character: conta do jogador dono do personagem (ausente = qualquer um). */
   ownerUserId?: string;
+  /**
+   * npc: referência à ficha base no Worldbuild (bestiário). A ficha, a imagem e o token
+   * padrão vêm de lá; `name` guarda o último nome conhecido. Ausente = NPC com os dados
+   * na própria entrada (criado antes do bestiário).
+   */
+  worldNpcId?: string;
+  /** npc: a ficha base está na Lore geral (senão, no Worldbuild de quem criou a mesa). */
+  worldNpcGlobal?: boolean;
   /** npc: conta do jogador autorizado pelo mestre a ver, editar e controlar o NPC (ausente = só o mestre). */
   controllerUserId?: string;
   /** npc: os jogadores podem ver (sem editar) a aba Ficha. Padrão: false. */

@@ -15,6 +15,7 @@ import { ImageViewer } from '../worldbuild/components/image-viewer/image-viewer'
 import { ItemCard } from '../worldbuild/components/item-card/item-card';
 import { TimelineEditor } from '../worldbuild/components/timeline-editor/timeline-editor';
 import { LoreScope } from '../worldbuild/directives/lore-scope.directive';
+import { WorldNpcSheet } from '../worldbuild/directives/world-npc-sheet.directive';
 import { LoreService } from '../worldbuild/services/lore.service';
 import { WorldbuildService } from '../worldbuild/services/worldbuild.service';
 import { ActionBar } from './components/action-bar/action-bar';
@@ -26,7 +27,7 @@ import { LORE_WINDOW, SidePanel, WORLDBUILD_WINDOW } from './components/side-pan
 import { TABLE_TOOLS, ToolBar } from './components/tool-bar/tool-bar';
 import { TokenWindow } from './components/token-window/token-window';
 import { BlobUrlService } from './services/blob-url.service';
-import { SheetStore } from './services/sheet-store';
+import { SheetStore } from '../../core/services/sheet-store';
 import { SoundMixerService } from './services/sound-mixer.service';
 import { TableSessionService } from './services/table-session.service';
 import { formatModifier } from './utils/dice';
@@ -37,7 +38,7 @@ interface WindowContent {
   icon: string;
   color: string;
   /** Tipo de conteúdo, usado para escolher o componente. */
-  type: 'entry' | 'sheet' | 'token' | 'explorer' | 'document' | 'timeline' | 'image' | 'item';
+  type: 'entry' | 'sheet' | 'token' | 'explorer' | 'document' | 'timeline' | 'image' | 'item' | 'npc';
   /** O conteúdo vem da Lore geral (os editores usam o LoreService). */
   global?: boolean;
 }
@@ -55,6 +56,7 @@ const WINDOW_SIZES: Record<WindowContent['type'], { width: number; height: numbe
   timeline: { width: 620, height: 560 },
   image: { width: 720, height: 520 },
   item: { width: 420, height: 600 },
+  npc: { width: 880, height: 700 },
 };
 
 /** Espaço ocupado por cada barra (para enquadrar o mapa na área livre). */
@@ -88,6 +90,7 @@ const PANEL_SPACE = { top: 60, left: 76, right: 344, bottom: 100 };
     CharacterSheetView,
     TokenWindow,
     LoreScope,
+    WorldNpcSheet,
     Explorer,
     DocumentEditor,
     TimelineEditor,

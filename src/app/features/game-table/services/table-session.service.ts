@@ -1,6 +1,8 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { Point } from '../../../core/models/geometry.model';
-import { WorldItem } from '../../../core/models/world-item.model';
+import { WorldItem, npcSheetOf, npcTokenOf } from '../../../core/models/world-item.model';
+import { LoreService } from '../../worldbuild/services/lore.service';
+import { WorldbuildService } from '../../worldbuild/services/worldbuild.service';
 import {
   BRUSH_COLORS,
   BRUSH_WIDTHS,
@@ -48,7 +50,7 @@ import { AuthService } from '../../../core/services/auth.service';
 import { newId } from '../../../core/utils/id';
 import { TagLevels, formatRoll, rollDice } from '../utils/dice';
 import { addOne, quantityOf, takeOne } from '../utils/inventory';
-import { SheetData, SheetStore } from './sheet-store';
+import { SheetData, SheetStore } from '../../../core/services/sheet-store';
 import { FxDrawing, buildFx, seededRandom } from '../utils/effects';
 import { createMask, decodeMask, encodeMask, isExploredAt, markPolygons, maskFits } from '../utils/fog-memory';
 import { computeVisibilityPolygon, doorSeen, pointInPolygon, wallsToSegments } from '../utils/visibility';
@@ -171,6 +173,9 @@ export function levelOf(placement: TokenPlacement): number {
 @Injectable()
 export class TableSessionService extends SheetStore {
   private readonly auth = inject(AuthService);
+  /** Bestiário: fichas base dos NPCs-referência (Worldbuild do usuário e Lore geral). */
+  private readonly worldbuild = inject(WorldbuildService);
+  private readonly loreGeneral = inject(LoreService);
 
   // --- Estado persistido ---------------------------------------------------
   private readonly state = signal<TableState>(EMPTY_STATE);
@@ -179,7 +184,13 @@ export class TableSessionService extends SheetStore {
 
   readonly loaded = signal(false);
   readonly scenes = computed(() => this.state().scenes);
-  readonly entries = computed(() => this.state().entries);
+  /** Arquivos da mesa; NPC-referência mostra sempre o nome atual da ficha base. */
+  readonly entries = computed(() =>
+    this.state().entries.map((e) => {
+      const base = this.worldNpcOf(e);
+      return base && base.name !== e.name ? { ...e, name: base.name } : e;
+    }),
+  );
   readonly activeScene = computed(() => this.scenes().find((s) => s.id === this.state().activeSceneId) ?? null);
   readonly entryById = computed(() => new Map(this.entries().map((e) => [e.id, e])));
   /** Volume mestre dos sons (0–1). */
@@ -806,22 +817,67 @@ export class TableSessionService extends SheetStore {
     return this.storage.get<Blob>(`blob:${blobId}`);
   }
 
+  // --- NPCs do bestiário (referências) -------------------------------------
+
+  /**
+   * NPCs do bestiário por chave ("g:" Lore geral / "w:" Worldbuild + id). Igualdade por
+   * referência dos itens: editar documentos ou outros itens do Worldbuild não recalcula
+   * tokens e fichas da mesa — só mudanças nos próprios NPCs.
+   */
+  private readonly worldNpcMap = computed(
+    () =>
+      new Map([
+        ...this.loreGeneral.worldNpcs().map((i) => [`g:${i.id}`, i] as const),
+        ...this.worldbuild.worldNpcs().map((i) => [`w:${i.id}`, i] as const),
+      ]),
+    { equal: (a, b) => a.size === b.size && [...a].every(([k, v]) => b.get(k) === v) },
+  );
+
+  /** Ficha base no bestiário de um NPC-referência (undefined se não for referência ou se o original sumiu). */
+  worldNpcOf(entry: TableEntry): WorldItem | undefined {
+    if (!entry.worldNpcId) return undefined;
+    return this.worldNpcMap().get(`${entry.worldNpcGlobal ? 'g' : 'w'}:${entry.worldNpcId}`);
+  }
+
+  /** Worldbuild ou Lore geral, conforme onde mora a ficha base do NPC. */
+  private worldServiceOf(entry: TableEntry): WorldbuildService {
+    return entry.worldNpcGlobal ? this.loreGeneral : this.worldbuild;
+  }
+
+  /** NPCs do bestiário (Lore geral + Worldbuild) que podem entrar na mesa. */
+  readonly bestiary = computed(() =>
+    [...this.worldNpcMap()].map(([key, item]) => ({ item, global: key.startsWith('g:') })),
+  );
+
+  /** Põe na mesa um NPC do bestiário (a entrada é só uma referência à ficha base). */
+  addNpcReference(item: WorldItem, global: boolean): TableEntry {
+    return this.addEntry('npc', { name: item.name, worldNpcId: item.id, ...(global && { worldNpcGlobal: true }) });
+  }
+
+  /** Cria um NPC novo no Worldbuild do usuário e já o põe na mesa. */
+  createWorldNpc(): TableEntry {
+    return this.addNpcReference(this.worldbuild.create('npc'), false);
+  }
+
   // --- Fichas (SheetStore) -------------------------------------------------
-  // O id da ficha é o id da entrada (personagem ou NPC).
+  // O id da ficha é o id da entrada (personagem ou NPC). NPC-referência lê e grava
+  // a ficha base no bestiário.
 
   /** Ficha da entrada com os valores padrão dos campos ausentes (sempre 3 temas e 1+ página). */
   sheetOf(entry: TableEntry): CharacterSheet {
-    return normalizeSheet(entry.sheet);
+    const base = this.worldNpcOf(entry);
+    return base ? npcSheetOf(base) : normalizeSheet(entry.sheet);
   }
 
   sheetData(id: string): SheetData | null {
     const entry = this.entryById().get(id);
     if (!entry || !hasSheet(entry.kind)) return null;
     const token = this.tokenOf(entry);
+    const isBase = !!this.worldNpcOf(entry);
     return {
       id,
       kind: entry.kind === 'character' ? 'character' : 'npc',
-      level: entry.kind === 'character' ? 'character' : 'npc',
+      level: entry.kind === 'character' ? 'character' : isBase ? 'npc-base' : 'npc',
       name: entry.name,
       blobId: token.blobId,
       sheet: this.sheetOf(entry),
@@ -832,17 +888,25 @@ export class TableSessionService extends SheetStore {
   }
 
   renameSheet(id: string, name: string): void {
-    if (name.trim()) this.updateEntry(id, { name: name.trim() });
+    const trimmed = name.trim();
+    const entry = this.entryById().get(id);
+    if (!trimmed || !entry) return;
+    const base = this.worldNpcOf(entry);
+    if (base) this.worldServiceOf(entry).rename(base.id, trimmed);
+    this.updateEntry(id, { name: trimmed });
   }
 
   setSheetImage(id: string, file: File): Promise<void> {
     return this.setTokenImage(id, file);
   }
 
-  /** Altera campos da ficha. */
+  /** Altera campos da ficha (NPC-referência: a ficha base no bestiário). */
   updateSheet(id: string, patch: Partial<CharacterSheet>): void {
     const entry = this.entryById().get(id);
-    if (entry) this.updateEntry(id, { sheet: { ...this.sheetOf(entry), ...patch } });
+    if (!entry) return;
+    const base = this.worldNpcOf(entry);
+    if (base) this.worldServiceOf(entry).update(base.id, { sheet: { ...npcSheetOf(base), ...patch } });
+    else this.updateEntry(id, { sheet: { ...this.sheetOf(entry), ...patch } });
   }
 
   updateStatus(id: string, patch: { bars?: TokenBar[]; tags?: TokenTag[] }): void {
@@ -1018,8 +1082,10 @@ export class TableSessionService extends SheetStore {
 
   // --- Tokens: regra de vínculo --------------------------------------------
 
-  /** Configuração do token na ficha (ou o padrão do tipo). */
+  /** Configuração do token na ficha (NPC-referência: a do bestiário; senão, o padrão do tipo). */
   tokenOf(entry: TableEntry): TokenSettings {
+    const base = this.worldNpcOf(entry);
+    if (base) return npcTokenOf(base);
     return entry.token ?? defaultToken(entry.kind);
   }
 
@@ -1085,13 +1151,18 @@ export class TableSessionService extends SheetStore {
     });
   }
 
-  /** Altera a configuração de token da ficha (personagem/NPC mantém sempre as barras de status). */
+  /**
+   * Altera a configuração de token da ficha (personagem/NPC mantém sempre as barras de status).
+   * NPC-referência: grava no token padrão do NPC no bestiário.
+   */
   updateEntryToken(entryId: string, patch: Partial<TokenSettings>): void {
     const entry = this.entryById().get(entryId);
     if (!entry) return;
     const token = { ...this.tokenOf(entry), ...patch };
     if (hasSheet(entry.kind)) token.bars = withStatusBars(token.bars);
-    this.updateEntry(entryId, { token });
+    const base = this.worldNpcOf(entry);
+    if (base) this.worldServiceOf(entry).update(base.id, { token });
+    else this.updateEntry(entryId, { token });
   }
 
   /** Troca a imagem do token da ficha e apaga a anterior. */

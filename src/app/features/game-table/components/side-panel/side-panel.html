@@ -251,8 +251,19 @@
   <section class="mb-4">
     <header class="mb-1 flex items-center justify-between gap-2 pl-2">
       <h4 class="min-w-0 truncate text-[11px] font-semibold uppercase tracking-widest text-slate-500">{{ title }}</h4>
-      <!-- NPCs são do mestre: só ele cria -->
-      @if (kind !== 'npc' || session.role() === 'gm') {
+      <!-- NPCs são do mestre: só ele os traz do bestiário (Worldbuild / Lore geral) -->
+      @if (kind === 'npc') {
+        @if (session.role() === 'gm') {
+          <button
+            type="button"
+            class="grid size-7 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-white/10 hover:text-white"
+            matTooltip="Adicionar NPC do bestiário"
+            [matMenuTriggerFor]="npcMenu"
+          >
+            <mat-icon class="!text-[18px]">add</mat-icon>
+          </button>
+        }
+      } @else {
         <button
           type="button"
           class="grid size-7 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-white/10 hover:text-white"
@@ -311,3 +322,25 @@
     }
   </section>
 </ng-template>
+
+<!-- ===================================================================== -->
+<!-- Adicionar NPC: do bestiário (Lore geral e Worldbuild) ou um novo        -->
+<!-- ===================================================================== -->
+<mat-menu #npcMenu="matMenu">
+  <p class="px-4 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-widest text-slate-500">Bestiário</p>
+  @for (option of session.bestiary(); track option.item.id) {
+    <button mat-menu-item (click)="addNpc(option.item, option.global)">
+      <mat-icon class="text-violet-300">smart_toy</mat-icon>
+      <span>{{ option.item.name }}</span>
+      @if (option.global) {
+        <mat-icon class="!ml-2 !mr-0 !size-3.5 !text-[14px] text-star-400/70">auto_stories</mat-icon>
+      }
+    </button>
+  } @empty {
+    <p class="px-4 pb-2 text-xs text-slate-500">Nenhum NPC no bestiário ainda.</p>
+  }
+  <button mat-menu-item (click)="createNpc()">
+    <mat-icon class="text-astral-300">add</mat-icon>
+    <span>Novo NPC no Worldbuild</span>
+  </button>
+</mat-menu>

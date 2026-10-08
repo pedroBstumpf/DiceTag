@@ -19,7 +19,7 @@ import { AuthService } from '../../../../core/services/auth.service';
 import { newId } from '../../../../core/utils/id';
 import { TagEditor } from '../../../../shared/components/tag-editor/tag-editor';
 import { BlobUrlService } from '../../services/blob-url.service';
-import { SheetStore } from '../../services/sheet-store';
+import { SheetStore } from '../../../../core/services/sheet-store';
 import { TableSessionService } from '../../services/table-session.service';
 import { LevelPips } from '../level-pips/level-pips';
 import { SheetInventory } from '../sheet-inventory/sheet-inventory';

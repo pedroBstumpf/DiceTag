@@ -1,4 +1,5 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
+import { defaultSheet, defaultToken } from '../../../core/models/table-session.model';
 import { User } from '../../../core/models/user.model';
 import { WORLD_ITEM_META, WorldItem, WorldItemType } from '../../../core/models/world-item.model';
 import { AuthService } from '../../../core/services/auth.service';
@@ -33,11 +34,9 @@ export class WorldbuildService {
   readonly byId = computed(() => new Map(this._items().map((i) => [i.id, i])));
 
   /** Itens do mundo (tipo `item`, com cartão), em ordem alfabética. */
-  readonly worldItems = computed(() =>
-    this._items()
-      .filter((i) => i.type === 'item')
-      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { numeric: true })),
-  );
+  readonly worldItems = computed(() => this.ofType('item'));
+  /** NPCs do bestiário (fichas base), em ordem alfabética. */
+  readonly worldNpcs = computed(() => this.ofType('npc'));
 
   /** Chave do usuário cujos dados estão (ou estão sendo) carregados. */
   private storageKey: string | null = null;
@@ -109,6 +108,7 @@ export class WorldbuildService {
       ...(type === 'document' && { content: '' }),
       ...(type === 'timeline' && { events: [], links: [] }),
       ...(type === 'item' && { tags: [] }),
+      ...(type === 'npc' && { sheet: defaultSheet(), token: defaultToken('npc') }),
     };
     this._items.update((list) => [...list, item]);
     this.persist();
@@ -166,12 +166,32 @@ export class WorldbuildService {
     this._items.update((list) => list.filter((i) => !ids.has(i.id)));
     this.persist();
 
-    // Limpa os arquivos de imagem associados
-    removed.filter((i) => i.blobId).forEach((i) => this.storage.delete(`blob:${i.blobId}`));
+    // Limpa os arquivos de imagem associados (inclui imagem e inventário dos NPCs)
+    for (const item of removed) {
+      const blobIds = [item.blobId, item.token?.blobId, ...(item.sheet?.inventory ?? []).map((i) => i.blobId)];
+      for (const blobId of blobIds) if (blobId) this.storage.delete(`blob:${blobId}`);
+    }
     return [...ids];
   }
 
+  /** Grava um arquivo (imagem) e devolve o id dele. */
+  async storeBlob(file: Blob): Promise<string> {
+    const blobId = newId();
+    await this.storage.set(`blob:${blobId}`, file);
+    return blobId;
+  }
+
+  deleteBlob(blobId: string): void {
+    this.storage.delete(`blob:${blobId}`);
+  }
+
   // --- Internos ------------------------------------------------------------
+
+  private ofType(type: WorldItemType): WorldItem[] {
+    return this._items()
+      .filter((i) => i.type === type)
+      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { numeric: true }));
+  }
 
   /** id + todos os descendentes. */
   private collectTree(rootId: string): Set<string> {
@@ -197,6 +217,7 @@ export class WorldbuildService {
       timeline: 'Nova linha do tempo',
       image: WORLD_ITEM_META.image.label,
       item: 'Novo item',
+      npc: 'Novo NPC',
     }[type];
     const siblings = new Set(this.childrenOf(parentId).map((i) => i.name));
     let name = base;

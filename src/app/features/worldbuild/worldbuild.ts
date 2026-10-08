@@ -13,12 +13,15 @@ import { WindowManagerService } from '../../shared/services/window-manager.servi
 import { DocumentEditor } from './components/document-editor/document-editor';
 import { Explorer } from './components/explorer/explorer';
 import { ImageViewer } from './components/image-viewer/image-viewer';
+import { CharacterSheetView } from '../game-table/components/character-sheet/character-sheet';
+import { BlobUrlService } from '../game-table/services/blob-url.service';
 import { ItemCard } from './components/item-card/item-card';
+import { WorldNpcSheet } from './directives/world-npc-sheet.directive';
 import { TimelineEditor } from './components/timeline-editor/timeline-editor';
 import { WorldbuildService } from './services/worldbuild.service';
 
 /** Tipos que podem ser criados pela URL (imagens só por envio de arquivo). */
-const URL_CREATABLE_TYPES: readonly WorldItemType[] = ['document', 'timeline', 'folder', 'item'];
+const URL_CREATABLE_TYPES: readonly WorldItemType[] = ['document', 'timeline', 'folder', 'item', 'npc'];
 
 /**
  * Página de Worldbuild.
@@ -27,7 +30,7 @@ const URL_CREATABLE_TYPES: readonly WorldItemType[] = ['document', 'timeline', '
  * flutuante que pode ser movida, redimensionada e maximizada.
  *
  * Parâmetros de URL (vindos da barra lateral):
- *   ?novo=document|timeline|folder|item → cria um item novo
+ *   ?novo=document|timeline|folder|item|npc → cria um item novo
  *   ?abrir=<id>                    → abre um item existente
  */
 @Component({
@@ -43,8 +46,11 @@ const URL_CREATABLE_TYPES: readonly WorldItemType[] = ['document', 'timeline', '
     TimelineEditor,
     ImageViewer,
     ItemCard,
+    CharacterSheetView,
+    WorldNpcSheet,
   ],
-  providers: [WindowManagerService],
+  // BlobUrlService: imagens da ficha dos NPCs do bestiário
+  providers: [WindowManagerService, BlobUrlService],
   templateUrl: './worldbuild.html',
   host: { class: 'block h-full' },
 })

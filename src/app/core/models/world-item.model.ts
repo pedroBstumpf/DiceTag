@@ -1,10 +1,12 @@
 import { Tag } from './tag.model';
+import { CharacterSheet, TokenSettings, defaultToken, normalizeSheet, withStatusBars } from './table-session.model';
 
 /**
  * Tipos de item que podem existir no worldbuild.
  * `item` = objeto do mundo (espada, poção…) com cartão: imagem, nome e etiquetas.
+ * `npc` = ficha base de um NPC/criatura (bestiário); as mesas usam referências a ela.
  */
-export type WorldItemType = 'folder' | 'document' | 'timeline' | 'image' | 'item';
+export type WorldItemType = 'folder' | 'document' | 'timeline' | 'image' | 'item' | 'npc';
 
 /** Evento de uma linha do tempo. A data é texto livre (calendários de fantasia). */
 export interface TimelineEvent {
@@ -52,6 +54,21 @@ export interface WorldItem {
   blobId?: string;
   /** item: etiquetas do cartão. Padrão: []. */
   tags?: Tag[];
+  /** npc: ficha base (temas, inventário…). Padrão: normalizeSheet(undefined). */
+  sheet?: CharacterSheet;
+  /** npc: token padrão (imagem, tamanho, visão, barras e etiquetas). Padrão: defaultToken('npc'). */
+  token?: TokenSettings;
+}
+
+/** Ficha base de um NPC do bestiário, com os padrões aplicados. */
+export function npcSheetOf(item: WorldItem): CharacterSheet {
+  return normalizeSheet(item.sheet);
+}
+
+/** Token padrão de um NPC do bestiário (sempre com as barras de status). */
+export function npcTokenOf(item: WorldItem): TokenSettings {
+  const token = { ...defaultToken('npc'), ...item.token };
+  return { ...token, bars: withStatusBars(token.bars) };
 }
 
 /** Metadados visuais de cada tipo (ícone e rótulo). */
@@ -61,6 +78,7 @@ export const WORLD_ITEM_META: Record<WorldItemType, { icon: string; label: strin
   timeline: { icon: 'timeline', label: 'Linha do tempo', color: 'text-astral-300' },
   image: { icon: 'map', label: 'Mapa / Imagem', color: 'text-violet-300' },
   item: { icon: 'inventory_2', label: 'Item', color: 'text-amber-300' },
+  npc: { icon: 'smart_toy', label: 'NPC', color: 'text-violet-300' },
 };
 
 /** Cores disponíveis para eventos da linha do tempo. */

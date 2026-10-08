@@ -2,9 +2,10 @@ import { NgTemplateOutlet } from '@angular/common';
 import { Component, computed, effect, inject, output, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { WORLD_ITEM_META, WorldItem } from '../../../../core/models/world-item.model';
-import { LoreFolder, TABLE_ENTRY_META, TableEntry, TableEntryKind } from '../../../../core/models/table-session.model';
+import { LoreFolder, TABLE_ENTRY_META, TableEntry, TableEntryKind, hasSheet } from '../../../../core/models/table-session.model';
 import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
 import { LoreService } from '../../../worldbuild/services/lore.service';
 import { WorldbuildService } from '../../../worldbuild/services/worldbuild.service';
@@ -42,7 +43,7 @@ interface LoreRow {
  */
 @Component({
   selector: 'app-side-panel',
-  imports: [NgTemplateOutlet, MatButtonModule, MatIconModule, MatTooltipModule, AutoFocus, SoundList, ChatPanel],
+  imports: [NgTemplateOutlet, MatButtonModule, MatIconModule, MatMenuModule, MatTooltipModule, AutoFocus, SoundList, ChatPanel],
   templateUrl: './side-panel.html',
   host: { class: 'flex h-full flex-col' },
 })
@@ -150,8 +151,24 @@ export class SidePanel {
 
   finishRename(entry: TableEntry, value: string): void {
     if (this.renamingId() !== entry.id) return;
-    if (value.trim()) this.session.updateEntry(entry.id, { name: value.trim() });
+    // Fichas renomeiam pelo store (NPC-referência renomeia a ficha base no bestiário)
+    if (hasSheet(entry.kind)) this.session.renameSheet(entry.id, value);
+    else if (value.trim()) this.session.updateEntry(entry.id, { name: value.trim() });
     this.renamingId.set(null);
+  }
+
+  // --- NPCs do bestiário ---------------------------------------------------
+
+  /** Põe na mesa uma referência ao NPC do bestiário e abre a ficha. */
+  addNpc(item: WorldItem, global: boolean): void {
+    this.opened.emit(this.session.addNpcReference(item, global).id);
+  }
+
+  /** Cria um NPC no Worldbuild, põe na mesa e já abre a ficha para preencher. */
+  createNpc(): void {
+    const entry = this.session.createWorldNpc();
+    this.renamingId.set(entry.id);
+    this.opened.emit(entry.id);
   }
 
   /** Personagens/NPCs podem ser arrastados até o mapa para colocar o token (NPC: só quem pode editá-lo). */
@@ -171,7 +188,10 @@ export class SidePanel {
   }
 
   remove(entry: TableEntry): void {
-    if (!confirm(`Excluir "${entry.name}"?`)) return;
+    const question = entry.worldNpcId
+      ? `Tirar "${entry.name}" da mesa? A ficha base continua no bestiário (Worldbuild).`
+      : `Excluir "${entry.name}"?`;
+    if (!confirm(question)) return;
     this.session.removeEntry(entry.id);
     this.removed.emit(entry.id);
   }

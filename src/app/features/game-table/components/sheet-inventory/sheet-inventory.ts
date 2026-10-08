@@ -12,7 +12,7 @@ import { ItemCardView } from '../../../worldbuild/components/item-card/item-card
 import { LoreService } from '../../../worldbuild/services/lore.service';
 import { WorldbuildService } from '../../../worldbuild/services/worldbuild.service';
 import { BlobUrlService } from '../../services/blob-url.service';
-import { SheetStore } from '../../services/sheet-store';
+import { SheetStore } from '../../../../core/services/sheet-store';
 import { TableSessionService } from '../../services/table-session.service';
 import { quantityOf } from '../../utils/inventory';
 
@@ -148,10 +148,18 @@ export class SheetInventory {
   readonly currency = CURRENCY;
   /** Inventário de NPC: tem a coluna de preço e pode virar loja para os jogadores. */
   readonly isShop = computed(() => this.data()?.kind === 'npc');
+  /**
+   * Inventário que vende e pode ser looteado: NPC da mesa com dados próprios ou token de NPC.
+   * A ficha base do bestiário (`npc-base` / `world`) não: comprar mexeria no original.
+   */
+  private readonly trades = computed(() => {
+    const level = this.data()?.level;
+    return !!this.session && (level === 'npc' || level === 'npc-token');
+  });
   /** Personagem do jogador que compra (só na mesa, no papel de jogador, em loja de NPC). */
   readonly buyer = computed(() => {
     const buyer = this.session?.buyer();
-    return this.isShop() && this.session?.role() === 'player' && buyer ? buyer : null;
+    return this.trades() && this.session?.role() === 'player' && buyer ? buyer : null;
   });
   /** Eiros do comprador. */
   readonly buyerEiros = computed(() => {
@@ -170,7 +178,9 @@ export class SheetInventory {
 
   /** Personagens da mesa que podem receber itens desta ficha (menos ela mesma). */
   readonly recipients = computed(() =>
-    this.isShop() || !this.session ? [] : this.session.entries().filter((e) => e.kind === 'character' && e.id !== this.sheetId()),
+    this.data()?.level !== 'character' || !this.session
+      ? []
+      : this.session.entries().filter((e) => e.kind === 'character' && e.id !== this.sheetId()),
   );
 
   /** Dá uma unidade do item (com nome, etiquetas e imagem personalizados) a outro personagem. */
@@ -180,7 +190,7 @@ export class SheetInventory {
   }
 
   /** NPC derrotado (alguma barra de status em 0): os itens podem ser looteados sem pagar. */
-  readonly defeated = computed(() => !!this.session?.isDefeated(this.sheetId()));
+  readonly defeated = computed(() => this.trades() && !!this.session?.isDefeated(this.sheetId()));
 
   async loot(row: InventoryRow): Promise<void> {
     const buyer = this.buyer();

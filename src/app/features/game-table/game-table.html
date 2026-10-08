@@ -98,6 +98,10 @@
               @case ('item') {
                 <app-item-card appLoreScope [itemId]="win.id" />
               }
+              @case ('npc') {
+                <!-- Ficha base do bestiário da Lore geral -->
+                <app-character-sheet appLoreScope appWorldNpcSheet [sheetId]="win.id" (openEntry)="open($event)" />
+              }
             }
           } @else {
             @switch (c.type) {
@@ -116,6 +120,10 @@
               }
               @case ('item') {
                 <app-item-card [itemId]="win.id" />
+              }
+              @case ('npc') {
+                <!-- Ficha base do bestiário do Worldbuild -->
+                <app-character-sheet appWorldNpcSheet [sheetId]="win.id" (openEntry)="open($event)" />
               }
             }
           }

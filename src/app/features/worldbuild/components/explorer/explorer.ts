@@ -9,13 +9,14 @@ import { WORLD_ITEM_META, WorldItem, WorldItemType } from '../../../../core/mode
 import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
 import { WorldbuildService } from '../../services/worldbuild.service';
 
-/** Abas do explorador: árvore de arquivos ou lista dos itens do mundo. */
-type ExplorerView = 'files' | 'items';
+/** Abas do explorador: árvore de arquivos, itens do mundo ou NPCs (bestiário). */
+type ExplorerView = 'files' | 'items' | 'npcs';
 
 /**
  * Explorador do worldbuild: árvore de pastas e itens.
  *
  * - Aba "Itens": lista e cria os itens do mundo (cartão com imagem, nome e etiquetas)
+ * - Aba "NPCs": bestiário — fichas base de NPCs, usadas pelas mesas como referência
  * - Criar itens na raiz ou dentro de pastas
  * - Renomear (duplo clique ou menu), excluir, mover
  * - Arrastar itens para dentro de pastas (ou para a raiz)
@@ -53,15 +54,23 @@ export class Explorer {
   readonly views: { id: ExplorerView; icon: string; label: string }[] = [
     { id: 'files', icon: 'folder', label: 'Arquivos' },
     { id: 'items', icon: WORLD_ITEM_META.item.icon, label: 'Itens' },
+    { id: 'npcs', icon: WORLD_ITEM_META.npc.icon, label: 'NPCs' },
   ];
   readonly view = signal<ExplorerView>('files');
 
-  /** Itens do mundo filtrados pela busca (aba Itens). */
+  /** Itens do mundo (aba Itens) ou NPCs do bestiário (aba NPCs), filtrados pela busca. */
   readonly itemResults = computed(() => {
     const q = this.query().trim().toLowerCase();
-    const items = this.service.worldItems();
+    const items = this.view() === 'npcs' ? this.service.worldNpcs() : this.service.worldItems();
     return q ? items.filter((i) => i.name.toLowerCase().includes(q)) : items;
   });
+
+  /** Quantos itens/NPCs há (contador da aba). */
+  countOf(view: ExplorerView): number | null {
+    if (view === 'items') return this.service.worldItems().length;
+    if (view === 'npcs') return this.service.worldNpcs().length;
+    return null;
+  }
 
   // --- Estado da árvore ----------------------------------------------------
   readonly expanded = signal(new Set<string>());

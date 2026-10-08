@@ -1,8 +1,8 @@
 import { Injectable, inject } from '@angular/core';
-import { Tag } from '../../../core/models/tag.model';
-import { CharacterSheet, InventoryEntry, TableEntry, TokenBar } from '../../../core/models/table-session.model';
-import { StorageService } from '../../../core/services/storage.service';
-import { newId } from '../../../core/utils/id';
+import { Tag } from '../models/tag.model';
+import { CharacterSheet, InventoryEntry, TableEntry, TokenBar } from '../models/table-session.model';
+import { StorageService } from './storage.service';
+import { newId } from '../utils/id';
 
 /**
  * Onde a ficha exibida mora:
