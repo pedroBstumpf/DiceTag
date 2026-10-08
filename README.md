@@ -83,10 +83,13 @@ O mapa ocupa a tela inteira e as barras flutuam por cima — todas escondíveis:
 Clicar num personagem no painel abre a ficha, com quatro abas:
 - **Ficha:** cards de tamanhos diferentes — **Básico** (imagem, nome, raça, sub-raça e rótulos), **Status**
   (barras Corpo, Mente e Espírito e as etiquetas do personagem, que também aparecem no token), **Relações**
-  (personagens com nível de 1 a 6 e descrição) e três **Temas** (nome e tags com nível de 1 a 6).
+  (personagens com nível de 1 a 6 e descrição) e três **Temas** (nome, tags com nível de 1 a 6 e **Defeitos**
+  com nível de -1 a -6).
 - **Inventário:** lista dos itens do personagem e, ao lado, o cartão do item selecionado (imagem, nome e etiquetas).
+  Editar o cartão aqui vale só para aquele personagem (o item do Worldbuild não muda).
 - **Anotações:** caderno de texto rico com páginas.
-- **Habilidades:** as ações do personagem, criadas por ele ou pelo mestre, com botão para usar.
+- **Habilidades:** as ações do personagem, criadas por ele ou pelo mestre, com botão para usar. Cada ação pode
+  usar tags e defeitos dos temas: o nível atual delas entra no modificador e acompanha a ficha automaticamente.
 
 ### Tokens
 Arraste a ficha de um personagem ou NPC do painel para o mapa para colocar o token. Ele tem imagem

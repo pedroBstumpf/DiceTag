@@ -142,7 +142,7 @@ src/
             │   ├── fog-memory.ts       # máscara de áreas exploradas (bitset base64)
             │   ├── simplify.ts         # Ramer–Douglas–Peucker (traços)
             │   ├── projection.ts       # matriz 2D/isométrica, tela↔mundo, enquadramento, "em pé" (upright)
-            │   ├── dice.ts             # rolagem 2d12/3d6, faixas de resultado, effectiveModifier (futuro: atributos)
+            │   ├── dice.ts             # rolagem 2d12/3d6, faixas de resultado, effectiveModifier (fixo + níveis das tags ligadas) + spec
             │   └── effects.ts          # buildFx: os 20 efeitos descritos como dados (partes SVG + animações)
             └── components/
                 ├── map-stage/          # ORQUESTRADOR do mapa: zoom, pan, tela↔mundo, roteamento por ferramenta, WASD
@@ -366,16 +366,24 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
     `withStatusBars` garante as três barras (ids `status-*`, rótulo e cor fixos) em personagens novos (`defaultToken`),
     antigos (`normalizeState`) e em toda gravação (`updateEntryToken`); a janela "Token" não as renomeia nem remove.
   - **Relações:** nome, nível **1–6** (`LevelPips`) e descrição.
-  - **Temas (3):** nome + tags com nível **1–6**.
+  - **Temas (3):** nome + tags com nível **1–6** e, embaixo, **Defeitos** (`flaws`) com nível **-1 a -6**
+    (`LevelPips` com `negative`). Fichas antigas ganham `flaws: []` em `sheetOf`.
 - **Aba Inventário** (`SheetInventory`): `InventoryEntry { itemId, global? }` referencia um item do mundo (Worldbuild do
-  usuário ou Lore geral); a lista mostra os nomes e, ao lado, o cartão do item selecionado (só leitura, "Editar
-  cartão" abre a janela do item). "+ Item" busca itens das duas fontes ou cria um novo no Worldbuild. Item excluído
-  do mundo aparece como "Item excluído".
+  usuário ou Lore geral); a lista mostra os nomes e, ao lado, o cartão **editável** (`ItemCardView`). Editar ali é
+  **cópia sob demanda**: só o que mudou vai para a entrada (`name`, `tags`, `blobId`) e vale no lugar do original —
+  o item do mundo e os outros inventários não mudam. "Voltar ao item original" limpa a personalização; imagens
+  personalizadas são apagadas ao trocar, voltar, tirar o item ou excluir o personagem. "+ Item" busca itens das duas
+  fontes ou cria um novo no Worldbuild. Original excluído sem personalização aparece como "Item excluído".
+  Etiquetas novas de item começam **verdes** (`ITEM_TAG_COLOR`).
 - **Aba Anotações** (`SheetNotes`): caderno de texto rico em páginas (`NotePage { title, content }`); a última página
   não é excluída. O `RichTextEditor` lê o conteúdo só ao ser criado: a página aberta é renderizada num `@for` com
   `track` pelo id para recriar o editor ao trocar de página.
 - **Aba Habilidades:** as automações do personagem (`automationsOf`), criadas por ele ou pelo mestre; "Usar" rola
   como a barra de ações (`onActionUsed`).
+- **Tags na rolagem:** na configuração de uma ação de personagem, o jogador liga tags e defeitos dos temas
+  (`RollConfig.attributes` = ids das tags). O **nível atual** é lido na hora (`tagLevelsOf` → `effectiveModifier`),
+  então subir a tag na ficha atualiza todas as ações que a usam. Fórmulas exibidas usam `session.formulaOf(action)`.
+  Tag apagada vale 0; trocar o dono da ação limpa as tags ligadas.
 
 ### Ações automatizadas (automações)
 - **Dono** (`TableEntry.ownerEntryId`): personagem = ação do jogador dele; NPC = ação do mestre para aquele NPC
@@ -388,8 +396,8 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   já com esse dono.
 - **Rolagem** (`RollConfig { dice: '2d12' | '3d6', modifier, attributes? }`, puro em `utils/dice.ts`):
   2d12 → total < 0 falha crítica · < 12 falha · < 17 sucesso parcial · < 24 sucesso · **24+ sucesso crítico**;
-  3d6 → até 9 azar · 10–12 neutro · 13+ sorte. O modificador passa sempre por `effectiveModifier(roll)`:
-  quando a ficha existir, somar ali os atributos de `roll.attributes` (um ou mais).
+  3d6 → até 9 azar · 10–12 neutro · 13+ sorte. O modificador passa sempre por `effectiveModifier(roll, levels)`:
+  valor fixo + nível atual das tags dos temas ligadas em `roll.attributes` (defeitos subtraem).
 - **Usar** (`useAction`): rola, grava no chat em nome de quem agiu, mostra um aviso e, se a ação tiver
   `effect`, arma o efeito (`armedFx`): ferramenta Efeitos ativa até o próximo arraste; depois volta à
   ferramenta anterior. Esc ou trocar de ferramenta desarma.
@@ -535,8 +543,6 @@ Para conectar um backend no futuro: trocar `StorageService` e `AuthService` mant
 ## 10. Pendências e próximos passos sugeridos
 
 - Estruturar a **ficha de NPC** (aguardar definição do dono).
-- Ligar o modificador das ações à ficha (`RollConfig.attributes` + `effectiveModifier`) — ex.: níveis das tags de
-  tema ou das relações; aguardar a regra do sistema.
 - Inventário sem quantidade/peso; relações por nome livre (sem vínculo com fichas da mesa).
 - Efeitos e chat ainda são locais (sem multiplayer, outros jogadores não veem); efeitos não saem do token automaticamente.
 - Persistir janelas abertas, visibilidade das barras e pincel por mesa.
