@@ -96,8 +96,13 @@ A ficha de NPC é igual à de personagem, sem Anotações e sem Relações. NPCs
 - dar o **controle** de um NPC a um jogador específico (ele passa a ver, editar e usar o NPC);
 - deixar a **ficha** e/ou o **inventário** do NPC visíveis para os jogadores (só leitura);
 - pôr **preços em Eiros** nos itens do inventário do NPC, criando uma loja. Com o inventário visível, o jogador
-  seleciona um item e compra com os Eiros do personagem dele (campo no topo da aba Inventário da ficha); uma cópia
-  do item vai para o inventário do personagem.
+  seleciona um item e compra com os Eiros do personagem dele (campo no topo da aba Inventário da ficha); uma unidade
+  do item vai para o inventário do personagem e a quantidade da loja baixa 1.
+- Se alguma barra de status do NPC chegar a 0, o token dele ganha um **X vermelho** e os jogadores com acesso ao
+  inventário podem **lootear** os itens, sem pagar.
+
+Itens de inventário têm **quantidade**, e cada personagem pode **dar** um item a outro ("Dar para…" no cartão),
+com as etiquetas e mudanças que fez nele.
 
 ### Tokens
 Arraste a ficha de um personagem ou NPC do painel para o mapa para colocar o token. Ele tem imagem

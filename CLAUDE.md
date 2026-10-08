@@ -142,6 +142,7 @@ src/
             │   ├── fog-memory.ts       # máscara de áreas exploradas (bitset base64)
             │   ├── simplify.ts         # Ramer–Douglas–Peucker (traços)
             │   ├── projection.ts       # matriz 2D/isométrica, tela↔mundo, enquadramento, "em pé" (upright)
+            │   ├── inventory.ts        # quantidade e transferência de unidades entre inventários + spec
             │   ├── dice.ts             # rolagem 2d12/3d6, faixas de resultado, effectiveModifier (fixo + níveis das tags ligadas) + spec
             │   └── effects.ts          # buildFx: os 20 efeitos descritos como dados (partes SVG + animações)
             └── components/
@@ -402,8 +403,17 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   `styles.scss` tira os eventos de mouse). A lista do inventário fica fora, para poder selecionar e comprar.
 - **Loja:** `InventoryEntry.price` (Eiros, `CURRENCY`) na coluna ao lado dos itens do NPC (vazio = não está à venda).
   O personagem tem `CharacterSheet.eiros` (topo da aba Inventário). Jogador vendo a loja compra com o personagem dele
-  (`session.buyer`: o selecionado ou o primeiro da conta): `buyItem` desconta os Eiros e copia o item (com a
-  personalização da loja, sem o preço; imagem personalizada duplicada) para o inventário dele.
+  (`session.buyer`: o selecionado ou o primeiro da conta): `buyItem` desconta os Eiros e passa **uma unidade**.
+- **Quantidade:** `InventoryEntry.quantity` (ausente = 1), coluna "Qtd." em todos os inventários. Na loja, comprar ou
+  lootear baixa 1 e a linha fica com 0 ("Esgotado", o mestre repõe); no personagem, a linha some ao zerar.
+- **Transferência única** (`transferItem(from, inventoryId, to, cost)`): usada por compra, loot e "Dar para". Leva a
+  personalização (nome, etiquetas, imagem) e nunca o preço; quem recebe empilha num item idêntico sem imagem própria
+  ou ganha linha nova. Imagem: duplicada enquanto sobra unidade na origem; movida quando a linha some.
+  Regras puras em `utils/inventory.ts` (`quantityOf`, `takeOne`, `addOne`) + spec.
+- **NPC derrotado** (`isDown`: alguma barra de status em 0; `isDefeated`: na ficha ou em qualquer token dele): o token
+  ganha um **X vermelho** e, com o inventário visível, o jogador vê **"Lootear"** em vez de "Comprar" (pega sem pagar).
+- **"Dar para…"** (cartão do item, inventário de personagem, quem edita a ficha): lista os outros personagens da mesa
+  e passa uma unidade com a personalização do dono.
 
 ### Ações automatizadas (automações)
 - **Dono** (`TableEntry.ownerEntryId`): personagem = ação do jogador dele; NPC = ação do mestre para aquele NPC
@@ -562,8 +572,8 @@ Para conectar um backend no futuro: trocar `StorageService` e `AuthService` mant
 
 ## 10. Pendências e próximos passos sugeridos
 
-- Inventário sem quantidade/peso (comprar o mesmo item duas vezes cria duas linhas); a loja não tem estoque
-  (o item continua no NPC); relações por nome livre (sem vínculo com fichas da mesa).
+- Inventário sem peso; "Dar para" e compra passam uma unidade por vez; relações por nome livre (sem vínculo com
+  fichas da mesa).
 - Permissões de NPC dependem do papel escolhido na mesa; com backend, "jogador" deve vir da conta e do convite.
   A lista de jogadores para o controle do NPC vem dos donos dos personagens (`session.players`).
 - Efeitos e chat ainda são locais (sem multiplayer, outros jogadores não veem); efeitos não saem do token automaticamente.
