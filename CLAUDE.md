@@ -374,9 +374,15 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   jogadores** na raiz ou em pasta revelada (registro dos feitos deles, sem criar o item duas vezes). O mestre os organiza
   como os demais (pastas, renomear, remover da aba). Abrem na janela `TableItemWindow` (tipo `table-item`): editável
   por quem criou e pelo mestre.
-- **Grade:** escondida (G ou menu da cena) = tokens e paredes se movem livres; visível = alinham (Shift = livre).
-- **Papel (`role`)**: alternado manualmente na barra de ações (Mestre/Jogador) — não há permissões reais ainda.
-  As regras de acesso às fichas já usam o papel + a conta (`canEdit`, `canOpen`…; ver "Ficha de NPC").
+- **Grade:** escondida (menu da cena: "Remover grade") = tokens e paredes se movem livres; visível = alinham (Shift = livre).
+  Não há botão nem atalho de grade na barra de ferramentas.
+- **Papel (`role`)**: alternado manualmente na barra de ações (Mestre/Jogador, `session.setRole`) — não há permissões
+  reais ainda. As regras de acesso às fichas já usam o papel + a conta (`canEdit`, `canOpen`…; ver "Ficha de NPC").
+- **O que o jogador não vê/faz:** ferramenta **Névoa** (`ToolDef.gmOnly`, `toolAllowed`; sem atalhos F/W; trocar para
+  jogador sai dela), **cenas** da barra superior (fica só voltar, título da mesa e os botões de painel, imersivo e tela
+  cheia), abas **Sons** e **Ações** do painel direito, **mover/redimensionar/remover tokens** que não pode editar
+  (`canEdit`: NPC só com controle; `MapStage.canMoveToken`, sem alça) e **criar ações pela barra de baixo** (cria na
+  aba Habilidades da própria ficha).
 - Estado de sessão **não persistido**: ferramenta ativa, papel, visibilidade das barras, janelas abertas,
   token selecionado, pincel, modo de parede, sons tocando, pilha de desfazer dos desenhos, efeitos na tela.
 
@@ -476,8 +482,8 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   (`ACT_SELECTION`, o padrão: segue a seleção); jogador = personagem dele ou NPC que controla, se selecionado, ou o
   primeiro personagem dele. `actorSheetId` = a ficha cujas tags valem (com o token do NPC que age selecionado, a cópia
   dele); "Usar" numa ficha rola com as tags daquela ficha (`useAction(action, sheetId)`), em nome dela no chat.
-  A barra de baixo (`hotbar`, até 10; teclas 1–9 e 0) mostra as ações de quem age; espaço vazio cria uma ação
-  já com esse dono.
+  A barra de baixo (`hotbar`, até 10; teclas 1–9 e 0) mostra as ações de quem age; espaço vazio (só mestre) cria
+  uma ação já com esse dono; o jogador cria as dele na aba Habilidades da ficha.
 - **Rolagem** (`RollConfig { dice: '2d12' | '3d6', modifier, attributes? }`, puro em `utils/dice.ts`):
   2d12 → total < 0 falha crítica · < 12 falha · < 17 sucesso parcial · < 24 sucesso · **24+ sucesso crítico**;
   3d6 → até 9 azar · 10–12 neutro · 13+ sorte. O modificador passa sempre por `effectiveModifier(roll, levels)`:
@@ -562,7 +568,7 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 
 ### Atalhos da mesa (ignorados ao digitar)
 `V` selecionar · `M` mover mapa · `R` régua · `P` ping · `D` desenhar · `F` névoa · `W` parede (névoa em modo linha) ·
-`N` anotação · `E` efeitos especiais · `G` grade · `+`/`-` zoom · `1`–`0` ações · `\` modo imersivo · `Delete` remove o token (ou a parede,
+`N` anotação · `E` efeitos especiais · `+`/`-` zoom · `1`–`0` ações · `\` modo imersivo · `Delete` remove o token (ou a parede,
 no modo editar) selecionado · `Esc` cancela parede/fecha anotação/desarma efeito de ação/limpa seleção · `Enter` finaliza parede ·
 `Ctrl+Z` desfaz desenho · **`WASD`/setas** movem o token selecionado (nesse caso W/D não trocam de ferramenta) ·
 **`PageUp`/`PageDown`** (mestre, isométrica) sobem/descem o token selecionado ou a camada em foco.
@@ -574,7 +580,7 @@ Botão do meio do mouse sempre move o mapa; roda do mouse = zoom no cursor.
 
 ### `FloatingWindow` (`shared/components/floating-window`)
 Janela reutilizável usada no Worldbuild e na Mesa. Recursos: arrastar pela barra de título, redimensionar
-(bordas direita, inferior e canto), **minimizar** (só a barra fica; o conteúdo é escondido, não destruído),
+(bordas direita, inferior e canto), **minimizar** (só a barra fica, estreita — largura do título + botões, até 22rem; o conteúdo é escondido, não destruído),
 **maximizar** (duplo clique na barra), **fixar** (trava posição/tamanho), foco/z-index.
 Usa `model()` para `geometry`, `maximized`, `minimized`, `pinned`. Limita-se ao elemento pai (`position: relative`).
 No mobile (<768px), aberta ocupa a área inteira.
