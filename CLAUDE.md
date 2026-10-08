@@ -160,7 +160,8 @@ src/
                 ├── side-panel/         # barra direita: Chat, Fichas, Lore, Sons, Ações
                 ├── chat-panel/         # aba Chat: mensagens e cartões de rolagem
                 ├── sound-list/         # aba Sons: mixer
-                ├── action-bar/         # barra inferior: 10 espaços de ações (teclas 1–0)
+                ├── action-bar/         # barra inferior: 10 espaços de ações (teclas 1–0) + botão "Rolar"
+                ├── quick-roll/         # painel da rolagem básica (dado, modificador, tags e etiquetas, não salvo)
                 ├── entry-window/       # configuração da automação (dono, rolagem, tags, ícone, efeito)
                 ├── character-sheet/    # FICHA de personagem e de NPC (abas; cards Básico, Status, Relações, Temas; Habilidades)
                 ├── sheet-inventory/    # aba Inventário: lista de itens + cartão; equipado; no NPC, preços e compra (loja)
@@ -484,6 +485,10 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   dele); "Usar" numa ficha rola com as tags daquela ficha (`useAction(action, sheetId)`), em nome dela no chat.
   A barra de baixo (`hotbar`, até 10; teclas 1–9 e 0) mostra as ações de quem age; espaço vazio (só mestre) cria
   uma ação já com esse dono; o jogador cria as dele na aba Habilidades da ficha.
+- **Rolagem básica** ("Rolar", à direita da barra de baixo, mestre e jogador; `QuickRoll` num overlay do CDK): 2d12 ou
+  3d6 + modificador escolhido na hora, **não salvo**. Soma tags/defeitos dos temas e etiquetas de status da ficha de
+  quem age (`actorSheetId`); cada etiqueta vira bônus ou penalidade (clique: + → − → fora; sem nível vale 1), regra
+  pura em `quickModifier` (`utils/dice.ts`). `session.quickRoll` grava no chat ("Rolagem", ícone `casino`).
 - **Rolagem** (`RollConfig { dice: '2d12' | '3d6', modifier, attributes? }`, puro em `utils/dice.ts`):
   2d12 → total < 0 falha crítica · < 12 falha · < 17 sucesso parcial · < 24 sucesso · **24+ sucesso crítico**;
   3d6 → até 9 azar · 10–12 neutro · 13+ sorte. O modificador passa sempre por `effectiveModifier(roll, levels)`:

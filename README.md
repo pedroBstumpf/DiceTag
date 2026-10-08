@@ -78,6 +78,8 @@ O mapa ocupa a tela inteira e as barras flutuam por cima — todas escondíveis:
   só para a mesa), Sons (mixer), Ações (automações por personagem, NPC ou gerais do mestre).
 - **Baixo — ações:** 10 espaços (teclas 1–0) com as ações de quem está agindo: o jogador vê as do personagem
   dele; o mestre escolhe no menu "Agindo" um personagem ou NPC fixo, as ações gerais ou seguir o token selecionado.
+  À direita, o botão **Rolar** faz a rolagem básica (2d12 ou 3d6 + modificador na hora), somando se quiser as tags e
+  defeitos dos temas e as etiquetas de status (como bônus ou penalidade) de quem está agindo — nada fica salvo.
 - **Janelas:** todo arquivo abre numa janela que pode ser movida, redimensionada, minimizada (vira uma barra
   estreita), maximizada e fixada.
 - **Visão de Jogador:** sem a ferramenta Névoa, sem as cenas da barra superior e sem as abas Sons e Ações; move
