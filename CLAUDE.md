@@ -21,14 +21,15 @@ organizar toda a atmosfera de uma campanha.
 | **Lore geral** (`/lore`): lore oficial do mundo, global, mesma página/editores do Worldbuild | Pronto |
 | Contas (login/cadastro locais) + **modo de teste sem conta** | Pronto (provisório) |
 | Minhas mesas (criar, listar, excluir com limpeza dos dados, abrir) | Pronto |
-| Worldbuild (pastas, documentos rich text, **linha do tempo em mapa mental**, mapas/imagens) | Pronto |
+| Worldbuild (pastas, documentos rich text, **linha do tempo em mapa mental**, mapas/imagens, **itens com cartão**) | Pronto |
 | **Mesa de jogo** (mapa em camadas, 4 barras escondíveis, janelas flutuantes) | Pronto |
 | **Vista isométrica** por cena + **camadas do mapa** (até 5, "ar" para voo) + **pastas de cenas** | Pronto |
 | Sons: **mixer** com faixas simultâneas, volume/repetição por faixa e volume mestre | Pronto |
 | **Tokens** (imagem, tamanho, visão, barras e etiquetas com cor/nível; vínculo personagem/NPC; WASD com velocidade configurável) | Pronto |
 | **Névoa de guerra + paredes + portas** (visão por ray casting, por papel, memória de áreas exploradas) | Pronto |
 | **Pincel** (desenho livre, borracha, Ctrl+Z) e **anotações** no mapa | Pronto |
-| Fichas de personagem/NPC | **Placeholder** (não estruturar sem pedido); nome + imagem (= imagem do token) + jogador dono + lista de ações; demais opções do token ficam só no mapa |
+| **Ficha de personagem** (abas Ficha, Inventário, Anotações, Habilidades; cards Básico, Status, Relações, 3 Temas) | Pronto |
+| Ficha de NPC | **Placeholder** (não estruturar sem pedido); nome + imagem (= imagem do token) + lista de ações |
 | **Automações** (dono personagem/NPC/geral, ícone, rolagem 2d12/3d6 + modificador, efeito especial) | Pronto |
 | **Rolagem de dados** (2d12: falha crítica…sucesso crítico; 3d6: azar/neutro/sorte) + **chat** da mesa | Pronto |
 | **Efeitos especiais** no mapa (20 efeitos em 4 grupos; 13 cores por elemento) | Pronto |
@@ -55,7 +56,7 @@ Todos os dados ficam **no navegador (IndexedDB)**. Não há API.
 - **Angular 21** (standalone, **zoneless** — não há zone.js), TypeScript 5.9
 - **Angular Material 21** (tema M3, escuro) + **CDK** (drag-drop, layout)
 - **Tailwind CSS 4** via PostCSS (`.postcssrc.json`), tema em `src/styles/tailwind.css` (sem `tailwind.config.js`)
-- **Tiptap 3** (editor rich text dos documentos)
+- **Tiptap 3** (editor rich text dos documentos e das anotações da ficha — `RichTextEditor`)
 - **Vitest** (via `@angular/build:unit-test`) para funções puras em `utils/`
 - Desenho do mapa sem bibliotecas: **SVG** (desenhos, paredes, setas) e **`<canvas>`** (névoa)
 - Node 20.19+ ou 22.12+
@@ -70,7 +71,8 @@ npx ng test --watch=false    # testes Vitest (*.spec.ts), uma execução
 Configuração relevante do `angular.json` (produção):
 - `optimization.fonts: false` → não tenta embutir Google Fonts no build (evita travar em redes restritas).
 - Budgets: inicial 800kB aviso / 1.5MB erro; estilo por componente 6kB / 12kB.
-  O inicial está em ~790kB (perto do aviso): evite importar coisas pesadas fora das rotas lazy.
+  O aviso subiu para **850kB** porque o CSS global do Tailwind cresce com cada tela nova (inicial hoje ~801kB,
+  dos quais ~88kB de CSS). Evite importar coisas pesadas fora das rotas lazy.
 
 ---
 
@@ -89,8 +91,10 @@ src/
     │   │   ├── geometry.model.ts       # Point, Rect
     │   │   ├── user.model.ts
     │   │   ├── game-table.model.ts     # GameTable, GAME_SYSTEMS, TABLE_ACCENTS
-    │   │   ├── table-session.model.ts  # Scene, TableEntry, TableState, tokens, paredes, traços, anotações, constantes
-    │   │   ├── world-item.model.ts     # WorldItem, TimelineEvent, TimelineLink, WORLD_ITEM_META, TIMELINE_COLORS
+    │   │   ├── table-session.model.ts  # Scene, TableEntry, TableState, tokens, paredes, traços, anotações,
+    │   │   │                           # ficha (CharacterSheet, STATUS_BARS, withStatusBars), constantes + spec
+    │   │   ├── tag.model.ts            # Tag (etiqueta: texto, cor, nível) e TAG_COLORS
+    │   │   ├── world-item.model.ts     # WorldItem (inclui `item`), TimelineEvent, TimelineLink, WORLD_ITEM_META, TIMELINE_COLORS
     │   │   └── news.model.ts
     │   ├── services/
     │   │   ├── storage.service.ts      # wrapper chave/valor do IndexedDB (get/set/delete)
@@ -103,6 +107,8 @@ src/
     │   ├── components/floating-window/ # JANELA FLUTUANTE (peça central da UX)
     │   ├── components/empty-state/
     │   ├── components/color-picker/    # bolinha de cor + paleta (mat-menu) + cor livre
+    │   ├── components/tag-editor/      # lista editável de etiquetas (cor, texto, nível): token, ficha, item
+    │   ├── components/rich-text-editor/ # Tiptap + barra de formatação (documentos e anotações da ficha)
     │   ├── directives/auto-focus.directive.ts
     │   ├── services/
     │   │   ├── window-manager.service.ts  # abre/fecha/foca janelas (fornecido por página)
@@ -122,7 +128,7 @@ src/
         │   ├── services/lore.service.ts         # Lore geral: estende WorldbuildService, chave global
         │   ├── directives/lore-scope.directive.ts  # appLoreScope: troca WorldbuildService → LoreService no elemento
         │   ├── utils/timeline-layout.ts         # layouts, setas e hit test do mapa mental + spec
-        │   └── components/ explorer, document-editor, timeline-editor, image-viewer
+        │   └── components/ explorer (abas Arquivos/Itens), document-editor, timeline-editor, image-viewer, item-card
         └── game-table/         # MESA DE JOGO (rota /mesa/:id, tela cheia, fora do Shell)
             ├── game-table.ts           # página: orquestra barras, janelas e atalhos
             ├── services/
@@ -150,7 +156,11 @@ src/
                 ├── chat-panel/         # aba Chat: mensagens e cartões de rolagem
                 ├── sound-list/         # aba Sons: mixer
                 ├── action-bar/         # barra inferior: 10 espaços de ações (teclas 1–0)
-                ├── entry-window/       # ficha de personagem/NPC (placeholder) e configuração da automação
+                ├── entry-window/       # ficha de NPC (placeholder) e configuração da automação
+                ├── character-sheet/    # FICHA DE PERSONAGEM (abas; cards Básico, Status, Relações, Temas; Habilidades)
+                ├── sheet-inventory/    # aba Inventário: lista de itens + cartão do item
+                ├── sheet-notes/        # aba Anotações: caderno com páginas (RichTextEditor)
+                ├── level-pips/         # seletor de nível 1–6 em losangos (relações e tags de tema)
                 ├── token-editor/       # editor de tamanho, visão, barras e etiquetas
                 ├── token-window/       # janela "Token" (duplo clique num token): único lugar das opções do token
                 └── note-popover/       # edição de anotação junto ao marcador
@@ -235,6 +245,9 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - **Fontes:** `font-display` = **Tektur** (títulos), `font-sans` = **Chakra Petch** (todo o texto).
 - **Cantos retos:** raios do Tailwind reduzidos no `@theme`; botões Material com 6px.
 - **Utilitário `.glass`:** fundo translúcido + blur + borda azul sutil. Usar em barras, submenus e popovers sobre o mapa.
+- **Utilitários da ficha** (`tailwind.css`): `sheet-card` (card), `sheet-title` (título do card), `sheet-label`
+  (rótulo de campo em caixa alta) e `sheet-input` (campo de texto). A ficha usa container queries
+  (`@container` + `@2xl:`/`@xl:`), porque o tamanho que importa é o da janela, não o da tela.
 - **Fundo:** campo de estrelas e nebulosas só em CSS no `body` (sem imagens).
 - **Animações:** `animate-fade-in` (entrada de painéis/janelas), `animate-ping-once` (ping no mapa),
   `animate-eq` (barras de equalizador do som tocando).
@@ -263,7 +276,12 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - Excluir uma mesa apaga também `table-state:<id>` e os Blobs dela (mapas, áudios, imagens de token).
 
 ### Worldbuild (`WorldbuildService`)
-- Tipos: `folder`, `document` (HTML do Tiptap em `content`), `timeline` (`events[]` + `links[]`), `image` (`blobId`).
+- Tipos: `folder`, `document` (HTML do Tiptap em `content`), `timeline` (`events[]` + `links[]`), `image` (`blobId`),
+  `item` (cartão: `blobId` opcional = imagem, nome e `tags: Tag[]`).
+- **Itens do mundo:** o explorador tem as abas **Arquivos** (árvore) e **Itens** (lista plana de `worldItems()`, com
+  busca e "Novo item"); itens também ficam na árvore. O cartão (`ItemCard`) é editável na janela do item e só
+  leitura no inventário da ficha. Trocar a imagem usa `setImage` (apaga a anterior). Como os demais itens, aparecem
+  na aba Lore da mesa e abrem em janela lá.
 - Árvore por `parentId` (`null` = raiz). Ordenação: pastas primeiro, depois nome (pt-BR, numérico).
 - Nomes padrão sem repetição na mesma pasta ("Novo documento 2"...).
 - Mover: proibido mover uma pasta para dentro dela mesma ou de um descendente.
@@ -319,8 +337,10 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - **Régua e visão:** 1 quadrado = **1,5 m** (`METERS_PER_SQUARE`).
 - **Arquivos da mesa (`TableEntry`):** `character`, `npc` (com `token`), `sound` (`blobId`, `volume`, `loop`),
   `automation` (`role: 'gm' | 'player'` + `icon`). Excluir a ficha remove os tokens dela e apaga os Blobs.
-- **Ficha x imagem:** personagem/NPC mostra a imagem no topo da ficha; enviar ali usa `setTokenImage`
-  (a imagem da ficha **é** a do token).
+- **Ficha x imagem:** personagem (card Básico) e NPC (topo da janela) mostram a imagem; enviar ali usa
+  `setTokenImage` (a imagem da ficha **é** a do token).
+- **Janela por tipo:** personagem abre a ficha completa (`CharacterSheetView`, janela `sheet`, 880×700);
+  NPC e automação abrem a `EntryWindow`.
 - **Lore** não é duplicada: a aba Lore lista os itens (exceto pastas) da **Lore geral** (marcados com
   `auto_stories`) e do **Worldbuild** do usuário e os abre com os mesmos editores.
   "Abrir Lore geral" / "Abrir pastas do Worldbuild" abrem o `Explorer` numa janela (`lore:explorer` /
@@ -334,6 +354,28 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - **Papel (`role`)**: alternado manualmente na barra de ações (Mestre/Jogador) — não há permissões reais ainda.
 - Estado de sessão **não persistido**: ferramenta ativa, papel, visibilidade das barras, janelas abertas,
   token selecionado, pincel, modo de parede, sons tocando, pilha de desfazer dos desenhos, efeitos na tela.
+
+### Ficha de personagem (`CharacterSheetView`, `TableEntry.sheet`)
+- Só para personagens jogadores (`character`). Dados em `CharacterSheet { race, subrace, labels, relations, themes,
+  inventory, notes }`, lidos sempre por `session.sheetOf(entry)` (preenche padrões: **3 temas** e **1+ página**) e
+  gravados por `updateSheet(entryId, patch)`.
+- **Aba Ficha** — cards em grade (container query):
+  - **Básico:** imagem (= token), nome, raça, sub-raça, jogador dono ("Vincular à minha conta") e **rótulos** (texto livre, Enter adiciona).
+  - **Status:** três barras fixas **Corpo** (vermelha), **Mente** (verde), **Espírito** (azul) + **etiquetas** do personagem.
+    Barras e etiquetas ficam no **token da ficha** (`TableEntry.token.bars/tags`), então aparecem no mapa.
+    `withStatusBars` garante as três barras (ids `status-*`, rótulo e cor fixos) em personagens novos (`defaultToken`),
+    antigos (`normalizeState`) e em toda gravação (`updateEntryToken`); a janela "Token" não as renomeia nem remove.
+  - **Relações:** nome, nível **1–6** (`LevelPips`) e descrição.
+  - **Temas (3):** nome + tags com nível **1–6**.
+- **Aba Inventário** (`SheetInventory`): `InventoryEntry { itemId, global? }` referencia um item do mundo (Worldbuild do
+  usuário ou Lore geral); a lista mostra os nomes e, ao lado, o cartão do item selecionado (só leitura, "Editar
+  cartão" abre a janela do item). "+ Item" busca itens das duas fontes ou cria um novo no Worldbuild. Item excluído
+  do mundo aparece como "Item excluído".
+- **Aba Anotações** (`SheetNotes`): caderno de texto rico em páginas (`NotePage { title, content }`); a última página
+  não é excluída. O `RichTextEditor` lê o conteúdo só ao ser criado: a página aberta é renderizada num `@for` com
+  `track` pelo id para recriar o editor ao trocar de página.
+- **Aba Habilidades:** as automações do personagem (`automationsOf`), criadas por ele ou pelo mestre; "Usar" rola
+  como a barra de ações (`onActionUsed`).
 
 ### Ações automatizadas (automações)
 - **Dono** (`TableEntry.ownerEntryId`): personagem = ação do jogador dele; NPC = ação do mestre para aquele NPC
@@ -476,9 +518,9 @@ O `MapStage` recebe `insets` para enquadrar o mapa só na área livre entre as b
 |---|---|
 | `users` | `StoredUser[]` |
 | `tables` | `GameTable[]` (todas; filtradas por `ownerId`) |
-| `worldbuild:<userId>` | `WorldItem[]` |
+| `worldbuild:<userId>` | `WorldItem[]` (inclui os itens do mundo com cartão) |
 | `lore:global` | `WorldItem[]` da Lore geral (igual para todos) |
-| `table-state:<tableId>` | `TableState` (cenas com tokens/névoa/memória/paredes/portas/desenhos/anotações/camadas/vista, pastas de cenas, cena ativa, arquivos, volume mestre, chat, organização da Lore) |
+| `table-state:<tableId>` | `TableState` (cenas com tokens/névoa/memória/paredes/portas/desenhos/anotações/camadas/vista, pastas de cenas, cena ativa, arquivos — com a ficha do personagem em `sheet` —, volume mestre, chat, organização da Lore) |
 | `blob:<id>` | `Blob` de imagem/mapa/áudio/imagem de token |
 | `localStorage: dicetag.session` | id do usuário logado |
 | `localStorage: dicetag.sidebarCollapsed` | preferência da barra lateral |
@@ -492,8 +534,10 @@ Para conectar um backend no futuro: trocar `StorageService` e `AuthService` mant
 
 ## 10. Pendências e próximos passos sugeridos
 
-- Estruturar **ficha de personagem/NPC** (aguardar definição do dono: sistema genérico ou por sistema).
-- Ligar o modificador das ações a atributos da ficha (`RollConfig.attributes` + `effectiveModifier`), quando a ficha existir.
+- Estruturar a **ficha de NPC** (aguardar definição do dono).
+- Ligar o modificador das ações à ficha (`RollConfig.attributes` + `effectiveModifier`) — ex.: níveis das tags de
+  tema ou das relações; aguardar a regra do sistema.
+- Inventário sem quantidade/peso; relações por nome livre (sem vínculo com fichas da mesa).
 - Efeitos e chat ainda são locais (sem multiplayer, outros jogadores não veem); efeitos não saem do token automaticamente.
 - Persistir janelas abertas, visibilidade das barras e pincel por mesa.
 - Imagens de token substituídas durante a sessão só liberam a URL antiga ao sair da mesa (`BlobUrlService`).
@@ -503,7 +547,7 @@ Para conectar um backend no futuro: trocar `StorageService` e `AuthService` mant
 - Backend + multiplayer em tempo real; permissões reais de mestre/jogador; convite de jogadores.
 - Lore geral: hoje qualquer usuário edita; com backend, só o dono do mundo deve editar (os demais só leem).
 - Mural de notícias alimentado por API/CMS (`NewsService.posts`).
-- Testes de componentes (hoje só as funções puras de `utils/` e a `FxLayer` têm testes).
+- Testes de componentes (hoje só as funções puras de `utils/`, as regras da ficha no modelo e a `FxLayer` têm testes).
 
 ---
 
@@ -513,6 +557,7 @@ Para conectar um backend no futuro: trocar `StorageService` e `AuthService` mant
 2. Mudanças pequenas e focadas; não refatore o que não foi pedido.
 3. Novos componentes: `features/<feature>/components/<nome>/<nome>.ts|.html`, standalone, Tailwind, comentários em PT-BR.
    Novas camadas do mapa: `features/game-table/components/map-layers/<nome>-layer/`.
-4. Reaproveite `FloatingWindow`, `WindowManagerService`, `EmptyState`, `AutoFocus`, `ColorPicker`, `TokenEditor`, tokens e `.glass`.
+4. Reaproveite `FloatingWindow`, `WindowManagerService`, `EmptyState`, `AutoFocus`, `ColorPicker`, `TagEditor`,
+   `RichTextEditor`, `TokenEditor`, `LevelPips`, tokens, `.glass` e os utilitários `sheet-*`.
 5. Valide com `npm run build` e `npx ng test --watch=false` ao final; corrija erros e avisos introduzidos.
 6. Atualize este `CLAUDE.md` (e o `README.md`) quando mudar arquitetura, regras ou convenções.

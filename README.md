@@ -33,7 +33,8 @@ src/
     │   ├── services/          # auth, mesas, notícias, layout, storage (IndexedDB)
     │   └── utils/
     ├── shared/                # peças reutilizáveis
-    │   ├── components/        # floating-window (janela arrastável), empty-state
+    │   ├── components/        # floating-window (janela arrastável), empty-state, color-picker,
+    │   │                      # tag-editor (etiquetas), rich-text-editor (Tiptap)
     │   ├── directives/        # auto-focus
     │   ├── services/          # quick-actions, window-manager (janelas)
     │   └── utils/             # viewport (pan/zoom puro)
@@ -46,11 +47,12 @@ src/
         ├── tables/            # "Minhas mesas" + diálogo de criação
         ├── game-table/        # a mesa de jogo (rota /mesa/:id, tela cheia)
         │   ├── components/    # map-stage (orquestrador), map-layers/ (desenhos, notas, névoa,
-        │   │                  # tokens, paredes), barras, submenus, janelas de ficha e token, mixer
+        │   │                  # tokens, paredes), barras, submenus, ficha de personagem (abas),
+        │   │                  # janelas de NPC e token, mixer
         │   ├── services/      # table-session (estado + vínculo de tokens), sound-mixer, blob-url
         │   └── utils/         # geometria, visão (ray casting), simplificação de traços
         └── worldbuild/        # explorador de pastas + janelas flutuantes (também é a página /lore)
-            ├── components/    # explorer, document-editor, timeline-editor, image-viewer
+            ├── components/    # explorer, document-editor, timeline-editor, image-viewer, item-card
             ├── directives/    # lore-scope (editores usando a Lore geral)
             ├── services/      # worldbuild (dados + migração), lore (Lore geral, dados globais)
             └── utils/         # layout da linha do tempo em mapa mental
@@ -70,12 +72,21 @@ O mapa ocupa a tela inteira e as barras flutuam por cima — todas escondíveis:
 - **Esquerda — ferramentas:** selecionar (V), mover (M), régua em quadrados e metros (R), ping (P),
   desenhar (D), névoa de guerra (F) com paredes (W), anotação (N), efeitos especiais (E), grade (G), zoom.
 - **Direita — painel:** Chat (mensagens e rolagens), Fichas (personagens e NPCs — arraste para o mapa; a imagem enviada na ficha é a do
-  token), Lore (itens da Lore geral e do worldbuild, com pastas próprias da mesa; renomear e remover valem
+  token; personagens abrem a ficha completa), Lore (itens da Lore geral e do worldbuild, com pastas próprias da mesa; renomear e remover valem
   só para a mesa), Sons (mixer), Ações (automações por personagem, NPC ou gerais do mestre).
 - **Baixo — ações:** 10 espaços (teclas 1–0) com as ações de quem está agindo: o jogador vê as do personagem
   dele; o mestre, as do token selecionado (NPC ou personagem) ou as gerais.
 - **Janelas:** todo arquivo abre numa janela que pode ser movida, redimensionada, minimizada, maximizada e fixada.
 - **Modo imersivo:** tecla `\` esconde/mostra todas as barras.
+
+### Ficha de personagem
+Clicar num personagem no painel abre a ficha, com quatro abas:
+- **Ficha:** cards de tamanhos diferentes — **Básico** (imagem, nome, raça, sub-raça e rótulos), **Status**
+  (barras Corpo, Mente e Espírito e as etiquetas do personagem, que também aparecem no token), **Relações**
+  (personagens com nível de 1 a 6 e descrição) e três **Temas** (nome e tags com nível de 1 a 6).
+- **Inventário:** lista dos itens do personagem e, ao lado, o cartão do item selecionado (imagem, nome e etiquetas).
+- **Anotações:** caderno de texto rico com páginas.
+- **Habilidades:** as ações do personagem, criadas por ele ou pelo mestre, com botão para usar.
 
 ### Tokens
 Arraste a ficha de um personagem ou NPC do painel para o mapa para colocar o token. Ele tem imagem
@@ -132,6 +143,8 @@ igual para todos — mesma página e mesmos editores, com dados globais.
 - **Linhas do tempo em mapa mental**: cartões livres ligados por setas (ramificações e eventos paralelos),
   criação de eventos conectados pelas alças, rótulos nas setas e organização automática.
 - **Mapas e imagens**: envio por botão ou arrastando arquivos; zoom com a roda do mouse e navegação arrastando.
+- **Itens**: aba própria no explorador para criar e listar os itens do mundo; cada item tem um cartão com
+  imagem, nome e etiquetas e pode ir para o inventário dos personagens. Também acessível dentro da mesa.
 
 ## Dados (provisório)
 
