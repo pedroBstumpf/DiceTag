@@ -346,8 +346,8 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - **Régua e visão:** 1 quadrado = **1,5 m** (`METERS_PER_SQUARE`).
 - **Arquivos da mesa (`TableEntry`):** `character`, `npc` (com `token`), `sound` (`blobId`, `volume`, `loop`),
   `automation` (`role: 'gm' | 'player'` + `icon`). Excluir a ficha remove os tokens dela e apaga os Blobs.
-- **Ficha x imagem:** personagem (card Básico) e NPC (topo da janela) mostram a imagem; enviar ali usa
-  `setTokenImage` (a imagem da ficha **é** a do token).
+- **Ficha x imagem:** o card Básico mostra a imagem; enviar ali usa `setTokenImage` (a imagem da ficha **é** a do
+  token). Ficha, token e avatares cortam a imagem igual: `object-cover object-top` (retratos mostram o rosto).
 - **Janela por tipo:** personagem, NPC e token de NPC (`npc:<id do token>`) abrem a ficha completa
   (`CharacterSheetView`, janela `sheet`, 880×700); NPC do bestiário aberto pelo explorador = janela `npc`
   (`appWorldNpcSheet`); automação abre a `EntryWindow`. Sem permissão, `content()` → null (não abre).
@@ -416,11 +416,14 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - **Do mestre:** só o mestre cria, exclui e configura NPCs. "Controle" (topo da aba Ficha, só mestre) =
   `TableEntry.controllerUserId`: um jogador (conta dona de personagens da mesa, `session.players`) que passa a ver,
   editar e controlar o NPC (barra de ações ao selecionar o token, aba Ações, arrastar para o mapa).
-- **Público:** botões "visível para os jogadores / só do mestre" na aba Ficha (`sheetPublic`) e na aba Inventário
-  (`inventoryPublic`). Jogador sem permissão não vê o NPC no painel, não abre a ficha e o duplo clique no token não abre
-  nada; com partes públicas, vê só essas abas em **somente leitura**.
+- **Público, por token:** na ficha de cada **token** de NPC, botões "visível para os jogadores / só do mestre" na aba
+  Ficha (`TokenPlacement.sheetPublic`) e na aba Inventário (`TokenPlacement.inventoryPublic`). Token **derrotado**
+  (barra de status em 0) mostra o inventário aos jogadores sempre — só aquele token. O NPC do painel (ficha base) só
+  abre para quem o edita: o jogador não o vê no painel; vê NPCs pelos tokens (duplo clique), só as abas liberadas,
+  em **somente leitura**. Sem nada liberado, o duplo clique não abre nada.
 - **Regras (único lugar, `TableSessionService`):** `canEdit` (mestre; NPC → só `controlsNpc`; personagens seguem livres),
-  `canViewSheet`, `canViewInventory`, `canOpen`, `myNpcs`; o `actor` do jogador inclui o NPC que ele controla.
+  `sheetAccess(sheetId)` → `{ edit, sheet, inventory }`, `canOpenSheet`, `myNpcs`; o `actor` do jogador inclui o NPC
+  que ele controla.
 - **Somente leitura** = `<fieldset [disabled]>` em volta do conteúdo editável (desabilita inputs/botões nativos;
   `styles.scss` tira os eventos de mouse). A lista do inventário fica fora, para poder selecionar e comprar.
 - **Loja:** `InventoryEntry.price` (Eiros, `CURRENCY`) na coluna ao lado dos itens do NPC (vazio = não está à venda).

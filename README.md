@@ -97,7 +97,8 @@ A ficha de NPC é igual à de personagem, sem Anotações e sem Relações. As f
 mapa é uma cópia individual — duplo clique abre a ficha daquele token, com status, etiquetas, temas e inventário
 próprios, sem mexer no NPC do painel nem no bestiário. NPCs são do mestre, que pode:
 - dar o **controle** de um NPC a um jogador específico (ele passa a ver, editar e usar o NPC);
-- deixar a **ficha** e/ou o **inventário** do NPC visíveis para os jogadores (só leitura);
+- deixar a **ficha** e/ou o **inventário** de cada **token** de NPC visíveis para os jogadores (só leitura) — um
+  token derrotado mostra o inventário sozinho;
 - pôr **preços em Eiros** nos itens do inventário do NPC, criando uma loja. Com o inventário visível, o jogador
   seleciona um item e compra com os Eiros do personagem dele (campo no topo da aba Inventário da ficha); uma unidade
   do item vai para o inventário do personagem e a quantidade da loja baixa 1.
