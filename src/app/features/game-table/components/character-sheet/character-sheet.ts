@@ -21,21 +21,23 @@ import { TableSessionService } from '../../services/table-session.service';
 import { formatRoll } from '../../utils/dice';
 import { LevelPips } from '../level-pips/level-pips';
 import { SheetInventory } from '../sheet-inventory/sheet-inventory';
+import { SheetNotes } from '../sheet-notes/sheet-notes';
 
 /** Abas da ficha de personagem. */
-type SheetTab = 'sheet' | 'inventory' | 'abilities';
+type SheetTab = 'sheet' | 'inventory' | 'notes' | 'abilities';
 
 /**
  * Ficha do personagem jogador, com abas:
  * - Ficha: cards Básico (imagem, nome, raça, sub-raça, rótulos), Status (barras
  *   Corpo/Mente/Espírito e etiquetas — as mesmas do token no mapa), Relações e três Temas.
  * - Inventário: itens do mundo que o personagem possui, com o cartão ao lado (SheetInventory).
+ * - Anotações: caderno de texto rico em páginas (SheetNotes).
  * - Habilidades: as ações (automações) do personagem, criadas por ele ou pelo mestre.
  * Tudo é gravado na ficha (`TableEntry.sheet`) ou no token dela (barras e etiquetas).
  */
 @Component({
   selector: 'app-character-sheet',
-  imports: [MatIconModule, MatTooltipModule, TagEditor, LevelPips, SheetInventory],
+  imports: [MatIconModule, MatTooltipModule, TagEditor, LevelPips, SheetInventory, SheetNotes],
   templateUrl: './character-sheet.html',
   host: { class: 'flex h-full flex-col' },
 })
@@ -54,6 +56,7 @@ export class CharacterSheetView {
   readonly tabs: { id: SheetTab; icon: string; label: string }[] = [
     { id: 'sheet', icon: 'badge', label: 'Ficha' },
     { id: 'inventory', icon: 'backpack', label: 'Inventário' },
+    { id: 'notes', icon: 'edit_note', label: 'Anotações' },
     { id: 'abilities', icon: 'bolt', label: 'Habilidades' },
   ];
   readonly tab = signal<SheetTab>('sheet');

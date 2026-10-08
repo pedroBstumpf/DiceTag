@@ -212,6 +212,13 @@ export interface InventoryEntry {
   global?: boolean;
 }
 
+/** Página das anotações do personagem (texto rico, HTML do Tiptap). */
+export interface NotePage {
+  id: string;
+  title: string;
+  content: string;
+}
+
 /**
  * Ficha do personagem jogador. As etiquetas e as barras de status (Corpo, Mente,
  * Espírito) ficam no token da ficha (`TableEntry.token`), assim aparecem também no mapa.
@@ -226,6 +233,8 @@ export interface CharacterSheet {
   themes: CharacterTheme[];
   /** Itens que o personagem possui. */
   inventory: InventoryEntry[];
+  /** Anotações do jogador, em páginas (sempre pelo menos uma). */
+  notes: NotePage[];
 }
 
 /** Ficha vazia de um personagem. */
@@ -237,6 +246,7 @@ export function defaultSheet(): CharacterSheet {
     relations: [],
     themes: Array.from({ length: SHEET_THEME_COUNT }, (_, i) => ({ id: `theme-${i + 1}`, name: '', tags: [] })),
     inventory: [],
+    notes: [{ id: 'page-1', title: 'Página 1', content: '' }],
   };
 }
 

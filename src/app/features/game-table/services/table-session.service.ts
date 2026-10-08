@@ -731,11 +731,12 @@ export class TableSessionService {
 
   // --- Ficha de personagem -------------------------------------------------
 
-  /** Ficha do personagem com os valores padrão dos campos ausentes (sempre 3 temas). */
+  /** Ficha do personagem com os valores padrão dos campos ausentes (sempre 3 temas e 1+ página). */
   sheetOf(entry: TableEntry): CharacterSheet {
-    const sheet = { ...defaultSheet(), ...entry.sheet };
-    const themes = defaultSheet().themes.map((theme, i) => sheet.themes[i] ?? theme);
-    return { ...sheet, themes: themes.slice(0, SHEET_THEME_COUNT) };
+    const empty = defaultSheet();
+    const sheet = { ...empty, ...entry.sheet };
+    const themes = empty.themes.map((theme, i) => sheet.themes[i] ?? theme);
+    return { ...sheet, themes: themes.slice(0, SHEET_THEME_COUNT), notes: sheet.notes.length ? sheet.notes : empty.notes };
   }
 
   /** Altera campos da ficha do personagem. */

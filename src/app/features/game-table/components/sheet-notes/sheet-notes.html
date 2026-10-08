@@ -1,0 +1,65 @@
+<!-- ===== Páginas do caderno ===== -->
+<nav class="sheet-card flex shrink-0 flex-col !p-2 @xl:w-48">
+  <div class="mb-1 flex items-center justify-between pl-2">
+    <h3 class="sheet-title !mb-0">
+      <mat-icon class="!size-4 !text-[16px]">menu_book</mat-icon>
+      Páginas
+    </h3>
+    <button type="button" class="grid size-7 place-items-center rounded-md text-astral-300 hover:bg-white/5" matTooltip="Nova página" aria-label="Nova página" (click)="addPage()">
+      <mat-icon class="!text-[18px]">add</mat-icon>
+    </button>
+  </div>
+  <div class="flex max-h-40 flex-col gap-0.5 overflow-y-auto @xl:max-h-none">
+    @for (page of pages(); track page.id; let i = $index) {
+      <div
+        class="group flex h-8 cursor-pointer items-center gap-2 rounded-md pl-2 pr-1 text-sm transition-colors"
+        [class]="i === index() ? 'bg-astral-500/15 text-astral-200' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'"
+        (click)="open(page)"
+      >
+        <span class="w-4 shrink-0 text-right text-[10px] tabular-nums text-slate-600">{{ i + 1 }}</span>
+        <span class="min-w-0 flex-1 truncate">{{ page.title }}</span>
+        @if (pages().length > 1) {
+          <button
+            type="button"
+            class="grid size-6 shrink-0 place-items-center rounded text-slate-500 opacity-0 hover:bg-white/10 hover:text-red-300 group-hover:opacity-100 max-lg:opacity-100"
+            aria-label="Excluir página"
+            matTooltip="Excluir página"
+            (click)="$event.stopPropagation(); remove(page)"
+          >
+            <mat-icon class="!text-[14px]">delete</mat-icon>
+          </button>
+        }
+      </div>
+    }
+  </div>
+</nav>
+
+<!-- ===== Página aberta (editor recriado ao trocar de página) ===== -->
+<section class="flex min-h-[360px] min-w-0 flex-1 flex-col overflow-hidden rounded-xl bg-ink-900/80 ring-1 ring-white/10">
+  @for (page of currentList(); track page.id) {
+    <app-rich-text-editor class="flex-1" [content]="page.content" placeholder="Anote o que quiser…" (contentChange)="saveContent(page.id, $event)">
+      <input
+        #titleInput
+        class="mb-4 w-full bg-transparent font-display text-2xl text-slate-100 outline-none placeholder:text-slate-600"
+        placeholder="Título da página"
+        aria-label="Título da página"
+        [value]="page.title"
+        (blur)="rename(page, titleInput.value)"
+        (keydown.enter)="titleInput.blur()"
+      />
+    </app-rich-text-editor>
+  }
+
+  <!-- Navegação entre páginas -->
+  <footer class="flex h-9 shrink-0 items-center justify-between border-t border-white/5 px-2 text-xs text-slate-500">
+    <button type="button" class="flex items-center gap-1 rounded-md px-2 py-1 hover:bg-white/5 hover:text-slate-200 disabled:opacity-30" [disabled]="index() === 0" (click)="step(-1)">
+      <mat-icon class="!size-4 !text-[16px]">chevron_left</mat-icon>
+      Anterior
+    </button>
+    <span class="tabular-nums">Página {{ index() + 1 }} de {{ pages().length }}</span>
+    <button type="button" class="flex items-center gap-1 rounded-md px-2 py-1 hover:bg-white/5 hover:text-slate-200 disabled:opacity-30" [disabled]="index() >= pages().length - 1" (click)="step(1)">
+      Próxima
+      <mat-icon class="!size-4 !text-[16px]">chevron_right</mat-icon>
+    </button>
+  </footer>
+</section>
