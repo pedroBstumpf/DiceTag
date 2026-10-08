@@ -44,15 +44,23 @@
             (input)="query.set($any($event.target).value)"
           />
         </label>
-        <button
-          type="button"
-          class="grid size-9 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-white/10 hover:text-white"
-          matTooltip="Nova pasta (só nesta mesa)"
-          (click)="createLoreFolder()"
-        >
-          <mat-icon class="!text-[20px]">create_new_folder</mat-icon>
-        </button>
+        @if (isGm()) {
+          <button
+            type="button"
+            class="grid size-9 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-white/10 hover:text-white"
+            matTooltip="Nova pasta (só nesta mesa)"
+            (click)="createLoreFolder()"
+          >
+            <mat-icon class="!text-[20px]">create_new_folder</mat-icon>
+          </button>
+        }
       </div>
+      @if (isGm()) {
+        <p class="mb-2 flex items-center gap-1.5 px-1 text-[11px] leading-relaxed text-slate-500">
+          <mat-icon class="!size-3.5 shrink-0 !text-[14px]">visibility_off</mat-icon>
+          Os jogadores só veem as pastas com o olho aberto (e só para ler).
+        </p>
+      }
 
       @if (loreSearch(); as results) {
         <!-- Busca: lista plana -->
@@ -76,7 +84,7 @@
               class="group flex h-9 cursor-pointer items-center gap-1.5 rounded-lg pl-1 pr-1 text-sm text-slate-300 transition-colors hover:bg-white/5 hover:text-white"
               [class]="loreDropTarget() === folder.id ? 'bg-astral-500/15 ring-1 ring-astral-400/50' : ''"
               (click)="renamingId() !== folder.id && toggleFolder(folder.id)"
-              (dblclick)="renamingId.set(folder.id)"
+              (dblclick)="isGm() && renamingId.set(folder.id)"
               (dragover)="onLoreDragOver($event, folder.id)"
               (drop)="onLoreDrop($event, folder.id)"
             >
@@ -97,30 +105,44 @@
                 <span class="min-w-0 flex-1 truncate">{{ folder.name }}</span>
                 <span class="text-[11px] text-slate-600">{{ loreIn(folder.id).length }}</span>
               }
-              <button
-                type="button"
-                class="grid size-7 shrink-0 place-items-center rounded-md text-slate-500 opacity-0 hover:bg-white/10 hover:text-white group-hover:opacity-100 max-lg:opacity-100"
-                aria-label="Renomear pasta"
-                matTooltip="Renomear"
-                (click)="$event.stopPropagation(); renamingId.set(folder.id)"
-              >
-                <mat-icon class="!text-[16px]">edit</mat-icon>
-              </button>
-              <button
-                type="button"
-                class="grid size-7 shrink-0 place-items-center rounded-md text-slate-500 opacity-0 hover:bg-white/10 hover:text-red-300 group-hover:opacity-100 max-lg:opacity-100"
-                aria-label="Excluir pasta"
-                matTooltip="Excluir pasta"
-                (click)="$event.stopPropagation(); removeLoreFolder(folder)"
-              >
-                <mat-icon class="!text-[16px]">delete</mat-icon>
-              </button>
+              @if (isGm()) {
+                <!-- Olho: revela (ou esconde) a pasta inteira para os jogadores -->
+                <button
+                  type="button"
+                  class="grid size-7 shrink-0 place-items-center rounded-md hover:bg-white/10"
+                  [class]="folder.public ? 'text-emerald-300' : 'text-slate-600 hover:text-slate-300'"
+                  [attr.aria-label]="folder.public ? 'Esconder dos jogadores' : 'Revelar aos jogadores'"
+                  [attr.aria-pressed]="!!folder.public"
+                  [matTooltip]="folder.public ? 'Visível para os jogadores (clique para esconder)' : 'Escondida dos jogadores (clique para revelar)'"
+                  (click)="$event.stopPropagation(); session.toggleLoreFolderPublic(folder.id)"
+                >
+                  <mat-icon class="!text-[16px]">{{ folder.public ? 'visibility' : 'visibility_off' }}</mat-icon>
+                </button>
+                <button
+                  type="button"
+                  class="grid size-7 shrink-0 place-items-center rounded-md text-slate-500 opacity-0 hover:bg-white/10 hover:text-white group-hover:opacity-100 max-lg:opacity-100"
+                  aria-label="Renomear pasta"
+                  matTooltip="Renomear"
+                  (click)="$event.stopPropagation(); renamingId.set(folder.id)"
+                >
+                  <mat-icon class="!text-[16px]">edit</mat-icon>
+                </button>
+                <button
+                  type="button"
+                  class="grid size-7 shrink-0 place-items-center rounded-md text-slate-500 opacity-0 hover:bg-white/10 hover:text-red-300 group-hover:opacity-100 max-lg:opacity-100"
+                  aria-label="Excluir pasta"
+                  matTooltip="Excluir pasta"
+                  (click)="$event.stopPropagation(); removeLoreFolder(folder)"
+                >
+                  <mat-icon class="!text-[16px]">delete</mat-icon>
+                </button>
+              }
             </div>
             @if (open) {
               @for (row of loreIn(folder.id); track row.item.id) {
                 <ng-container *ngTemplateOutlet="loreItem; context: { $implicit: row, depth: 1 }" />
               } @empty {
-                <p class="py-1.5 pl-9 text-xs text-slate-600">Arraste itens para cá.</p>
+                <p class="py-1.5 pl-9 text-xs text-slate-600">{{ isGm() ? 'Arraste itens para cá.' : 'Pasta vazia.' }}</p>
               }
             }
           }
@@ -129,30 +151,32 @@
             <ng-container *ngTemplateOutlet="loreItem; context: { $implicit: row, depth: 0 }" />
           } @empty {
             @if (!loreFolders().length) {
-              <p class="px-2 py-6 text-center text-sm text-slate-500">A lore está vazia.</p>
+              <p class="px-2 py-6 text-center text-sm text-slate-500">{{ isGm() ? 'A lore está vazia.' : 'O mestre ainda não revelou nada da lore.' }}</p>
             }
           }
         </div>
       }
 
-      @if (hiddenLoreCount()) {
+      @if (hiddenLoreCount() && isGm()) {
         <button type="button" class="mt-2 flex w-full items-center justify-center gap-1 rounded-md py-1 text-xs text-slate-500 hover:text-astral-300" (click)="session.restoreLoreItems()">
           <mat-icon class="!size-4 !text-[16px]">undo</mat-icon>
           Restaurar {{ hiddenLoreCount() }} item(ns) removido(s) desta mesa
         </button>
       }
 
-      <!-- Abre os exploradores numa janela, sem sair da mesa -->
-      <div class="mt-3 flex flex-col gap-2">
-        <button mat-stroked-button class="w-full" (click)="opened.emit(loreWindow)">
-          <mat-icon>auto_stories</mat-icon>
-          Abrir Lore geral
-        </button>
-        <button mat-stroked-button class="w-full" (click)="opened.emit(worldbuildWindow)">
-          <mat-icon>folder_open</mat-icon>
-          Abrir pastas do Worldbuild
-        </button>
-      </div>
+      <!-- Abre os exploradores numa janela, sem sair da mesa (só o mestre) -->
+      @if (isGm()) {
+        <div class="mt-3 flex flex-col gap-2">
+          <button mat-stroked-button class="w-full" (click)="opened.emit(loreWindow)">
+            <mat-icon>auto_stories</mat-icon>
+            Abrir Lore geral
+          </button>
+          <button mat-stroked-button class="w-full" (click)="opened.emit(worldbuildWindow)">
+            <mat-icon>folder_open</mat-icon>
+            Abrir pastas do Worldbuild
+          </button>
+        </div>
+      }
     }
 
     <!-- Sons e ambientação -->
@@ -196,11 +220,11 @@
   <div
     class="group flex h-9 cursor-pointer items-center gap-2 rounded-lg pr-1 text-sm text-slate-300 transition-colors hover:bg-white/5 hover:text-white"
     [class]="depth ? 'pl-8' : 'pl-2'"
-    [attr.draggable]="renamingId() === row.item.id ? null : 'true'"
+    [attr.draggable]="!isGm() || renamingId() === row.item.id ? null : 'true'"
     (dragstart)="onLoreDragStart($event, row)"
     (dragend)="onLoreDragEnd()"
     (click)="renamingId() !== row.item.id && opened.emit(row.item.id)"
-    (dblclick)="renamingId.set(row.item.id)"
+    (dblclick)="isGm() && renamingId.set(row.item.id)"
   >
     <mat-icon class="!size-5 shrink-0 !text-[20px]" [class]="loreMeta(row.item).color">{{ loreMeta(row.item).icon }}</mat-icon>
 
@@ -223,24 +247,26 @@
       }
     }
 
-    <button
-      type="button"
-      class="grid size-7 shrink-0 place-items-center rounded-md text-slate-500 opacity-0 hover:bg-white/10 hover:text-white group-hover:opacity-100 max-lg:opacity-100"
-      aria-label="Renomear nesta mesa"
-      matTooltip="Renomear (só nesta mesa)"
-      (click)="$event.stopPropagation(); renamingId.set(row.item.id)"
-    >
-      <mat-icon class="!text-[16px]">edit</mat-icon>
-    </button>
-    <button
-      type="button"
-      class="grid size-7 shrink-0 place-items-center rounded-md text-slate-500 opacity-0 hover:bg-white/10 hover:text-red-300 group-hover:opacity-100 max-lg:opacity-100"
-      aria-label="Remover desta mesa"
-      matTooltip="Remover (só desta mesa)"
-      (click)="$event.stopPropagation(); hideLore(row)"
-    >
-      <mat-icon class="!text-[16px]">delete</mat-icon>
-    </button>
+    @if (isGm()) {
+      <button
+        type="button"
+        class="grid size-7 shrink-0 place-items-center rounded-md text-slate-500 opacity-0 hover:bg-white/10 hover:text-white group-hover:opacity-100 max-lg:opacity-100"
+        aria-label="Renomear nesta mesa"
+        matTooltip="Renomear (só nesta mesa)"
+        (click)="$event.stopPropagation(); renamingId.set(row.item.id)"
+      >
+        <mat-icon class="!text-[16px]">edit</mat-icon>
+      </button>
+      <button
+        type="button"
+        class="grid size-7 shrink-0 place-items-center rounded-md text-slate-500 opacity-0 hover:bg-white/10 hover:text-red-300 group-hover:opacity-100 max-lg:opacity-100"
+        aria-label="Remover desta mesa"
+        matTooltip="Remover (só desta mesa)"
+        (click)="$event.stopPropagation(); hideLore(row)"
+      >
+        <mat-icon class="!text-[16px]">delete</mat-icon>
+      </button>
+    }
   </div>
 </ng-template>
 

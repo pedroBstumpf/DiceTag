@@ -15,6 +15,8 @@ import { ItemCardView } from './item-card-view';
   host: { class: 'block h-full overflow-y-auto p-5' },
   template: `
     @if (item(); as it) {
+      <!-- Só leitura: o fieldset desabilitado bloqueia imagem, nome e etiquetas -->
+      <fieldset class="min-w-0" [disabled]="readonly()">
       <app-item-card-view
         [name]="it.name"
         [tags]="tags()"
@@ -23,6 +25,7 @@ import { ItemCardView } from './item-card-view';
         (tagsChange)="setTags(it.id, $event)"
         (imagePicked)="service.setImage(it.id, $event)"
       />
+      </fieldset>
     } @else {
       <p class="p-6 text-center text-sm text-slate-500">Este item não existe mais.</p>
     }
@@ -32,6 +35,8 @@ export class ItemCard {
   readonly service = inject(WorldbuildService);
 
   readonly itemId = input.required<string>();
+  /** Só leitura (jogador na mesa). */
+  readonly readonly = input(false);
 
   readonly item = computed(() => this.service.byId().get(this.itemId()));
   readonly tags = computed<Tag[]>(() => this.item()?.tags ?? []);

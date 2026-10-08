@@ -95,21 +95,30 @@ export class SidePanel {
 
   // --- Lore da mesa --------------------------------------------------------
 
-  /** Itens (exceto pastas) da Lore geral e do worldbuild que não foram removidos desta mesa. */
+  /** O mestre organiza a Lore; o jogador só vê as pastas que o mestre revelou. */
+  readonly isGm = computed(() => this.session.role() === 'gm');
+
+  /**
+   * Itens (exceto pastas) da Lore geral e do worldbuild que não foram removidos desta mesa.
+   * Jogador: só os que estão em pastas reveladas pelo mestre.
+   */
   private readonly loreRows = computed<LoreRow[]>(() => {
     const overrides = this.session.lore().items;
     const rows = (items: WorldItem[], global: boolean) =>
       items
-        .filter((i) => i.type !== 'folder' && !overrides[i.id]?.hidden)
+        .filter((i) => i.type !== 'folder' && !overrides[i.id]?.hidden && this.session.canSeeLoreItem(i.id))
         .map((item) => ({ item, name: overrides[item.id]?.name ?? item.name, global }));
     return [...rows(this.loreGeneral.items(), true), ...rows(this.worldbuild.items(), false)].sort((a, b) =>
       a.name.localeCompare(b.name, 'pt-BR', { numeric: true }),
     );
   });
 
-  /** Pastas da mesa, em ordem alfabética. */
+  /** Pastas da mesa, em ordem alfabética (jogador: só as reveladas). */
   readonly loreFolders = computed(() =>
-    [...this.session.lore().folders].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { numeric: true })),
+    this.session
+      .lore()
+      .folders.filter((f) => this.isGm() || f.public)
+      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { numeric: true })),
   );
 
   /** Itens agrupados por pasta da mesa (null = raiz; pasta inexistente também cai na raiz). */
@@ -239,6 +248,7 @@ export class SidePanel {
   // --- Arrastar itens da Lore para as pastas da mesa ---------------------
 
   onLoreDragStart(event: DragEvent, row: LoreRow): void {
+    if (!this.isGm()) return;
     this.draggedLoreId = row.item.id;
     event.dataTransfer?.setData('text/plain', row.name);
     if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';

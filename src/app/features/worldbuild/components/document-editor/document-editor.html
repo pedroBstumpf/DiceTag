@@ -4,6 +4,7 @@
   class="flex-1"
   [content]="item()?.content ?? ''"
   placeholder="Comece a escrever a história do seu mundo…"
+  [editable]="!readonly()"
   (contentChange)="save($event)"
 >
   <!-- Título do documento (renomeia o item) -->
@@ -11,6 +12,7 @@
     #titleInput
     class="mb-6 w-full bg-transparent font-display text-3xl text-slate-100 outline-none placeholder:text-slate-600"
     placeholder="Título"
+    [readOnly]="readonly()"
     [value]="item()?.name ?? ''"
     (blur)="rename(titleInput.value)"
     (keydown.enter)="titleInput.blur()"
@@ -21,7 +23,7 @@
 <footer class="flex h-8 shrink-0 items-center justify-end gap-3 border-t border-white/5 px-4 text-[11px] text-slate-500">
   <span>{{ editor.words() }} palavra(s)</span>
   <span class="flex items-center gap-1">
-    <mat-icon class="!size-3.5 !text-[14px]">cloud_done</mat-icon>
-    Salvo automaticamente
+    <mat-icon class="!size-3.5 !text-[14px]">{{ readonly() ? 'visibility' : 'cloud_done' }}</mat-icon>
+    {{ readonly() ? 'Somente leitura' : 'Salvo automaticamente' }}
   </span>
 </footer>

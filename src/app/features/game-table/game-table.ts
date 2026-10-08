@@ -127,6 +127,8 @@ export class GameTablePage {
   readonly id = input.required<string>();
 
   readonly table = computed(() => this.tables.getById(this.id()));
+  /** Mestre: único que acessa o Worldbuild na mesa e edita a lore (o jogador só lê o que foi revelado). */
+  readonly isGm = computed(() => this.session.role() === 'gm');
   readonly tablesLoaded = this.tables.loaded;
 
   protected readonly map = viewChild(MapStage);
@@ -165,11 +167,12 @@ export class GameTablePage {
 
   /** Descobre o que mostrar numa janela (arquivo/token da mesa ou item do worldbuild / Lore geral). */
   content(id: string): WindowContent | null {
+    // Os exploradores do Worldbuild e da Lore geral são só do mestre
     if (id === WORLDBUILD_WINDOW) {
-      return { title: 'Worldbuild', icon: 'public', color: 'text-sky-300', type: 'explorer' };
+      return this.isGm() ? { title: 'Worldbuild', icon: 'public', color: 'text-sky-300', type: 'explorer' } : null;
     }
     if (id === LORE_WINDOW) {
-      return { title: 'Lore geral', icon: 'auto_stories', color: 'text-star-400', type: 'explorer', global: true };
+      return this.isGm() ? { title: 'Lore geral', icon: 'auto_stories', color: 'text-star-400', type: 'explorer', global: true } : null;
     }
     if (id.startsWith(TOKEN_WINDOW)) {
       const token = this.session.resolvedTokenById(id.slice(TOKEN_WINDOW.length));
@@ -191,10 +194,11 @@ export class GameTablePage {
       const type = hasSheet(entry.kind) ? 'sheet' : 'entry';
       return { title: entry.name, icon: entry.icon ?? meta.icon, color: meta.color, type };
     }
-    // Itens da lore: o título usa o nome desta mesa (pode ter sido renomeado só aqui)
+    // Itens da lore: o título usa o nome desta mesa (pode ter sido renomeado só aqui).
+    // O jogador só abre itens de pastas da aba Lore que o mestre revelou.
     const globalItem = this.loreGeneral.byId().get(id);
     const item = globalItem ?? this.worldbuild.byId().get(id);
-    if (item && item.type !== 'folder') {
+    if (item && item.type !== 'folder' && this.session.canSeeLoreItem(item.id)) {
       const meta = WORLD_ITEM_META[item.type];
       return { title: this.session.loreName(item), icon: meta.icon, color: meta.color, type: item.type, global: !!globalItem };
     }

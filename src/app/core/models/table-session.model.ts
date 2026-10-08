@@ -508,6 +508,8 @@ export interface TableLore {
 export interface LoreFolder {
   id: string;
   name: string;
+  /** Os jogadores veem (só leitura) os itens desta pasta. Padrão: false — a lore é segredo do mestre. */
+  public?: boolean;
 }
 
 /** Ajustes locais de um item da lore nesta mesa. */

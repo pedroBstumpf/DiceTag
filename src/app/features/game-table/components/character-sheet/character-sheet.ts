@@ -66,6 +66,8 @@ export class CharacterSheetView {
 
   /** Id da ficha no SheetStore. */
   readonly sheetId = input.required<string>();
+  /** Força só leitura (ex.: jogador abrindo um NPC do bestiário pela aba Lore da mesa). */
+  readonly readonly = input(false);
   /** Pedido para abrir outra ficha/ação/item numa janela. */
   readonly openEntry = output<string>();
   /** Uma habilidade foi usada pela ficha. */
@@ -83,6 +85,7 @@ export class CharacterSheetView {
 
   /** Pode editar (fora da mesa: sempre; na mesa: mestre e, no NPC, o jogador autorizado). */
   readonly canEdit = computed(() => {
+    if (this.readonly()) return false;
     const entry = this.entry();
     return !this.session || !entry || this.session.canEdit(entry);
   });
@@ -93,7 +96,10 @@ export class CharacterSheetView {
   /** Visibilidade para os jogadores é de cada token. */
   readonly publicSettings = computed(() => this.isGm() && this.data()?.level === 'npc-token');
   /** O que a conta atual pode ver/editar nesta ficha (fora da mesa: tudo). */
-  readonly access = computed(() => this.session?.sheetAccess(this.sheetId()) ?? { edit: true, sheet: true, inventory: true });
+  readonly access = computed(() => {
+    const access = this.session?.sheetAccess(this.sheetId()) ?? { edit: true, sheet: true, inventory: true };
+    return this.readonly() ? { ...access, edit: false } : access;
+  });
   /** Token desta ficha (só fichas de token de NPC). */
   private readonly placement = computed(() => {
     const id = this.sheetId();

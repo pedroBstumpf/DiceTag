@@ -1,15 +1,19 @@
 <!-- ===== Barra superior ===== -->
 <div class="flex h-12 shrink-0 items-center gap-1 border-b border-white/5 bg-ink-900/60 px-3">
-  <button mat-flat-button class="!h-8 !text-sm" (click)="addAtCenter()">
-    <mat-icon>add</mat-icon>
-    Evento
-  </button>
+  @if (!readonly()) {
+    <button mat-flat-button class="!h-8 !text-sm" (click)="addAtCenter()">
+      <mat-icon>add</mat-icon>
+      Evento
+    </button>
+  }
   <button mat-icon-button class="!size-8 !p-1" matTooltip="Enquadrar tudo" (click)="fitAll()">
     <mat-icon class="!text-[20px]">fit_screen</mat-icon>
   </button>
-  <button mat-icon-button class="!size-8 !p-1" matTooltip="Organizar automaticamente" [disabled]="!events().length" (click)="autoLayout()">
-    <mat-icon class="!text-[20px]">account_tree</mat-icon>
-  </button>
+  @if (!readonly()) {
+    <button mat-icon-button class="!size-8 !p-1" matTooltip="Organizar automaticamente" [disabled]="!events().length" (click)="autoLayout()">
+      <mat-icon class="!text-[20px]">account_tree</mat-icon>
+    </button>
+  }
   <span class="ml-auto text-xs text-slate-500">{{ events().length }} evento(s)</span>
 </div>
 
@@ -58,7 +62,7 @@
 
     <!-- Rótulos das setas (campo de edição quando a seta está selecionada) -->
     @for (shape of linkShapes(); track shape.link.id) {
-      @if (selectedLinkId() === shape.link.id) {
+      @if (selectedLinkId() === shape.link.id && !readonly()) {
         <div
           class="absolute z-30 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-md bg-ink-850 p-1 shadow-lg ring-1 ring-astral-400/50"
           [style.left.px]="shape.mid.x"
@@ -112,7 +116,7 @@
         [style.top.px]="ev.y"
         [style.width.px]="card.width"
         [style.min-height.px]="card.height"
-        [style.height.px]="editing ? null : card.height"
+        [style.height.px]="editing || (readonly() && selected) ? null : card.height"
         (pointerdown)="onCardDown($event, ev)"
       >
         <span class="absolute inset-x-0 top-0 h-1 rounded-t-lg" [style.background]="ev.color"></span>
@@ -168,8 +172,10 @@
               {{ ev.date || 'Sem data' }}
             </span>
             <span class="truncate text-sm font-medium text-slate-100">{{ ev.title || 'Evento sem título' }}</span>
-            <p class="line-clamp-2 whitespace-pre-line text-xs leading-snug text-slate-400">{{ ev.description }}</p>
+            <!-- Só leitura: o cartão selecionado mostra a descrição inteira -->
+            <p class="whitespace-pre-line text-xs leading-snug text-slate-400" [class.line-clamp-2]="!(readonly() && selected)">{{ ev.description }}</p>
           </div>
+          @if (!readonly()) {
           <button
             type="button"
             class="absolute right-1 top-1.5 grid size-6 place-items-center rounded text-slate-500 transition-opacity hover:bg-white/10 hover:text-slate-200"
@@ -179,9 +185,10 @@
           >
             <mat-icon class="!text-[16px]">edit</mat-icon>
           </button>
+          }
 
           <!-- Alças: clique cria evento conectado, arraste conecta a outro cartão -->
-          @if (selected) {
+          @if (selected && !readonly()) {
             @for (side of sides; track side) {
               <button
                 type="button"
@@ -206,16 +213,18 @@
       <div class="flex flex-col items-center gap-3">
         <mat-icon class="!size-10 !text-[40px] text-slate-600">account_tree</mat-icon>
         <p class="max-w-xs text-sm text-slate-400">Registre eras, guerras e reviravoltas. Ligue eventos para mostrar causas e caminhos paralelos.</p>
-        <button mat-stroked-button class="pointer-events-auto" (click)="addAtCenter()" (pointerdown)="$event.stopPropagation()">
-          <mat-icon>add</mat-icon>
-          Primeiro evento
-        </button>
+        @if (!readonly()) {
+          <button mat-stroked-button class="pointer-events-auto" (click)="addAtCenter()" (pointerdown)="$event.stopPropagation()">
+            <mat-icon>add</mat-icon>
+            Primeiro evento
+          </button>
+        }
       </div>
     </div>
   }
 
   <!-- Dicas e zoom -->
   <div class="pointer-events-none absolute bottom-2 left-3 text-[11px] text-slate-500">
-    Duplo clique: novo evento · Shift: alinhar à grade · {{ (view().scale * 100).toFixed(0) }}%
+    {{ readonly() ? 'Somente leitura · clique num evento para ler tudo' : 'Duplo clique: novo evento · Shift: alinhar à grade' }} · {{ (view().scale * 100).toFixed(0) }}%
   </div>
 </div>

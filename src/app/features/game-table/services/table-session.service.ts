@@ -1136,6 +1136,22 @@ export class TableSessionService extends SheetStore {
     this.patchLore((l) => ({ ...l, folders: l.folders.map((f) => (f.id === id ? { ...f, name: trimmed } : f)) }));
   }
 
+  /** Mestre: revela ou esconde dos jogadores tudo o que está na pasta. */
+  toggleLoreFolderPublic(id: string): void {
+    this.patchLore((l) => ({ ...l, folders: l.folders.map((f) => (f.id === id ? { ...f, public: !f.public || undefined } : f)) }));
+  }
+
+  /**
+   * O jogador pode ver este item da lore? Só se estiver numa pasta da mesa que o mestre
+   * revelou (e não removido desta mesa). O mestre vê tudo.
+   */
+  canSeeLoreItem(itemId: string): boolean {
+    if (this.role() === 'gm') return true;
+    const override = this.lore().items[itemId];
+    if (!override?.folderId || override.hidden) return false;
+    return !!this.lore().folders.find((f) => f.id === override.folderId)?.public;
+  }
+
   /** Exclui a pasta da mesa; os itens dela voltam para a raiz da aba Lore. */
   removeLoreFolder(id: string): void {
     this.patchLore((l) => ({

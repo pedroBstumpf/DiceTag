@@ -62,6 +62,8 @@ export class TimelineEditor {
   private readonly stage = viewChild.required<ElementRef<HTMLElement>>('stage');
 
   readonly itemId = input.required<string>();
+  /** Só leitura (jogador na mesa): navega e lê, sem criar, mover, ligar nem editar. */
+  readonly readonly = input(false);
 
   // --- Dados ---------------------------------------------------------------
   private readonly item = computed(() => this.service.byId().get(this.itemId()));
@@ -165,6 +167,7 @@ export class TimelineEditor {
   }
 
   startEditing(id: string): void {
+    if (this.readonly()) return;
     this.selectedId.set(id);
     this.editingId.set(id);
   }
@@ -184,7 +187,7 @@ export class TimelineEditor {
     this.selectedLinkId.set(null);
     this.editingId.set(null);
 
-    if (event.button === 0 && this.isDoubleTap('fundo', event)) {
+    if (event.button === 0 && !this.readonly() && this.isDoubleTap('fundo', event)) {
       const p = this.toWorld(event);
       this.createAt({ x: p.x - TIMELINE_CARD.width / 2, y: p.y - TIMELINE_CARD.height / 2 });
       return;
@@ -204,6 +207,8 @@ export class TimelineEditor {
     this.focusHost();
     this.selectedId.set(ev.id);
     this.selectedLinkId.set(null);
+    // Só leitura: selecionar (mostra a descrição inteira) e nada mais
+    if (this.readonly()) return;
     if (this.isDoubleTap(ev.id, event)) {
       this.startEditing(ev.id);
       return;
@@ -217,7 +222,7 @@ export class TimelineEditor {
   onHandleDown(event: PointerEvent, ev: TimelineEvent, side: CardSide): void {
     event.stopPropagation();
     event.preventDefault();
-    if (event.button !== 0) return;
+    if (event.button !== 0 || this.readonly()) return;
     this.drag = { kind: 'link', fromId: ev.id, side, sx: event.clientX, sy: event.clientY, moved: false };
     this.capture(event);
   }
@@ -288,7 +293,7 @@ export class TimelineEditor {
       return;
     }
 
-    if (event.key === 'Delete' || event.key === 'Backspace') {
+    if ((event.key === 'Delete' || event.key === 'Backspace') && !this.readonly()) {
       const linkId = this.selectedLinkId();
       const eventId = this.selectedId();
       if (linkId) this.removeLink(linkId);
