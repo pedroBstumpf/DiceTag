@@ -13,6 +13,7 @@ import {
 } from '../../../../core/models/table-session.model';
 import { newId } from '../../../../core/utils/id';
 import { ColorPicker } from '../../../../shared/components/color-picker/color-picker';
+import { TagEditor } from '../../../../shared/components/tag-editor/tag-editor';
 import { TokenPatch } from '../../services/table-session.service';
 
 /** Valores exibidos no editor (ficha ou token colocado). */
@@ -32,7 +33,7 @@ export interface TokenEditorValue {
  */
 @Component({
   selector: 'app-token-editor',
-  imports: [MatIconModule, MatTooltipModule, ColorPicker],
+  imports: [MatIconModule, MatTooltipModule, ColorPicker, TagEditor],
   templateUrl: './token-editor.html',
   host: { class: 'flex flex-col gap-5' },
 })
@@ -102,27 +103,6 @@ export class TokenEditor {
 
   removeBar(id: string): void {
     this.changed.emit({ bars: this.value().bars.filter((b) => b.id !== id) });
-  }
-
-  // --- Etiquetas -----------------------------------------------------------
-
-  addTag(): void {
-    const tag: TokenTag = { id: newId(), text: 'Etiqueta', color: TOKEN_COLORS[1] };
-    this.changed.emit({ tags: [...this.value().tags, tag] });
-  }
-
-  updateTag(id: string, patch: Partial<TokenTag>): void {
-    this.changed.emit({ tags: this.value().tags.map((t) => (t.id === id ? { ...t, ...patch } : t)) });
-  }
-
-  /** Botões −/+ do nível da etiqueta (0 remove o nível). */
-  stepTagLevel(tag: TokenTag, delta: number): void {
-    const level = Math.max(0, (tag.level ?? 0) + delta);
-    this.updateTag(tag.id, { level: level || undefined });
-  }
-
-  removeTag(id: string): void {
-    this.changed.emit({ tags: this.value().tags.filter((t) => t.id !== id) });
   }
 
 }

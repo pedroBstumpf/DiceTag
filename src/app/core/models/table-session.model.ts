@@ -1,4 +1,5 @@
 import { Point } from './geometry.model';
+import { TAG_COLORS, Tag } from './tag.model';
 
 /** Papel de quem está usando a mesa. */
 export type TableRole = 'gm' | 'player';
@@ -372,13 +373,7 @@ export interface TokenBar {
 }
 
 /** Etiqueta exibida abaixo do token (ex.: "Envenenado", "Exaustão 2"). */
-export interface TokenTag {
-  id: string;
-  text: string;
-  color: string;
-  /** Nível da condição (ex.: exaustão 2). Ausente ou 0 = sem nível. */
-  level?: number;
-}
+export type TokenTag = Tag;
 
 /** Visão do token (usada pela névoa de guerra). */
 export interface TokenVision {
@@ -433,11 +428,8 @@ export const DEFAULT_TOKEN_SPEED = 2;
 export const MIN_TOKEN_SPEED = 0.5;
 export const MAX_TOKEN_SPEED = 12;
 
-/** Paleta para barras e etiquetas de tokens (cores livres também são aceitas). */
-export const TOKEN_COLORS = [
-  '#ef4444', '#f97316', '#eab308', '#22c55e', '#2dd4bf',
-  '#4f86f7', '#b18cff', '#f472b6', '#e8eefc', '#64748b',
-] as const;
+/** Paleta para barras e etiquetas de tokens (a mesma das etiquetas em geral). */
+export const TOKEN_COLORS = TAG_COLORS;
 
 /** Token padrão de uma ficha: personagens enxergam, NPCs começam sem visão. */
 export function defaultToken(kind: TableEntryKind): TokenSettings {

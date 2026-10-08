@@ -12,6 +12,7 @@ import { WindowManagerService } from '../../shared/services/window-manager.servi
 import { DocumentEditor } from '../worldbuild/components/document-editor/document-editor';
 import { Explorer } from '../worldbuild/components/explorer/explorer';
 import { ImageViewer } from '../worldbuild/components/image-viewer/image-viewer';
+import { ItemCard } from '../worldbuild/components/item-card/item-card';
 import { TimelineEditor } from '../worldbuild/components/timeline-editor/timeline-editor';
 import { LoreScope } from '../worldbuild/directives/lore-scope.directive';
 import { LoreService } from '../worldbuild/services/lore.service';
@@ -34,7 +35,7 @@ interface WindowContent {
   icon: string;
   color: string;
   /** Tipo de conteúdo, usado para escolher o componente. */
-  type: 'entry' | 'token' | 'explorer' | 'document' | 'timeline' | 'image';
+  type: 'entry' | 'token' | 'explorer' | 'document' | 'timeline' | 'image' | 'item';
   /** O conteúdo vem da Lore geral (os editores usam o LoreService). */
   global?: boolean;
 }
@@ -50,6 +51,7 @@ const WINDOW_SIZES: Record<WindowContent['type'], { width: number; height: numbe
   document: { width: 720, height: 600 },
   timeline: { width: 620, height: 560 },
   image: { width: 720, height: 520 },
+  item: { width: 420, height: 600 },
 };
 
 /** Espaço ocupado por cada barra (para enquadrar o mapa na área livre). */
@@ -86,6 +88,7 @@ const PANEL_SPACE = { top: 60, left: 76, right: 344, bottom: 100 };
     DocumentEditor,
     TimelineEditor,
     ImageViewer,
+    ItemCard,
   ],
   providers: [TableSessionService, SoundMixerService, BlobUrlService, WindowManagerService],
   templateUrl: './game-table.html',

@@ -12,6 +12,24 @@
   }
 </header>
 
+<!-- ===== Abas: árvore de arquivos ou lista de itens ===== -->
+<nav class="grid shrink-0 grid-cols-2 gap-1 px-3 pt-3">
+  @for (v of views; track v.id) {
+    <button
+      type="button"
+      class="flex h-8 items-center justify-center gap-1.5 rounded-lg text-xs font-medium transition-colors"
+      [class]="view() === v.id ? 'bg-astral-500/20 text-astral-300' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'"
+      (click)="view.set(v.id)"
+    >
+      <mat-icon class="!size-4 !text-[16px]">{{ v.icon }}</mat-icon>
+      {{ v.label }}
+      @if (v.id === 'items') {
+        <span class="text-[10px] text-slate-500">{{ service.worldItems().length }}</span>
+      }
+    </button>
+  }
+</nav>
+
 <!-- ===== Busca ===== -->
 <div class="shrink-0 px-3 pt-3">
   <label class="flex h-9 items-center gap-2 rounded-lg bg-ink-950/70 px-3 text-sm ring-1 ring-white/5 focus-within:ring-astral-500/50">
@@ -30,6 +48,28 @@
   </label>
 </div>
 
+@if (view() === 'items') {
+  <!-- ===== Itens do mundo (lista plana, com cartão) ===== -->
+  <div class="min-h-0 flex-1 overflow-y-auto px-2 py-3">
+    <button
+      type="button"
+      class="mb-2 flex h-9 w-full items-center gap-2 rounded-lg border border-dashed border-white/10 px-3 text-sm text-astral-300 transition-colors hover:border-astral-400/40 hover:bg-astral-500/10"
+      (click)="create('item')"
+    >
+      <mat-icon class="!size-5 !text-[20px]">add</mat-icon>
+      Novo item
+    </button>
+    @for (item of itemResults(); track item.id) {
+      <ng-container *ngTemplateOutlet="row; context: { $implicit: item, depth: 0 }" />
+    } @empty {
+      <p class="px-3 py-6 text-center text-sm text-slate-500">
+        {{ query() ? 'Nada encontrado.' : 'Nenhum item ainda. Cada item tem um cartão com imagem, nome e etiquetas.' }}
+      </p>
+    }
+  </div>
+
+  <p class="shrink-0 border-t border-white/5 px-4 py-2 text-[11px] text-slate-500">Itens também aparecem na árvore de arquivos</p>
+} @else {
 <!-- ===== Árvore (a área vazia também aceita itens = mover para a raiz) ===== -->
 <div
   class="min-h-0 flex-1 overflow-y-auto px-2 py-3 transition-colors"
@@ -63,6 +103,7 @@
 <p class="shrink-0 border-t border-white/5 px-4 py-2 text-[11px] text-slate-500">
   Arraste itens para organizar · solte imagens para enviar
 </p>
+}
 
 <!-- Entrada de arquivo oculta (envio de mapas/imagens) -->
 <input #fileInput type="file" accept="image/*" multiple hidden (change)="onFilesPicked(fileInput)" />
@@ -152,6 +193,10 @@
     <button mat-menu-item (click)="create('timeline', parentId)">
       <mat-icon [class]="meta.timeline.color">{{ meta.timeline.icon }}</mat-icon>
       <span>Linha do tempo</span>
+    </button>
+    <button mat-menu-item (click)="create('item', parentId)">
+      <mat-icon [class]="meta.item.color">{{ meta.item.icon }}</mat-icon>
+      <span>Item</span>
     </button>
     <button mat-menu-item (click)="pickImages(fileInput, parentId)">
       <mat-icon [class]="meta.image.color">add_photo_alternate</mat-icon>

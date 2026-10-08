@@ -9,9 +9,13 @@ import { WORLD_ITEM_META, WorldItem, WorldItemType } from '../../../../core/mode
 import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
 import { WorldbuildService } from '../../services/worldbuild.service';
 
+/** Abas do explorador: árvore de arquivos ou lista dos itens do mundo. */
+type ExplorerView = 'files' | 'items';
+
 /**
  * Explorador do worldbuild: árvore de pastas e itens.
  *
+ * - Aba "Itens": lista e cria os itens do mundo (cartão com imagem, nome e etiquetas)
  * - Criar itens na raiz ou dentro de pastas
  * - Renomear (duplo clique ou menu), excluir, mover
  * - Arrastar itens para dentro de pastas (ou para a raiz)
@@ -44,6 +48,20 @@ export class Explorer {
   readonly hide = output<void>();
   /** Mostra o botão "Esconder painel" (falso quando o explorador está numa janela, ex.: na mesa). */
   readonly hideable = input(true);
+
+  // --- Abas ----------------------------------------------------------------
+  readonly views: { id: ExplorerView; icon: string; label: string }[] = [
+    { id: 'files', icon: 'folder', label: 'Arquivos' },
+    { id: 'items', icon: WORLD_ITEM_META.item.icon, label: 'Itens' },
+  ];
+  readonly view = signal<ExplorerView>('files');
+
+  /** Itens do mundo filtrados pela busca (aba Itens). */
+  readonly itemResults = computed(() => {
+    const q = this.query().trim().toLowerCase();
+    const items = this.service.worldItems();
+    return q ? items.filter((i) => i.name.toLowerCase().includes(q)) : items;
+  });
 
   // --- Estado da árvore ----------------------------------------------------
   readonly expanded = signal(new Set<string>());

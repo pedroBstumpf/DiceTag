@@ -92,6 +92,9 @@
               @case ('image') {
                 <app-image-viewer appLoreScope [itemId]="win.id" />
               }
+              @case ('item') {
+                <app-item-card appLoreScope [itemId]="win.id" />
+              }
             }
           } @else {
             @switch (c.type) {
@@ -107,6 +110,9 @@
               }
               @case ('image') {
                 <app-image-viewer [itemId]="win.id" />
+              }
+              @case ('item') {
+                <app-item-card [itemId]="win.id" />
               }
             }
           }

@@ -72,6 +72,9 @@
               @case ('image') {
                 <app-image-viewer [itemId]="item.id" />
               }
+              @case ('item') {
+                <app-item-card [itemId]="item.id" />
+              }
             }
           </app-floating-window>
         }
@@ -90,6 +93,10 @@
           <button mat-stroked-button (click)="createAndOpen('timeline')">
             <mat-icon [class]="meta.timeline.color">{{ meta.timeline.icon }}</mat-icon>
             Linha do tempo
+          </button>
+          <button mat-stroked-button (click)="createAndOpen('item')">
+            <mat-icon [class]="meta.item.color">{{ meta.item.icon }}</mat-icon>
+            Item
           </button>
         </app-empty-state>
       }

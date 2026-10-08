@@ -32,6 +32,13 @@ export class WorldbuildService {
   /** Acesso rápido por id. */
   readonly byId = computed(() => new Map(this._items().map((i) => [i.id, i])));
 
+  /** Itens do mundo (tipo `item`, com cartão), em ordem alfabética. */
+  readonly worldItems = computed(() =>
+    this._items()
+      .filter((i) => i.type === 'item')
+      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { numeric: true })),
+  );
+
   /** Chave do usuário cujos dados estão (ou estão sendo) carregados. */
   private storageKey: string | null = null;
   private saveTimer?: ReturnType<typeof setTimeout>;
@@ -101,6 +108,7 @@ export class WorldbuildService {
       updatedAt: now,
       ...(type === 'document' && { content: '' }),
       ...(type === 'timeline' && { events: [], links: [] }),
+      ...(type === 'item' && { tags: [] }),
     };
     this._items.update((list) => [...list, item]);
     this.persist();
@@ -115,6 +123,15 @@ export class WorldbuildService {
     const item = this.create('image', parentId, file.name.replace(/\.[^.]+$/, ''));
     this.update(item.id, { blobId });
     return { ...item, blobId };
+  }
+
+  /** Troca (ou define) a imagem de um item e apaga a anterior. */
+  async setImage(id: string, file: File): Promise<void> {
+    const old = this.byId().get(id)?.blobId;
+    const blobId = newId();
+    await this.storage.set(`blob:${blobId}`, file);
+    this.update(id, { blobId });
+    if (old) this.storage.delete(`blob:${old}`);
   }
 
   // --- Edição --------------------------------------------------------------
@@ -174,7 +191,13 @@ export class WorldbuildService {
 
   /** "Novo documento", "Novo documento 2"… sem repetir nomes na mesma pasta. */
   private defaultName(type: WorldItemType, parentId: string | null): string {
-    const base = { folder: 'Nova pasta', document: 'Novo documento', timeline: 'Nova linha do tempo', image: WORLD_ITEM_META.image.label }[type];
+    const base = {
+      folder: 'Nova pasta',
+      document: 'Novo documento',
+      timeline: 'Nova linha do tempo',
+      image: WORLD_ITEM_META.image.label,
+      item: 'Novo item',
+    }[type];
     const siblings = new Set(this.childrenOf(parentId).map((i) => i.name));
     let name = base;
     for (let n = 2; siblings.has(name); n++) name = `${base} ${n}`;

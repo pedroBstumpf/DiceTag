@@ -13,11 +13,12 @@ import { WindowManagerService } from '../../shared/services/window-manager.servi
 import { DocumentEditor } from './components/document-editor/document-editor';
 import { Explorer } from './components/explorer/explorer';
 import { ImageViewer } from './components/image-viewer/image-viewer';
+import { ItemCard } from './components/item-card/item-card';
 import { TimelineEditor } from './components/timeline-editor/timeline-editor';
 import { WorldbuildService } from './services/worldbuild.service';
 
 /** Tipos que podem ser criados pela URL (imagens só por envio de arquivo). */
-const URL_CREATABLE_TYPES: readonly WorldItemType[] = ['document', 'timeline', 'folder'];
+const URL_CREATABLE_TYPES: readonly WorldItemType[] = ['document', 'timeline', 'folder', 'item'];
 
 /**
  * Página de Worldbuild.
@@ -26,7 +27,7 @@ const URL_CREATABLE_TYPES: readonly WorldItemType[] = ['document', 'timeline', '
  * flutuante que pode ser movida, redimensionada e maximizada.
  *
  * Parâmetros de URL (vindos da barra lateral):
- *   ?novo=document|timeline|folder → cria um item novo
+ *   ?novo=document|timeline|folder|item → cria um item novo
  *   ?abrir=<id>                    → abre um item existente
  */
 @Component({
@@ -41,6 +42,7 @@ const URL_CREATABLE_TYPES: readonly WorldItemType[] = ['document', 'timeline', '
     DocumentEditor,
     TimelineEditor,
     ImageViewer,
+    ItemCard,
   ],
   providers: [WindowManagerService],
   templateUrl: './worldbuild.html',
