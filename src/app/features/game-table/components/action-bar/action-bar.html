@@ -6,7 +6,7 @@
       class="rounded-md px-2 py-1 transition-colors"
       [class]="session.role() === 'gm' ? 'bg-astral-500/25 text-astral-300' : 'text-slate-500 hover:text-slate-300'"
       matTooltip="Ações do mestre"
-      (click)="session.role.set('gm')"
+      (click)="session.setRole('gm')"
     >
       MESTRE
     </button>
@@ -15,7 +15,7 @@
       class="rounded-md px-2 py-1 transition-colors"
       [class]="session.role() === 'player' ? 'bg-astral-500/25 text-astral-300' : 'text-slate-500 hover:text-slate-300'"
       matTooltip="Ações do jogador"
-      (click)="session.role.set('player')"
+      (click)="session.setRole('player')"
     >
       JOGADOR
     </button>
@@ -71,7 +71,7 @@
         "
         [class.scale-90]="flashing() === slot.entry?.id"
         [class.opacity-40]="!slot.entry && !canCreate()"
-        [matTooltip]="slot.entry ? slot.entry.name + ' (' + slot.key + ') · clique direito: configurar' : canCreate() ? 'Nova ação para ' + actorLabel() : 'Crie um personagem para ter ações'"
+        [matTooltip]="slot.entry ? slot.entry.name + ' (' + slot.key + ') · clique direito: configurar' : emptyHint()"
         (click)="trigger(i)"
         (contextmenu)="$event.preventDefault(); slot.entry && opened.emit(slot.entry.id)"
       >

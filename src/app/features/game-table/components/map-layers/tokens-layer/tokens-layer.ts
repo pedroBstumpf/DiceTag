@@ -39,6 +39,8 @@ export class TokensLayer {
   readonly selectedId = input<string | null>(null);
   /** Tokens recebem o ponteiro (ferramenta Selecionar). */
   readonly interactive = input(false);
+  /** A conta pode mover/redimensionar o token? (jogador x NPC que não controla: não; sem alça) */
+  readonly movable = input<(token: ResolvedToken) => boolean>(() => true);
   /** Vista isométrica: transformação CSS que deixa o token "em pé" (vazio na 2D). */
   readonly upright = input('');
 

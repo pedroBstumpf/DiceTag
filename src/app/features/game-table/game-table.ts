@@ -27,7 +27,7 @@ import { TableItemWindow } from './components/table-item-window/table-item-windo
 import { MapStage } from './components/map-stage/map-stage';
 import { SceneBar } from './components/scene-bar/scene-bar';
 import { LORE_WINDOW, SidePanel, WORLDBUILD_WINDOW } from './components/side-panel/side-panel';
-import { TABLE_TOOLS, ToolBar } from './components/tool-bar/tool-bar';
+import { TABLE_TOOLS, ToolBar, toolAllowed } from './components/tool-bar/tool-bar';
 import { TokenWindow } from './components/token-window/token-window';
 import { BlobUrlService } from './services/blob-url.service';
 import { SheetStore } from '../../core/services/sheet-store';
@@ -288,10 +288,11 @@ export class GameTablePage {
     }
 
     const key = event.key.toLowerCase();
-    const tool = TABLE_TOOLS.find((t) => t.key.toLowerCase() === key && !t.soon);
+    // Ferramentas do mestre (Névoa, paredes) não têm atalho no papel de jogador
+    const tool = TABLE_TOOLS.find((t) => t.key.toLowerCase() === key && toolAllowed(t, this.session.role()));
 
     if (tool) this.session.tool.set(tool.id);
-    else if (key === 'w') this.startWalls();
+    else if (key === 'w' && this.isGm()) this.startWalls();
     else if (key === '\\') this.session.toggleImmersive();
     else if (key === 'g') this.toggleGrid();
     else if (key === '=' || key === '+') this.map()?.zoomBy(1.2);

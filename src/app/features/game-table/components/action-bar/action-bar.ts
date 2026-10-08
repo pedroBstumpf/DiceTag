@@ -13,7 +13,7 @@ const SLOT_COUNT = 10;
  * Mostra as ações de quem está agindo (`session.actor`): o mestre escolhe no menu
  * "Agindo" — uma ficha fixa (personagem ou NPC), as ações gerais ou seguir o token
  * selecionado; o jogador age com o personagem dele. Espaços numerados, usáveis com
- * clique ou teclas 1–0.
+ * clique ou teclas 1–0. Espaço vazio cria ação só para o mestre (o jogador cria na ficha).
  */
 @Component({
   selector: 'app-action-bar',
@@ -40,8 +40,14 @@ export class ActionBar {
     }));
   });
 
-  /** Jogador sem personagem nesta mesa não tem onde criar ações. */
-  readonly canCreate = computed(() => this.session.role() === 'gm' || !!this.session.actor());
+  /** Só o mestre cria ações pela barra; o jogador cria na aba Habilidades da própria ficha. */
+  readonly canCreate = computed(() => this.session.role() === 'gm');
+
+  /** Dica do espaço vazio. */
+  readonly emptyHint = computed(() => {
+    if (this.canCreate()) return 'Nova ação para ' + this.actorLabel();
+    return this.session.actor() ? 'Crie ações na aba Habilidades da sua ficha' : 'Crie um personagem para ter ações';
+  });
 
   /** Rótulo de quem está agindo. */
   readonly actorLabel = computed(() => {

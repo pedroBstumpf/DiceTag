@@ -90,7 +90,7 @@
     }
 
     <!-- Alça de redimensionar -->
-    @if (selected && interactive()) {
+    @if (selected && interactive() && movable()(t)) {
       <span
         class="absolute cursor-nwse-resize rounded-sm border-white bg-astral-500"
         [style.width.px]="ui(12)"

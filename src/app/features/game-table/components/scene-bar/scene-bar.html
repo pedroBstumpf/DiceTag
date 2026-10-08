@@ -8,9 +8,10 @@
     <span class="truncate text-[11px] text-slate-500">{{ table().system }}</span>
   </div>
 
+  @if (isGm()) {
   <span class="mx-1 hidden h-6 w-px bg-white/10 md:block"></span>
 
-  <!-- ===== Pastas e abas de cenas ===== -->
+  <!-- ===== Pastas e abas de cenas (só o mestre vê e troca as cenas) ===== -->
   <div class="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-1">
     <!-- Pastas: abrem a lista das cenas delas -->
     @for (folder of session.sceneFolders(); track folder.id) {
@@ -120,6 +121,10 @@
       <mat-icon>add</mat-icon>
     </button>
   </div>
+  } @else {
+    <!-- Jogador: só o título da mesa e os controles da tela -->
+    <span class="flex-1"></span>
+  }
 
   <!-- ===== Vista do mapa (mestre) ===== -->
   @if (isGm() && session.activeScene()) {

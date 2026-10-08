@@ -1,11 +1,11 @@
 <!-- ===== Abas ===== -->
-<nav class="grid shrink-0 grid-cols-5 gap-1 border-b border-white/5 p-1.5">
-  @for (t of tabs; track t.id) {
+<nav class="grid shrink-0 auto-cols-fr grid-flow-col gap-1 border-b border-white/5 p-1.5">
+  @for (t of tabs(); track t.id) {
     <button
       type="button"
       class="relative flex flex-col items-center gap-0.5 rounded-lg py-1.5 text-[11px] font-medium transition-colors"
       [class]="tab() === t.id ? 'bg-astral-500/20 text-astral-300' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'"
-      (click)="tab.set(t.id)"
+      (click)="selectTab(t.id)"
     >
       <mat-icon class="!text-[20px]">{{ t.icon }}</mat-icon>
       {{ t.label }}

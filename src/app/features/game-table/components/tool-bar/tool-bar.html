@@ -1,6 +1,6 @@
 <nav class="glass flex flex-col items-center gap-1 rounded-xl p-1.5 shadow-xl shadow-black/40">
   <!-- Ferramentas -->
-  @for (tool of tools; track tool.id) {
+  @for (tool of tools(); track tool.id) {
     <button
       type="button"
       class="grid size-10 place-items-center rounded-lg transition-colors"
@@ -80,7 +80,9 @@
       <app-draw-menu class="animate-fade-in" />
     }
     @case ('fog') {
-      <app-fog-menu class="animate-fade-in" />
+      @if (session.role() === 'gm') {
+        <app-fog-menu class="animate-fade-in" />
+      }
     }
     @case ('fx') {
       <!-- Com o efeito de uma ação na mão, o submenu some (a ação já definiu forma e cor) -->

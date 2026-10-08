@@ -368,6 +368,12 @@ export class TableSessionService extends SheetStore {
   // --- Estado da sessão (não persistido) -----------------------------------
   readonly tool = signal<TableTool>('select');
   readonly role = signal<TableRole>('gm');
+
+  /** Troca o papel; no de jogador, sai da ferramenta Névoa (que é só do mestre). */
+  setRole(role: TableRole): void {
+    this.role.set(role);
+    if (role === 'player' && this.tool() === 'fog') this.tool.set('select');
+  }
   /** Token selecionado no mapa (anel azul). */
   readonly selectedTokenId = signal<string | null>(null);
   /** Modo da ferramenta Névoa: desenhar parede em linha, em círculo ou apagar. */

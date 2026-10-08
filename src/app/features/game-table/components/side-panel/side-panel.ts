@@ -70,14 +70,23 @@ export class SidePanel {
   readonly removed = output<string>();
 
   // --- Abas ----------------------------------------------------------------
-  readonly tabs: { id: PanelTab; icon: string; label: string }[] = [
+  private readonly allTabs: { id: PanelTab; icon: string; label: string; gmOnly?: boolean }[] = [
     { id: 'chat', icon: 'forum', label: 'Chat' },
     { id: 'sheets', icon: 'group', label: 'Fichas' },
     { id: 'lore', icon: 'menu_book', label: 'Lore' },
-    { id: 'sounds', icon: 'graphic_eq', label: 'Sons' },
-    { id: 'automations', icon: 'bolt', label: 'Ações' },
+    { id: 'sounds', icon: 'graphic_eq', label: 'Sons', gmOnly: true },
+    // O jogador cria e usa as ações dele na aba Habilidades da ficha e na barra de ações
+    { id: 'automations', icon: 'bolt', label: 'Ações', gmOnly: true },
   ];
-  readonly tab = signal<PanelTab>('chat');
+  /** Abas do papel atual (Sons e Ações são só do mestre). */
+  readonly tabs = computed(() => this.allTabs.filter((t) => !t.gmOnly || this.session.role() === 'gm'));
+  private readonly chosenTab = signal<PanelTab>('chat');
+  /** Aba aberta (volta ao Chat se a escolhida não existir no papel atual). */
+  readonly tab = computed<PanelTab>(() => (this.tabs().some((t) => t.id === this.chosenTab()) ? this.chosenTab() : 'chat'));
+
+  selectTab(tab: PanelTab): void {
+    this.chosenTab.set(tab);
+  }
   readonly renamingId = signal<string | null>(null);
   readonly query = signal('');
 

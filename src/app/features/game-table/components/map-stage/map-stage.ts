@@ -561,13 +561,23 @@ export class MapStage {
 
   // --- Ponteiro: tokens ----------------------------------------------------
 
-  /** Token pressionado: seleciona, move (com snap) ou redimensiona. Duplo clique abre a janela. */
+  /** Mestre move tudo; jogador, os personagens e os NPCs que controla (regra: session.canEdit). */
+  readonly canMoveToken = (token: ResolvedToken): boolean => this.session.canEdit(token.entry);
+
+  /**
+   * Token pressionado: seleciona, move (com snap) ou redimensiona. Duplo clique abre a janela.
+   * Quem não pode mexer no token (jogador x NPC que não controla) só seleciona e abre.
+   */
   onTokenDown({ event, token, mode }: TokenPointerDown): void {
     const id = token.placement.id;
     this.openNoteId.set(null);
     this.session.selectedTokenId.set(id);
     const { x: cx, y: cy } = token.placement;
 
+    if (!this.session.canEdit(token.entry)) {
+      if (this.isDoubleTap(id, event)) this.tokenOpened.emit(id);
+      return;
+    }
     if (mode === 'resize') {
       this.gesture = { kind: 'resize', id, cx, cy };
     } else {
@@ -718,7 +728,10 @@ export class MapStage {
       return true;
     }
 
-    const tokenId = this.session.selectedTokenId();
+    // Token selecionado que a conta pode mexer (jogador: não move nem remove NPC que não controla)
+    const selected = this.session.selectedTokenId();
+    const selectedEntry = selected ? this.session.resolvedTokenById(selected)?.entry : undefined;
+    const tokenId = selectedEntry && this.session.canEdit(selectedEntry) ? selected : null;
 
     // WASD/setas: desliza o token selecionado enquanto a tecla estiver pressionada
     const key = event.key.toLowerCase();
@@ -735,7 +748,7 @@ export class MapStage {
       this.session.removeToken(tokenId);
       return true;
     }
-    if (event.key === 'Escape' && tokenId) {
+    if (event.key === 'Escape' && selected) {
       this.session.selectedTokenId.set(null);
       return true;
     }

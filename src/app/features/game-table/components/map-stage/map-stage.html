@@ -120,6 +120,7 @@
           [gridSize]="gridSize()"
           [selectedId]="session.selectedTokenId()"
           [interactive]="selecting()"
+          [movable]="canMoveToken"
           [upright]="upright()"
           (tokenDown)="onTokenDown($event)"
         />
