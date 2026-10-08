@@ -41,10 +41,7 @@ export class Sidebar {
   ];
 
   // --- Recursos planejados (exibidos como "em breve") ----------------------
-  readonly upcoming = [
-    { label: 'Fichas de personagem', icon: 'badge' },
-    { label: 'Rolador de dados', icon: 'casino' },
-  ];
+  readonly upcoming = [{ label: 'Rolador de dados', icon: 'casino' }];
 
   /** Rótulos visíveis? (expandida no desktop ou gaveta aberta no mobile) */
   readonly expanded = computed(() => this.layout.isMobile() || !this.layout.collapsed());

@@ -73,6 +73,9 @@
             @case ('entry') {
               <app-entry-window [entryId]="win.id" (openEntry)="open($event)" />
             }
+            @case ('sheet') {
+              <app-character-sheet [entryId]="win.id" (openEntry)="open($event)" (used)="onActionUsed($event)" />
+            }
             @case ('token') {
               <app-token-window [placementId]="placementOf(win.id)" (openEntry)="open($event)" />
             }

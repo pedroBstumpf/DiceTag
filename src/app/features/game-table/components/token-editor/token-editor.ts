@@ -10,6 +10,7 @@ import {
   TokenBar,
   TokenTag,
   TokenVision,
+  isStatusBar,
 } from '../../../../core/models/table-session.model';
 import { newId } from '../../../../core/utils/id';
 import { ColorPicker } from '../../../../shared/components/color-picker/color-picker';
@@ -99,6 +100,11 @@ export class TokenEditor {
   /** Botões −/+ do valor da barra. */
   stepBar(bar: TokenBar, delta: number): void {
     this.updateBar(bar.id, { value: bar.value + delta });
+  }
+
+  /** Barra de status da ficha do personagem (rótulo e cor fixos, não pode ser removida). */
+  isStatus(bar: TokenBar): boolean {
+    return isStatusBar(bar);
   }
 
   removeBar(id: string): void {

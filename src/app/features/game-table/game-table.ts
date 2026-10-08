@@ -18,6 +18,7 @@ import { LoreScope } from '../worldbuild/directives/lore-scope.directive';
 import { LoreService } from '../worldbuild/services/lore.service';
 import { WorldbuildService } from '../worldbuild/services/worldbuild.service';
 import { ActionBar } from './components/action-bar/action-bar';
+import { CharacterSheetView } from './components/character-sheet/character-sheet';
 import { EntryWindow } from './components/entry-window/entry-window';
 import { MapStage } from './components/map-stage/map-stage';
 import { SceneBar } from './components/scene-bar/scene-bar';
@@ -35,7 +36,7 @@ interface WindowContent {
   icon: string;
   color: string;
   /** Tipo de conteúdo, usado para escolher o componente. */
-  type: 'entry' | 'token' | 'explorer' | 'document' | 'timeline' | 'image' | 'item';
+  type: 'entry' | 'sheet' | 'token' | 'explorer' | 'document' | 'timeline' | 'image' | 'item';
   /** O conteúdo vem da Lore geral (os editores usam o LoreService). */
   global?: boolean;
 }
@@ -46,6 +47,7 @@ const TOKEN_WINDOW = 'token:';
 /** Tamanho inicial das janelas por tipo de conteúdo. */
 const WINDOW_SIZES: Record<WindowContent['type'], { width: number; height: number }> = {
   entry: { width: 520, height: 480 },
+  sheet: { width: 880, height: 700 },
   token: { width: 460, height: 560 },
   explorer: { width: 340, height: 540 },
   document: { width: 720, height: 600 },
@@ -82,6 +84,7 @@ const PANEL_SPACE = { top: 60, left: 76, right: 344, bottom: 100 };
     SidePanel,
     ActionBar,
     EntryWindow,
+    CharacterSheetView,
     TokenWindow,
     LoreScope,
     Explorer,
@@ -164,7 +167,9 @@ export class GameTablePage {
     // Sons não abrem janela: são controlados direto no mixer da aba Sons
     if (entry && entry.kind !== 'sound') {
       const meta = TABLE_ENTRY_META[entry.kind];
-      return { title: entry.name, icon: entry.icon ?? meta.icon, color: meta.color, type: 'entry' };
+      // Personagem abre a ficha completa (abas); NPC e automação, a janela simples
+      const type = entry.kind === 'character' ? 'sheet' : 'entry';
+      return { title: entry.name, icon: entry.icon ?? meta.icon, color: meta.color, type };
     }
     // Itens da lore: o título usa o nome desta mesa (pode ter sido renomeado só aqui)
     const globalItem = this.loreGeneral.byId().get(id);

@@ -1,0 +1,302 @@
+@if (entry(); as e) {
+  <!-- ===== Abas da ficha ===== -->
+  <nav class="flex shrink-0 gap-1 overflow-x-auto border-b border-white/5 bg-ink-900/60 px-2 py-1.5">
+    @for (t of tabs; track t.id) {
+      <button
+        type="button"
+        class="flex h-8 shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors"
+        [class]="tab() === t.id ? 'bg-astral-500/20 text-astral-300' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'"
+        (click)="tab.set(t.id)"
+      >
+        <mat-icon class="!size-4 !text-[16px]">{{ t.icon }}</mat-icon>
+        {{ t.label }}
+        @if (t.id === 'abilities') {
+          <span class="text-[10px] text-slate-500">{{ abilities().length }}</span>
+        }
+      </button>
+    }
+  </nav>
+
+  <div class="@container min-h-0 flex-1 overflow-y-auto p-4">
+    @switch (tab()) {
+      <!-- ================================================================= -->
+      <!-- Ficha: cards                                                      -->
+      <!-- ================================================================= -->
+      @case ('sheet') {
+        @if (sheet(); as s) {
+          <div class="grid gap-3 @2xl:grid-cols-6">
+            <!-- ===== Card Básico ===== -->
+            <section class="sheet-card @2xl:col-span-4">
+              <div class="flex gap-4">
+                <!-- Imagem da ficha = imagem do token (clique para enviar/trocar) -->
+                <button
+                  type="button"
+                  class="group relative grid size-28 shrink-0 place-items-center overflow-hidden rounded-lg bg-ink-700 ring-1 ring-white/15"
+                  [matTooltip]="e.token?.blobId ? 'Trocar imagem (também usada no token)' : 'Enviar imagem (também usada no token)'"
+                  (click)="imageInput.click()"
+                >
+                  @if (blobs.url(e.token?.blobId); as src) {
+                    <img [src]="src" alt="" class="size-full object-cover" />
+                  } @else {
+                    <span class="flex flex-col items-center gap-1 text-slate-500">
+                      <mat-icon class="!size-8 !text-[32px] text-astral-300">person</mat-icon>
+                      <span class="text-[10px]">Enviar imagem</span>
+                    </span>
+                  }
+                  <span class="absolute inset-0 grid place-items-center bg-black/60 opacity-0 transition-opacity group-hover:opacity-100">
+                    <mat-icon class="text-white">add_photo_alternate</mat-icon>
+                  </span>
+                </button>
+                <input #imageInput type="file" accept="image/*" hidden (change)="onImagePicked(imageInput)" />
+
+                <div class="flex min-w-0 flex-1 flex-col gap-2">
+                  <label class="sheet-label">
+                    Nome
+                    <input
+                      #nameInput
+                      class="w-full bg-transparent font-display text-2xl normal-case tracking-normal text-star-300 outline-none"
+                      [value]="e.name"
+                      (blur)="rename(nameInput.value)"
+                      (keydown.enter)="nameInput.blur()"
+                    />
+                  </label>
+                  <div class="grid grid-cols-2 gap-2">
+                    <label class="sheet-label">
+                      Raça
+                      <input #raceInput class="sheet-input" placeholder="Ex.: Humano" [value]="s.race" (input)="update({ race: raceInput.value })" />
+                    </label>
+                    <label class="sheet-label">
+                      Sub-raça
+                      <input #subraceInput class="sheet-input" placeholder="Ex.: Nórdico" [value]="s.subrace" (input)="update({ subrace: subraceInput.value })" />
+                    </label>
+                  </div>
+                  <!-- Jogador dono do personagem -->
+                  <p class="flex items-center gap-1.5 text-xs text-slate-400">
+                    <mat-icon class="!size-4 !text-[16px]">account_circle</mat-icon>
+                    @if (!e.ownerUserId) {
+                      Sem jogador definido
+                    } @else if (isMine()) {
+                      Seu personagem
+                    } @else {
+                      Personagem de outra conta
+                    }
+                    @if (!isMine()) {
+                      <button type="button" class="ml-1 text-astral-300 hover:underline" (click)="claim()">Vincular à minha conta</button>
+                    }
+                  </p>
+                </div>
+              </div>
+
+              <!-- Rótulos de personagem -->
+              <div class="mt-3">
+                <h4 class="sheet-label mb-1.5">Rótulos de personagem</h4>
+                <div class="flex flex-wrap items-center gap-1.5">
+                  @for (label of s.labels; track label) {
+                    <span class="flex h-7 items-center gap-1 rounded-md bg-astral-500/15 pl-2.5 pr-1 text-xs font-medium text-astral-200 ring-1 ring-astral-400/30">
+                      {{ label }}
+                      <button type="button" class="grid size-5 place-items-center rounded text-astral-300/70 hover:bg-white/10 hover:text-white" [attr.aria-label]="'Remover ' + label" (click)="removeLabel(label)">
+                        <mat-icon class="!size-3.5 !text-[14px]">close</mat-icon>
+                      </button>
+                    </span>
+                  }
+                  <input
+                    #labelInput
+                    class="h-7 w-36 rounded-md bg-ink-950 px-2 text-xs text-slate-100 outline-none ring-1 ring-white/10 placeholder:text-slate-600 focus:ring-astral-500/60"
+                    placeholder="+ Rótulo (Enter)"
+                    aria-label="Novo rótulo"
+                    (keydown.enter)="addLabel(labelInput)"
+                    (blur)="addLabel(labelInput)"
+                  />
+                </div>
+              </div>
+            </section>
+
+            <!-- ===== Card de Status ===== -->
+            <section class="sheet-card @2xl:col-span-2 @2xl:row-span-2">
+              <h3 class="sheet-title">
+                <mat-icon class="!size-4 !text-[16px]">monitor_heart</mat-icon>
+                Status
+              </h3>
+              <div class="flex flex-col gap-3">
+                @for (bar of statusBars(); track bar.id) {
+                  <div>
+                    <div class="mb-1 flex items-center justify-between text-xs">
+                      <span class="font-semibold" [style.color]="bar.color">{{ bar.label }}</span>
+                      <span class="flex items-center gap-0.5 tabular-nums text-slate-300">
+                        <button type="button" class="grid size-6 place-items-center rounded text-slate-400 hover:bg-white/10" [attr.aria-label]="'Diminuir ' + bar.label" (click)="stepBar(bar, -1)">
+                          <mat-icon class="!text-[14px]">remove</mat-icon>
+                        </button>
+                        <input
+                          #valueInput
+                          type="number"
+                          min="0"
+                          class="h-6 w-9 rounded bg-ink-950 text-center text-xs text-slate-100 outline-none ring-1 ring-white/10 focus:ring-astral-500/60"
+                          [attr.aria-label]="bar.label + ': valor'"
+                          [value]="bar.value"
+                          (input)="setBarNumber(bar, 'value', valueInput.value)"
+                        />
+                        <span class="text-slate-500">/</span>
+                        <input
+                          #maxInput
+                          type="number"
+                          min="0"
+                          class="h-6 w-9 rounded bg-ink-950 text-center text-xs text-slate-100 outline-none ring-1 ring-white/10 focus:ring-astral-500/60"
+                          [attr.aria-label]="bar.label + ': máximo'"
+                          [value]="bar.max"
+                          (input)="setBarNumber(bar, 'max', maxInput.value)"
+                        />
+                        <button type="button" class="grid size-6 place-items-center rounded text-slate-400 hover:bg-white/10" [attr.aria-label]="'Aumentar ' + bar.label" (click)="stepBar(bar, 1)">
+                          <mat-icon class="!text-[14px]">add</mat-icon>
+                        </button>
+                      </span>
+                    </div>
+                    <div class="h-2.5 overflow-hidden rounded-sm bg-white/10 ring-1 ring-white/5">
+                      <div class="h-full transition-[width] duration-200" [style.width.%]="percent(bar)" [style.background]="bar.color"></div>
+                    </div>
+                  </div>
+                }
+              </div>
+
+              <!-- Etiquetas (as mesmas exibidas abaixo do token) -->
+              <div class="mt-5">
+                <div class="mb-2 flex items-center justify-between">
+                  <h4 class="sheet-label">Etiquetas</h4>
+                  <button type="button" class="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-astral-300 hover:bg-white/5" (click)="tagEditor.add()">
+                    <mat-icon class="!size-4 !text-[16px]">add</mat-icon>
+                    Etiqueta
+                  </button>
+                </div>
+                <app-tag-editor #tagEditor [tags]="tags()" emptyText="Ex.: Envenenado, Inspirado, Exausto." (changed)="setTags($event)" />
+              </div>
+              <p class="mt-3 text-[11px] leading-relaxed text-slate-500">Barras e etiquetas também aparecem no token do personagem.</p>
+            </section>
+
+            <!-- ===== Card de Relações ===== -->
+            <section class="sheet-card @2xl:col-span-4">
+              <div class="mb-2 flex items-center justify-between">
+                <h3 class="sheet-title !mb-0">
+                  <mat-icon class="!size-4 !text-[16px]">diversity_3</mat-icon>
+                  Relações
+                </h3>
+                <button type="button" class="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-astral-300 hover:bg-white/5" (click)="addRelation()">
+                  <mat-icon class="!size-4 !text-[16px]">add</mat-icon>
+                  Relação
+                </button>
+              </div>
+              <div class="flex flex-col gap-2">
+                @for (r of s.relations; track r.id) {
+                  <div class="rounded-lg bg-white/[0.03] p-2 ring-1 ring-white/5">
+                    <div class="flex items-center gap-2">
+                      <input
+                        #relName
+                        class="sheet-input min-w-0 flex-1"
+                        placeholder="Nome do personagem"
+                        aria-label="Nome do personagem"
+                        [value]="r.name"
+                        (input)="updateRelation(r.id, { name: relName.value })"
+                      />
+                      <app-level-pips [value]="r.level" label="Nível da relação" (picked)="updateRelation(r.id, { level: $event })" />
+                      <button type="button" class="grid size-7 shrink-0 place-items-center rounded-md text-slate-500 hover:bg-red-500/15 hover:text-red-300" aria-label="Remover relação" (click)="removeRelation(r.id)">
+                        <mat-icon class="!text-[16px]">close</mat-icon>
+                      </button>
+                    </div>
+                    <textarea
+                      #relDesc
+                      rows="2"
+                      class="mt-1.5 w-full resize-none rounded-md bg-ink-950 px-2 py-1.5 text-xs leading-relaxed text-slate-200 outline-none ring-1 ring-white/10 placeholder:text-slate-600 focus:ring-astral-500/60"
+                      placeholder="Descrição da relação"
+                      aria-label="Descrição da relação"
+                      [value]="r.description"
+                      (input)="updateRelation(r.id, { description: relDesc.value })"
+                    ></textarea>
+                  </div>
+                } @empty {
+                  <p class="text-xs text-slate-600">Aliados, rivais, mentores… cada relação tem um nível de 1 a {{ maxLevel }}.</p>
+                }
+              </div>
+            </section>
+
+            <!-- ===== Cards de Tema (três) ===== -->
+            @for (theme of s.themes; track theme.id; let i = $index) {
+              <section class="sheet-card @2xl:col-span-2">
+                <div class="mb-2 flex items-center gap-2">
+                  <mat-icon class="!size-4 shrink-0 !text-[16px] text-star-400">auto_awesome</mat-icon>
+                  <input
+                    #themeName
+                    class="min-w-0 flex-1 bg-transparent font-display text-base text-star-300 outline-none placeholder:text-slate-600"
+                    [placeholder]="'Tema ' + (i + 1)"
+                    [attr.aria-label]="'Nome do tema ' + (i + 1)"
+                    [value]="theme.name"
+                    (input)="updateTheme(theme.id, { name: themeName.value })"
+                  />
+                </div>
+                <div class="flex flex-col gap-1.5">
+                  @for (tag of theme.tags; track tag.id) {
+                    <div class="flex items-center gap-1.5">
+                      <input
+                        #tagText
+                        class="sheet-input min-w-0 flex-1"
+                        placeholder="Tag"
+                        aria-label="Tag do tema"
+                        [value]="tag.text"
+                        (input)="updateThemeTag(theme, tag.id, { text: tagText.value })"
+                      />
+                      <app-level-pips [value]="tag.level" label="Nível da tag" (picked)="updateThemeTag(theme, tag.id, { level: $event })" />
+                      <button type="button" class="grid size-6 shrink-0 place-items-center rounded-md text-slate-500 hover:bg-red-500/15 hover:text-red-300" aria-label="Remover tag" (click)="removeThemeTag(theme, tag.id)">
+                        <mat-icon class="!text-[14px]">close</mat-icon>
+                      </button>
+                    </div>
+                  }
+                </div>
+                <button type="button" class="mt-2 flex items-center gap-1 rounded-md px-2 py-1 text-xs text-astral-300 hover:bg-white/5" (click)="addThemeTag(theme)">
+                  <mat-icon class="!size-4 !text-[16px]">add</mat-icon>
+                  Tag
+                </button>
+              </section>
+            }
+          </div>
+        }
+      }
+
+      <!-- ================================================================= -->
+      <!-- Habilidades: ações do personagem                                  -->
+      <!-- ================================================================= -->
+      @case ('abilities') {
+        <div class="mb-3 flex items-center justify-between gap-2">
+          <p class="text-xs leading-relaxed text-slate-400">
+            Ações deste personagem, criadas pelo jogador ou pelo mestre. Também ficam na barra de ações (teclas 1–0).
+          </p>
+          <button type="button" class="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs text-astral-300 hover:bg-white/5" (click)="addAbility()">
+            <mat-icon class="!size-4 !text-[16px]">add</mat-icon>
+            Habilidade
+          </button>
+        </div>
+        <div class="flex flex-col gap-1.5">
+          @for (action of abilities(); track action.id) {
+            <div class="flex h-11 items-center gap-2.5 rounded-lg bg-white/5 pl-3 pr-1.5 text-sm text-slate-200 transition-colors hover:bg-white/10">
+              <mat-icon class="!size-5 shrink-0 !text-[20px] text-amber-300">{{ action.icon ?? 'bolt' }}</mat-icon>
+              <button type="button" class="min-w-0 flex-1 truncate text-left" matTooltip="Configurar" (click)="openEntry.emit(action.id)">
+                {{ action.name }}
+              </button>
+              @if (action.effect) {
+                <span class="size-2.5 shrink-0 rounded-full" [style.background]="action.effect.color" matTooltip="Tem efeito especial"></span>
+              }
+              <span class="font-mono text-xs text-slate-400">{{ formula(action) }}</span>
+              <button
+                type="button"
+                class="flex h-8 items-center gap-1 rounded-md bg-astral-500/20 px-2.5 text-xs font-semibold text-astral-300 hover:bg-astral-500/30"
+                [attr.aria-label]="'Usar ' + action.name"
+                (click)="used.emit(action)"
+              >
+                <mat-icon class="!size-4 !text-[16px]">casino</mat-icon>
+                Usar
+              </button>
+            </div>
+          } @empty {
+            <p class="py-6 text-center text-sm text-slate-500">Nenhuma habilidade ainda. Ex.: ataque, magia, teste de resistência.</p>
+          }
+        </div>
+      }
+    }
+  </div>
+}

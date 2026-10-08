@@ -186,3 +186,17 @@
   backdrop-filter: blur(14px) saturate(140%);
   border: 1px solid color-mix(in oklab, var(--color-astral-300) 12%, transparent);
 }
+
+/* Ficha de personagem: card, título de card, rótulo de campo e campo de texto */
+@utility sheet-card {
+  @apply rounded-xl bg-ink-900/80 p-4 ring-1 ring-white/10;
+}
+@utility sheet-title {
+  @apply mb-3 flex items-center gap-1.5 font-display text-sm tracking-wide text-star-300;
+}
+@utility sheet-label {
+  @apply flex flex-col gap-0.5 text-[11px] font-semibold uppercase tracking-widest text-slate-500;
+}
+@utility sheet-input {
+  @apply h-8 rounded-md bg-ink-950 px-2 text-sm font-normal normal-case tracking-normal text-slate-100 outline-none ring-1 ring-white/10 placeholder:text-slate-600 focus:ring-astral-500/60;
+}

@@ -168,6 +168,89 @@ export interface TableEntry {
   ownerUserId?: string;
   /** character/npc: configuração do token. Padrão: defaultToken(kind). */
   token?: TokenSettings;
+  /** character: ficha do personagem. Padrão: defaultSheet(). */
+  sheet?: CharacterSheet;
+}
+
+// --- Ficha de personagem -----------------------------------------------------
+
+/** Níveis de relações e de tags de tema: de 1 a 6. */
+export const SHEET_MAX_LEVEL = 6;
+/** Quantidade fixa de cards de tema na ficha. */
+export const SHEET_THEME_COUNT = 3;
+
+/** Relação do personagem com outro personagem (nível de 1 a 6). */
+export interface CharacterRelation {
+  id: string;
+  name: string;
+  level: number;
+  description: string;
+}
+
+/** Tag de um tema, com nível de 1 a 6. */
+export interface ThemeTag {
+  id: string;
+  text: string;
+  level: number;
+}
+
+/** Card de tema: nome + tags com nível. */
+export interface CharacterTheme {
+  id: string;
+  name: string;
+  tags: ThemeTag[];
+}
+
+/**
+ * Ficha do personagem jogador. As etiquetas e as barras de status (Corpo, Mente,
+ * Espírito) ficam no token da ficha (`TableEntry.token`), assim aparecem também no mapa.
+ */
+export interface CharacterSheet {
+  race: string;
+  subrace: string;
+  /** Rótulos de personagem (texto livre: "Nobre", "Exilado"…). */
+  labels: string[];
+  relations: CharacterRelation[];
+  /** Sempre SHEET_THEME_COUNT temas. */
+  themes: CharacterTheme[];
+}
+
+/** Ficha vazia de um personagem. */
+export function defaultSheet(): CharacterSheet {
+  return {
+    race: '',
+    subrace: '',
+    labels: [],
+    relations: [],
+    themes: Array.from({ length: SHEET_THEME_COUNT }, (_, i) => ({ id: `theme-${i + 1}`, name: '', tags: [] })),
+  };
+}
+
+/** Barras de status fixas do personagem, na ordem da ficha (também exibidas sobre o token). */
+export const STATUS_BARS = [
+  { id: 'status-body', label: 'Corpo', color: '#ef4444' },
+  { id: 'status-mind', label: 'Mente', color: '#22c55e' },
+  { id: 'status-spirit', label: 'Espírito', color: '#4f86f7' },
+] as const;
+
+/** Valor máximo inicial das barras de status. */
+export const DEFAULT_STATUS_MAX = 10;
+
+/** A barra é uma das barras de status fixas (não pode ser renomeada nem removida)? */
+export function isStatusBar(bar: TokenBar): boolean {
+  return STATUS_BARS.some((s) => s.id === bar.id);
+}
+
+/**
+ * Garante as três barras de status no início da lista, com rótulo e cor fixos
+ * (mantém valor e máximo já salvos). As demais barras continuam depois delas.
+ */
+export function withStatusBars(bars: TokenBar[]): TokenBar[] {
+  const status = STATUS_BARS.map((s) => {
+    const saved = bars.find((b) => b.id === s.id);
+    return { ...s, value: saved?.value ?? DEFAULT_STATUS_MAX, max: saved?.max ?? DEFAULT_STATUS_MAX };
+  });
+  return [...status, ...bars.filter((b) => !isStatusBar(b))];
 }
 
 // --- Rolagens ----------------------------------------------------------------
@@ -431,12 +514,15 @@ export const MAX_TOKEN_SPEED = 12;
 /** Paleta para barras e etiquetas de tokens (a mesma das etiquetas em geral). */
 export const TOKEN_COLORS = TAG_COLORS;
 
-/** Token padrão de uma ficha: personagens enxergam, NPCs começam sem visão. */
+/**
+ * Token padrão de uma ficha: personagens enxergam e têm as barras de status
+ * (Corpo, Mente, Espírito); NPCs começam sem visão e sem barras.
+ */
 export function defaultToken(kind: TableEntryKind): TokenSettings {
   return {
     size: 1,
     vision: { enabled: kind === 'character', range: DEFAULT_VISION_RANGE },
-    bars: [],
+    bars: kind === 'character' ? withStatusBars([]) : [],
     tags: [],
   };
 }

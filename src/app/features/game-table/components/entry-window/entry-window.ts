@@ -14,7 +14,6 @@ import {
   TABLE_ENTRY_META,
   TableEntry,
 } from '../../../../core/models/table-session.model';
-import { AuthService } from '../../../../core/services/auth.service';
 import { BlobUrlService } from '../../services/blob-url.service';
 import { TableSessionService } from '../../services/table-session.service';
 import { formatModifier, formatRoll } from '../../utils/dice';
@@ -37,10 +36,11 @@ const OUTCOME_GUIDE: Record<DiceKind, { outcome: RollOutcome; range: string }[]>
 };
 
 /**
- * Ficha aberta pelo painel (personagem, NPC ou automação).
+ * Janela de NPC ou automação aberta pelo painel (personagens usam a ficha
+ * completa, `CharacterSheetView`).
  *
- * - Personagem/NPC: nome, imagem (a mesma do token), jogador dono (personagem)
- *   e as ações automatizadas dele. O resto da ficha será estruturado depois.
+ * - NPC: nome, imagem (a mesma do token) e as ações automatizadas dele.
+ *   O resto da ficha de NPC será estruturado depois.
  * - Automação: dono (personagem, NPC ou geral do mestre), ícone, rolagem
  *   (2d12 ou 3d6 + modificador) e efeito especial lançado ao usar.
  * As demais opções do token ficam só no mapa (duplo clique no token).
@@ -54,7 +54,6 @@ const OUTCOME_GUIDE: Record<DiceKind, { outcome: RollOutcome; range: string }[]>
 export class EntryWindow {
   readonly session = inject(TableSessionService);
   readonly blobs = inject(BlobUrlService);
-  private readonly auth = inject(AuthService);
 
   readonly entryId = input.required<string>();
   /** Pedido para abrir outra ficha/ação numa janela. */
@@ -67,22 +66,15 @@ export class EntryWindow {
   readonly icons = AUTOMATION_ICONS;
   readonly diceKinds = DICE_KINDS;
 
-  // --- Personagem / NPC ----------------------------------------------------
+  // --- NPC -----------------------------------------------------------------
 
   /** Ações automatizadas desta ficha. */
   readonly actions = computed(() => this.session.automationsOf(this.entryId()));
-
-  /** O personagem é da conta atual? */
-  readonly isMine = computed(() => this.entry()?.ownerUserId === this.auth.user()?.id);
 
   /** Cria uma ação desta ficha e a abre. */
   addAction(): void {
     const created = this.session.addEntry('automation', { ownerEntryId: this.entryId() });
     this.openEntry.emit(created.id);
-  }
-
-  claim(): void {
-    this.session.updateEntry(this.entryId(), { ownerUserId: this.auth.user()?.id });
   }
 
   // --- Automação -----------------------------------------------------------

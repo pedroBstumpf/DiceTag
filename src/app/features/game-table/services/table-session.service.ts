@@ -36,7 +36,11 @@ import {
   TokenTag,
   TokenVision,
   Wall,
+  CharacterSheet,
+  SHEET_THEME_COUNT,
+  defaultSheet,
   defaultToken,
+  withStatusBars,
 } from '../../../core/models/table-session.model';
 import { AuthService } from '../../../core/services/auth.service';
 import { StorageService } from '../../../core/services/storage.service';
@@ -725,6 +729,21 @@ export class TableSessionService {
     return this.storage.get<Blob>(`blob:${blobId}`);
   }
 
+  // --- Ficha de personagem -------------------------------------------------
+
+  /** Ficha do personagem com os valores padrão dos campos ausentes (sempre 3 temas). */
+  sheetOf(entry: TableEntry): CharacterSheet {
+    const sheet = { ...defaultSheet(), ...entry.sheet };
+    const themes = defaultSheet().themes.map((theme, i) => sheet.themes[i] ?? theme);
+    return { ...sheet, themes: themes.slice(0, SHEET_THEME_COUNT) };
+  }
+
+  /** Altera campos da ficha do personagem. */
+  updateSheet(entryId: string, patch: Partial<CharacterSheet>): void {
+    const entry = this.entryById().get(entryId);
+    if (entry) this.updateEntry(entryId, { sheet: { ...this.sheetOf(entry), ...patch } });
+  }
+
   // --- Lore da mesa (pastas e ajustes locais) -----------------------------
   // Nada aqui altera ou apaga os itens do worldbuild / Lore geral.
 
@@ -860,10 +879,13 @@ export class TableSessionService {
     });
   }
 
-  /** Altera a configuração de token da ficha. */
+  /** Altera a configuração de token da ficha (personagem mantém sempre as barras de status). */
   updateEntryToken(entryId: string, patch: Partial<TokenSettings>): void {
     const entry = this.entryById().get(entryId);
-    if (entry) this.updateEntry(entryId, { token: { ...this.tokenOf(entry), ...patch } });
+    if (!entry) return;
+    const token = { ...this.tokenOf(entry), ...patch };
+    if (entry.kind === 'character') token.bars = withStatusBars(token.bars);
+    this.updateEntry(entryId, { token });
   }
 
   /** Troca a imagem do token da ficha e apaga a anterior. */
@@ -1114,9 +1136,15 @@ function normalizeState(raw: TableState | undefined): TableState {
       drawings: sc.drawings ?? [],
       notes: sc.notes ?? [],
     })),
-    entries: raw.entries.map((e) =>
-      e.kind === 'sound' ? { ...e, volume: e.volume ?? DEFAULT_SOUND_VOLUME, loop: e.loop ?? true } : e,
-    ),
+    entries: raw.entries.map((e) => {
+      if (e.kind === 'sound') return { ...e, volume: e.volume ?? DEFAULT_SOUND_VOLUME, loop: e.loop ?? true };
+      // Personagens sempre têm as barras de status (Corpo, Mente, Espírito) no token
+      if (e.kind === 'character') {
+        const token = e.token ?? defaultToken('character');
+        return { ...e, token: { ...token, bars: withStatusBars(token.bars) } };
+      }
+      return e;
+    }),
   };
 }
 

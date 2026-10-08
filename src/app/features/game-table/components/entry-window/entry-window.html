@@ -38,27 +38,11 @@
         (blur)="rename(nameInput.value)"
         (keydown.enter)="nameInput.blur()"
       />
-      <!-- Jogador dono do personagem -->
-      @if (e.kind === 'character') {
-        <p class="flex items-center gap-1.5 text-xs text-slate-400">
-          <mat-icon class="!size-4 !text-[16px]">account_circle</mat-icon>
-          @if (!e.ownerUserId) {
-            Sem jogador definido
-          } @else if (isMine()) {
-            Seu personagem
-          } @else {
-            Personagem de outra conta
-          }
-          @if (!isMine()) {
-            <button type="button" class="ml-1 text-astral-300 hover:underline" (click)="claim()">Vincular à minha conta</button>
-          }
-        </p>
-      }
     </div>
   </div>
 
   @if (hasToken()) {
-    <!-- ===== Personagem / NPC ===== -->
+    <!-- ===== NPC ===== -->
     <p class="mt-4 flex items-start gap-2 rounded-lg bg-white/5 px-3 py-2 text-xs leading-relaxed text-slate-400">
       <mat-icon class="!size-4 shrink-0 !text-[16px] text-astral-300">token</mat-icon>
       A imagem acima também é a do token. Arraste esta ficha do painel direito até o mapa para colocá-lo e
@@ -70,7 +54,7 @@
       <div class="mb-2 flex items-center justify-between">
         <h4 class="text-xs text-slate-400">
           Ações automatizadas
-          <span class="text-slate-600">· {{ e.kind === 'character' ? 'barra do jogador' : 'barra do mestre ao selecionar o token' }}</span>
+          <span class="text-slate-600">· barra do mestre ao selecionar o token</span>
         </h4>
         <button type="button" class="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-astral-300 hover:bg-white/5" (click)="addAction()">
           <mat-icon class="!size-4 !text-[16px]">add</mat-icon>
@@ -99,8 +83,7 @@
     <div class="mt-6 flex flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/10 p-6 text-center">
       <mat-icon class="text-slate-600">construction</mat-icon>
       <p class="max-w-sm text-sm leading-relaxed text-slate-400">
-        {{ e.kind === 'npc' ? 'A ficha de NPC (atributos, ataques e notas do mestre)' : 'A ficha de personagem (atributos, perícias, inventário)' }}
-        será estruturada na próxima etapa.
+        A ficha de NPC (atributos, ataques e notas do mestre) será estruturada numa próxima etapa.
       </p>
     </div>
   }
