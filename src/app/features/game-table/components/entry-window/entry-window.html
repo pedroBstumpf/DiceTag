@@ -108,18 +108,18 @@
         </div>
         <div class="flex flex-wrap gap-1.5">
           @for (tag of ownerTags(); track tag.id) {
-            @let on = isLinked(tag.id);
+            @let on = signOf(tag) !== 0;
             <button
               type="button"
               class="flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs transition-colors"
-              [class]="tagClass(tag, on)"
+              [class]="tagClass(tag)"
               [attr.aria-pressed]="on"
               [matTooltip]="tagHint(tag)"
-              (click)="toggleTag(tag.id)"
+              (click)="toggleTag(tag)"
             >
-              <mat-icon class="!size-4 !text-[16px]">{{ on ? 'check' : tag.item ? 'shield' : 'add' }}</mat-icon>
+              <mat-icon class="!size-4 !text-[16px]">{{ on ? (signOf(tag) < 0 ? 'remove' : 'check') : tag.item ? 'shield' : 'add' }}</mat-icon>
               {{ tag.text }}
-              <span class="font-semibold tabular-nums">{{ modifierText(tag.level) }}</span>
+              <span class="font-semibold tabular-nums">{{ modifierText(tagValue(tag)) }}</span>
             </button>
           } @empty {
             <p class="text-xs text-slate-600">A ficha ainda não tem tags nos temas nem itens equipados.</p>
@@ -127,8 +127,8 @@
         </div>
         <p class="mt-2 text-[11px] leading-relaxed text-slate-500">
           O nível atual de cada tag ligada é somado ao modificador fixo (defeitos subtraem). Quando a tag sobe ou desce
-          na ficha, esta ação acompanha sozinha. Etiquetas de itens equipados (verdes) somam o nível delas (sem nível, +1)
-          e saem da ação se o item for desequipado.
+          na ficha, esta ação acompanha sozinha. Etiquetas de itens equipados alternam a cada clique entre bônus (verde),
+          penalidade (vermelha) e desligada; valem o nível delas (sem nível, 1) e saem da ação se o item for desequipado.
         </p>
       </section>
     }

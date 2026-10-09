@@ -51,8 +51,8 @@ import {
 } from '../../../core/models/table-session.model';
 import { AuthService } from '../../../core/services/auth.service';
 import { newId } from '../../../core/utils/id';
-import { TagLevels, formatRoll, rollDice } from '../utils/dice';
-import { addOne, inventoryRow, itemTagId, itemTagLevel, keepValidItemTags, quantityOf, takeOne } from '../utils/inventory';
+import { TagLevels, formatRoll, keepValidItemTags, rollDice } from '../utils/dice';
+import { addOne, inventoryRow, itemTagId, itemTagLevel, quantityOf, takeOne } from '../utils/inventory';
 import { SheetData, SheetStore } from '../../../core/services/sheet-store';
 import { FxDrawing, buildFx, seededRandom } from '../utils/effects';
 import { createMask, decodeMask, encodeMask, isExploredAt, markPolygons, maskFits } from '../utils/fog-memory';

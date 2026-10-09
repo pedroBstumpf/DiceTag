@@ -16,7 +16,7 @@ import {
   hasSheet,
 } from '../../../../core/models/table-session.model';
 import { SheetTagOption, TableSessionService } from '../../services/table-session.service';
-import { formatModifier } from '../../utils/dice';
+import { NEGATED_TAG_PREFIX, attributeSign, baseTagId, formatModifier } from '../../utils/dice';
 import { FxPicker } from '../fx-picker/fx-picker';
 
 /** Faixas de resultado de cada dado (legenda da configuração da rolagem). */
@@ -81,39 +81,55 @@ export class EntryWindow {
   });
   /** Tags e defeitos dos temas do dono + etiquetas dos itens que ele tem equipados. */
   readonly ownerTags = computed(() => this.session.rollTagsOf(this.entry()?.ownerEntryId));
+  /** Sinal de cada tag ligada (1; −1 = etiqueta de item ligada como penalidade), por id. */
+  private readonly linkedSigns = computed(() => new Map((this.roll().attributes ?? []).map((a) => [baseTagId(a), attributeSign(a)])));
   /** Tags ligadas a esta ação que ainda existem na ficha. */
-  readonly linkedTags = computed(() => {
-    const ids = new Set(this.roll().attributes ?? []);
-    return this.ownerTags().filter((t) => ids.has(t.id));
-  });
-  /** Composição do modificador, ex.: "+1 fixo +3 Esgrima −2 Medo = +2". */
+  readonly linkedTags = computed(() => this.ownerTags().filter((t) => this.linkedSigns().has(t.id)));
+  /** Composição do modificador, ex.: "+1 fixo +3 Esgrima −2 Medo −1 Pesada = +1". */
   readonly breakdown = computed(() => {
-    const parts = [`${this.modifierText(this.roll().modifier)} fixo`, ...this.linkedTags().map((t) => `${this.modifierText(t.level)} ${t.text}`)];
-    const total = this.linkedTags().reduce((sum, t) => sum + t.level, this.roll().modifier);
+    const parts = [`${this.modifierText(this.roll().modifier)} fixo`, ...this.linkedTags().map((t) => `${this.modifierText(this.tagValue(t))} ${t.text}`)];
+    const total = this.linkedTags().reduce((sum, t) => sum + this.tagValue(t), this.roll().modifier);
     return `${parts.join(' ')} = ${this.modifierText(total)}`;
   });
 
-  isLinked(tagId: string): boolean {
-    return (this.roll().attributes ?? []).includes(tagId);
+  /** Sinal da tag nesta ação: 1 (soma), −1 (penalidade, só itens) ou 0 (desligada). */
+  signOf(tag: SheetTagOption): number {
+    return this.linkedSigns().get(tag.id) ?? 0;
   }
 
-  /** Liga/desliga a tag (ids de tags apagadas da ficha são descartados aqui). */
-  toggleTag(tagId: string): void {
+  /** Valor da tag na rolagem desta ação (nível com o sinal escolhido; desligada = o nível). */
+  tagValue(tag: SheetTagOption): number {
+    return tag.level * (this.signOf(tag) || 1);
+  }
+
+  /**
+   * Clique na tag: tags dos temas ligam/desligam; etiquetas de itens alternam
+   * desligada → bônus → penalidade → desligada. Ids de tags apagadas da ficha são descartados aqui.
+   */
+  toggleTag(tag: SheetTagOption): void {
     const valid = new Set(this.ownerTags().map((t) => t.id));
-    const current = (this.roll().attributes ?? []).filter((id) => valid.has(id));
-    const attributes = current.includes(tagId) ? current.filter((id) => id !== tagId) : [...current, tagId];
+    const others = (this.roll().attributes ?? []).filter((a) => valid.has(baseTagId(a)) && baseTagId(a) !== tag.id);
+    const sign = this.signOf(tag);
+    let next: string | null = null;
+    if (!sign) next = tag.id;
+    else if (sign > 0 && tag.item) next = NEGATED_TAG_PREFIX + tag.id;
+    const attributes = next ? [...others, next] : others;
     this.patchRoll({ attributes: attributes.length ? attributes : undefined });
   }
 
-  tagClass(tag: SheetTagOption, on: boolean): string {
-    if (!on) return 'bg-white/5 text-slate-400 ring-1 ring-white/10 hover:bg-white/10 hover:text-slate-200';
-    if (tag.item) return 'bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-400/50';
-    return tag.flaw ? 'bg-red-500/15 text-red-200 ring-1 ring-red-400/50' : 'bg-astral-500/20 text-astral-200 ring-1 ring-astral-400/50';
+  tagClass(tag: SheetTagOption): string {
+    const sign = this.signOf(tag);
+    if (!sign) return 'bg-white/5 text-slate-400 ring-1 ring-white/10 hover:bg-white/10 hover:text-slate-200';
+    if (tag.item && sign > 0) return 'bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-400/50';
+    return tag.flaw || sign < 0 ? 'bg-red-500/15 text-red-200 ring-1 ring-red-400/50' : 'bg-astral-500/20 text-astral-200 ring-1 ring-astral-400/50';
   }
 
-  /** Dica da tag: tema (ou item equipado) de origem. */
+  /** Dica da tag: tema (ou item equipado) de origem e, nos itens, o que o próximo clique faz. */
   tagHint(tag: SheetTagOption): string {
-    return tag.item ? `Item equipado · ${tag.theme}` : tag.theme + (tag.flaw ? ' · defeito' : '');
+    if (!tag.item) return tag.theme + (tag.flaw ? ' · defeito' : '');
+    const sign = this.signOf(tag);
+    const next = sign > 0 ? 'clique: penalidade' : sign < 0 ? 'clique: tirar' : 'clique: bônus';
+    return `Item equipado · ${tag.theme} (${next})`;
   }
 
   setDice(dice: DiceKind): void {

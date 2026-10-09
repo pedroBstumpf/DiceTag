@@ -1,5 +1,6 @@
 import { InventoryEntry } from '../../../core/models/table-session.model';
-import { addOne, itemTagId, itemTagLevel, keepValidItemTags, quantityOf, takeOne } from './inventory';
+import { keepValidItemTags } from './dice';
+import { addOne, itemTagId, itemTagLevel, quantityOf, takeOne } from './inventory';
 
 let n = 0;
 const id = () => `novo-${++n}`;
@@ -63,5 +64,11 @@ describe('etiquetas de itens equipados nas rolagens', () => {
     const attrs = ['tema-1', itemTagId('espada', 'a'), itemTagId('escudo', 'b')];
     expect(keepValidItemTags(attrs, new Set([itemTagId('espada', 'a')]))).toEqual(['tema-1', itemTagId('espada', 'a')]);
     expect(keepValidItemTags(attrs, new Set([itemTagId('espada', 'a'), itemTagId('escudo', 'b')]))).toBeNull();
+  });
+
+  it('keepValidItemTags reconhece etiquetas ligadas como penalidade', () => {
+    const negated = '-' + itemTagId('escudo', 'b');
+    expect(keepValidItemTags(['tema-1', negated], new Set())).toEqual(['tema-1']);
+    expect(keepValidItemTags([negated], new Set([itemTagId('escudo', 'b')]))).toBeNull();
   });
 });

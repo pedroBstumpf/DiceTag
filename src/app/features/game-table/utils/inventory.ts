@@ -1,6 +1,7 @@
 import { Tag } from '../../../core/models/tag.model';
 import { InventoryEntry } from '../../../core/models/table-session.model';
 import { WorldItem } from '../../../core/models/world-item.model';
+import { ITEM_TAG_PREFIX } from './dice';
 
 /** Quantidade do item (itens antigos, sem quantidade, valem 1). */
 export function quantityOf(item: InventoryEntry): number {
@@ -68,8 +69,6 @@ export function inventoryRow(entry: InventoryEntry, sources: ItemSources): Inven
 
 // --- Etiquetas de itens equipados nas rolagens ------------------------------
 
-/** Prefixo dos ids de etiquetas de itens equipados usadas em rolagens (`RollConfig.attributes`). */
-export const ITEM_TAG_PREFIX = 'item:';
 
 /** Id da etiqueta de um item equipado nas rolagens: único por linha do inventário. */
 export function itemTagId(inventoryId: string, tagId: string): string {
@@ -79,15 +78,6 @@ export function itemTagId(inventoryId: string, tagId: string): string {
 /** Valor da etiqueta de item na rolagem: o nível dela (sem nível ou 0 = 1). */
 export function itemTagLevel(tag: Tag): number {
   return tag.level || 1;
-}
-
-/**
- * Tags de uma ação sem as etiquetas de itens que não estão mais equipados (`valid` = ids
- * das etiquetas de itens equipados agora). Tags dos temas ficam. null = nada mudou.
- */
-export function keepValidItemTags(attributes: readonly string[], valid: ReadonlySet<string>): string[] | null {
-  const kept = attributes.filter((id) => !id.startsWith(ITEM_TAG_PREFIX) || valid.has(id));
-  return kept.length === attributes.length ? null : kept;
 }
 
 /**

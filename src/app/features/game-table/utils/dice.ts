@@ -13,14 +13,55 @@ export type Random = () => number;
 export type TagLevels = ReadonlyMap<string, number>;
 const NO_LEVELS: TagLevels = new Map();
 
+// --- Tags ligadas às ações (`RollConfig.attributes`) -------------------------
+
+/** Prefixo dos ids de etiquetas de itens equipados (`item:<linha do inventário>:<etiqueta>`). */
+export const ITEM_TAG_PREFIX = 'item:';
+/** Prefixo de tag ligada como penalidade (subtrai o nível): usado nas etiquetas de itens. */
+export const NEGATED_TAG_PREFIX = '-';
+
+/** Id da tag sem o prefixo de penalidade. */
+export function baseTagId(attribute: string): string {
+  return attribute.startsWith(NEGATED_TAG_PREFIX) ? attribute.slice(NEGATED_TAG_PREFIX.length) : attribute;
+}
+
+/** Sinal da tag ligada: −1 se ligada como penalidade, senão 1. */
+export function attributeSign(attribute: string): 1 | -1 {
+  return attribute.startsWith(NEGATED_TAG_PREFIX) ? -1 : 1;
+}
+
+/** É etiqueta de item equipado (com ou sem o prefixo de penalidade)? */
+export function isItemAttribute(attribute: string): boolean {
+  return baseTagId(attribute).startsWith(ITEM_TAG_PREFIX);
+}
+
+/**
+ * Tags de uma ação sem as etiquetas de itens que não estão mais equipados (`valid` = ids
+ * das etiquetas de itens equipados agora). Tags dos temas ficam. null = nada mudou.
+ */
+export function keepValidItemTags(attributes: readonly string[], valid: ReadonlySet<string>): string[] | null {
+  const kept = attributes.filter((id) => !isItemAttribute(id) || valid.has(baseTagId(id)));
+  return kept.length === attributes.length ? null : kept;
+}
+
+/** Soma o nível atual das tags ligadas (penalidades subtraem); `only` filtra quais entram. */
+function sumAttributes(roll: RollConfig, levels: TagLevels, only: (attribute: string) => boolean): number {
+  return (roll.attributes ?? []).filter(only).reduce((sum, id) => sum + attributeSign(id) * (levels.get(baseTagId(id)) ?? 0), 0);
+}
+
 /**
  * Modificador efetivo da rolagem: o valor fixo + o nível atual de cada tag ligada
- * (`roll.attributes`, ids de tags dos temas; defeitos têm nível negativo).
- * Tags que não existem mais valem 0. Como o nível é lido na hora, subir uma tag
- * na ficha já muda todas as ações que a usam.
+ * (`roll.attributes`: tags dos temas, com defeitos de nível negativo, e etiquetas de itens
+ * equipados, que podem estar ligadas como penalidade). Tags que não existem mais valem 0.
+ * Como o nível é lido na hora, subir uma tag na ficha já muda todas as ações que a usam.
  */
 export function effectiveModifier(roll: RollConfig, levels: TagLevels = NO_LEVELS): number {
-  return (roll.attributes ?? []).reduce((sum, id) => sum + (levels.get(id) ?? 0), roll.modifier);
+  return roll.modifier + sumAttributes(roll, levels, () => true);
+}
+
+/** Parte do modificador que vem das etiquetas de itens equipados (exibida à parte no chat). */
+export function itemModifier(roll: RollConfig, levels: TagLevels = NO_LEVELS): number {
+  return sumAttributes(roll, levels, isItemAttribute);
 }
 
 /** Etiqueta de status ligada na rolagem básica: soma (+1) ou subtrai (−1) o nível dela. */
@@ -40,13 +81,16 @@ export function quickModifier(fixed: number, themeLevels: readonly number[], sta
   return status.reduce((sum, pick) => sum + pick.sign * (pick.level || 1), fixed + themes);
 }
 
-/** Rola os dados de `roll` e classifica o total. */
+/**
+ * Rola os dados de `roll` e classifica o total. `itemModifier` = parte do modificador que
+ * vem dos itens equipados (já incluída em `modifier`).
+ */
 export function rollDice(roll: RollConfig, random: Random = Math.random, levels: TagLevels = NO_LEVELS) {
   const { count, sides } = DICE[roll.dice];
   const rolls = Array.from({ length: count }, () => 1 + Math.floor(random() * sides));
   const modifier = effectiveModifier(roll, levels);
   const total = rolls.reduce((sum, r) => sum + r, 0) + modifier;
-  return { rolls, modifier, total, outcome: rollOutcome(roll.dice, total) };
+  return { rolls, modifier, itemModifier: itemModifier(roll, levels), total, outcome: rollOutcome(roll.dice, total) };
 }
 
 /**

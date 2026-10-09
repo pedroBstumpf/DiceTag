@@ -369,8 +369,9 @@ export interface RollConfig {
   /** Modificador fixo somado ao total. */
   modifier: number;
   /**
-   * Ids das tags dos temas (tags e defeitos) do personagem dono da ação: o nível
-   * atual de cada uma é somado ao modificador (ver `effectiveModifier` em utils/dice.ts).
+   * Ids das tags dos temas (tags e defeitos) e das etiquetas dos itens equipados do dono
+   * da ação: o nível atual de cada uma é somado ao modificador; com o prefixo "-" (só
+   * etiquetas de itens), é subtraído (ver `effectiveModifier` em utils/dice.ts).
    */
   attributes?: string[];
 }
