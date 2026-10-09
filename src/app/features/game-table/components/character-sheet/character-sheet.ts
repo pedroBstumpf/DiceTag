@@ -106,9 +106,16 @@ export class CharacterSheetView {
   readonly controllerSettings = computed(() => this.isNpc() && this.isGm() && this.data()?.level !== 'npc-token');
   /** Visibilidade para os jogadores é de cada token. */
   readonly publicSettings = computed(() => this.isGm() && this.data()?.level === 'npc-token');
-  /** O que a conta atual pode ver/editar nesta ficha (fora da mesa: tudo). */
+  /**
+   * A ficha mora na mesa? (fichas do bestiário — WorldNpcStore — não, mesmo abertas numa janela da mesa:
+   * as permissões da mesa não as conhecem; quem abre como jogador já recebe `readonly`.)
+   */
+  private readonly tableSheet = computed(() => !!this.session && (this.store as unknown) === this.session);
+
+  /** O que a conta atual pode ver/editar nesta ficha (fora da mesa e no bestiário: tudo, salvo `readonly`). */
   readonly access = computed(() => {
-    const access = this.session?.sheetAccess(this.sheetId()) ?? { edit: true, sheet: true, inventory: true };
+    const full = { edit: true, sheet: true, inventory: true };
+    const access = this.tableSheet() ? (this.session?.sheetAccess(this.sheetId()) ?? full) : full;
     return this.readonly() ? { ...access, edit: false } : access;
   });
   /** Token desta ficha (só fichas de token de NPC). */
