@@ -47,142 +47,149 @@
       </div>
     </div>
 
-    <!-- ===== Tags e defeitos dos temas ===== -->
-    @if (themeGroups().length) {
-      <section>
-        <h4 class="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-500">Temas</h4>
-        <div class="flex flex-col gap-2">
-          @for (group of themeGroups(); track group.theme) {
-            <div>
-              <p class="mb-1 truncate text-[11px] text-star-400/80">{{ group.theme }}</p>
-              <div class="flex flex-wrap gap-1">
-                @for (tag of group.tags; track tag.id) {
-                  @let on = isPicked(tag);
-                  <button
-                    type="button"
-                    class="flex h-7 items-center gap-1 rounded-md px-2 text-xs ring-1 transition-colors"
-                    [class]="
-                      on
-                        ? tag.flaw
-                          ? 'bg-red-500/20 text-red-200 ring-red-400/50'
-                          : 'bg-astral-500/25 text-astral-100 ring-astral-400/50'
-                        : 'bg-white/[0.03] text-slate-400 ring-white/10 hover:text-slate-200'
-                    "
-                    [attr.aria-pressed]="on"
-                    [matTooltip]="tag.flaw ? 'Defeito' : 'Tag'"
-                    (click)="toggleTheme(tag)"
-                  >
-                    {{ tag.text }}
-                    <span class="font-semibold tabular-nums" [class]="tag.flaw ? 'text-red-300' : 'text-astral-300'">{{ formatLevel(tag.level) }}</span>
-                  </button>
-                }
-              </div>
-            </div>
-          }
-        </div>
-      </section>
-    }
-
-    <!-- ===== Etiquetas dos itens equipados (bônus ou penalidade, como as de status) ===== -->
-    @if (itemGroups().length) {
-      <section>
-        <h4 class="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-500">Itens equipados · clique: + / − / fora</h4>
-        <div class="flex flex-col gap-2">
-          @for (group of itemGroups(); track group.theme) {
-            <div>
-              <p class="mb-1 flex items-center gap-1 truncate text-[11px] text-emerald-300/80">
-                <mat-icon class="!size-3.5 !text-[14px]">shield</mat-icon>
-                {{ group.theme }}
-              </p>
-              <div class="flex flex-wrap gap-1">
-                @for (tag of group.tags; track tag.id) {
-                  @let sign = statusSign(tag);
-                  <button
-                    type="button"
-                    class="flex h-7 items-center gap-1 rounded-md px-2 text-xs ring-1 transition-colors"
-                    [class]="
-                      sign > 0
-                        ? 'bg-emerald-500/15 text-emerald-100 ring-emerald-400/50'
-                        : sign < 0
-                          ? 'bg-red-500/15 text-red-100 ring-red-400/50'
+    <!-- ===== Etiquetas da ficha: só no 2d12 (o 3d6 usa só o modificador fixo) ===== -->
+    @if (usesTags()) {
+      <!-- ===== Tags e defeitos dos temas ===== -->
+      @if (themeGroups().length) {
+        <section>
+          <h4 class="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-500">Temas</h4>
+          <div class="flex flex-col gap-2">
+            @for (group of themeGroups(); track group.theme) {
+              <div>
+                <p class="mb-1 truncate text-[11px] text-star-400/80">{{ group.theme }}</p>
+                <div class="flex flex-wrap gap-1">
+                  @for (tag of group.tags; track tag.id) {
+                    @let on = isPicked(tag);
+                    <button
+                      type="button"
+                      class="flex h-7 items-center gap-1 rounded-md px-2 text-xs ring-1 transition-colors"
+                      [class]="
+                        on
+                          ? tag.flaw
+                            ? 'bg-red-500/20 text-red-200 ring-red-400/50'
+                            : 'bg-astral-500/25 text-astral-100 ring-astral-400/50'
                           : 'bg-white/[0.03] text-slate-400 ring-white/10 hover:text-slate-200'
-                    "
-                    [matTooltip]="sign > 0 ? 'Bônus (clique: penalidade)' : sign < 0 ? 'Penalidade (clique: tirar)' : 'Fora da rolagem (clique: bônus)'"
-                    (click)="cycleStatus(tag)"
-                  >
-                    {{ tag.text }}
-                    @if (sign) {
-                      <span class="font-semibold tabular-nums">{{ sign > 0 ? '+' : '−' }}{{ tag.level }}</span>
-                    } @else {
-                      <span class="tabular-nums text-slate-500">{{ tag.level }}</span>
-                    }
-                  </button>
-                }
+                      "
+                      [attr.aria-pressed]="on"
+                      [matTooltip]="tag.flaw ? 'Defeito' : 'Tag'"
+                      (click)="toggleTheme(tag)"
+                    >
+                      {{ tag.text }}
+                      <span class="font-semibold tabular-nums" [class]="tag.flaw ? 'text-red-300' : 'text-astral-300'">{{ formatLevel(tag.level) }}</span>
+                    </button>
+                  }
+                </div>
               </div>
-            </div>
-          }
-        </div>
-      </section>
-    }
+            }
+          </div>
+        </section>
+      }
 
-    <!-- ===== Etiquetas de status (bônus ou penalidade) ===== -->
-    @if (statusTags().length) {
-      <section>
-        <h4 class="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-500">Etiquetas · clique: + / − / fora</h4>
-        <div class="flex flex-wrap gap-1">
-          @for (tag of statusTags(); track tag.id) {
-            @let sign = statusSign(tag);
-            <button
-              type="button"
-              class="flex h-7 items-center gap-1.5 rounded-md px-2 text-xs ring-1 transition-colors"
-              [class]="
-                sign > 0
-                  ? 'bg-emerald-500/15 text-emerald-100 ring-emerald-400/50'
-                  : sign < 0
-                    ? 'bg-red-500/15 text-red-100 ring-red-400/50'
-                    : 'bg-white/[0.03] text-slate-400 ring-white/10 hover:text-slate-200'
-              "
-              [matTooltip]="sign > 0 ? 'Bônus (clique: penalidade)' : sign < 0 ? 'Penalidade (clique: tirar)' : 'Fora da rolagem (clique: bônus)'"
-              (click)="cycleStatus(tag)"
-            >
-              <span class="size-2.5 shrink-0 rounded-full" [style.background]="tag.color"></span>
-              {{ tag.text }}
-              @if (sign) {
-                <span class="font-semibold tabular-nums">{{ sign > 0 ? '+' : '−' }}{{ statusValue(tag) }}</span>
-              }
-            </button>
-          }
-        </div>
-      </section>
-    }
+      <!-- ===== Etiquetas dos itens equipados (bônus ou penalidade, como as de status) ===== -->
+      @if (itemGroups().length) {
+        <section>
+          <h4 class="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-500">Itens equipados · clique: + / − / fora</h4>
+          <div class="flex flex-col gap-2">
+            @for (group of itemGroups(); track group.theme) {
+              <div>
+                <p class="mb-1 flex items-center gap-1 truncate text-[11px] text-emerald-300/80">
+                  <mat-icon class="!size-3.5 !text-[14px]">shield</mat-icon>
+                  {{ group.theme }}
+                </p>
+                <div class="flex flex-wrap gap-1">
+                  @for (tag of group.tags; track tag.id) {
+                    @let sign = statusSign(tag);
+                    <button
+                      type="button"
+                      class="flex h-7 items-center gap-1 rounded-md px-2 text-xs ring-1 transition-colors"
+                      [class]="
+                        sign > 0
+                          ? 'bg-emerald-500/15 text-emerald-100 ring-emerald-400/50'
+                          : sign < 0
+                            ? 'bg-red-500/15 text-red-100 ring-red-400/50'
+                            : 'bg-white/[0.03] text-slate-400 ring-white/10 hover:text-slate-200'
+                      "
+                      [matTooltip]="sign > 0 ? 'Bônus (clique: penalidade)' : sign < 0 ? 'Penalidade (clique: tirar)' : 'Fora da rolagem (clique: bônus)'"
+                      (click)="cycleStatus(tag)"
+                    >
+                      {{ tag.text }}
+                      @if (sign) {
+                        <span class="font-semibold tabular-nums">{{ sign > 0 ? '+' : '−' }}{{ tag.level }}</span>
+                      } @else {
+                        <span class="tabular-nums text-slate-500">{{ tag.level }}</span>
+                      }
+                    </button>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        </section>
+      }
 
-    <!-- ===== Estudos e Treinos (sem modificador: 12+ soma 1 SA, crítico soma 2) ===== -->
-    @if (studies().length) {
-      <section>
-        <h4 class="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-500">Estudos e Treinos · sem modificador</h4>
-        <div class="flex flex-wrap gap-1">
-          @for (study of studies(); track study.id) {
-            @let on = isStudying(study);
-            <button
-              type="button"
-              class="flex h-7 items-center gap-1.5 rounded-md px-2 text-xs ring-1 transition-colors"
-              [class]="on ? 'bg-amber-400/15 text-amber-100 ring-amber-300/50' : 'bg-white/[0.03] text-slate-400 ring-white/10 hover:text-slate-200'"
-              [attr.aria-pressed]="on"
-              matTooltip="Treinar nesta rolagem: 12+ soma 1 SA, sucesso crítico soma 2"
-              (click)="toggleStudy(study)"
-            >
-              <mat-icon class="!size-3.5 !text-[14px]">school</mat-icon>
-              {{ study.text }}
-              <span class="tabular-nums text-slate-500">{{ studyProgress(study) }}</span>
-            </button>
-          }
-        </div>
-      </section>
-    }
+      <!-- ===== Etiquetas de status (bônus ou penalidade) ===== -->
+      @if (statusTags().length) {
+        <section>
+          <h4 class="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-500">Etiquetas · clique: + / − / fora</h4>
+          <div class="flex flex-wrap gap-1">
+            @for (tag of statusTags(); track tag.id) {
+              @let sign = statusSign(tag);
+              <button
+                type="button"
+                class="flex h-7 items-center gap-1.5 rounded-md px-2 text-xs ring-1 transition-colors"
+                [class]="
+                  sign > 0
+                    ? 'bg-emerald-500/15 text-emerald-100 ring-emerald-400/50'
+                    : sign < 0
+                      ? 'bg-red-500/15 text-red-100 ring-red-400/50'
+                      : 'bg-white/[0.03] text-slate-400 ring-white/10 hover:text-slate-200'
+                "
+                [matTooltip]="sign > 0 ? 'Bônus (clique: penalidade)' : sign < 0 ? 'Penalidade (clique: tirar)' : 'Fora da rolagem (clique: bônus)'"
+                (click)="cycleStatus(tag)"
+              >
+                <span class="size-2.5 shrink-0 rounded-full" [style.background]="tag.color"></span>
+                {{ tag.text }}
+                @if (sign) {
+                  <span class="font-semibold tabular-nums">{{ sign > 0 ? '+' : '−' }}{{ statusValue(tag) }}</span>
+                }
+              </button>
+            }
+          </div>
+        </section>
+      }
 
-    @if (!themeGroups().length && !itemGroups().length && !statusTags().length && !studies().length) {
+      <!-- ===== Estudos e Treinos (sem modificador: 12+ soma 1 SA, crítico soma 2) ===== -->
+      @if (studies().length) {
+        <section>
+          <h4 class="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-500">Estudos e Treinos · sem modificador</h4>
+          <div class="flex flex-wrap gap-1">
+            @for (study of studies(); track study.id) {
+              @let on = isStudying(study);
+              <button
+                type="button"
+                class="flex h-7 items-center gap-1.5 rounded-md px-2 text-xs ring-1 transition-colors"
+                [class]="on ? 'bg-amber-400/15 text-amber-100 ring-amber-300/50' : 'bg-white/[0.03] text-slate-400 ring-white/10 hover:text-slate-200'"
+                [attr.aria-pressed]="on"
+                matTooltip="Treinar nesta rolagem: 12+ soma 1 SA, sucesso crítico soma 2"
+                (click)="toggleStudy(study)"
+              >
+                <mat-icon class="!size-3.5 !text-[14px]">school</mat-icon>
+                {{ study.text }}
+                <span class="tabular-nums text-slate-500">{{ studyProgress(study) }}</span>
+              </button>
+            }
+          </div>
+        </section>
+      }
+
+      @if (!themeGroups().length && !itemGroups().length && !statusTags().length && !studies().length) {
+        <p class="text-[11px] leading-relaxed text-slate-500">
+          Sem tags para somar: selecione o token de quem rola (ou escolha em "Agindo") para usar as tags e etiquetas da ficha.
+        </p>
+      }
+    } @else {
       <p class="text-[11px] leading-relaxed text-slate-500">
-        Sem tags para somar: selecione o token de quem rola (ou escolha em "Agindo") para usar as tags e etiquetas da ficha.
+        Rolagens de 3d6 (sorte) não usam etiquetas: só o modificador escolhido acima.
       </p>
     }
   </div>

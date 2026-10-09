@@ -16,7 +16,7 @@ import {
   hasSheet,
 } from '../../../../core/models/table-session.model';
 import { SheetTagOption, TableSessionService } from '../../services/table-session.service';
-import { NEGATED_TAG_PREFIX, attributeSign, baseTagId, formatModifier } from '../../utils/dice';
+import { NEGATED_TAG_PREFIX, attributeSign, baseTagId, formatModifier, rollUsesTags } from '../../utils/dice';
 import { FxPicker } from '../fx-picker/fx-picker';
 
 /** Faixas de resultado de cada dado (legenda da configuração da rolagem). */
@@ -65,6 +65,8 @@ export class EntryWindow {
 
   readonly roll = computed<RollConfig>(() => this.entry()?.roll ?? DEFAULT_ROLL);
   readonly guide = computed(() => OUTCOME_GUIDE[this.roll().dice]);
+  /** O dado da ação aceita tags da ficha? (3d6: só o modificador fixo; as tags ligadas ficam salvas, mas não valem) */
+  readonly usesTags = computed(() => rollUsesTags(this.roll().dice));
 
   /** Trocar o dono desliga as tags do dono anterior. */
   setOwner(value: string): void {

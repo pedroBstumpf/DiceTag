@@ -519,13 +519,16 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   A barra de baixo (`hotbar`, até 10; teclas 1–9 e 0) mostra as ações de quem age; espaço vazio (só mestre) cria
   uma ação já com esse dono; o jogador cria as dele na aba Habilidades da ficha.
 - **Rolagem básica** ("Rolar", à direita da barra de baixo, mestre e jogador; `QuickRoll` num overlay do CDK): 2d12 ou
-  3d6 + modificador escolhido na hora, **não salvo**. Soma tags/defeitos dos temas, etiquetas dos itens equipados e etiquetas de status da ficha de
+  3d6 + modificador escolhido na hora, **não salvo**. No 2d12 (o 3d6 usa só o modificador fixo) soma tags/defeitos dos temas, etiquetas dos itens equipados e etiquetas de status da ficha de
   quem age (`actorSheetId`); cada etiqueta (de status ou de item) vira bônus ou penalidade (clique: + → − → fora; sem nível vale 1), regra
   pura em `quickModifier` (`utils/dice.ts`). `session.quickRoll` grava no chat ("Rolagem", ícone `casino`).
 - **Rolagem** (`RollConfig { dice: '2d12' | '3d6', modifier, attributes? }`, puro em `utils/dice.ts`):
   2d12 → total < 0 falha crítica · < 12 falha · 12–17 sucesso parcial · 18–23 sucesso · **24+ sucesso crítico**;
   3d6 → até 9 azar · 10–12 neutro · 13+ sorte. O modificador passa sempre por `effectiveModifier(roll, levels)`:
   valor fixo + nível atual das tags dos temas ligadas em `roll.attributes` (defeitos subtraem).
+  **3d6 não usa etiquetas** (`rollUsesTags`): nem temas, itens, status ou estudos; vale só o modificador fixo. As tags
+  ligadas a uma ação que passou para 3d6 continuam salvas (valem de novo se ela voltar a 2d12), mas são ignoradas, e a
+  `EntryWindow` e o `QuickRoll` escondem as etiquetas no 3d6.
 - **Usar** (`useAction`): rola, grava no chat em nome de quem agiu, mostra um aviso e, se a ação tiver
   `effect`, arma o efeito (`armedFx`): ferramenta Efeitos ativa até o próximo arraste; depois volta à
   ferramenta anterior. Esc ou trocar de ferramenta desarma.

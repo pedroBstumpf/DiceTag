@@ -97,8 +97,13 @@
       </div>
     </section>
 
-    <!-- ===== Tags do personagem somadas ao modificador ===== -->
-    @if (ownerHasSheet()) {
+    <!-- ===== Tags do personagem somadas ao modificador (só no 2d12) ===== -->
+    @if (ownerHasSheet() && !usesTags()) {
+      <p class="mt-6 text-[11px] leading-relaxed text-slate-500">
+        Rolagens de 3d6 (sorte) não usam tags nem etiquetas da ficha: só o modificador fixo acima.
+      </p>
+    }
+    @if (ownerHasSheet() && usesTags()) {
       <section class="mt-6">
         <div class="mb-2 flex items-baseline justify-between gap-2">
           <h4 class="text-xs text-slate-400">Tags da ficha no modificador</h4>

@@ -44,8 +44,17 @@ export function keepValidItemTags(attributes: readonly string[], valid: Readonly
   return kept.length === attributes.length ? null : kept;
 }
 
-/** Soma o nível atual das tags ligadas (penalidades subtraem); `only` filtra quais entram. */
+/**
+ * A rolagem usa etiquetas (tags dos temas, itens, status, estudos)? Só o 2d12: o 3d6 (sorte)
+ * recebe apenas o modificador fixo escolhido na hora.
+ */
+export function rollUsesTags(dice: DiceKind): boolean {
+  return dice === '2d12';
+}
+
+/** Soma o nível atual das tags ligadas (penalidades subtraem); `only` filtra quais entram. 3d6 = 0. */
 function sumAttributes(roll: RollConfig, levels: TagLevels, only: (attribute: string) => boolean): number {
+  if (!rollUsesTags(roll.dice)) return 0;
   return (roll.attributes ?? []).filter(only).reduce((sum, id) => sum + attributeSign(id) * (levels.get(baseTagId(id)) ?? 0), 0);
 }
 
@@ -54,6 +63,7 @@ function sumAttributes(roll: RollConfig, levels: TagLevels, only: (attribute: st
  * (`roll.attributes`: tags dos temas, com defeitos de nível negativo, e etiquetas de itens
  * equipados, que podem estar ligadas como penalidade). Tags que não existem mais valem 0.
  * Como o nível é lido na hora, subir uma tag na ficha já muda todas as ações que a usam.
+ * No 3d6 as tags são ignoradas (ficam salvas na ação, caso ela volte a ser 2d12).
  */
 export function effectiveModifier(roll: RollConfig, levels: TagLevels = NO_LEVELS): number {
   return roll.modifier + sumAttributes(roll, levels, () => true);
@@ -109,8 +119,12 @@ export function rollOutcome(dice: DiceKind, total: number): RollOutcome {
 
 // --- Estudos e Treinos ---------------------------------------------------------
 
-/** SA ganhos por um estudo ligado à rolagem: 2 no sucesso crítico, 1 com total 12 ou mais, senão 0. */
+/**
+ * SA ganhos por um estudo ligado à rolagem: 2 no sucesso crítico, 1 com total 12 ou mais, senão 0.
+ * Rolagens de 3d6 não usam etiquetas, então não treinam.
+ */
 export function studyGain(total: number, outcome: RollOutcome): number {
+  if (outcome === 'bad-luck' || outcome === 'neutral' || outcome === 'good-luck') return 0;
   if (outcome === 'critical-success') return 2;
   return total >= 12 ? 1 : 0;
 }

@@ -6,7 +6,7 @@ import { DICE_KINDS, DiceKind, ROLL_OUTCOMES } from '../../../../core/models/tab
 import { Tag } from '../../../../core/models/tag.model';
 import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
 import { SheetTagOption, TableSessionService } from '../../services/table-session.service';
-import { StatusPick, formatModifier, levelUpText, quickModifier } from '../../utils/dice';
+import { StatusPick, formatModifier, levelUpText, quickModifier, rollUsesTags } from '../../utils/dice';
 
 /** Tags e defeitos de um tema (ou etiquetas de um item equipado), para agrupar no painel. */
 interface ThemeGroup {
@@ -23,9 +23,10 @@ function groupByTheme(tags: SheetTagOption[]): ThemeGroup[] {
 
 /**
  * Painel da rolagem básica (botão "Rolar" da barra de ações): 2d12 ou 3d6 + um modificador
- * escolhido na hora, sem automação. Pode somar as tags e defeitos dos temas, as etiquetas
+ * escolhido na hora, sem automação. No 2d12, pode somar as tags e defeitos dos temas, as etiquetas
  * dos itens equipados e as etiquetas de status da ficha de quem age (`session.actorSheetId`): cada etiqueta (de status ou
- * de item) vira bônus ou penalidade (clique alterna desligada → + → −). Nada é salvo: ao abrir de novo, começa do zero.
+ * de item) vira bônus ou penalidade (clique alterna desligada → + → −). O 3d6 usa só o modificador fixo.
+ * Nada é salvo: ao abrir de novo, começa do zero.
  */
 @Component({
   selector: 'app-quick-roll',
@@ -44,6 +45,8 @@ export class QuickRoll {
   readonly dice = signal<DiceKind>('2d12');
   /** Modificador fixo digitado. */
   readonly fixed = signal(0);
+  /** O dado escolhido aceita etiquetas? (3d6: só o modificador fixo) */
+  readonly usesTags = computed(() => rollUsesTags(this.dice()));
 
   // --- Ficha de quem rola --------------------------------------------------
 
@@ -126,10 +129,13 @@ export class QuickRoll {
   }
 
   /** Parte do modificador vinda dos itens equipados (bônus ou penalidade, conforme o clique). */
-  readonly itemModifier = computed(() => quickModifier(0, [], this.signedPicks(this.itemGroups().flatMap((g) => g.tags))));
+  readonly itemModifier = computed(() =>
+    this.usesTags() ? quickModifier(0, [], this.signedPicks(this.itemGroups().flatMap((g) => g.tags))) : 0,
+  );
 
-  /** Modificador total desta rolagem: fixo + temas + etiquetas de status + itens. */
+  /** Modificador total desta rolagem: fixo + temas + etiquetas de status + itens (3d6: só o fixo). */
   readonly modifier = computed(() => {
+    if (!this.usesTags()) return this.fixed();
     const levels = this.themeGroups()
       .flatMap((g) => g.tags)
       .filter((t) => this.themePicks().has(t.id))
@@ -165,7 +171,7 @@ export class QuickRoll {
   // --- Rolar ---------------------------------------------------------------
 
   roll(): void {
-    const studies = this.studies().filter((s) => this.studyPicks().has(s.id)).map((s) => s.id);
+    const studies = this.usesTags() ? this.studies().filter((s) => this.studyPicks().has(s.id)).map((s) => s.id) : [];
     const { author, roll, levelUps } = this.session.quickRoll(this.dice(), this.modifier(), this.sheetId(), this.itemModifier(), studies);
     const text = `${author} · ${roll.dice}${formatModifier(roll.modifier)} = ${roll.total} — ${ROLL_OUTCOMES[roll.outcome].label}`;
     this.snackBar.open(text, undefined, { duration: 3500 });

@@ -1,4 +1,15 @@
-import { effectiveModifier, formatModifier, formatRoll, itemModifier, quickModifier, rollDice, rollOutcome, studyGain, trainStudy } from './dice';
+import {
+  effectiveModifier,
+  formatModifier,
+  formatRoll,
+  itemModifier,
+  quickModifier,
+  rollDice,
+  rollOutcome,
+  rollUsesTags,
+  studyGain,
+  trainStudy,
+} from './dice';
 
 /** Random que devolve os valores na ordem (para dados previsíveis). */
 function sequence(...values: number[]) {
@@ -87,6 +98,20 @@ describe('tags do personagem no modificador', () => {
     expect(r.modifier).toBe(3);
     expect(r.total).toBe(5);
   });
+
+  it('3d6 ignora as tags ligadas: vale só o modificador fixo', () => {
+    const roll = { dice: '3d6' as const, modifier: 1, attributes: ['esgrima', 'medo', 'item:espada:afiada'] };
+    const withItem = new Map([...levels, ['item:espada:afiada', 2]]);
+    expect(rollUsesTags('3d6')).toBe(false);
+    expect(rollUsesTags('2d12')).toBe(true);
+    expect(effectiveModifier(roll, withItem)).toBe(1);
+    expect(itemModifier(roll, withItem)).toBe(0);
+    expect(formatRoll(roll, withItem)).toBe('3d6+1');
+    const r = rollDice(roll, sequence(0), withItem);
+    expect(r.modifier).toBe(1);
+    expect(r.itemModifier).toBe(0);
+    expect(r.total).toBe(3 + 1);
+  });
 });
 
 describe('rolagem básica (quickModifier)', () => {
@@ -121,8 +146,13 @@ describe('estudos e treinos', () => {
   it('12+ soma 1 SA, sucesso crítico soma 2, abaixo de 12 nada', () => {
     expect(studyGain(11, 'failure')).toBe(0);
     expect(studyGain(12, 'partial')).toBe(1);
-    expect(studyGain(13, 'good-luck')).toBe(1);
     expect(studyGain(25, 'critical-success')).toBe(2);
+  });
+
+  it('rolagens de 3d6 não treinam (não usam etiquetas)', () => {
+    expect(studyGain(13, 'good-luck')).toBe(0);
+    expect(studyGain(12, 'neutral')).toBe(0);
+    expect(studyGain(5, 'bad-luck')).toBe(0);
   });
 
   it('sobe de nível só ao alcançar o SN definido nesta rolagem', () => {
