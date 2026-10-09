@@ -73,8 +73,16 @@ features ──► shared ──► core
 layout  ──► shared, core
 ```
 
-`core` não importa nada de `shared`, `layout` ou `features`. A única exceção consciente é a mesa
-(`game-table`) importar editores e serviços do `worldbuild` para abrir a lore sem sair da mesa.
+`core` não importa nada de `shared`, `layout` ou `features`, e `layout` não importa `features`.
+A regra **não é verificada automaticamente** e hoje tem três exceções conhecidas:
+
+| De → para | O que é importado | Por quê |
+|---|---|---|
+| `shared` → `features` | `QuickActionsService` importa `AuthDialog` e `CreateTableDialog` | as ações rápidas (barra lateral e Home) abrem esses diálogos |
+| `game-table` → `worldbuild` | editores, `Explorer`, `ItemCardView`, diretivas, `WorldbuildService`/`LoreService` | abrir a lore e os itens do mundo sem sair da mesa |
+| `worldbuild` → `game-table` | `CharacterSheetView` e `BlobUrlService` | a ficha base dos NPCs do bestiário é a mesma tela da mesa |
+
+As duas últimas formam um **ciclo** entre as features (ver o plano em [`SPEC.md`](SPEC.md)).
 
 ### Convenção de cada feature
 
@@ -86,6 +94,9 @@ features/<feature>/
 ├── directives/             # diretivas que trocam provedores (ver §5.3)
 └── utils/                  # funções puras + *.spec.ts
 ```
+
+Features pequenas não seguem tudo: `auth/auth-dialog/` e `tables/create-table-dialog/` ficam direto na
+pasta da feature, sem `components/`.
 
 ---
 
@@ -120,13 +131,14 @@ quase toda dúvida de "por que isso sumiu/persistiu".
 | **Sessão da mesa** (não persistido) | signals do `TableSessionService` e serviços da página | até sair da mesa | ferramenta ativa, papel, token selecionado, pincel, barras visíveis, efeitos na tela, desfazer |
 | **Local do componente** | `signal` dentro do componente | enquanto o componente existir | campo em edição, aba aberta, arraste em andamento |
 
-Preferências pequenas de interface usam `localStorage` (`dicetag.session`, `dicetag.sidebarCollapsed`).
+Fora do IndexedDB, o `localStorage` guarda a sessão (`dicetag.session`, id do usuário logado) e uma
+preferência de interface (`dicetag.sidebarCollapsed`).
 
 ### 4.1 Serviços globais (`providedIn: 'root'`)
 
 | Serviço | Estado | Chave no IndexedDB |
 |---|---|---|
-| `StorageService` | conexão com o banco (wrapper chave/valor `get`/`set`/`delete`) | — |
+| `StorageService` | conexão com o banco (wrapper chave/valor `get`/`set`/`delete`) e pedido de armazenamento persistente (`requestPersistence`) | — |
 | `AuthService` | `user` (conta logada ou visitante), `isLoggedIn`, `isGuest` | `users` + `localStorage dicetag.session` |
 | `GameTablesService` | lista de mesas, filtrada pelo usuário atual | `tables` |
 | `WorldbuildService` | árvore de `WorldItem` do usuário (`items`, `byId`, `worldItems`, `worldNpcs`) | `worldbuild:<userId>` |
@@ -150,6 +162,7 @@ Estes serviços existem **uma vez por página aberta** e morrem com ela:
 - **`TableSessionService`** — o coração da mesa (ver §6). Estende `SheetStore`.
 - **`SoundMixerService`** — um `HTMLAudioElement` por som; estado "tocando" só na sessão.
 - **`BlobUrlService`** — cache de *object URLs* dos Blobs (imagens de token, mapas), liberados ao sair.
+  Mora em `game-table/services/`, mas também é fornecido pelo `Worldbuild` (é genérico; candidato a `shared/`).
 - **`WindowManagerService`** — lista de janelas abertas (`id`, geometria, z-index, minimizada, fixada).
 
 ---
@@ -158,7 +171,8 @@ Estes serviços existem **uma vez por página aberta** e morrem com ela:
 
 ### 5.1 Leitura → mutação → persistência
 
-Todos os serviços com dados persistidos seguem o mesmo ciclo:
+Os serviços com edição frequente (`TableSessionService` e `WorldbuildService`/`LoreService`) seguem este
+ciclo. `GameTablesService` e `AuthService` mudam pouco e gravam na hora (`await storage.set`), sem debounce.
 
 ```
 componente                    serviço                           IndexedDB
@@ -188,9 +202,12 @@ Ao carregar, o dado salvo passa por uma função de normalização que preenche 
 
 Por isso **todo campo novo nos modelos é opcional** e tem valor padrão na leitura.
 
-**Troca de usuário** (`WorldbuildService`, `GameTablesService`): um `effect` observa `auth.user()`;
-antes de trocar a chave, grava as pendências do usuário anterior e descarta carregamentos que terminem
-depois da troca.
+**Troca de usuário:** `WorldbuildService` e `GameTablesService` observam `auth.user()` com um `effect`.
+
+- `WorldbuildService` grava as pendências do usuário anterior antes de trocar a chave e descarta
+  carregamentos que terminem depois da troca.
+- `GameTablesService` só recarrega a lista (todas as mesas ficam numa chave e são filtradas por
+  `ownerId`); não tem pendências nem proteção contra um carregamento antigo terminar depois.
 
 ### 5.3 Injeção de dependência como "escopo de dados"
 
@@ -271,7 +288,9 @@ GameTablePage  (providers da mesa; atalhos de teclado na window; abre janelas)
   `TableSessionService`. As **camadas** (`map-layers/`) só desenham e emitem eventos (`tokenDown`, `noteDown`).
 - **Vista**: `Viewport` (`shared/utils/viewport.ts`) + matriz 2D/isométrica (`utils/projection.ts`).
   Toda conversão tela↔mundo passa por `project`/`unproject`.
-- Desenho sem bibliotecas: **SVG** para desenhos, paredes, tokens e efeitos; **`<canvas>`** para a névoa.
+- Desenho sem bibliotecas: **SVG** para desenhos, paredes, régua e efeitos; **`<canvas>`** para a névoa;
+  **HTML** posicionado (`div`/`img`) para tokens, marcadores de anotação e botões de porta (o X de token
+  derrotado é um SVG dentro do token).
 
 ### 6.3 Janelas
 
@@ -373,7 +392,9 @@ Além desses, há specs para `table-session.model.ts` e para a `FxLayer`.
 - **Tailwind 4** nas classes dos templates; tokens de design (`ink-*`, `astral-*`, `star-*`) em
   `src/styles/tailwind.css`. Sem `.scss` por componente.
 - **Angular Material** (M3, escuro) para botões, menus, diálogos, tooltips e snackbars; overrides em `styles.scss`.
-- **CDK** para arrastar e soltar (listas e páginas das anotações) e overlays (`QuickRoll`).
+- **CDK** para reordenar as páginas das anotações (`cdkDropList`) e para o overlay do `QuickRoll`.
+- **Arrastar nativo do HTML5** (`draggable` + `dragstart`/`drop`) para levar fichas do painel ao mapa,
+  itens às pastas da aba Lore e itens entre pastas no `Explorer`.
 - **`FloatingWindow`** é a peça central da UX: arrastar, redimensionar, minimizar, maximizar e fixar,
   com estado em `model()` controlado pelo `WindowManagerService` da página.
 
