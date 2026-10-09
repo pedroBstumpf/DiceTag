@@ -781,13 +781,13 @@ function meteor(b: FxBuilder, R: number): Built {
 
 /**
  * Erupção: uma fileira de explosões de estacas ao longo do arraste (sem linha ligando os pontos).
- * Cada ponto: cratera escura no chão, brilho, anel de impacto, 4–6 estacas saindo do centro
- * (~1 quadrado) e destroços.
+ * Cada ponto: cratera escura no chão, brilho, anel de impacto, 4–5 estacas saindo do centro
+ * (~1 a 1,7 quadrado) e destroços.
  */
 function eruption(b: FxBuilder, L: number): Built {
   const grid = b.ctx.grid;
   const step = 80;
-  const n = Math.min(12, Math.max(2, Math.round(L / (grid * 1.15))));
+  const n = Math.min(10, Math.max(2, Math.round(L / (grid * 1.7))));
   const spikeFill = b.gradient('linear', [{ offset: 0, color: b.color }, { offset: 0.55, color: b.light }, { offset: 1, color: WHITE }]);
   const crater = b.gradient('radial', [
     { offset: 0, color: b.dark, opacity: 0.85 },
@@ -798,8 +798,8 @@ function eruption(b: FxBuilder, L: number): Built {
   const parts: FxPart[] = [];
   for (let i = 0; i < n; i++) {
     const x = (L * (i + 0.5)) / n;
-    const y = b.rnd(-1, 1) * grid * 0.2;
-    const s = grid * b.rnd(0.55, 0.8);
+    const y = b.rnd(-1, 1) * grid * 0.3;
+    const s = grid * b.rnd(0.95, 1.25);
     const delay = i * step;
     const k = Math.floor(b.rnd(4, 6));
     const rot = b.rnd(0, Math.PI * 2);

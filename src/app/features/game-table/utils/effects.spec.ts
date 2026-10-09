@@ -79,7 +79,7 @@ describe('buildFx (todos os efeitos)', () => {
     });
   }
 
-  it('erupção: sem linha ligando os pontos e estacas do tamanho de ~1 quadrado', () => {
+  it('erupção: sem linha ligando os pontos e estacas grandes (até ~1,7 quadrado)', () => {
     const grid = 70;
     const d = buildFx('eruption', '#ff7a1a', { x: 0, y: 0 }, { x: 420, y: 0 }, { uid: 'e', scale: 1, grid, random: seededRandom(5) });
     const parts = flatten(d.parts);
@@ -90,8 +90,8 @@ describe('buildFx (todos os efeitos)', () => {
       return Math.max(...pts.flatMap((a) => pts.map((b) => Math.hypot(a[0] - b[0], a[1] - b[1]))));
     });
     expect(spikes.length).toBeGreaterThanOrEqual(8);
-    expect(Math.max(...spikes)).toBeGreaterThan(grid * 0.8);
-    expect(Math.min(...spikes)).toBeGreaterThan(grid * 0.3);
+    expect(Math.max(...spikes)).toBeGreaterThan(grid * 1.3);
+    expect(Math.min(...spikes)).toBeGreaterThan(grid * 0.5);
   });
 
   it('mesma semente = mesmo desenho', () => {
