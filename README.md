@@ -93,9 +93,12 @@ O mapa ocupa a tela inteira e as barras flutuam por cima — todas escondíveis:
 Clicar num personagem no painel abre a ficha, com quatro abas:
 - **Ficha:** cards de tamanhos diferentes — **Básico** (imagem, nome, raça, sub-raça e rótulos), **Status**
   (barras Corpo, Mente e Espírito, começando em 24, e as etiquetas do personagem, que também aparecem no token), **Relações**
-  (personagens com nível de 1 a 6 e descrição) e três **Temas** (nome, tags com nível de 1 a 6 e **Defeitos**
-  com nível de -1 a -6) e, abaixo deles, os itens **Equipados** (clique abre o cartão do item numa janela).
-- **Inventário:** lista dos itens do personagem e, ao lado, o cartão do item selecionado (imagem, nome e etiquetas).
+  (personagens com nível de 1 a 6 e descrição) e três **Temas** (nome, tags com nível de 1 a 6, **Defeitos**
+  com nível de -1 a -6 e um **Objetivo** com 5 marcadores de avanço) e, abaixo deles, os itens **Equipados** (clique
+  abre o cartão do item numa janela) e os **Estudos e Treinos**: três etiquetas com SA (Sucessos Acumulados) e SN
+  (Sucessos Necessários, definido pelo mestre). Ligado a uma rolagem, sem modificador, o estudo ganha 1 SA com 12+ e 2
+  com sucesso crítico; ao alcançar o SN, mestre e jogador são avisados de que ele subiu de nível.
+- **Inventário:** lista dos itens do personagem e, ao lado, o cartão do item selecionado (imagem, nome, descrição e etiquetas).
   Editar o cartão aqui vale só para aquele personagem (o item do Worldbuild não muda). A caixa à esquerda de cada
   item marca se ele está **equipado**. Itens que um jogador cria no inventário ficam só naquela mesa (não vão para o
   Worldbuild) e aparecem na aba **Lore** da mesa, visíveis a todos os jogadores.
@@ -123,7 +126,7 @@ com as etiquetas e mudanças que fez nele.
 
 ### Tokens
 Arraste a ficha de um personagem ou NPC do painel para o mapa para colocar o token. Ele tem imagem
-circular, tamanho, visão, barras (ex.: PV 12/20) e etiquetas com cor e nível (ex.: Exaustão 2), tudo
+circular, tamanho (de meio quadrado até 6, para criaturas enormes), visão, barras (ex.: PV 12/20) e etiquetas com cor e nível (ex.: Exaustão 2), tudo
 configurado com **duplo clique no token**. Tokens de **personagem** são vinculados à ficha; cada token de
 **NPC** é independente (cinco goblins, cinco PVs). Arraste para mover (snap à grade; Shift ou grade
 escondida = livre), use **WASD/setas** para deslizar devagar, a alça para redimensionar e Delete para remover.
@@ -139,8 +142,8 @@ PageUp/PageDown sobem e descem o token selecionado. Paredes e portas são de cad
 em foco e só bloqueiam a visão nela.
 
 ### Ações, rolagens e chat
-Cada ação rola **2d12** ou **3d6** + modificador. 2d12: abaixo de 0 falha crítica, até 11 falha, até 16
-sucesso parcial, até 23 sucesso, 24+ sucesso crítico. 3d6: até 9 azar, 10–12 neutro, 13+ sorte. O resultado
+Cada ação rola **2d12** ou **3d6** + modificador. 2d12: abaixo de 0 falha crítica, até 11 falha, 12 a 17
+sucesso parcial, 18 a 23 sucesso, 24+ sucesso crítico. 3d6: até 9 azar, 10–12 neutro, 13+ sorte. O resultado
 vai para o **chat** da mesa, que também recebe mensagens digitadas.
 
 ### Efeitos especiais

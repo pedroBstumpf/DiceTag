@@ -285,7 +285,8 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 
 ### Worldbuild (`WorldbuildService`)
 - Tipos: `folder`, `document` (HTML do Tiptap em `content`), `timeline` (`events[]` + `links[]`), `image` (`blobId`),
-  `item` (cartão: `blobId` opcional = imagem, nome e `tags: Tag[]`), `npc` (bestiário: `sheet` + `token` padrão;
+  `item` (cartão: `blobId` opcional = imagem, nome, `description` e `tags: Tag[]`; a descrição também pode ser
+  personalizada no inventário, como nome e etiquetas), `npc` (bestiário: `sheet` + `token` padrão;
   padrões em `npcSheetOf` / `npcTokenOf`).
 - **Bestiário (NPCs):** aba **NPCs** do explorador (e "NPC" no menu Criar). A ficha base abre com a mesma
   `CharacterSheetView` + `WorldNpcStore` (diretiva `appWorldNpcSheet`), sem Relações, Anotações nem Habilidades.
@@ -400,13 +401,19 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
     Fichas novas (personagem e NPC) começam com as três barras em **24/24** (`DEFAULT_STATUS_MAX`).
   - **Relações:** nome, nível **1–6** (`LevelPips`) e descrição.
   - **Temas (3):** nome + tags com nível **1–6** e, embaixo, **Defeitos** (`flaws`) com nível **-1 a -6**
-    (`LevelPips` com `negative`). Fichas antigas ganham `flaws: []` em `sheetOf`.
+    (`LevelPips` com `negative`). Fichas antigas ganham `flaws: []` em `sheetOf`. Só personagem: **Objetivo** abaixo dos
+    defeitos (`goal`, texto, + `goalProgress` de 0 a `GOAL_STEPS` = 5 marcadores; clicar no último aceso desmarca).
   - **Equipados** (personagem e NPC, abaixo dos temas, fora do `fieldset` para quem só lê também abrir): itens com
     `InventoryEntry.equipped` (caixa à esquerda de cada item na aba Inventário, `canEquip`). Clique (só na mesa) abre a
     janela `equip:<id da ficha>:<id no inventário>` (`EquippedItemWindow`: o mesmo `ItemCardView` do inventário,
     editável por quem edita a ficha). A linha do inventário (personalização x original) é montada por `inventoryRow`
     (`utils/inventory.ts`; as fontes vêm de `itemSources` em `sheet-inventory`). Transferir um item (`addOne`) não leva
     o "equipado".
+  - **Estudos e Treinos** (só personagem, abaixo dos Equipados): `CharacterSheet.studies`, sempre `SHEET_STUDY_COUNT` = 3
+    (`CharacterStudy { text, sa, sn }`; etiqueta sem cor). SN só o mestre edita. Ligado a uma rolagem (painel "Rolar" ou
+    ação, via `studyTagsOf` em `rollTagsOf`, nível 0 = sem modificador): `studyGain` (12+ → 1 SA, sucesso crítico → 2) e
+    `trainStudy` (`utils/dice.ts`); `session.trainStudies` grava e, ao alcançar o SN, avisa no chat e devolve os nomes
+    (`levelUps`) para o aviso "⭐ … subiu de nível!" de quem rolou.
 - **Aba Inventário** (`SheetInventory`): `InventoryEntry { itemId, global?, table? }` referencia um item do mundo (Worldbuild do
   usuário ou Lore geral) ou da mesa (`TableState.items`); a lista mostra os nomes e, ao lado, o cartão **editável** (`ItemCardView`). Editar ali é
   **cópia sob demanda**: só o que mudou vai para a entrada (`name`, `tags`, `blobId`) e vale no lugar do original —
@@ -502,7 +509,7 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   quem age (`actorSheetId`); cada etiqueta (de status ou de item) vira bônus ou penalidade (clique: + → − → fora; sem nível vale 1), regra
   pura em `quickModifier` (`utils/dice.ts`). `session.quickRoll` grava no chat ("Rolagem", ícone `casino`).
 - **Rolagem** (`RollConfig { dice: '2d12' | '3d6', modifier, attributes? }`, puro em `utils/dice.ts`):
-  2d12 → total < 0 falha crítica · < 12 falha · < 17 sucesso parcial · < 24 sucesso · **24+ sucesso crítico**;
+  2d12 → total < 0 falha crítica · < 12 falha · 12–17 sucesso parcial · 18–23 sucesso · **24+ sucesso crítico**;
   3d6 → até 9 azar · 10–12 neutro · 13+ sorte. O modificador passa sempre por `effectiveModifier(roll, levels)`:
   valor fixo + nível atual das tags dos temas ligadas em `roll.attributes` (defeitos subtraem).
 - **Usar** (`useAction`): rola, grava no chat em nome de quem agiu, mostra um aviso e, se a ação tiver
@@ -542,7 +549,7 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - Envio de vários arquivos `audio/*` (ou extensão de áudio) pelo botão ou arrastando para a aba Sons.
 
 ### Tokens — regra de vínculo (único lugar: `resolveToken` / `updateToken`)
-- `TableEntry.token` (ficha): `blobId`, `size` (0.5–4 quadrados), `vision { enabled, range (m) }`, `speed?`, `bars`, `tags`
+- `TableEntry.token` (ficha): `blobId`, `size` (0.5–6 quadrados; `TOKEN_SIZES` vai até 6 para criaturas enormes), `vision { enabled, range (m) }`, `speed?`, `bars`, `tags`
   (`TokenTag.level` opcional, ex.: Exaustão 2). Cores de barras/etiquetas: paleta `TOKEN_COLORS` ou cor livre.
   Padrão (`defaultToken`): tamanho 1, visão 18 m (ligada para personagem, desligada para NPC).
 - `Scene.tokens: TokenPlacement { id, entryId, x, y (centro), size?, bars?, tags? }`.
