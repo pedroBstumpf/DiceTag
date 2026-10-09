@@ -307,6 +307,31 @@
                   <h4 class="sheet-label mb-1.5 !text-red-300/70">Defeitos</h4>
                   <ng-container *ngTemplateOutlet="themeTags; context: { theme: theme, list: 'flaws' }" />
                 </div>
+
+                <!-- Objetivo do tema (só personagem): texto + avanço em 5 marcadores -->
+                @if (!isNpc()) {
+                  <div class="mt-3 border-t border-star-400/15 pt-2">
+                    <h4 class="sheet-label mb-1.5 !text-star-400/80">Objetivo</h4>
+                    <textarea
+                      #goalInput
+                      rows="2"
+                      class="w-full resize-none rounded-md bg-ink-950 px-2 py-1.5 text-xs leading-relaxed text-slate-200 outline-none ring-1 ring-white/10 placeholder:text-slate-600 focus:ring-astral-500/60"
+                      placeholder="O que o personagem busca neste tema"
+                      [attr.aria-label]="'Objetivo do tema ' + (i + 1)"
+                      [value]="theme.goal"
+                      (input)="updateTheme(theme.id, { goal: goalInput.value })"
+                    ></textarea>
+                    <div class="mt-1 flex items-center justify-between gap-2">
+                      <span class="text-[11px] text-slate-500">Avanço</span>
+                      <app-level-pips
+                        [value]="theme.goalProgress"
+                        [max]="goalSteps"
+                        label="Avanço do objetivo"
+                        (picked)="setGoalProgress(theme, $event)"
+                      />
+                    </div>
+                  </div>
+                }
               </section>
             }
           </div>

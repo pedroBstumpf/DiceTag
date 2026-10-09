@@ -8,6 +8,7 @@ import {
   CharacterSheet,
   CharacterTheme,
   CURRENCY,
+  GOAL_STEPS,
   NPC_TOKEN_SHEET,
   SHEET_MAX_LEVEL,
   TableEntry,
@@ -296,6 +297,15 @@ export class CharacterSheetView {
 
   removeThemeTag(theme: CharacterTheme, list: ThemeTagList, tagId: string): void {
     this.updateTheme(theme.id, { [list]: theme[list].filter((t) => t.id !== tagId) });
+  }
+
+  // --- Objetivo dos temas (personagem) -------------------------------------
+
+  readonly goalSteps = GOAL_STEPS;
+
+  /** Clicar no último marcador aceso desmarca ele (permite voltar a 0). */
+  setGoalProgress(theme: CharacterTheme, value: number): void {
+    this.updateTheme(theme.id, { goalProgress: value === theme.goalProgress ? value - 1 : value });
   }
 
   // --- Equipados (personagem) ----------------------------------------------

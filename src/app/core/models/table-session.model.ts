@@ -216,7 +216,14 @@ export interface CharacterTheme {
   tags: ThemeTag[];
   /** Defeitos (nível -1 a -6). Fichas antigas ganham [] em `sheetOf`. */
   flaws: ThemeTag[];
+  /** Personagem: objetivo do tema (texto livre). Padrão: ''. */
+  goal: string;
+  /** Personagem: avanço do objetivo, de 0 a GOAL_STEPS marcadores. Padrão: 0. */
+  goalProgress: number;
 }
+
+/** Marcadores de avanço do objetivo de cada tema. */
+export const GOAL_STEPS = 5;
 
 /** Lista de tags de um tema: positivas ou defeitos. */
 export type ThemeTagList = 'tags' | 'flaws';
@@ -309,7 +316,14 @@ export function defaultSheet(): CharacterSheet {
     subrace: '',
     labels: [],
     relations: [],
-    themes: Array.from({ length: SHEET_THEME_COUNT }, (_, i) => ({ id: `theme-${i + 1}`, name: '', tags: [], flaws: [] })),
+    themes: Array.from({ length: SHEET_THEME_COUNT }, (_, i) => ({
+      id: `theme-${i + 1}`,
+      name: '',
+      tags: [],
+      flaws: [],
+      goal: '',
+      goalProgress: 0,
+    })),
     inventory: [],
     notes: withFixedNotePages([]),
     eiros: 0,
@@ -318,12 +332,15 @@ export function defaultSheet(): CharacterSheet {
 
 /**
  * Ficha salva com os valores padrão dos campos ausentes: sempre SHEET_THEME_COUNT temas
- * (com `flaws`) e as páginas fixas das anotações no início. Fichas antigas sempre abrem.
+ * (com `flaws` e objetivo) e as páginas fixas das anotações no início. Fichas antigas sempre abrem.
  */
 export function normalizeSheet(raw: Partial<CharacterSheet> | undefined): CharacterSheet {
   const empty = defaultSheet();
   const sheet = { ...empty, ...raw };
-  const themes = empty.themes.map((theme, i) => ({ ...theme, ...sheet.themes[i], flaws: sheet.themes[i]?.flaws ?? [] }));
+  const themes = empty.themes.map((theme, i) => {
+    const saved = sheet.themes[i];
+    return { ...theme, ...saved, flaws: saved?.flaws ?? [], goal: saved?.goal ?? '', goalProgress: saved?.goalProgress ?? 0 };
+  });
   return { ...sheet, themes, notes: withFixedNotePages(sheet.notes) };
 }
 
