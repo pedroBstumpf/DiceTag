@@ -59,7 +59,6 @@ export class SidePanel {
   private readonly loreGeneral = inject(LoreService);
   private readonly blobs = inject(BlobUrlService);
 
-  readonly worldMeta = WORLD_ITEM_META;
   /** Ids das janelas dos exploradores (worldbuild e Lore geral) na mesa. */
   readonly worldbuildWindow = WORLDBUILD_WINDOW;
   readonly loreWindow = LORE_WINDOW;
