@@ -3,7 +3,7 @@
 <form [formGroup]="form" (ngSubmit)="submit()">
   <mat-dialog-content class="flex flex-col gap-1 !pt-2">
     <!-- Nome -->
-    <mat-form-field appearance="outline">
+    <mat-form-field appearance="outline" class="w-full">
       <mat-label>Nome da mesa</mat-label>
       <input matInput formControlName="name" placeholder="Ex.: A Queda de Valdris" cdkFocusInitial />
       @if (form.controls.name.hasError('required')) {
@@ -30,7 +30,7 @@
     </div>
 
     <!-- Descrição -->
-    <mat-form-field appearance="outline">
+    <mat-form-field appearance="outline" class="w-full">
       <mat-label>Descrição (opcional)</mat-label>
       <textarea matInput rows="3" formControlName="description" placeholder="Sobre o que é a campanha?"></textarea>
       <mat-hint align="end">{{ form.controls.description.value.length }}/400</mat-hint>
