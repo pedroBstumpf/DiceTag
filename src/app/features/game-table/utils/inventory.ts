@@ -22,10 +22,7 @@ export interface ItemSources {
   table: ReadonlyMap<string, CardItem>;
 }
 
-/**
- * Origem do item. Entradas antigas marcadas como da Lore geral (`global`) são procuradas no
- * mundo: a Lore geral foi importada para ele com os mesmos ids.
- */
+/** Origem do item: da mesa (`table`) ou do mundo. */
 function sourceOf(entry: InventoryEntry): ItemSource {
   return entry.table ? 'table' : 'own';
 }

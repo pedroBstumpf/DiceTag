@@ -176,8 +176,6 @@ export interface TableEntry {
    * na própria entrada (criado antes do bestiário).
    */
   worldNpcId?: string;
-  /** Legado: a ficha base estava na antiga Lore geral (hoje importada para o mundo, com o mesmo id; ignorado). */
-  worldNpcGlobal?: boolean;
   /** npc: conta do jogador autorizado pelo mestre a ver, editar e controlar o NPC (ausente = só o mestre). */
   controllerUserId?: string;
   /** character/npc: configuração do token. Padrão: defaultToken(kind). */
@@ -256,8 +254,6 @@ export type ThemeTagList = 'tags' | 'flaws';
 export interface InventoryEntry {
   id: string;
   itemId: string;
-  /** Legado: o item vinha da antiga Lore geral (hoje importada para o mundo, com o mesmo id; ignorado). */
-  global?: boolean;
   /** O item foi criado nesta mesa (`TableState.items`), fora do Worldbuild. */
   table?: boolean;
   /** Nome personalizado (ausente = nome do original). */
@@ -339,10 +335,9 @@ export interface CharacterSheet {
 /** Campo da ficha que recebe uma Raça. */
 export type RaceSlot = 'race' | 'subrace';
 
-/** Referência a uma Raça do mundo. `global` = legado (era da antiga Lore geral, hoje importada; ignorado). */
+/** Referência a uma Raça do mundo. */
 export interface RaceRef {
   id: string;
-  global?: boolean;
 }
 
 /** O que uma Raça aplicou na ficha: rótulos que ela acrescentou e modificadores somados ao máximo. */

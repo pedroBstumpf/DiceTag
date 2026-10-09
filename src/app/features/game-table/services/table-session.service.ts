@@ -890,10 +890,7 @@ export class TableSessionService extends SheetStore {
     equal: (a, b) => a.size === b.size && [...a].every(([k, v]) => b.get(k) === v),
   });
 
-  /**
-   * Ficha base no bestiário de um NPC-referência (undefined se não for referência ou se o original
-   * sumiu). Referências antigas à Lore geral (`worldNpcGlobal`) acham o NPC importado para o mundo.
-   */
+  /** Ficha base no bestiário de um NPC-referência (undefined se não for referência ou se o original sumiu). */
   worldNpcOf(entry: TableEntry): WorldItem | undefined {
     return entry.worldNpcId ? this.worldNpcMap().get(entry.worldNpcId) : undefined;
   }

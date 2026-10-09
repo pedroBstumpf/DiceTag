@@ -7,7 +7,6 @@ import { StorageService } from '../../../core/services/storage.service';
 import { WorldsService } from '../../../core/services/worlds.service';
 import { newId } from '../../../core/utils/id';
 import { OpenWindow } from '../../../shared/services/window-manager.service';
-import { LEGACY_LORE_IMPORTED_KEY, LEGACY_LORE_KEY, mergeLegacyLore } from '../utils/legacy-lore';
 import { columnLayout } from '../utils/timeline-layout';
 
 /**
@@ -73,9 +72,7 @@ export class WorldbuildService {
         this.desk.set([]);
         this.storageKey = user && ready ? worldbuildKey(user.id, worldId) : null;
         this.deskKey = user && ready ? `desk:${user.id}:${worldId}` : null;
-        // A Lore geral antiga é importada uma vez, para o primeiro mundo
-        const first = this.worlds.worlds()[0]?.id === worldId;
-        if (this.storageKey && user) void this.load(this.storageKey, first ? user.id : null);
+        if (this.storageKey) void this.load(this.storageKey);
       });
     });
   }
@@ -258,11 +255,10 @@ export class WorldbuildService {
     return name;
   }
 
-  /** Carrega os itens da chave. `importLoreFor`: usuário que recebe a Lore geral antiga, se ainda não foi importada. */
-  private async load(key: string, importLoreFor: string | null): Promise<void> {
+  /** Carrega os itens e a mesa de trabalho do mundo. */
+  private async load(key: string): Promise<void> {
     const deskKey = this.deskKey;
-    let items = ((await this.storage.get<WorldItem[]>(key)) ?? []).map(migrateTimeline);
-    if (importLoreFor) items = await this.importLegacyLore(items, importLoreFor, key);
+    const items = ((await this.storage.get<WorldItem[]>(key)) ?? []).map(migrateTimeline);
     const desk = deskKey ? ((await this.storage.get<OpenWindow[]>(deskKey)) ?? []) : [];
     // O usuário ou o mundo mudou durante o carregamento: descarta o resultado antigo
     if (key !== this.storageKey) return;
@@ -283,22 +279,6 @@ export class WorldbuildService {
     clearTimeout(this.deskTimer);
     if (this.pendingDesk && this.deskKey) this.storage.set(this.deskKey, this.pendingDesk);
     this.pendingDesk = null;
-  }
-
-  /**
-   * A Lore geral foi removida do app: o conteúdo dela (chave `lore:global`) entra uma única vez
-   * no primeiro mundo do primeiro usuário que abrir o app, numa pasta "Lore geral (importada)".
-   * Os ids são mantidos, então NPCs, itens e raças usados pelas mesas continuam funcionando.
-   * A chave antiga fica intacta, como cópia de segurança.
-   */
-  private async importLegacyLore(items: WorldItem[], userId: string, key: string): Promise<WorldItem[]> {
-    if (await this.storage.get(LEGACY_LORE_IMPORTED_KEY)) return items;
-    const lore = (await this.storage.get<WorldItem[]>(LEGACY_LORE_KEY)) ?? [];
-    const merged = mergeLegacyLore(items, lore.map(migrateTimeline), { id: newId(), now: Date.now() });
-    // Grava na chave do mundo que estava sendo carregado (mesmo que o usuário já tenha trocado)
-    if (merged !== items) await this.storage.set(key, merged);
-    await this.storage.set(LEGACY_LORE_IMPORTED_KEY, userId);
-    return merged;
   }
 
   /**

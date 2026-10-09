@@ -3,7 +3,7 @@ import { raceTraitsOf } from '../../../core/models/world-item.model';
 import { RaceChoice, applyRace, raceKey } from './race';
 
 const elfo: RaceChoice = {
-  ref: { id: 'elfo', global: true },
+  ref: { id: 'elfo' },
   name: 'Elfo',
   traits: ['Longevo', 'Visão no escuro', ' '],
   statusMods: { 'status-mind': 2, 'status-body': -1 },
@@ -19,7 +19,7 @@ const byId = (list: TokenBar[], id: string) => list.find((b) => b.id === id)!;
 describe('raça na ficha', () => {
   it('aplica as características como rótulos (sem vazios nem repetidos) e soma os modificadores ao máximo', () => {
     const r = applyRace({ labels: ['Nobre', 'Longevo'] }, bars(), 'race', elfo);
-    expect(r.sheet).toMatchObject({ race: 'Elfo', raceRef: { id: 'elfo', global: true } });
+    expect(r.sheet).toMatchObject({ race: 'Elfo', raceRef: { id: 'elfo' } });
     expect(r.sheet.labels).toEqual(['Nobre', 'Longevo', 'Visão no escuro']);
     // "Longevo" já existia: não foi a raça que pôs (não sai ao trocar)
     expect(r.sheet.appliedRaces?.race).toEqual({ labels: ['Visão no escuro'], mods: elfo.statusMods });
@@ -72,8 +72,7 @@ describe('raça na ficha', () => {
     expect(raceTraitsOf(base)).toEqual([]);
   });
 
-  it('raceKey é o id: referências antigas da Lore geral acham a raça importada', () => {
-    expect(raceKey({ id: 'x', global: true })).toBe('x');
+  it('raceKey é o id da raça', () => {
     expect(raceKey({ id: 'x' })).toBe('x');
     expect(raceKey(undefined)).toBe('');
   });

@@ -211,8 +211,7 @@ Por isso **todo campo novo nos modelos é opcional** e tem valor padrão na leit
 `auth.user()` com um `effect`; o `WorldbuildService` também observa o mundo aberto (`WorldsService.activeId`).
 
 - `WorldbuildService` grava as pendências do mundo/usuário anterior antes de trocar a chave e descarta
-  carregamentos que terminem depois da troca. Ao carregar o primeiro mundo, importa uma única vez a antiga
-  Lore geral (`utils/legacy-lore.ts`), mantendo os ids.
+  carregamentos que terminem depois da troca.
 - `GameTablesService` só recarrega a lista (todas as mesas ficam numa chave e são filtradas por
   `ownerId`); não tem pendências nem proteção contra um carregamento antigo terminar depois.
 
@@ -364,7 +363,6 @@ Mudar o volume de um som ou o nome de uma ficha não muda as origens de visão, 
 - **Página** `Worldbuild`: explorador (com seletor de mundo no cabeçalho) à esquerda + área de janelas flutuantes.
 - **Dados**: lista plana de `WorldItem` com `parentId` (árvore). Tipos: `folder`, `document`, `timeline`,
   `image`, `item`, `npc`, `race`. Uma lista por mundo (`worldbuild:<userId>` no primeiro, `worldbuild:<userId>:<worldId>` nos demais).
-- **Lore geral removida**: o conteúdo antigo (`lore:global`) foi importado para o primeiro mundo, com os mesmos ids.
 - **Mesa de trabalho persistida**: as janelas da página Worldbuild são salvas por mundo (`WorldbuildService.desk`,
   `desk:<userId>:<worldId>`) e restauradas pelo `WindowManagerService.restore`. Pastas abrem como janela (`FolderView`).
 - **Componentes**: `Explorer` (abas em ícones: Arquivos/Itens/NPCs/Raças/Linhas do tempo/Documentos/Mapas), `RaceCard`, `DocumentEditor` (sobre o `RichTextEditor`/Tiptap),

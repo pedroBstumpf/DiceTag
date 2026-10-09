@@ -25,10 +25,7 @@ export interface RaceChoice {
   statusMods?: StatusMods;
 }
 
-/**
- * Chave de uma raça na lista: o id. Referências antigas marcadas como da Lore geral (`global`)
- * acham a mesma raça, importada para o mundo com o mesmo id.
- */
+/** Chave de uma raça na lista: o id. */
 export function raceKey(ref: RaceRef | undefined): string {
   return ref?.id ?? '';
 }

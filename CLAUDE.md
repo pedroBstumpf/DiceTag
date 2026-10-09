@@ -19,7 +19,7 @@ organizar toda a atmosfera de uma campanha.
 |---|---|
 | Landing page (banner com logo, atalhos, mural de notícias vazio) | Pronto |
 | Barra lateral global (navegação, **mundos** do usuário, atalhos para as **mesas** — até 6 + "Ver todas" —, conta) | Pronto |
-| **Mundos**: até 2 Worldbuilds separados por usuário; cada mesa se passa num mundo (a Lore geral foi removida e importada) | Pronto |
+| **Mundos**: até 2 Worldbuilds separados por usuário; cada mesa se passa num mundo | Pronto |
 | Contas (login/cadastro locais) + **modo de teste sem conta** | Pronto (provisório) |
 | Minhas mesas (criar, listar, excluir com limpeza dos dados, abrir) | Pronto |
 | Worldbuild (pastas, documentos rich text, **linha do tempo em mapa mental**, mapas/imagens, **itens com cartão**) | Pronto |
@@ -127,11 +127,11 @@ src/
         ├── tables/             # "Minhas mesas" + create-table-dialog
         ├── worldbuild/
         │   ├── worldbuild.ts           # página: explorador (com seletor de mundo) + área de janelas
-        │   ├── services/worldbuild.service.ts   # itens do mundo aberto; migração de timelines antigas; importa a Lore geral antiga
+        │   ├── services/worldbuild.service.ts   # itens e mesa de trabalho do mundo aberto; migração de timelines antigas
         │   ├── services/world-npc.store.ts      # SheetStore das fichas base do bestiário (NPCs do Worldbuild)
         │   ├── directives/world-npc-sheet.directive.ts  # appWorldNpcSheet: a ficha usa o WorldNpcStore
         │   ├── utils/timeline-layout.ts         # layouts, setas e hit test do mapa mental + spec
-        │   ├── utils/legacy-lore.ts             # importação única da antiga Lore geral para o primeiro mundo + spec
+        │   ├── utils/references.ts              # referências dos eventos da linha do tempo a itens do mundo + spec
         │   └── components/ explorer (abas Arquivos/Itens/NPCs/Raças/Linhas do tempo/Documentos/Mapas), race-card,
         │                   document-editor, timeline-editor, image-viewer,
         │                   item-card (ItemCard + ItemCardView)
@@ -186,7 +186,6 @@ src/
 
 Rotas (`app.routes.ts`, todas lazy):
 - `''` (Shell) → `''` Home · `mesas` Tables · `worldbuild` Worldbuild do mundo aberto (aceita `?novo=<tipo>` e `?abrir=<id>`).
-  A antiga rota `/lore` (Lore geral) foi removida; endereços antigos caem no `**`.
 - `mesa/:id` → GameTablePage (tela cheia, **fora** do Shell)
 - `**` → redireciona para `''`
 
@@ -338,11 +337,6 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - Página Worldbuild: seletor no cabeçalho do explorador (`Explorer.worldSwitcher`): trocar, criar (até 2), renomear,
   excluir. **Excluir** apaga itens e Blobs e só é permitido se **nenhuma mesa** se passa no mundo e se sobrar outro.
   Na mesa, o explorador não troca de mundo (é o da mesa). Barra lateral: seção "Mundo" lista os mundos (abre o Worldbuild).
-- **Lore geral removida.** O conteúdo de `lore:global` foi importado **uma vez** para o primeiro mundo do primeiro
-  usuário que abrir o app, numa pasta "Lore geral (importada)", **com os mesmos ids** (`mergeLegacyLore`,
-  `utils/legacy-lore.ts`; marca `lore:global:imported`). A chave antiga fica como cópia de segurança, sem uso.
-  Referências antigas (`InventoryEntry.global`, `TableEntry.worldNpcGlobal`, `RaceRef.global`) são **ignoradas**:
-  tudo é procurado no mundo pelo id.
 
 ### Linha do tempo (mapa mental)
 - Eventos são cartões livres no quadro (`x`/`y` = canto superior esquerdo; tamanho fixo `TIMELINE_CARD`),
@@ -504,7 +498,7 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   NPCs também têm as barras de status (`hasSheet`). Ações de NPC também usam as tags dos temas.
 - **Três níveis** (`SheetData.level`), todos pela mesma tela e pelo `SheetStore`:
   1. **Bestiário** (`world`): a ficha base no Worldbuild do mundo.
-  2. **NPC da mesa** (`npc-base`): `TableEntry.worldNpcId` (+ `worldNpcGlobal`) é **só uma referência** — ficha,
+  2. **NPC da mesa** (`npc-base`): `TableEntry.worldNpcId` é **só uma referência** — ficha,
      imagem e token padrão vêm da base (`worldNpcOf`, `tokenOf`, `sheetOf`, `updateSheet`, `updateEntryToken` gravam
      lá); o nome acompanha o original (`entries` substitui pelo nome atual). Ações, controle e visibilidade são da
      mesa. "+" de NPCs no painel = bestiário (`session.bestiary`) ou "Novo NPC no Worldbuild". Tirar da mesa não apaga
@@ -720,8 +714,6 @@ O `MapStage` recebe `insets` para enquadrar o mapa só na área livre entre as b
 | `worlds:<userId>` | `World[]` (mundos do usuário; ausente = só o primeiro) |
 | `worldbuild:<userId>` | `WorldItem[]` do primeiro mundo (`DEFAULT_WORLD_ID`; itens, NPCs do bestiário, raças…) |
 | `worldbuild:<userId>:<worldId>` | `WorldItem[]` dos outros mundos |
-| `lore:global` | `WorldItem[]` da antiga Lore geral — **sem uso**, cópia de segurança (importada para o primeiro mundo) |
-| `lore:global:imported` | id do usuário que recebeu a importação da Lore geral (marca de "já importado") |
 | `table-state:<tableId>` | `TableState` (cenas com tokens/névoa/memória/paredes/portas/desenhos/anotações/camadas/vista, pastas de cenas, cena ativa, arquivos — com a ficha do personagem em `sheet` e os NPCs como referência ao bestiário —, tokens de NPC com ficha própria, volume mestre, chat, organização da Lore, itens criados na mesa por jogadores) |
 | `blob:<id>` | `Blob` de imagem/mapa/áudio/imagem de token |
 | `desk:<userId>:<worldId>` | `OpenWindow[]`: janelas da mesa de trabalho do Worldbuild daquele mundo (posição, tamanho, estado) |

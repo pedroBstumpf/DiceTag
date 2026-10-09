@@ -2,7 +2,6 @@ import { TestBed } from '@angular/core/testing';
 import { WorldItem } from '../../../core/models/world-item.model';
 import { StorageService } from '../../../core/services/storage.service';
 import { WorldsService } from '../../../core/services/worlds.service';
-import { LEGACY_LORE_FOLDER, LEGACY_LORE_IMPORTED_KEY, LEGACY_LORE_KEY } from '../utils/legacy-lore';
 import { WorldbuildService } from './worldbuild.service';
 
 /** IndexedDB em memória (o jsdom não tem IndexedDB). */
@@ -38,11 +37,8 @@ const item = (id: string, type: WorldItem['type'] = 'document', parentId: string
   updatedAt: 0,
 });
 
-/**
- * Worldbuild com mundos: carrega o mundo aberto e, no primeiro mundo, importa a antiga Lore geral
- * uma única vez (com os mesmos ids), sem apagar a chave antiga.
- */
-describe('WorldbuildService (mundos e importação da Lore geral)', () => {
+/** Worldbuild com mundos: carrega o mundo aberto e a mesa de trabalho dele. */
+describe('WorldbuildService (mundos)', () => {
   let storage: MemoryStorage;
 
   function start(): { service: WorldbuildService; worlds: WorldsService } {
@@ -55,29 +51,12 @@ describe('WorldbuildService (mundos e importação da Lore geral)', () => {
     storage = new MemoryStorage();
   });
 
-  it('importa a Lore geral para o primeiro mundo, uma vez, e mantém a cópia antiga', async () => {
+  it('carrega os itens do primeiro mundo da chave antiga do Worldbuild', async () => {
     storage.data.set('worldbuild:guest', [item('meu')]);
-    storage.data.set(LEGACY_LORE_KEY, [item('npc-lore', 'npc'), item('raca', 'race')]);
     const { service } = start();
     await settle();
-
-    const ids = service.items().map((i) => i.id);
-    expect(ids).toEqual(expect.arrayContaining(['meu', 'npc-lore', 'raca']));
-    const folder = service.items().find((i) => i.name === LEGACY_LORE_FOLDER);
-    expect(folder?.type).toBe('folder');
-    expect(service.byId().get('npc-lore')?.parentId).toBe(folder?.id);
-    // Gravado no mundo, marcado como importado e com a chave antiga intacta
-    expect((storage.data.get('worldbuild:guest') as WorldItem[]).length).toBe(4);
-    expect(storage.data.get(LEGACY_LORE_IMPORTED_KEY)).toBe('guest');
-    expect(storage.data.has(LEGACY_LORE_KEY)).toBe(true);
-  });
-
-  it('não importa de novo se já foi importada', async () => {
-    storage.data.set(LEGACY_LORE_KEY, [item('x')]);
-    storage.data.set(LEGACY_LORE_IMPORTED_KEY, 'outro');
-    const { service } = start();
-    await settle();
-    expect(service.items()).toEqual([]);
+    expect(service.items().map((i) => i.id)).toEqual(['meu']);
+    expect(service.loaded()).toBe(true);
   });
 
   it('mesa de trabalho: janelas salvas por mundo voltam ao reabrir o mundo', async () => {

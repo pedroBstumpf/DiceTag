@@ -57,7 +57,7 @@ src/
             ├── components/    # explorer, document-editor, timeline-editor, image-viewer, item-card, race-card
             ├── directives/    # world-npc-sheet (ficha base dos NPCs do bestiário)
             ├── services/      # worldbuild (itens do mundo aberto + migrações), world-npc store
-            └── utils/         # layout da linha do tempo em mapa mental, importação da antiga Lore geral
+            └── utils/         # layout da linha do tempo em mapa mental, referências dos eventos
 ```
 
 ## Modo de teste (sem conta)
@@ -174,7 +174,7 @@ Várias faixas tocando juntas, cada uma com volume e repetição, mais volume me
 
 Cada usuário tem até **2 mundos**, e cada mundo é um **Worldbuild** separado (escolha e crie no cabeçalho do
 explorador ou pela barra lateral). Cada mesa se passa num mundo, escolhido ao criá-la, e a aba Lore dela mostra os
-itens desse mundo. A antiga **Lore geral** foi removida; o conteúdo dela foi importado para o primeiro mundo.
+itens desse mundo.
 
 - **Explorador** (escondível): pastas livres, arrastar para mover, renomear com duplo clique, busca.
 - **Janelas flutuantes**: cada item abre numa janela que pode ser movida, redimensionada e maximizada (duplo clique na barra).
