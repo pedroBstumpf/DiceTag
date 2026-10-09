@@ -653,6 +653,10 @@ O `MapStage` recebe `insets` para enquadrar o mapa só na área livre entre as b
 O banco e as chaves do `localStorage` mantêm o prefixo `dicetag` (nome antigo do projeto) — assim como o prefixo
 do hash das senhas — para não perder dados, sessões e contas já salvos. **Não renomear.**
 
+**Armazenamento persistente:** `StorageService.requestPersistence()` chama `navigator.storage.persist()` (uma vez por
+sessão) ao criar uma mesa ou um item do Worldbuild/Lore, para o navegador não apagar o IndexedDB quando falta espaço.
+Não protege contra o usuário limpar os dados do site.
+
 Para conectar um backend no futuro: trocar `StorageService` e `AuthService` mantendo as interfaces públicas.
 
 ---

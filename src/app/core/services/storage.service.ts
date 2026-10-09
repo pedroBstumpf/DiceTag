@@ -15,6 +15,25 @@ export class StorageService {
   private readonly dbName = 'dicetag'; // nome antigo do projeto, mantido para não perder os dados salvos
   private readonly storeName = 'kv';
   private dbPromise?: Promise<IDBDatabase>;
+  private persistPromise?: Promise<boolean>;
+
+  /**
+   * Pede ao navegador armazenamento persistente: sem isso, o IndexedDB pode ser apagado
+   * quando falta espaço em disco. Chamado quando o usuário cria dados (mesa, item do mundo),
+   * porque no Firefox o pedido aparece como uma permissão. Só pede uma vez por sessão.
+   */
+  requestPersistence(): Promise<boolean> {
+    this.persistPromise ??= (async () => {
+      const storage = navigator.storage;
+      if (!storage?.persist) return false;
+      try {
+        return (await storage.persisted()) || (await storage.persist());
+      } catch {
+        return false;
+      }
+    })();
+    return this.persistPromise;
+  }
 
   /** Lê um valor (ou undefined se não existir). */
   async get<T>(key: string): Promise<T | undefined> {

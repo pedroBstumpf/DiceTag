@@ -44,6 +44,7 @@ export class GameTablesService {
     const table: GameTable = { ...data, id: newId(), ownerId: user.id, createdAt: Date.now() };
     this.all.update((list) => [...list, table]);
     await this.persist();
+    this.storage.requestPersistence();
     return table;
   }
 

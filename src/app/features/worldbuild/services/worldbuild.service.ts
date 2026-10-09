@@ -112,6 +112,7 @@ export class WorldbuildService {
     };
     this._items.update((list) => [...list, item]);
     this.persist();
+    this.storage.requestPersistence();
     return item;
   }
 
