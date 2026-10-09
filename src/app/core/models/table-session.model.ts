@@ -599,7 +599,7 @@ export interface TokenVision {
 export interface TokenSettings {
   /** Imagem do token no IndexedDB. Sem imagem: inicial do nome num círculo. */
   blobId?: string;
-  /** Tamanho em quadrados da grade (0.5, 1, 2, 3, 4; a alça usa passos de 0.5). */
+  /** Tamanho em quadrados da grade (0.5 a 6; a alça usa passos de 0.5). */
   size: number;
   vision: TokenVision;
   /** Velocidade do movimento por WASD/setas, em quadrados por segundo. Padrão: DEFAULT_TOKEN_SPEED. */
@@ -644,9 +644,10 @@ export interface TokenPlacement {
 export const NPC_TOKEN_SHEET = 'npc:';
 
 /** Tamanhos oferecidos na configuração do token (em quadrados). */
-export const TOKEN_SIZES = [0.5, 1, 2, 3, 4] as const;
+export const TOKEN_SIZES = [0.5, 1, 2, 3, 4, 5, 6] as const;
 export const MIN_TOKEN_SIZE = 0.5;
-export const MAX_TOKEN_SIZE = 4;
+/** Maior tamanho (criaturas enormes): 6 quadrados. */
+export const MAX_TOKEN_SIZE = 6;
 
 /** Metros por quadrado da grade (padrão da maioria dos sistemas). */
 export const METERS_PER_SQUARE = 1.5;
