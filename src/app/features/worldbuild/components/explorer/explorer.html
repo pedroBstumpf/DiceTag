@@ -80,6 +80,15 @@
   (dragleave)="dropTargetId.set(undefined)"
   (drop)="onDrop($event, null)"
 >
+  <!-- Nova pasta na raiz (os demais tipos ficam no "+" do cabeçalho e nas outras abas) -->
+  <button
+    type="button"
+    class="mb-2 flex h-9 w-full items-center gap-2 rounded-lg border border-dashed border-white/10 px-3 text-sm text-astral-300 transition-colors hover:border-astral-400/40 hover:bg-astral-500/10"
+    (click)="create('folder')"
+  >
+    <mat-icon class="!size-5 !text-[20px]">create_new_folder</mat-icon>
+    Nova pasta
+  </button>
   @if (searchResults(); as results) {
     <!-- Resultado de busca: lista plana -->
     @for (item of results; track item.id) {
