@@ -403,7 +403,10 @@ export interface RollResult {
   dice: DiceKind;
   /** Valor de cada dado. */
   rolls: number[];
+  /** Modificador total (fixo + etiquetas do personagem + etiquetas dos itens). */
   modifier: number;
+  /** Parte do modificador vinda das etiquetas dos itens equipados (já somada em `modifier`). Padrão: 0. */
+  itemModifier?: number;
   total: number;
   outcome: RollOutcome;
 }

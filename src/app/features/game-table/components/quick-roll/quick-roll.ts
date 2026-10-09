@@ -6,7 +6,7 @@ import { DICE_KINDS, DiceKind, ROLL_OUTCOMES } from '../../../../core/models/tab
 import { Tag } from '../../../../core/models/tag.model';
 import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
 import { SheetTagOption, TableSessionService } from '../../services/table-session.service';
-import { formatModifier, quickModifier } from '../../utils/dice';
+import { StatusPick, formatModifier, quickModifier } from '../../utils/dice';
 
 /** Tags e defeitos de um tema (ou etiquetas de um item equipado), para agrupar no painel. */
 interface ThemeGroup {
@@ -104,19 +104,25 @@ export class QuickRoll {
     return tag.level || 1;
   }
 
-  /** Modificador total desta rolagem. */
+  /** Parte do modificador vinda dos itens equipados (bônus ou penalidade, conforme o clique). */
+  readonly itemModifier = computed(() => quickModifier(0, [], this.signedPicks(this.itemGroups().flatMap((g) => g.tags))));
+
+  /** Modificador total desta rolagem: fixo + temas + etiquetas de status + itens. */
   readonly modifier = computed(() => {
     const levels = this.themeGroups()
       .flatMap((g) => g.tags)
       .filter((t) => this.themePicks().has(t.id))
       .map((t) => t.level);
-    // Etiquetas de status e de itens: bônus ou penalidade, conforme o clique
-    const signed = [...this.statusTags(), ...this.itemGroups().flatMap((g) => g.tags)].flatMap((t) => {
+    return quickModifier(this.fixed(), levels, this.signedPicks(this.statusTags())) + this.itemModifier();
+  });
+
+  /** Etiquetas escolhidas (de status ou de item), com o sinal do clique. */
+  private signedPicks(tags: { id: string; level?: number }[]): StatusPick[] {
+    return tags.flatMap((t) => {
       const sign = this.statusPicks().get(t.id);
       return sign ? [{ level: t.level, sign }] : [];
     });
-    return quickModifier(this.fixed(), levels, signed);
-  });
+  }
   readonly formula = computed(() => this.dice() + formatModifier(this.modifier()));
 
   // --- Modificador fixo ----------------------------------------------------
@@ -138,7 +144,7 @@ export class QuickRoll {
   // --- Rolar ---------------------------------------------------------------
 
   roll(): void {
-    const { author, roll } = this.session.quickRoll(this.dice(), this.modifier(), this.sheetId());
+    const { author, roll } = this.session.quickRoll(this.dice(), this.modifier(), this.sheetId(), this.itemModifier());
     const text = `${author} · ${roll.dice}${formatModifier(roll.modifier)} = ${roll.total} — ${ROLL_OUTCOMES[roll.outcome].label}`;
     this.snackBar.open(text, undefined, { duration: 3500 });
     this.done.emit();

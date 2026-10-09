@@ -562,8 +562,9 @@ export class TableSessionService extends SheetStore {
    * modificador (já com as tags escolhidas) valem só para esta rolagem. Vai para o chat em
    * nome da ficha `sheetId` (ou do mestre/conta, sem ficha).
    */
-  quickRoll(dice: DiceKind, modifier: number, sheetId: string | null): { author: string; roll: RollResult } {
-    const roll: RollResult = { action: 'Rolagem', icon: 'casino', dice, ...rollDice({ dice, modifier }) };
+  quickRoll(dice: DiceKind, modifier: number, sheetId: string | null, itemModifier = 0): { author: string; roll: RollResult } {
+    // `itemModifier`: parte de `modifier` que vem dos itens equipados (exibida à parte no chat)
+    const roll: RollResult = { action: 'Rolagem', icon: 'casino', dice, ...rollDice({ dice, modifier }), itemModifier };
     const author = (sheetId && this.sheetData(sheetId)?.name) || this.userName();
     this.pushChat({ author, roll });
     return { author, roll };
