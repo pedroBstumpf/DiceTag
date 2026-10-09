@@ -12,19 +12,22 @@
   }
 </header>
 
-<!-- ===== Abas: árvore de arquivos ou lista de itens ===== -->
-<nav class="grid shrink-0 grid-cols-3 gap-1 px-3 pt-3">
+<!-- ===== Abas (ícones; o nome fica na dica): árvore de arquivos ou lista de um tipo ===== -->
+<nav class="grid shrink-0 grid-cols-7 gap-0.5 px-3 pt-3" aria-label="Abas do explorador">
   @for (v of views; track v.id) {
+    @let count = countOf(v.id);
     <button
       type="button"
-      class="flex h-8 items-center justify-center gap-1.5 rounded-lg text-xs font-medium transition-colors"
+      class="relative flex h-9 items-center justify-center rounded-lg transition-colors"
       [class]="view() === v.id ? 'bg-astral-500/20 text-astral-300' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'"
+      [matTooltip]="count !== null ? v.label + ' (' + count + ')' : v.label"
+      [attr.aria-label]="v.label"
+      [attr.aria-pressed]="view() === v.id"
       (click)="view.set(v.id)"
     >
-      <mat-icon class="!size-4 !text-[16px]">{{ v.icon }}</mat-icon>
-      {{ v.label }}
-      @if (countOf(v.id); as count) {
-        <span class="text-[10px] text-slate-500">{{ count }}</span>
+      <mat-icon class="!size-[18px] !text-[18px]">{{ v.icon }}</mat-icon>
+      @if (count) {
+        <span class="absolute right-0.5 top-0.5 text-[9px] leading-none tabular-nums text-slate-500">{{ count }}</span>
       }
     </button>
   }
@@ -48,27 +51,26 @@
   </label>
 </div>
 
-@if (view() !== 'files') {
-  <!-- ===== Itens do mundo (lista plana, com cartão) ===== -->
+@if (listView(); as lv) {
+  <!-- ===== Lista plana de um tipo (Itens, NPCs, Raças, Linhas do tempo, Documentos, Mapas) ===== -->
   <div class="min-h-0 flex-1 overflow-y-auto px-2 py-3">
+    <h3 class="mb-2 px-2 text-xs font-semibold uppercase tracking-widest text-slate-500">{{ lv.label }}</h3>
     <button
       type="button"
       class="mb-2 flex h-9 w-full items-center gap-2 rounded-lg border border-dashed border-white/10 px-3 text-sm text-astral-300 transition-colors hover:border-astral-400/40 hover:bg-astral-500/10"
-      (click)="create(view() === 'npcs' ? 'npc' : 'item')"
+      (click)="createInView(lv, fileInput)"
     >
-      <mat-icon class="!size-5 !text-[20px]">add</mat-icon>
-      {{ view() === 'npcs' ? 'Novo NPC' : 'Novo item' }}
+      <mat-icon class="!size-5 !text-[20px]">{{ lv.id === 'image' ? 'add_photo_alternate' : 'add' }}</mat-icon>
+      {{ lv.newLabel }}
     </button>
     @for (item of itemResults(); track item.id) {
       <ng-container *ngTemplateOutlet="row; context: { $implicit: item, depth: 0 }" />
     } @empty {
-      <p class="px-3 py-6 text-center text-sm text-slate-500">
-        {{ query() ? 'Nada encontrado.' : view() === 'npcs' ? 'Nenhum NPC ainda. As fichas daqui são a base dos NPCs das mesas.' : 'Nenhum item ainda. Cada item tem um cartão com imagem, nome e etiquetas.' }}
-      </p>
+      <p class="px-3 py-6 text-center text-sm text-slate-500">{{ query() ? 'Nada encontrado.' : lv.empty }}</p>
     }
   </div>
 
-  <p class="shrink-0 border-t border-white/5 px-4 py-2 text-[11px] text-slate-500">{{ view() === 'npcs' ? 'NPCs' : 'Itens' }} também aparecem na árvore de arquivos</p>
+  <p class="shrink-0 border-t border-white/5 px-4 py-2 text-[11px] text-slate-500">{{ lv.label }} também aparecem na árvore de arquivos</p>
 } @else {
 <!-- ===== Árvore (a área vazia também aceita itens = mover para a raiz) ===== -->
 <div

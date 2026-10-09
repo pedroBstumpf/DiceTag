@@ -9,14 +9,32 @@ import { WORLD_ITEM_META, WorldItem, WorldItemType } from '../../../../core/mode
 import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
 import { WorldbuildService } from '../../services/worldbuild.service';
 
-/** Abas do explorador: árvore de arquivos, itens do mundo ou NPCs (bestiário). */
-type ExplorerView = 'files' | 'items' | 'npcs';
+/** Abas do explorador: árvore de arquivos ou a lista de um tipo de item. */
+type ExplorerView = 'files' | Exclude<WorldItemType, 'folder'>;
+
+/** Aba de lista: tipo listado, textos e o que o botão "Novo" faz. */
+interface ListView {
+  id: ExplorerView;
+  label: string;
+  newLabel: string;
+  empty: string;
+}
+
+/** Abas de lista, na ordem da barra (a árvore "Arquivos" vem antes). */
+const LIST_VIEWS: ListView[] = [
+  { id: 'item', label: 'Itens', newLabel: 'Novo item', empty: 'Nenhum item ainda. Cada item tem um cartão com imagem, nome e etiquetas.' },
+  { id: 'npc', label: 'NPCs', newLabel: 'Novo NPC', empty: 'Nenhum NPC ainda. As fichas daqui são a base dos NPCs das mesas.' },
+  { id: 'race', label: 'Raças', newLabel: 'Nova raça', empty: 'Nenhuma raça ainda. Escolhida na ficha, a raça soma etiquetas e modificadores de status.' },
+  { id: 'timeline', label: 'Linhas do tempo', newLabel: 'Nova linha do tempo', empty: 'Nenhuma linha do tempo ainda.' },
+  { id: 'document', label: 'Documentos', newLabel: 'Novo documento', empty: 'Nenhum documento ainda.' },
+  { id: 'image', label: 'Mapas', newLabel: 'Enviar mapa / imagem', empty: 'Nenhum mapa ainda. Envie imagens ou solte arquivos na árvore.' },
+];
 
 /**
  * Explorador do worldbuild: árvore de pastas e itens.
  *
- * - Aba "Itens": lista e cria os itens do mundo (cartão com imagem, nome e etiquetas)
- * - Aba "NPCs": bestiário — fichas base de NPCs, usadas pelas mesas como referência
+ * - Abas (ícones): Arquivos (árvore) e uma lista por tipo — Itens, NPCs (bestiário), Raças,
+ *   Linhas do tempo, Documentos e Mapas —, cada uma com busca e botão "Novo"
  * - Criar itens na raiz ou dentro de pastas
  * - Renomear (duplo clique ou menu), excluir, mover
  * - Arrastar itens para dentro de pastas (ou para a raiz)
@@ -53,23 +71,36 @@ export class Explorer {
   // --- Abas ----------------------------------------------------------------
   readonly views: { id: ExplorerView; icon: string; label: string }[] = [
     { id: 'files', icon: 'folder', label: 'Arquivos' },
-    { id: 'items', icon: WORLD_ITEM_META.item.icon, label: 'Itens' },
-    { id: 'npcs', icon: WORLD_ITEM_META.npc.icon, label: 'NPCs' },
+    ...LIST_VIEWS.map((v) => ({ id: v.id, icon: WORLD_ITEM_META[v.id as WorldItemType].icon, label: v.label })),
   ];
   readonly view = signal<ExplorerView>('files');
+  /** Aba de lista aberta (null = árvore de arquivos). */
+  readonly listView = computed(() => LIST_VIEWS.find((v) => v.id === this.view()) ?? null);
 
-  /** Itens do mundo (aba Itens) ou NPCs do bestiário (aba NPCs), filtrados pela busca. */
+  /** Itens de cada tipo, em ordem alfabética (uma passada pela lista). */
+  private readonly byType = computed(() => {
+    const map = new Map<string, WorldItem[]>();
+    for (const item of this.service.items()) map.set(item.type, [...(map.get(item.type) ?? []), item]);
+    for (const list of map.values()) list.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { numeric: true }));
+    return map;
+  });
+
+  /** Itens do tipo da aba aberta, filtrados pela busca. */
   readonly itemResults = computed(() => {
     const q = this.query().trim().toLowerCase();
-    const items = this.view() === 'npcs' ? this.service.worldNpcs() : this.service.worldItems();
+    const items = this.byType().get(this.view()) ?? [];
     return q ? items.filter((i) => i.name.toLowerCase().includes(q)) : items;
   });
 
-  /** Quantos itens/NPCs há (contador da aba). */
+  /** Quantos itens há na aba (contador; null = árvore). */
   countOf(view: ExplorerView): number | null {
-    if (view === 'items') return this.service.worldItems().length;
-    if (view === 'npcs') return this.service.worldNpcs().length;
-    return null;
+    return view === 'files' ? null : (this.byType().get(view)?.length ?? 0);
+  }
+
+  /** Botão "Novo" da aba de lista: cria o tipo da aba (Mapas: envia imagens). */
+  createInView(view: ListView, fileInput: HTMLInputElement): void {
+    if (view.id === 'image') this.pickImages(fileInput);
+    else this.create(view.id as WorldItemType);
   }
 
   // --- Estado da árvore ----------------------------------------------------

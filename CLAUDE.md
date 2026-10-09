@@ -132,7 +132,8 @@ src/
         │   ├── directives/lore-scope.directive.ts  # appLoreScope: troca WorldbuildService → LoreService no elemento
         │   ├── directives/world-npc-sheet.directive.ts  # appWorldNpcSheet: a ficha usa o WorldNpcStore
         │   ├── utils/timeline-layout.ts         # layouts, setas e hit test do mapa mental + spec
-        │   └── components/ explorer (abas Arquivos/Itens/NPCs), document-editor, timeline-editor, image-viewer,
+        │   └── components/ explorer (abas Arquivos/Itens/NPCs/Raças/Linhas do tempo/Documentos/Mapas), race-card,
+        │                   document-editor, timeline-editor, image-viewer,
         │                   item-card (ItemCard + ItemCardView)
         └── game-table/         # MESA DE JOGO (rota /mesa/:id, tela cheia, fora do Shell)
             ├── game-table.ts           # página: orquestra barras, janelas e atalhos
@@ -308,8 +309,10 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - **Bestiário (NPCs):** aba **NPCs** do explorador (e "NPC" no menu Criar). A ficha base abre com a mesma
   `CharacterSheetView` + `WorldNpcStore` (diretiva `appWorldNpcSheet`), sem Relações, Anotações nem Habilidades.
   Excluir um NPC do Worldbuild apaga a imagem e as imagens personalizadas do inventário dele.
-- **Itens do mundo:** o explorador tem as abas **Arquivos** (árvore) e **Itens** (lista plana de `worldItems()`, com
-  busca e "Novo item"); itens também ficam na árvore. O cartão (`ItemCard`) é editável na janela do item e só
+- **Abas do explorador** (ícones com o nome na dica e contador; `LIST_VIEWS` em `explorer.ts`): **Arquivos** (árvore) e
+  uma lista plana por tipo — Itens, NPCs, Raças, Linhas do tempo, Documentos e Mapas —, com busca e botão "Novo"
+  (em Mapas, envia imagens). Valem no Worldbuild, na Lore geral e nas janelas de explorador da mesa.
+- **Itens do mundo:** aba **Itens** do explorador; itens também ficam na árvore. O cartão (`ItemCard`) é editável na janela do item e só
   leitura no inventário da ficha. Trocar a imagem usa `setImage` (apaga a anterior). Como os demais itens, aparecem
   na aba Lore da mesa e abrem em janela lá.
 - Árvore por `parentId` (`null` = raiz). Ordenação: pastas primeiro, depois nome (pt-BR, numérico).
