@@ -1,0 +1,390 @@
+# Arquitetura — Crônicas de Zehenia
+
+Visão técnica do app: como as pastas se organizam, quais são as peças principais, por onde os dados
+passam e onde cada parte do estado mora. As **regras de negócio** detalhadas (fichas, NPCs, névoa,
+rolagens…) estão no [`CLAUDE.md`](CLAUDE.md); este documento explica o **esqueleto** que as sustenta.
+
+---
+
+## 1. Visão geral
+
+Aplicação **Angular 21** de página única, **standalone** e **zoneless** (sem zone.js): toda a
+reatividade vem de **signals**. Não há backend — os dados vivem no **IndexedDB** do navegador.
+
+```
+┌──────────────────────────── Navegador ────────────────────────────┐
+│                                                                   │
+│  Componentes (templates)  ──lêem signals──►  Serviços (estado)    │
+│          │                                        │               │
+│          └──── chamam métodos de mutação ────────►│               │
+│                                                   │ debounce 300ms│
+│                                                   ▼               │
+│                                         StorageService            │
+│                                    (IndexedDB "dicetag", store kv)│
+└───────────────────────────────────────────────────────────────────┘
+```
+
+Três princípios guiam o código:
+
+1. **Fonte única por domínio.** Cada conjunto de dados tem um serviço dono (mesas, worldbuild, mesa
+   aberta). Componentes nunca gravam no `StorageService` diretamente para dados de domínio.
+2. **Fluxo unidirecional.** Componentes leem `signal`/`computed` e chamam métodos do serviço; o serviço
+   produz um novo objeto de estado (imutável), os `computed` se recalculam e a tela se atualiza.
+3. **Lógica pura separada.** Geometria, visão, dados, inventário e efeitos ficam em `utils/` como
+   funções puras (sem Angular), cada uma com seu `*.spec.ts`.
+
+---
+
+## 2. Estrutura de pastas
+
+```
+src/
+├── main.ts                 # bootstrap (appConfig + App)
+├── index.html              # fontes (Tektur, Chakra Petch, Material Symbols Sharp)
+├── styles.scss             # tema Material M3 escuro + overrides + estilos do editor
+├── styles/tailwind.css     # Tailwind 4: tokens de design, animações, utilitários (.glass, sheet-*)
+└── app/
+    ├── app.ts / app.config.ts / app.routes.ts
+    ├── core/               # domínio e dados — sem UI
+    │   ├── config/         # flags globais (APP_SETTINGS.requireAuth)
+    │   ├── models/         # interfaces, constantes e funções de normalização do domínio
+    │   ├── services/       # serviços globais (storage, auth, mesas, layout, notícias, SheetStore)
+    │   └── utils/          # newId()
+    ├── shared/             # reutilizável por qualquer feature
+    │   ├── components/     # FloatingWindow, EmptyState, ColorPicker, TagEditor, RichTextEditor
+    │   ├── directives/     # AutoFocus
+    │   ├── services/       # WindowManagerService, QuickActionsService
+    │   └── utils/          # viewport.ts (pan/zoom puro)
+    ├── layout/             # Shell (barra lateral + conteúdo) e Sidebar
+    └── features/           # uma pasta por área do app (rotas lazy)
+        ├── home/           # landing
+        ├── auth/           # diálogo Entrar/Criar conta
+        ├── tables/         # "Minhas mesas" + diálogo de criação
+        ├── worldbuild/     # Worldbuild e Lore geral (mesma página, serviços diferentes)
+        └── game-table/     # mesa de jogo (a maior feature)
+```
+
+Regra de dependência entre camadas:
+
+```
+features ──► shared ──► core
+   │                     ▲
+   └─────────────────────┘
+layout  ──► shared, core
+```
+
+`core` não importa nada de `shared`, `layout` ou `features`. A única exceção consciente é a mesa
+(`game-table`) importar editores e serviços do `worldbuild` para abrir a lore sem sair da mesa.
+
+### Convenção de cada feature
+
+```
+features/<feature>/
+├── <feature>.ts|.html      # página (componente da rota)
+├── services/               # estado da feature
+├── components/<nome>/      # componentes da feature (standalone, Tailwind)
+├── directives/             # diretivas que trocam provedores (ver §5.3)
+└── utils/                  # funções puras + *.spec.ts
+```
+
+---
+
+## 3. Rotas e carregamento
+
+Definidas em [`app.routes.ts`](src/app/app.routes.ts); **todas as páginas são lazy**.
+
+| Rota | Componente | Contêiner |
+|---|---|---|
+| `''` | `Home` | `Shell` |
+| `mesas` | `Tables` | `Shell` |
+| `worldbuild` | `Worldbuild` (aceita `?novo=<tipo>` e `?abrir=<id>`) | `Shell` |
+| `lore` | `Worldbuild` com `LoreService` (via `LORE_ROUTES`) | `Shell` |
+| `mesa/:id` | `GameTablePage` | tela cheia, **fora** do `Shell` |
+| `**` | redireciona para `''` | — |
+
+`withComponentInputBinding()` entrega os parâmetros de rota como `input()` (ex.: `GameTablePage.id`).
+A mesa fica fora do `Shell` para ocupar a tela inteira; o chunk dela (`game-table`) só é baixado ao
+abrir uma mesa.
+
+---
+
+## 4. Onde fica o estado
+
+O estado está dividido em **quatro níveis de vida**. Saber em qual nível um dado mora responde a
+quase toda dúvida de "por que isso sumiu/persistiu".
+
+| Nível | Onde | Vida útil | Exemplos |
+|---|---|---|---|
+| **Persistido global** | serviços `providedIn: 'root'` → IndexedDB | sempre | contas, mesas, worldbuild do usuário, Lore geral |
+| **Persistido por mesa** | `TableSessionService.state` → `table-state:<id>` | enquanto a mesa existir | cenas, tokens, paredes, fichas, chat, organização da lore |
+| **Sessão da mesa** (não persistido) | signals do `TableSessionService` e serviços da página | até sair da mesa | ferramenta ativa, papel, token selecionado, pincel, barras visíveis, efeitos na tela, desfazer |
+| **Local do componente** | `signal` dentro do componente | enquanto o componente existir | campo em edição, aba aberta, arraste em andamento |
+
+Preferências pequenas de interface usam `localStorage` (`dicetag.session`, `dicetag.sidebarCollapsed`).
+
+### 4.1 Serviços globais (`providedIn: 'root'`)
+
+| Serviço | Estado | Chave no IndexedDB |
+|---|---|---|
+| `StorageService` | conexão com o banco (wrapper chave/valor `get`/`set`/`delete`) | — |
+| `AuthService` | `user` (conta logada ou visitante), `isLoggedIn`, `isGuest` | `users` + `localStorage dicetag.session` |
+| `GameTablesService` | lista de mesas, filtrada pelo usuário atual | `tables` |
+| `WorldbuildService` | árvore de `WorldItem` do usuário (`items`, `byId`, `worldItems`, `worldNpcs`) | `worldbuild:<userId>` |
+| `LoreService` | igual ao anterior, mas global (`extends WorldbuildService`, só troca `keyFor()`) | `lore:global` |
+| `LayoutService` | barra lateral recolhida / modo mobile | `localStorage dicetag.sidebarCollapsed` |
+| `NewsService` | notícias do mural (vazio por enquanto) | — |
+| `QuickActionsService` | atalhos globais (login, criar mesa, abrir worldbuild) — sem estado próprio | — |
+
+Arquivos binários (mapas, imagens, áudios, imagens de token) são gravados à parte como
+`blob:<id>`; os objetos de domínio guardam só o `blobId`.
+
+### 4.2 Serviços por página (fornecidos no componente)
+
+Estes serviços existem **uma vez por página aberta** e morrem com ela:
+
+| Página | Provedores |
+|---|---|
+| `GameTablePage` | `TableSessionService`, `SheetStore → TableSessionService`, `SoundMixerService`, `BlobUrlService`, `WindowManagerService` |
+| `Worldbuild` | `WindowManagerService`, `BlobUrlService` |
+
+- **`TableSessionService`** — o coração da mesa (ver §6). Estende `SheetStore`.
+- **`SoundMixerService`** — um `HTMLAudioElement` por som; estado "tocando" só na sessão.
+- **`BlobUrlService`** — cache de *object URLs* dos Blobs (imagens de token, mapas), liberados ao sair.
+- **`WindowManagerService`** — lista de janelas abertas (`id`, geometria, z-index, minimizada, fixada).
+
+---
+
+## 5. Padrões de fluxo de dados
+
+### 5.1 Leitura → mutação → persistência
+
+Todos os serviços com dados persistidos seguem o mesmo ciclo:
+
+```
+componente                    serviço                           IndexedDB
+    │  lê session.scenes()       │                                  │
+    │◄───────────────────────────│ computed(() => state().scenes)   │
+    │                            │                                  │
+    │  session.moveToken(id, p)  │                                  │
+    │───────────────────────────►│ patchState(s => novo objeto)     │
+    │                            │   ├─ state.update(...)           │
+    │◄── computed recalculam ────│   └─ agenda flush() em 300ms     │
+    │                            │                                  │
+    │                            │ flush() ────── storage.set ─────►│
+```
+
+- **Debounce de 300ms**: várias alterações seguidas viram uma gravação só.
+- **`flush()` imediato** em `pagehide` e ao destruir a página, para não perder a última alteração.
+- **Imutabilidade**: mutações sempre criam objetos novos (spread). Mutação de token por id troca só a
+  cena que o contém — as outras mantêm a mesma referência e os `computed` delas não recalculam.
+
+### 5.2 Carregamento e compatibilidade com dados antigos
+
+Ao carregar, o dado salvo passa por uma função de normalização que preenche campos novos com o padrão:
+
+- `normalizeState` (mesa) — cenas sem `walls`/`drawings`/`notes`, sons sem volume, fichas sem barras de status;
+- `normalizeSheet` / `sheetOf` (ficha) — temas, páginas fixas das anotações, defeitos, estudos;
+- `migrateTimeline` (worldbuild) — linhas do tempo antigas viram mapa mental.
+
+Por isso **todo campo novo nos modelos é opcional** e tem valor padrão na leitura.
+
+**Troca de usuário** (`WorldbuildService`, `GameTablesService`): um `effect` observa `auth.user()`;
+antes de trocar a chave, grava as pendências do usuário anterior e descarta carregamentos que terminem
+depois da troca.
+
+### 5.3 Injeção de dependência como "escopo de dados"
+
+A mesma tela funciona com fontes de dados diferentes trocando o provedor no elemento:
+
+```
+                     ┌── na mesa ──────────► TableSessionService  (fichas da mesa)
+CharacterSheetView ──┤
+ inject(SheetStore)  └── appWorldNpcSheet ─► WorldNpcStore       (ficha base do bestiário)
+
+                     ┌── padrão ───────────► WorldbuildService   (worldbuild:<userId>)
+Explorer / editores ─┤
+ inject(Worldbuild…) └── appLoreScope / ───► LoreService         (lore:global)
+                         rota /lore
+```
+
+- **`SheetStore`** (`core/services/sheet-store.ts`) é uma classe abstrata: declara como ler/gravar uma
+  ficha (`sheetData`, `updateSheet`, `updateStatus`…) e implementa as operações de inventário comuns.
+  `TableSessionService` e `WorldNpcStore` são as duas implementações.
+- **`appLoreScope`** fornece `{ provide: WorldbuildService, useExisting: LoreService }`.
+- **`appWorldNpcSheet`** fornece `{ provide: SheetStore, useExisting: WorldNpcStore }`.
+
+Assim nenhum editor precisa saber de onde vêm os dados.
+
+### 5.4 Effects: armadilhas evitadas
+
+- Effects que só devem reagir a um signal usam `untracked()` no corpo (ex.: a mesa carrega só quando o `id` muda).
+- Effects que carregam Blobs dependem de um `computed` estreito (só o `blobId`), para não recarregar a cada edição.
+- Effects assíncronos registram `onCleanup` antes do `await` e conferem cancelamento depois.
+- Cálculos caros (visão, névoa) usam `computed` com igualdade por valor e redesenho em `requestAnimationFrame`.
+
+---
+
+## 6. Mesa de jogo (`features/game-table`)
+
+### 6.1 `TableSessionService`
+
+Um por mesa aberta. Guarda o `TableState` inteiro num único `signal` privado e expõe tudo por
+`computed` e métodos de mutação. Está organizado em seções (`// --- Seção ---`):
+
+| Seção | Conteúdo |
+|---|---|
+| Estado persistido | `state`, `scenes`, `entries`, `activeScene`, `entryById`, `soundMaster`, `lore` |
+| Vista isométrica e camadas | `isometric`, `mapLevels`, `playerLevel`, `currentLevel` |
+| Névoa e paredes | `walls` da camada em foco, origens de visão, polígonos de visão |
+| Memória da névoa | máscara de áreas exploradas (bitset em base64) |
+| Estado da sessão | `tool`, `role`, `selectedTokenId`, `wallMode`, `brush`, `panels`, `immersive` |
+| Ações e quem age | `actor`, `actorSheetId`, `hotbar`, `useAction`, `quickRoll` |
+| Permissões | `canEdit`, `sheetAccess`, `canOpenSheet` (único lugar das regras de acesso) |
+| Chat / Efeitos | mensagens (máx. 300) / efeitos transitórios na tela |
+| Cenas, pastas, camadas, arquivos, NPCs, fichas, lojas, lore, itens, tokens, paredes, desenhos, anotações | métodos de mutação |
+| Persistência | `patchState` (debounce) e `flush` |
+
+Regras com dono único dentro do serviço: vínculo dos tokens (`resolveToken`/`updateToken`), quem age
+(`actor`), permissões (`sheetAccess`) e transferência de itens (`transferItem`).
+
+### 6.2 Composição da página
+
+```
+GameTablePage  (providers da mesa; atalhos de teclado na window; abre janelas)
+├── MapStage            ← orquestrador do mapa (vista, zoom/pan, tela↔mundo, ferramentas, WASD)
+│   └── camadas do "mundo", de baixo para cima:
+│       mapa · grade · DrawingsLayer · NotesLayer · FogLayer (canvas) · TokensLayer
+│       · DoorsLayer · WallsLayer · FxLayer · régua/ping   (+ NotePopover fora do mundo)
+├── SceneBar            ← topo: cenas e pastas, vista isométrica
+├── ToolBar             ← esquerda: ferramentas + DrawMenu / FogMenu / FxMenu / LevelsMenu
+├── SidePanel           ← direita: abas Chat · Fichas · Lore · Sons · Ações
+│   ├── ChatPanel
+│   └── SoundList
+├── ActionBar           ← baixo: 10 espaços de ações + QuickRoll (overlay do CDK)
+└── camada de janelas   ← FloatingWindow por janela aberta; o conteúdo é escolhido por tipo:
+    CharacterSheetView (SheetInventory, SheetNotes, LevelPips) · TokenWindow (TokenEditor)
+    · EntryWindow (FxPicker) · EquippedItemWindow · TableItemWindow
+    · Explorer · DocumentEditor · TimelineEditor · ImageViewer · ItemCard   (do worldbuild)
+```
+
+- **`MapStage`** decide o que cada evento de ponteiro faz conforme a ferramenta e chama o
+  `TableSessionService`. As **camadas** (`map-layers/`) só desenham e emitem eventos (`tokenDown`, `noteDown`).
+- **Vista**: `Viewport` (`shared/utils/viewport.ts`) + matriz 2D/isométrica (`utils/projection.ts`).
+  Toda conversão tela↔mundo passa por `project`/`unproject`.
+- Desenho sem bibliotecas: **SVG** para desenhos, paredes, tokens e efeitos; **`<canvas>`** para a névoa.
+
+### 6.3 Janelas
+
+`GameTablePage.content(id)` traduz o **id da janela** no que ela exibe e aplica as permissões
+(retorna `null` = não abre):
+
+| Id | Conteúdo |
+|---|---|
+| `<id da entrada>` | ficha (personagem/NPC) ou `EntryWindow` (automação) |
+| `npc:<id do token>` | ficha própria do token de NPC |
+| `token:<id do token>` | janela "Token" (fecha sozinha se o token sair do mapa) |
+| `equip:<ficha>:<item>` | cartão de item equipado |
+| `<id de item da mesa>` | `TableItemWindow` |
+| `<id de item da lore>` | editor do worldbuild/Lore geral (com `appLoreScope` se global) |
+| `worldbuild:explorer` / `lore:explorer` | explorador numa janela (só mestre) |
+
+O `WindowManagerService` só guarda geometria e ordem; abrir de novo o mesmo id foca a janela.
+
+### 6.4 Fluxo de exemplo: usar uma ação
+
+```
+tecla "1" ──► GameTablePage.onKeydown ──► useSlot(0) ──► onActionUsed(entry)
+                                                           │
+     TableSessionService.useAction(entry, sheetId) ◄───────┘
+       ├─ tagLevelsOf / rollTagsOf  → níveis atuais das tags (temas + itens equipados)
+       ├─ utils/dice.ts: roll + effectiveModifier → RollResult
+       ├─ trainStudies → Estudos e Treinos (pode avisar "subiu de nível")
+       ├─ pushChat(...)            → state.chat (persistido)
+       └─ armedFx.set(...)         → efeito no mouse (sessão)
+GameTablePage mostra o snackbar; o próximo arraste no mapa lança o efeito (castFx → FxLayer).
+```
+
+### 6.5 Fluxo de exemplo: visão e névoa
+
+```
+tokens + paredes da camada em foco
+   └─► visionSources (computed, igualdade por valor)
+         └─► computeVisibilityPolygon (utils/visibility.ts) por token
+               ├─► FogLayer redesenha o <canvas> (agrupado em requestAnimationFrame)
+               └─► markPolygons (utils/fog-memory.ts) → Scene.explored (persistido)
+```
+
+Mudar o volume de um som ou o nome de uma ficha não muda as origens de visão, então nada disso recalcula.
+
+---
+
+## 7. Worldbuild e Lore geral (`features/worldbuild`)
+
+- **Página** `Worldbuild`: explorador à esquerda + área de janelas flutuantes. Serve `/worldbuild` e `/lore`.
+- **Dados**: lista plana de `WorldItem` com `parentId` (árvore). Tipos: `folder`, `document`, `timeline`,
+  `image`, `item`, `npc`. Uma lista por chave (`worldbuild:<userId>` ou `lore:global`).
+- **Componentes**: `Explorer` (abas Arquivos/Itens/NPCs), `DocumentEditor` (sobre o `RichTextEditor`/Tiptap),
+  `TimelineEditor` (mapa mental; layout puro em `utils/timeline-layout.ts`), `ImageViewer`,
+  `ItemCard`/`ItemCardView`, e a ficha de NPC reaproveitada da mesa com `appWorldNpcSheet`.
+- **Na mesa**, os mesmos editores são abertos em janelas; a aba Lore lista itens da Lore geral e do
+  worldbuild sem duplicá-los. A organização local (pastas, nomes, itens escondidos) fica em
+  `TableState.lore` e nunca altera o original.
+
+---
+
+## 8. Modelos (`core/models`)
+
+| Arquivo | Conteúdo |
+|---|---|
+| `geometry.model.ts` | `Point`, `Rect` |
+| `user.model.ts` | `User`, `StoredUser` |
+| `game-table.model.ts` | `GameTable`, `GAME_SYSTEMS`, `TABLE_ACCENTS` |
+| `table-session.model.ts` | `TableState` e tudo que está dentro dele (cenas, tokens, paredes, desenhos, notas, entradas, ficha, inventário, rolagens, chat) + constantes e funções puras de normalização (`withStatusBars`, `defaultToken`, `defaultSheet`…) com spec |
+| `tag.model.ts` | `Tag` (texto, cor, nível) e `TAG_COLORS` |
+| `world-item.model.ts` | `WorldItem`, `TimelineEvent`, `TimelineLink`, `WORLD_ITEM_META`, padrões de NPC (`npcSheetOf`, `npcTokenOf`) |
+| `news.model.ts` | `NewsPost` |
+
+---
+
+## 9. Lógica pura e testes
+
+Funções sem Angular, testadas com **Vitest** (`npx ng test --watch=false`):
+
+| Arquivo | Responsabilidade |
+|---|---|
+| `shared/utils/viewport.ts` | zoom no cursor, enquadramento, tela↔mundo |
+| `worldbuild/utils/timeline-layout.ts` | layouts, setas e hit test do mapa mental |
+| `game-table/utils/geometry.ts` | snap de token/canto, alça de tamanho, distâncias |
+| `game-table/utils/projection.ts` | matriz isométrica, `project`/`unproject`, "em pé" |
+| `game-table/utils/visibility.ts` | ray casting da visão, paredes/portas → segmentos |
+| `game-table/utils/walls.ts` | mover parede/alça, distância até a parede |
+| `game-table/utils/fog-memory.ts` | máscara de áreas exploradas (bitset base64) |
+| `game-table/utils/simplify.ts` | Ramer–Douglas–Peucker dos traços |
+| `game-table/utils/dice.ts` | rolagens 2d12/3d6, faixas, modificadores, estudos |
+| `game-table/utils/inventory.ts` | quantidade, transferência, linha do inventário |
+| `game-table/utils/effects.ts` | os 20 efeitos especiais descritos como dados SVG |
+
+Além desses, há specs para `table-session.model.ts` e para a `FxLayer`.
+
+---
+
+## 10. Interface e estilo
+
+- **Tailwind 4** nas classes dos templates; tokens de design (`ink-*`, `astral-*`, `star-*`) em
+  `src/styles/tailwind.css`. Sem `.scss` por componente.
+- **Angular Material** (M3, escuro) para botões, menus, diálogos, tooltips e snackbars; overrides em `styles.scss`.
+- **CDK** para arrastar e soltar (listas e páginas das anotações) e overlays (`QuickRoll`).
+- **`FloatingWindow`** é a peça central da UX: arrastar, redimensionar, minimizar, maximizar e fixar,
+  com estado em `model()` controlado pelo `WindowManagerService` da página.
+
+---
+
+## 11. Rumo ao backend
+
+O app foi desenhado para trocar o armazenamento sem mexer nas telas:
+
+- **`StorageService`** e **`AuthService`** têm a interface pública que uma API real manteria.
+- O estado da mesa já é um único documento (`TableState`) com mutações centralizadas em
+  `TableSessionService`, o ponto natural para sincronizar com um servidor em tempo real.
+- Permissões já passam por um único lugar (`sheetAccess`, `canEdit`); hoje o papel é escolhido na mesa,
+  no futuro virá da conta e do convite.

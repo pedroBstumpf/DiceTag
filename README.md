@@ -19,6 +19,8 @@ npx ng test --watch=false    # testes das funções puras (utils/)
 
 ## Estrutura
 
+Arquitetura detalhada (camadas, fluxos de dados e onde fica o estado) em [`ARCHITECTURE.md`](ARCHITECTURE.md).
+
 ```
 src/
 ├── index.html                 # fontes (Chakra Petch, Tektur, Material Symbols)
