@@ -1,4 +1,4 @@
-import { CharacterStudy, DiceKind, RollConfig, RollOutcome } from '../../../core/models/table-session.model';
+import { CharacterStudy, DiceKind, RollConfig, RollOutcome, RollResult } from '../../../core/models/table-session.model';
 
 /** Quantidade de dados e faces de cada tipo de rolagem. */
 const DICE: Record<DiceKind, { count: number; sides: number }> = {
@@ -64,14 +64,23 @@ function sumAttributes(roll: RollConfig, levels: TagLevels, only: (attribute: st
  * equipados, que podem estar ligadas como penalidade). Tags que não existem mais valem 0.
  * Como o nível é lido na hora, subir uma tag na ficha já muda todas as ações que a usam.
  * No 3d6 as tags são ignoradas (ficam salvas na ação, caso ela volte a ser 2d12).
+ * As etiquetas de itens só entram com `roll.addItems` (padrão: ficam fora do total).
  */
 export function effectiveModifier(roll: RollConfig, levels: TagLevels = NO_LEVELS): number {
-  return roll.modifier + sumAttributes(roll, levels, () => true);
+  return roll.modifier + sumAttributes(roll, levels, (attribute) => !!roll.addItems || !isItemAttribute(attribute));
 }
 
-/** Parte do modificador que vem das etiquetas de itens equipados (exibida à parte no chat). */
+/** Valor das etiquetas de itens equipados ligadas (exibido à parte no chat, somado ou não ao total). */
 export function itemModifier(roll: RollConfig, levels: TagLevels = NO_LEVELS): number {
   return sumAttributes(roll, levels, isItemAttribute);
+}
+
+/**
+ * Modificador do personagem numa rolagem já feita (fixo + tags + status, sem os itens).
+ * Rolagens antigas (sem `itemsAdded`) somavam os itens em `modifier`: eles são descontados.
+ */
+export function characterModifier(roll: Pick<RollResult, 'modifier' | 'itemModifier' | 'itemsAdded'>): number {
+  return roll.itemsAdded === false ? roll.modifier : roll.modifier - (roll.itemModifier ?? 0);
 }
 
 /** Etiqueta de status ligada na rolagem básica: soma (+1) ou subtrai (−1) o nível dela. */
@@ -92,15 +101,22 @@ export function quickModifier(fixed: number, themeLevels: readonly number[], sta
 }
 
 /**
- * Rola os dados de `roll` e classifica o total. `itemModifier` = parte do modificador que
- * vem dos itens equipados (já incluída em `modifier`).
+ * Rola os dados de `roll` e classifica o total. `itemModifier` = valor das etiquetas de itens
+ * ligadas; `itemsAdded` diz se ele entrou em `modifier` (e no total).
  */
 export function rollDice(roll: RollConfig, random: Random = Math.random, levels: TagLevels = NO_LEVELS) {
   const { count, sides } = DICE[roll.dice];
   const rolls = Array.from({ length: count }, () => 1 + Math.floor(random() * sides));
   const modifier = effectiveModifier(roll, levels);
   const total = rolls.reduce((sum, r) => sum + r, 0) + modifier;
-  return { rolls, modifier, itemModifier: itemModifier(roll, levels), total, outcome: rollOutcome(roll.dice, total) };
+  return {
+    rolls,
+    modifier,
+    itemModifier: itemModifier(roll, levels),
+    itemsAdded: !!roll.addItems,
+    total,
+    outcome: rollOutcome(roll.dice, total),
+  };
 }
 
 /**

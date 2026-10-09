@@ -124,6 +124,21 @@
               </div>
             }
           </div>
+          <!-- Itens aparecem na rolagem; só entram no total se ligado (padrão: não) -->
+          <button
+            type="button"
+            role="switch"
+            class="mt-2 flex items-center gap-2 text-[11px] text-slate-300"
+            [attr.aria-checked]="addItems()"
+            matTooltip="Desligado: o valor dos itens aparece no chat, mas não entra no total"
+            (click)="addItems.set(!addItems())"
+          >
+            <span class="relative h-4 w-7 rounded-full transition-colors" [class]="addItems() ? 'bg-emerald-500' : 'bg-ink-600'">
+              <span class="absolute top-0.5 size-3 rounded-full bg-white transition-all" [class]="addItems() ? 'left-3.5' : 'left-0.5'"></span>
+            </span>
+            Somar itens ao total
+            <span class="tabular-nums text-slate-500">({{ formatLevel(itemModifier()) }})</span>
+          </button>
         </section>
       }
 

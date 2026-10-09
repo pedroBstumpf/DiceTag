@@ -4,7 +4,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ROLL_OUTCOMES, RollResult } from '../../../../core/models/table-session.model';
 import { TableSessionService } from '../../services/table-session.service';
-import { formatModifier } from '../../utils/dice';
+import { characterModifier, formatModifier } from '../../utils/dice';
 
 /**
  * Aba Chat do painel da mesa: mensagens digitadas e resultados das rolagens,
@@ -42,9 +42,14 @@ import { formatModifier } from '../../utils/dice';
                 <mat-icon class="!size-4 !text-[16px] text-astral-300">person</mat-icon>
                 {{ characterModifier(roll) }}
               </span>
-              <span class="flex items-center gap-1 text-emerald-200" matTooltip="Modificador das etiquetas dos itens equipados">
-                <mat-icon class="!size-4 !text-[16px] text-emerald-300">shield</mat-icon>
-                {{ itemModifier(roll) }}
+              @let added = roll.itemsAdded !== false;
+              <span
+                class="flex items-center gap-1"
+                [class]="added ? 'text-emerald-200' : 'text-slate-500'"
+                [matTooltip]="added ? 'Etiquetas dos itens equipados (somadas ao total)' : 'Etiquetas dos itens equipados (fora do total)'"
+              >
+                <mat-icon class="!size-4 !text-[16px]" [class]="added ? 'text-emerald-300' : 'text-slate-500'">shield</mat-icon>
+                <span [class.line-through]="!added">{{ itemModifier(roll) }}</span>
               </span>
             </div>
 
@@ -131,7 +136,7 @@ export class ChatPanel {
 
   /** Modificador do personagem: tudo menos os itens (fixo + tags dos temas + etiquetas de status). */
   characterModifier(roll: RollResult): string {
-    return formatModifier(roll.modifier - (roll.itemModifier ?? 0)) || '±0';
+    return formatModifier(characterModifier(roll)) || '±0';
   }
 
   /** Modificador das etiquetas dos itens equipados (rolagens antigas: ±0). */

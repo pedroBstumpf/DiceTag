@@ -415,6 +415,11 @@ export interface RollConfig {
    * etiquetas de itens), é subtraído (ver `effectiveModifier` em utils/dice.ts).
    */
   attributes?: string[];
+  /**
+   * Somar as etiquetas de itens ligadas ao total dos dados. Padrão: false — elas aparecem
+   * na rolagem (cartão do chat), mas não entram no total nem no resultado.
+   */
+  addItems?: boolean;
 }
 
 export const DEFAULT_ROLL: RollConfig = { dice: '2d12', modifier: 0 };
@@ -444,10 +449,15 @@ export interface RollResult {
   dice: DiceKind;
   /** Valor de cada dado. */
   rolls: number[];
-  /** Modificador total (fixo + etiquetas do personagem + etiquetas dos itens). */
+  /** Modificador somado ao total (fixo + etiquetas do personagem + itens, se `itemsAdded`). */
   modifier: number;
-  /** Parte do modificador vinda das etiquetas dos itens equipados (já somada em `modifier`). Padrão: 0. */
+  /** Valor das etiquetas dos itens equipados ligadas à rolagem (exibido à parte no chat). Padrão: 0. */
   itemModifier?: number;
+  /**
+   * `itemModifier` entrou no total? Rolagens novas gravam sempre; ausente (rolagens antigas) =
+   * sim, como era antes de os itens deixarem de somar por padrão.
+   */
+  itemsAdded?: boolean;
   total: number;
   outcome: RollOutcome;
 }

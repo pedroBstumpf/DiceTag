@@ -25,7 +25,8 @@ function groupByTheme(tags: SheetTagOption[]): ThemeGroup[] {
  * Painel da rolagem básica (botão "Rolar" da barra de ações): 2d12 ou 3d6 + um modificador
  * escolhido na hora, sem automação. No 2d12, pode somar as tags e defeitos dos temas, as etiquetas
  * dos itens equipados e as etiquetas de status da ficha de quem age (`session.actorSheetId`): cada etiqueta (de status ou
- * de item) vira bônus ou penalidade (clique alterna desligada → + → −). O 3d6 usa só o modificador fixo.
+ * de item) vira bônus ou penalidade (clique alterna desligada → + → −). Os itens aparecem no chat, mas só
+ * somam ao total com "Somar itens ao total" ligado (padrão: não). O 3d6 usa só o modificador fixo.
  * Nada é salvo: ao abrir de novo, começa do zero.
  */
 @Component({
@@ -128,19 +129,21 @@ export class QuickRoll {
     return tag.level || 1;
   }
 
-  /** Parte do modificador vinda dos itens equipados (bônus ou penalidade, conforme o clique). */
+  /** Valor das etiquetas dos itens escolhidas (bônus ou penalidade, conforme o clique); aparece no chat. */
   readonly itemModifier = computed(() =>
     this.usesTags() ? quickModifier(0, [], this.signedPicks(this.itemGroups().flatMap((g) => g.tags))) : 0,
   );
+  /** Somar os itens ao total? Padrão: não (só aparecem na rolagem). */
+  readonly addItems = signal(false);
 
-  /** Modificador total desta rolagem: fixo + temas + etiquetas de status + itens (3d6: só o fixo). */
+  /** Modificador somado aos dados: fixo + temas + etiquetas de status (+ itens, se ligado). 3d6: só o fixo. */
   readonly modifier = computed(() => {
     if (!this.usesTags()) return this.fixed();
     const levels = this.themeGroups()
       .flatMap((g) => g.tags)
       .filter((t) => this.themePicks().has(t.id))
       .map((t) => t.level);
-    return quickModifier(this.fixed(), levels, this.signedPicks(this.statusTags())) + this.itemModifier();
+    return quickModifier(this.fixed(), levels, this.signedPicks(this.statusTags())) + (this.addItems() ? this.itemModifier() : 0);
   });
 
   /** Etiquetas escolhidas (de status ou de item), com o sinal do clique. */
@@ -172,7 +175,8 @@ export class QuickRoll {
 
   roll(): void {
     const studies = this.usesTags() ? this.studies().filter((s) => this.studyPicks().has(s.id)).map((s) => s.id) : [];
-    const { author, roll, levelUps } = this.session.quickRoll(this.dice(), this.modifier(), this.sheetId(), this.itemModifier(), studies);
+    const itemsAdded = this.usesTags() && this.addItems();
+    const { author, roll, levelUps } = this.session.quickRoll(this.dice(), this.modifier(), this.sheetId(), this.itemModifier(), studies, itemsAdded);
     const text = `${author} · ${roll.dice}${formatModifier(roll.modifier)} = ${roll.total} — ${ROLL_OUTCOMES[roll.outcome].label}`;
     this.snackBar.open(text, undefined, { duration: 3500 });
     // Estudo que alcançou o SN: notificação em destaque (também vai para o chat)

@@ -1,4 +1,5 @@
 import {
+  characterModifier,
   effectiveModifier,
   formatModifier,
   formatRoll,
@@ -132,13 +133,29 @@ describe('etiquetas de itens nas ações (bônus ou penalidade)', () => {
     ['item:escudo:pesado', 1],
   ]);
 
-  it('etiqueta com "-" subtrai o nível; o modificador dos itens sai à parte', () => {
-    const roll = { dice: '2d12' as const, modifier: 1, attributes: ['esgrima', 'item:espada:afiada', '-item:escudo:pesado'] };
-    expect(effectiveModifier(roll, levels)).toBe(1 + 3 + 2 - 1);
+  const attributes = ['esgrima', 'item:espada:afiada', '-item:escudo:pesado'];
+
+  it('por padrão os itens aparecem (itemModifier) mas não somam ao total', () => {
+    const roll = { dice: '2d12' as const, modifier: 1, attributes };
+    expect(effectiveModifier(roll, levels)).toBe(1 + 3);
     expect(itemModifier(roll, levels)).toBe(2 - 1);
+    expect(formatRoll(roll, levels)).toBe('2d12+4');
     const r = rollDice(roll, () => 0, levels);
-    expect(r.modifier).toBe(5);
-    expect(r.itemModifier).toBe(1);
+    expect(r).toMatchObject({ modifier: 4, itemModifier: 1, itemsAdded: false, total: 2 + 4 });
+  });
+
+  it('com addItems, a etiqueta de item soma (e com "-" subtrai) o nível', () => {
+    const roll = { dice: '2d12' as const, modifier: 1, attributes, addItems: true };
+    expect(effectiveModifier(roll, levels)).toBe(1 + 3 + 2 - 1);
+    const r = rollDice(roll, () => 0, levels);
+    expect(r).toMatchObject({ modifier: 5, itemModifier: 1, itemsAdded: true, total: 2 + 5 });
+  });
+
+  it('modificador do personagem no chat: rolagens antigas descontam os itens, as novas sem itens somados não', () => {
+    expect(characterModifier({ modifier: 5, itemModifier: 1 })).toBe(4);
+    expect(characterModifier({ modifier: 5, itemModifier: 1, itemsAdded: true })).toBe(4);
+    expect(characterModifier({ modifier: 4, itemModifier: 1, itemsAdded: false })).toBe(4);
+    expect(characterModifier({ modifier: 3 })).toBe(3);
   });
 });
 

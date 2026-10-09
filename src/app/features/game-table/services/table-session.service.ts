@@ -514,7 +514,8 @@ export class TableSessionService extends SheetStore {
    * Rolagem básica (botão "Rolar dados" da barra de ações): não é uma ação salva — dado e
    * modificador (já com as tags escolhidas) valem só para esta rolagem. Vai para o chat em
    * nome da ficha `sheetId` (ou do mestre/conta, sem ficha). `studies`: estudos ligados a esta
-   * rolagem (sem modificador; acumulam SA conforme o resultado).
+   * rolagem (sem modificador; acumulam SA conforme o resultado). `itemModifier`: valor das
+   * etiquetas de itens escolhidas (exibido à parte no chat); `itemsAdded`: ele já está em `modifier`.
    */
   quickRoll(
     dice: DiceKind,
@@ -522,9 +523,9 @@ export class TableSessionService extends SheetStore {
     sheetId: string | null,
     itemModifier = 0,
     studies: readonly string[] = [],
+    itemsAdded = false,
   ): { author: string; roll: RollResult; levelUps: string[] } {
-    // `itemModifier`: parte de `modifier` que vem dos itens equipados (exibida à parte no chat)
-    const roll: RollResult = { action: 'Rolagem', icon: 'casino', dice, ...rollDice({ dice, modifier }), itemModifier };
+    const roll: RollResult = { action: 'Rolagem', icon: 'casino', dice, ...rollDice({ dice, modifier }), itemModifier, itemsAdded };
     const author = (sheetId && this.sheetData(sheetId)?.name) || this.userName();
     this.pushChat({ author, roll });
     return { author, roll, levelUps: this.trainStudies(sheetId, studies, roll) };

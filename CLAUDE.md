@@ -457,10 +457,14 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   ações dela as etiquetas de itens que não estão mais equipados (`keepValidItemTags`, puro + spec).
   Na ação, a etiqueta de item alterna desligada → bônus → **penalidade** (id com o prefixo `-`, `NEGATED_TAG_PREFIX`;
   `effectiveModifier` subtrai). Regras de sinal e de prefixo em `utils/dice.ts` (`baseTagId`, `attributeSign`).
+  **Itens não somam ao total por padrão:** continuam selecionáveis e aparecem no cartão do chat, mas só entram no total
+  (e no resultado) com a chave "Somar itens ao total" ligada — na ação `RollConfig.addItems` (`EntryWindow`), no "Rolar"
+  um sinal do `QuickRoll` (não salvo, começa desligado). `effectiveModifier` só soma etiquetas de itens com `addItems`.
 - **Cartão de rolagem no chat:** resultado (Sucesso, Falha…) grande no topo, dados e total no centro e, embaixo, o
-  modificador do **personagem** (ícone `person`: fixo + temas + status) e o dos **itens** (ícone `shield`).
-  `RollResult.itemModifier` guarda a parte dos itens (`itemModifier` em `utils/dice.ts`; no "Rolar", calculada no
-  painel); rolagens antigas mostram ±0 nos itens.
+  modificador do **personagem** (ícone `person`: fixo + temas + status) e o dos **itens** (ícone `shield`; riscado e
+  cinza quando ficou fora do total). `RollResult.itemModifier` guarda o valor dos itens e `RollResult.itemsAdded` se ele
+  entrou no total; rolagens antigas (sem `itemsAdded`) somaram os itens. `characterModifier` (puro) separa a parte do
+  personagem nos dois casos.
 
 ### Ficha de NPC (mesma `CharacterSheetView`, `isNpc`)
 - Igual à do personagem, **sem a aba Anotações e sem o card Relações** (abas Ficha, Inventário, Habilidades).
@@ -519,7 +523,7 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   A barra de baixo (`hotbar`, até 10; teclas 1–9 e 0) mostra as ações de quem age; espaço vazio (só mestre) cria
   uma ação já com esse dono; o jogador cria as dele na aba Habilidades da ficha.
 - **Rolagem básica** ("Rolar", à direita da barra de baixo, mestre e jogador; `QuickRoll` num overlay do CDK): 2d12 ou
-  3d6 + modificador escolhido na hora, **não salvo**. No 2d12 (o 3d6 usa só o modificador fixo) soma tags/defeitos dos temas, etiquetas dos itens equipados e etiquetas de status da ficha de
+  3d6 + modificador escolhido na hora, **não salvo**. No 2d12 (o 3d6 usa só o modificador fixo) soma tags/defeitos dos temas, etiquetas dos itens equipados (só com "Somar itens ao total") e etiquetas de status da ficha de
   quem age (`actorSheetId`); cada etiqueta (de status ou de item) vira bônus ou penalidade (clique: + → − → fora; sem nível vale 1), regra
   pura em `quickModifier` (`utils/dice.ts`). `session.quickRoll` grava no chat ("Rolagem", ícone `casino`).
 - **Rolagem** (`RollConfig { dice: '2d12' | '3d6', modifier, attributes? }`, puro em `utils/dice.ts`):

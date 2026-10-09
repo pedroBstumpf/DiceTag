@@ -87,17 +87,25 @@ export class EntryWindow {
   private readonly linkedSigns = computed(() => new Map((this.roll().attributes ?? []).map((a) => [baseTagId(a), attributeSign(a)])));
   /** Tags ligadas a esta ação que ainda existem na ficha. */
   readonly linkedTags = computed(() => this.ownerTags().filter((t) => this.linkedSigns().has(t.id)));
-  /** Composição do modificador, ex.: "+1 fixo +3 Esgrima −2 Medo −1 Pesada = +1". */
+  /** Somar as etiquetas de itens ligadas ao total? (padrão: não; elas só aparecem na rolagem) */
+  readonly addItems = computed(() => !!this.roll().addItems);
+  /** O dono tem etiquetas de itens equipados (mostra a chave "Somar itens ao total"). */
+  readonly hasItemTags = computed(() => this.ownerTags().some((t) => t.item));
+
+  toggleAddItems(): void {
+    this.patchRoll({ addItems: !this.addItems() || undefined });
+  }
+
+  /** Composição do modificador, ex.: "+1 fixo +3 Esgrima −2 Medo = +2 · itens +1 (fora do total)". */
   readonly breakdown = computed(() => {
-    const parts = [
-      `${this.modifierText(this.roll().modifier)} fixo`,
-      // Estudos não entram no modificador (só acumulam SA)
-      ...this.linkedTags()
-        .filter((t) => !t.study)
-        .map((t) => `${this.modifierText(this.tagValue(t))} ${t.text}`),
-    ];
-    const total = this.linkedTags().reduce((sum, t) => sum + this.tagValue(t), this.roll().modifier);
-    return `${parts.join(' ')} = ${this.modifierText(total)}`;
+    // Estudos não entram no modificador (só acumulam SA); itens só com "Somar itens ao total"
+    const counted = this.linkedTags().filter((t) => !t.study && (!t.item || this.addItems()));
+    const items = this.linkedTags().filter((t) => t.item && !this.addItems());
+    const parts = [`${this.modifierText(this.roll().modifier)} fixo`, ...counted.map((t) => `${this.modifierText(this.tagValue(t))} ${t.text}`)];
+    const total = counted.reduce((sum, t) => sum + this.tagValue(t), this.roll().modifier);
+    const itemSum = items.reduce((sum, t) => sum + this.tagValue(t), 0);
+    const outside = items.length ? ` · itens ${this.modifierText(itemSum)} (fora do total)` : '';
+    return `${parts.join(' ')} = ${this.modifierText(total)}${outside}`;
   });
 
   /** Sinal da tag nesta ação: 1 (soma), −1 (penalidade, só itens) ou 0 (desligada). */
