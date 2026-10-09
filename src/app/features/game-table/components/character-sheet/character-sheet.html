@@ -125,7 +125,7 @@
                       (keydown.enter)="nameInput.blur()"
                     />
                   </label>
-                  <!-- Raça e sub-raça: Raças do Worldbuild / Lore geral; escolher aplica etiquetas e modificadores -->
+                  <!-- Raça e sub-raça: Raças do mundo; escolher aplica características e modificadores -->
                   <div class="grid grid-cols-2 gap-2">
                     @for (slot of raceSlots; track slot.id) {
                       @let orphan = orphanRaceName(slot.id);
@@ -136,11 +136,11 @@
                           class="sheet-input"
                           [value]="raceKeyOf(slot.id)"
                           (change)="chooseRace(slot.id, raceSelect.value)"
-                          [matTooltip]="raceOptions().length ? '' : 'Crie Raças no Worldbuild ou na Lore geral'"
+                          [matTooltip]="raceOptions().length ? '' : 'Crie Raças no Worldbuild deste mundo'"
                         >
                           <option value="">{{ orphan || '— Nenhuma —' }}</option>
                           @for (o of raceOptions(); track o.key) {
-                            <option [value]="o.key" [selected]="o.key === raceKeyOf(slot.id)">{{ o.item.name }}{{ o.ref.global ? ' · Lore geral' : '' }}</option>
+                            <option [value]="o.key" [selected]="o.key === raceKeyOf(slot.id)">{{ o.item.name }}</option>
                           }
                         </select>
                       </label>

@@ -1,29 +1,30 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { defaultSheet, defaultToken } from '../../../core/models/table-session.model';
-import { User } from '../../../core/models/user.model';
-import { WORLD_ITEM_META, WorldItem, WorldItemType } from '../../../core/models/world-item.model';
+import { WORLD_ITEM_META, WorldItem, WorldItemType, worldItemBlobIds } from '../../../core/models/world-item.model';
+import { worldbuildKey } from '../../../core/models/world.model';
 import { AuthService } from '../../../core/services/auth.service';
 import { StorageService } from '../../../core/services/storage.service';
+import { WorldsService } from '../../../core/services/worlds.service';
 import { newId } from '../../../core/utils/id';
+import { LEGACY_LORE_IMPORTED_KEY, LEGACY_LORE_KEY, mergeLegacyLore } from '../utils/legacy-lore';
 import { columnLayout } from '../utils/timeline-layout';
 
 /**
- * Fonte única de dados do worldbuild do usuário logado.
+ * Fonte única de dados do Worldbuild do mundo aberto (`WorldsService.activeId`) do usuário.
  *
  * Os itens formam uma árvore (parentId). A lista de itens é salva como um
- * único registro por usuário; imagens são salvas como Blobs separados
- * (chave "blob:<id>") para não pesar a lista.
- *
- * Também é a base do LoreService (Lore geral): a subclasse só troca o título
- * e a chave de armazenamento, e todos os editores funcionam com as duas.
+ * único registro por mundo; imagens são salvas como Blobs separados
+ * (chave "blob:<id>") para não pesar a lista. Trocar de mundo ou de usuário
+ * grava as pendências na chave antiga antes de carregar a nova.
  */
 @Injectable({ providedIn: 'root' })
 export class WorldbuildService {
   private readonly storage = inject(StorageService);
   private readonly auth = inject(AuthService);
+  private readonly worlds = inject(WorldsService);
 
-  /** Nome exibido no cabeçalho do explorador. */
-  readonly title: string = 'Worldbuild';
+  /** Nome exibido no cabeçalho do explorador: o do mundo aberto. */
+  readonly title = computed(() => this.worlds.active()?.name ?? 'Worldbuild');
 
   // --- Estado --------------------------------------------------------------
   private readonly _items = signal<WorldItem[]>([]);
@@ -48,23 +49,22 @@ export class WorldbuildService {
     // Garante que nada se perca ao fechar ou recarregar a aba
     window.addEventListener('pagehide', () => this.flush());
 
-    // Recarrega o worldbuild quando o usuário muda
+    // Recarrega os itens quando o usuário ou o mundo aberto mudam (depois de a lista de mundos carregar)
     effect(() => {
       const user = this.auth.user();
+      const ready = this.worlds.loaded();
+      const worldId = this.worlds.activeId();
       untracked(() => {
-        // Grava as pendências do usuário anterior antes de trocar a chave
+        // Grava as pendências do mundo/usuário anterior antes de trocar a chave
         this.flush();
         this.loaded.set(false);
         this._items.set([]);
-        this.storageKey = this.keyFor(user);
-        if (this.storageKey) this.load(this.storageKey);
+        this.storageKey = user && ready ? worldbuildKey(user.id, worldId) : null;
+        // A Lore geral antiga é importada uma vez, para o primeiro mundo
+        const first = this.worlds.worlds()[0]?.id === worldId;
+        if (this.storageKey && user) void this.load(this.storageKey, first ? user.id : null);
       });
     });
-  }
-
-  /** Chave do IndexedDB onde ficam os itens (por usuário; null = ninguém logado). */
-  protected keyFor(user: User | null): string | null {
-    return user ? `worldbuild:${user.id}` : null;
   }
 
   // --- Consultas -----------------------------------------------------------
@@ -188,14 +188,7 @@ export class WorldbuildService {
 
     // Limpa os arquivos de imagem associados (inclui imagem e inventário dos NPCs e imagens das raças)
     for (const item of removed) {
-      const blobIds = [
-        item.blobId,
-        item.token?.blobId,
-        item.maleBlobId,
-        item.femaleBlobId,
-        ...(item.sheet?.inventory ?? []).map((i) => i.blobId),
-      ];
-      for (const blobId of blobIds) if (blobId) this.storage.delete(`blob:${blobId}`);
+      for (const blobId of worldItemBlobIds(item)) this.storage.delete(`blob:${blobId}`);
     }
     return [...ids];
   }
@@ -252,12 +245,30 @@ export class WorldbuildService {
     return name;
   }
 
-  private async load(key: string): Promise<void> {
-    const items = (await this.storage.get<WorldItem[]>(key)) ?? [];
-    // O usuário mudou durante o carregamento: descarta o resultado antigo
+  /** Carrega os itens da chave. `importLoreFor`: usuário que recebe a Lore geral antiga, se ainda não foi importada. */
+  private async load(key: string, importLoreFor: string | null): Promise<void> {
+    let items = ((await this.storage.get<WorldItem[]>(key)) ?? []).map(migrateTimeline);
+    if (importLoreFor) items = await this.importLegacyLore(items, importLoreFor, key);
+    // O usuário ou o mundo mudou durante o carregamento: descarta o resultado antigo
     if (key !== this.storageKey) return;
-    this._items.set(items.map(migrateTimeline));
+    this._items.set(items);
     this.loaded.set(true);
+  }
+
+  /**
+   * A Lore geral foi removida do app: o conteúdo dela (chave `lore:global`) entra uma única vez
+   * no primeiro mundo do primeiro usuário que abrir o app, numa pasta "Lore geral (importada)".
+   * Os ids são mantidos, então NPCs, itens e raças usados pelas mesas continuam funcionando.
+   * A chave antiga fica intacta, como cópia de segurança.
+   */
+  private async importLegacyLore(items: WorldItem[], userId: string, key: string): Promise<WorldItem[]> {
+    if (await this.storage.get(LEGACY_LORE_IMPORTED_KEY)) return items;
+    const lore = (await this.storage.get<WorldItem[]>(LEGACY_LORE_KEY)) ?? [];
+    const merged = mergeLegacyLore(items, lore.map(migrateTimeline), { id: newId(), now: Date.now() });
+    // Grava na chave do mundo que estava sendo carregado (mesmo que o usuário já tenha trocado)
+    if (merged !== items) await this.storage.set(key, merged);
+    await this.storage.set(LEGACY_LORE_IMPORTED_KEY, userId);
+    return merged;
   }
 
   /**

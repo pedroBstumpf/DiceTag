@@ -15,7 +15,7 @@
   </div>
 
   @if (picking() && !readonly()) {
-    <!-- Escolher um item do mundo (Lore geral e Worldbuild) -->
+    <!-- Escolher um item do mundo (Worldbuild) ou da mesa -->
     <div class="mb-3 rounded-lg bg-ink-950/70 p-2 ring-1 ring-astral-400/25 animate-fade-in">
       <label class="flex h-8 items-center gap-2 rounded-md bg-ink-900 px-2 text-sm ring-1 ring-white/10 focus-within:ring-astral-500/60">
         <mat-icon class="!size-4 !text-[16px] text-slate-500">search</mat-icon>
@@ -37,9 +37,7 @@
           >
             <mat-icon class="!size-4 shrink-0 !text-[16px] text-amber-300">inventory_2</mat-icon>
             <span class="min-w-0 flex-1 truncate">{{ option.item.name }}</span>
-            @if (option.source === 'global') {
-              <mat-icon class="!size-3.5 shrink-0 !text-[14px] text-star-400/70" matTooltip="Lore geral">auto_stories</mat-icon>
-            } @else if (option.source === 'table') {
+            @if (option.source === 'table') {
               <mat-icon class="!size-3.5 shrink-0 !text-[14px] text-emerald-300/70" matTooltip="Item desta mesa">table_restaurant</mat-icon>
             }
           </button>
@@ -152,7 +150,7 @@
       </div>
     } @empty {
       <p class="px-1 py-4 text-xs leading-relaxed text-slate-500">
-        O inventário está vazio. Adicione itens criados na aba "Itens" do Worldbuild ou da Lore geral.
+        O inventário está vazio. Adicione itens criados na aba "Itens" do Worldbuild.
       </p>
     }
   </div>

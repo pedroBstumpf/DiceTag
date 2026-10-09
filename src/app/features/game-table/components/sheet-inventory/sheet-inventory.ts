@@ -8,7 +8,6 @@ import { CURRENCY, InventoryEntry, TableEntry } from '../../../../core/models/ta
 import { newId } from '../../../../core/utils/id';
 import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
 import { ItemCardView } from '../../../worldbuild/components/item-card/item-card-view';
-import { LoreService } from '../../../worldbuild/services/lore.service';
 import { WorldbuildService } from '../../../worldbuild/services/worldbuild.service';
 import { BlobUrlService } from '../../services/blob-url.service';
 import { SheetStore } from '../../../../core/services/sheet-store';
@@ -18,8 +17,8 @@ import { CardItem, InventoryRow, ItemSource, ItemSources, inventoryRow, itemOrig
 const NO_ITEMS = new Map<string, CardItem>();
 
 /** Fontes dos itens (lê signals: use dentro de computed). Fora da mesa não há itens da mesa. */
-export function itemSources(lore: LoreService, worldbuild: WorldbuildService, session: TableSessionService | null): ItemSources {
-  return { global: lore.byId(), own: worldbuild.byId(), table: session?.tableItemById() ?? NO_ITEMS };
+export function itemSources(worldbuild: WorldbuildService, session: TableSessionService | null): ItemSources {
+  return { own: worldbuild.byId(), table: session?.tableItemById() ?? NO_ITEMS };
 }
 
 /** Item (do mundo ou da mesa) que pode ser adicionado ao inventário. */
@@ -32,8 +31,8 @@ interface ItemOption {
  * Aba Inventário da ficha: lista dos itens do personagem e, ao lado, o cartão
  * do item selecionado (imagem, nome e etiquetas).
  *
- * Os itens vêm do worldbuild do usuário ou da Lore geral (aba "Itens" do
- * Worldbuild) ou são itens da mesa: o jogador que cria um item no inventário o
+ * Os itens vêm do mundo (aba "Itens" do Worldbuild; o jogador só vê os revelados na aba Lore)
+ * ou são itens da mesa: o jogador que cria um item no inventário o
  * cria só nesta mesa (TableState.items), nunca no Worldbuild. Editar o cartão aqui personaliza só a cópia desta ficha
  * (InventoryEntry guarda o que mudou); o original e os outros inventários não mudam.
  * `readonly`: jogador vendo o inventário público de um NPC (só seleciona e vê os cartões).
@@ -55,7 +54,6 @@ export class SheetInventory {
   /** Presente só na mesa (loja, loot e "Dar para"). */
   private readonly session = inject(TableSessionService, { optional: true });
   private readonly worldbuild = inject(WorldbuildService);
-  private readonly loreGeneral = inject(LoreService);
   private readonly snackBar = inject(MatSnackBar);
   readonly blobs = inject(BlobUrlService);
 
@@ -72,7 +70,7 @@ export class SheetInventory {
   private readonly inventory = computed(() => this.data()?.sheet.inventory ?? []);
 
   readonly rows = computed<InventoryRow[]>(() => {
-    const sources = itemSources(this.loreGeneral, this.worldbuild, this.session);
+    const sources = itemSources(this.worldbuild, this.session);
     return this.inventory().map((entry) => inventoryRow(entry, sources));
   });
 
@@ -244,12 +242,12 @@ export class SheetInventory {
   readonly createsInTable = computed(() => this.isPlayer() && this.tableItemsAllowed());
   readonly canCreate = computed(() => !this.isPlayer() || this.tableItemsAllowed());
 
-  /** Itens que podem entrar no inventário (Lore geral, Worldbuild e itens da mesa), filtrados pela busca. */
+  /** Itens que podem entrar no inventário (do mundo e da mesa), filtrados pela busca. */
   readonly options = computed<ItemOption[]>(() => {
     const q = this.query().trim().toLowerCase();
-    const options: ItemOption[] = this.loreGeneral.worldItems().map((item) => ({ item, source: 'global' }));
-    // O jogador não vê o Worldbuild na mesa
-    if (!this.isPlayer()) options.push(...this.worldbuild.worldItems().map((item) => ({ item, source: 'own' as const })));
+    // O jogador só vê os itens do mundo que o mestre revelou na aba Lore
+    const own = this.worldbuild.worldItems().filter((item) => !this.isPlayer() || !!this.session?.canSeeLoreItem(item.id));
+    const options: ItemOption[] = own.map((item) => ({ item, source: 'own' }));
     if (this.tableItemsAllowed() && this.session) {
       options.push(...this.session.tableItems().map((item) => ({ item, source: 'table' as const })));
     }
@@ -260,7 +258,6 @@ export class SheetInventory {
     const entry: InventoryEntry = {
       id: newId(),
       itemId: option.item.id,
-      ...(option.source === 'global' && { global: true }),
       ...(option.source === 'table' && { table: true }),
     };
     this.store.updateSheet(this.sheetId(), { inventory: [...this.inventory(), entry] });

@@ -18,8 +18,8 @@ organizar toda a atmosfera de uma campanha.
 | Área | Status |
 |---|---|
 | Landing page (banner com logo, atalhos, mural de notícias vazio) | Pronto |
-| Barra lateral global (navegação, **Lore geral**, atalhos para as **mesas** do usuário — até 6 + "Ver todas" —, conta) | Pronto |
-| **Lore geral** (`/lore`): lore oficial do mundo, global, mesma página/editores do Worldbuild | Pronto |
+| Barra lateral global (navegação, **mundos** do usuário, atalhos para as **mesas** — até 6 + "Ver todas" —, conta) | Pronto |
+| **Mundos**: até 2 Worldbuilds separados por usuário; cada mesa se passa num mundo (a Lore geral foi removida e importada) | Pronto |
 | Contas (login/cadastro locais) + **modo de teste sem conta** | Pronto (provisório) |
 | Minhas mesas (criar, listar, excluir com limpeza dos dados, abrir) | Pronto |
 | Worldbuild (pastas, documentos rich text, **linha do tempo em mapa mental**, mapas/imagens, **itens com cartão**) | Pronto |
@@ -96,12 +96,14 @@ src/
     │   │   │                           # ficha (CharacterSheet, STATUS_BARS, withStatusBars), constantes + spec
     │   │   ├── tag.model.ts            # Tag (etiqueta: texto, cor, nível) e TAG_COLORS
     │   │   ├── world-item.model.ts     # WorldItem (inclui `item`), TimelineEvent, TimelineLink, WORLD_ITEM_META, TIMELINE_COLORS
+    │   │   ├── world.model.ts          # World (mundo), MAX_WORLDS = 2, DEFAULT_WORLD_ID, worldbuildKey
     │   │   └── news.model.ts
     │   ├── services/
     │   │   ├── storage.service.ts      # wrapper chave/valor do IndexedDB (get/set/delete)
     │   │   ├── auth.service.ts         # contas locais + visitante
     │   │   ├── sheet-store.ts          # SheetStore: contrato da fonte de dados da ficha + inventário em comum
     │   │   ├── game-tables.service.ts  # CRUD de mesas (excluir apaga table-state e blobs)
+    │   │   ├── worlds.service.ts       # mundos do usuário (lista, aberto, criar/renomear/excluir) + spec
     │   │   ├── layout.service.ts       # barra lateral (recolhida/mobile)
     │   │   └── news.service.ts         # notícias (vazio por enquanto)
     │   └── utils/id.ts                 # newId() com fallback fora de HTTPS
@@ -124,14 +126,12 @@ src/
         ├── auth/auth-dialog/   # diálogo único Entrar/Criar conta
         ├── tables/             # "Minhas mesas" + create-table-dialog
         ├── worldbuild/
-        │   ├── worldbuild.ts           # página: explorador + área de janelas (também serve a /lore)
-        │   ├── lore.routes.ts          # rota /lore: página do worldbuild com LoreService
-        │   ├── services/worldbuild.service.ts   # inclui a migração de linhas do tempo antigas; keyFor() define a chave
-        │   ├── services/lore.service.ts         # Lore geral: estende WorldbuildService, chave global
+        │   ├── worldbuild.ts           # página: explorador (com seletor de mundo) + área de janelas
+        │   ├── services/worldbuild.service.ts   # itens do mundo aberto; migração de timelines antigas; importa a Lore geral antiga
         │   ├── services/world-npc.store.ts      # SheetStore das fichas base do bestiário (NPCs do Worldbuild)
-        │   ├── directives/lore-scope.directive.ts  # appLoreScope: troca WorldbuildService → LoreService no elemento
         │   ├── directives/world-npc-sheet.directive.ts  # appWorldNpcSheet: a ficha usa o WorldNpcStore
         │   ├── utils/timeline-layout.ts         # layouts, setas e hit test do mapa mental + spec
+        │   ├── utils/legacy-lore.ts             # importação única da antiga Lore geral para o primeiro mundo + spec
         │   └── components/ explorer (abas Arquivos/Itens/NPCs/Raças/Linhas do tempo/Documentos/Mapas), race-card,
         │                   document-editor, timeline-editor, image-viewer,
         │                   item-card (ItemCard + ItemCardView)
@@ -185,8 +185,8 @@ src/
 ```
 
 Rotas (`app.routes.ts`, todas lazy):
-- `''` (Shell) → `''` Home · `mesas` Tables · `worldbuild` Worldbuild (aceita `?novo=<tipo>` e `?abrir=<id>`) ·
-  `lore` Lore geral (`loadChildren` → `LORE_ROUTES`: mesmo componente `Worldbuild` com `LoreService` no lugar do `WorldbuildService`)
+- `''` (Shell) → `''` Home · `mesas` Tables · `worldbuild` Worldbuild do mundo aberto (aceita `?novo=<tipo>` e `?abrir=<id>`).
+  A antiga rota `/lore` (Lore geral) foi removida; endereços antigos caem no `**`.
 - `mesa/:id` → GameTablePage (tela cheia, **fora** do Shell)
 - `**` → redireciona para `''`
 
@@ -292,11 +292,13 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - `isLoggedIn()` = há usuário (real ou visitante). `isGuest()` = é o visitante.
 - Contas reais: e-mail único (normalizado em minúsculas), senha com mínimo de 6 caracteres, hash SHA-256 (`dicetag:` + senha).
   Sessão = id do usuário em `localStorage['dicetag.session']`. **É provisório** — não é segurança real.
-- Todos os dados são separados por usuário (o visitante tem os próprios dados), **exceto a Lore geral** (global).
+- Todos os dados são separados por usuário (o visitante tem os próprios dados).
 
 ### Mesas (`GameTablesService`)
 - Campos: nome (obrigatório, até 60), sistema (texto livre com sugestões `GAME_SYSTEMS`), descrição (até 400),
-  jogadores (1–20), cor de destaque (`TABLE_ACCENTS`), dono (`ownerId`).
+  jogadores (1–20), cor de destaque (`TABLE_ACCENTS`), dono (`ownerId`) e **mundo** (`worldId`, escolhido na criação;
+  ausente = o primeiro mundo, `DEFAULT_WORLD_ID`). Ao abrir a mesa, `GameTablePage` abre o mundo dela
+  (`WorldsService.select`): a aba Lore, o bestiário, os itens do inventário e as raças vêm desse mundo.
 - Lista mostra só as mesas do usuário atual, mais recentes primeiro.
 - Excluir uma mesa apaga também `table-state:<id>` e os Blobs dela (mapas, áudios, imagens de token).
 
@@ -313,7 +315,7 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   Excluir um NPC do Worldbuild apaga a imagem e as imagens personalizadas do inventário dele.
 - **Abas do explorador** (ícones com o nome na dica e contador; `LIST_VIEWS` em `explorer.ts`): **Arquivos** (árvore) e
   uma lista plana por tipo — Itens, NPCs, Raças, Linhas do tempo, Documentos e Mapas —, com busca e botão "Novo"
-  (em Mapas, envia imagens). Valem no Worldbuild, na Lore geral e nas janelas de explorador da mesa.
+  (em Mapas, envia imagens); a aba Arquivos tem "Nova pasta". Valem no Worldbuild e na janela de explorador da mesa.
 - **Itens do mundo:** aba **Itens** do explorador; itens também ficam na árvore. O cartão (`ItemCard`) é editável na janela do item e só
   leitura no inventário da ficha. Trocar a imagem usa `setImage` (apaga a anterior). Como os demais itens, aparecem
   na aba Lore da mesa e abrem em janela lá.
@@ -323,13 +325,19 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - Excluir pasta exclui todo o conteúdo e apaga os Blobs de imagem.
 - Arquivos soltos no explorador: apenas imagens são aceitas.
 
-### Lore geral (`LoreService`)
-- A lore oficial do mundo (o app é voltado a um mundo/sistema próprios). Mesmas regras do Worldbuild,
-  mas numa chave **global** (`lore:global`), igual para todos os usuários. Ainda sem permissões: quem
-  abre pode editar.
-- `LoreService extends WorldbuildService` e só troca `title` e `keyFor()`. Página e editores são os
-  mesmos: a rota `/lore` fornece `LoreService` como `WorldbuildService`; na mesa, a diretiva
-  `appLoreScope` faz o mesmo no elemento do editor/explorador.
+### Mundos (`WorldsService`, `core/`)
+- Cada usuário tem até **`MAX_WORLDS` = 2** mundos; cada um é um Worldbuild separado (`worldbuild:<usuário>:<mundo>`).
+  O primeiro (`DEFAULT_WORLD_ID`, "Meu mundo") usa a chave antiga `worldbuild:<usuário>`: nada foi migrado.
+  Lista em `worlds:<usuário>` (sem lista salva = só o primeiro); o mundo aberto fica em `localStorage dicetag.world.<usuário>`.
+- `WorldbuildService` carrega sempre o **mundo aberto** (`activeId`): trocar de mundo grava as pendências na chave antiga.
+- Página Worldbuild: seletor no cabeçalho do explorador (`Explorer.worldSwitcher`): trocar, criar (até 2), renomear,
+  excluir. **Excluir** apaga itens e Blobs e só é permitido se **nenhuma mesa** se passa no mundo e se sobrar outro.
+  Na mesa, o explorador não troca de mundo (é o da mesa). Barra lateral: seção "Mundo" lista os mundos (abre o Worldbuild).
+- **Lore geral removida.** O conteúdo de `lore:global` foi importado **uma vez** para o primeiro mundo do primeiro
+  usuário que abrir o app, numa pasta "Lore geral (importada)", **com os mesmos ids** (`mergeLegacyLore`,
+  `utils/legacy-lore.ts`; marca `lore:global:imported`). A chave antiga fica como cópia de segurança, sem uso.
+  Referências antigas (`InventoryEntry.global`, `TableEntry.worldNpcGlobal`, `RaceRef.global`) são **ignoradas**:
+  tudo é procurado no mundo pelo id.
 
 ### Linha do tempo (mapa mental)
 - Eventos são cartões livres no quadro (`x`/`y` = canto superior esquerdo; tamanho fixo `TIMELINE_CARD`),
@@ -380,10 +388,8 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - **Janela por tipo:** personagem, NPC e token de NPC (`npc:<id do token>`) abrem a ficha completa
   (`CharacterSheetView`, janela `sheet`, 880×700); NPC do bestiário aberto pelo explorador = janela `npc`
   (`appWorldNpcSheet`); automação abre a `EntryWindow`; item equipado (`equip:…`) abre a `EquippedItemWindow`. Sem permissão, `content()` → null (não abre).
-- **Lore** não é duplicada: a aba Lore lista os itens (exceto pastas) da **Lore geral** (marcados com
-  `auto_stories`) e do **Worldbuild** do usuário e os abre com os mesmos editores.
-  "Abrir Lore geral" / "Abrir pastas do Worldbuild" abrem o `Explorer` numa janela (`lore:explorer` /
-  `worldbuild:explorer`) **sem sair da mesa**.
+- **Lore** não é duplicada: a aba Lore lista os itens (exceto pastas) do **mundo da mesa** e os abre com os mesmos
+  editores. "Abrir pastas do mundo" abre o `Explorer` numa janela (`worldbuild:explorer`) **sem sair da mesa**.
 - **Organização da Lore por mesa (`TableState.lore`):** pastas próprias da mesa (um nível, `LoreFolder`) e
   ajustes por item (`LoreItemOverride { name?, folderId?, hidden? }`). Renomear muda só o nome **nesta mesa**
   (vazio = volta ao original; o título da janela usa `loreName`); a lixeira **esconde** o item desta mesa
@@ -392,8 +398,8 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - **Lore x jogadores:** cada pasta da mesa tem um **olho** (`LoreFolder.public`, fechado por padrão). O jogador só vê
   as pastas reveladas e os itens dentro delas (`canSeeLoreItem`; itens soltos na raiz são só do mestre) e os abre
   em **só leitura** (`readonly` em DocumentEditor/RichTextEditor `editable`, TimelineEditor, ItemCard e na ficha do
-  NPC do bestiário). Organizar a aba (pastas, renomear, remover, arrastar) e abrir os exploradores "Lore geral" /
-  "Worldbuild" é só do mestre; no papel de jogador essas janelas não abrem (`content()` → null).
+  NPC do bestiário). Organizar a aba (pastas, renomear, remover, arrastar) e abrir o explorador do mundo é só do
+  mestre; no papel de jogador essa janela não abre (`content()` → null).
 - **Itens criados na mesa** (`TableState.items`) também entram na aba Lore (ícone verde de mesa) e ficam **visíveis aos
   jogadores** na raiz ou em pasta revelada (registro dos feitos deles, sem criar o item duas vezes). O mestre os organiza
   como os demais (pastas, renomear, remover da aba). Abrem na janela `TableItemWindow` (tipo `table-item`): editável
@@ -416,8 +422,8 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   gravados por `updateSheet(entryId, patch)`.
 - **Aba Ficha** — cards em grade (container query):
   - **Básico:** imagem (= token), nome, raça, sub-raça, jogador dono ("Vincular à minha conta") e **rótulos** (texto livre, Enter adiciona).
-    **Raça e sub-raça** são listas com as Raças da Lore geral e do Worldbuild (na mesa, menos as removidas da aba Lore
-    desta mesa; com `appLoreScope`, só as da Lore geral). Escolher aplica (`applyRace`, puro em `utils/race.ts` + spec):
+    **Raça e sub-raça** são listas com as Raças do mundo aberto (na mesa, o mundo dela, menos as removidas da aba Lore
+    desta mesa). Escolher aplica (`applyRace`, puro em `utils/race.ts` + spec):
     as características da raça viram **rótulos** e os `statusMods` somam ao **máximo** de Corpo/Mente/Espírito (o valor atual
     acompanha, entre 0 e o máximo; máximo ≥ 1). Raça e sub-raça somam; trocar ou limpar um campo desfaz só o que ele
     aplicou (`CharacterSheet.appliedRaces`; `raceRef`/`subraceRef` guardam a escolha). Fichas antigas com texto livre
@@ -445,12 +451,12 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
     ação, via `studyTagsOf` em `rollTagsOf`, nível 0 = sem modificador): `studyGain` (só 2d12: 12+ → 1 SA, sucesso crítico → 2, **falha crítica → −1**, SA nunca abaixo de 0) e
     `trainStudy` (`utils/dice.ts`); `session.trainStudies` grava e, ao alcançar o SN, avisa no chat e devolve os nomes
     (`levelUps`) para o aviso "⭐ … subiu de nível!" de quem rolou.
-- **Aba Inventário** (`SheetInventory`): `InventoryEntry { itemId, global?, table? }` referencia um item do mundo (Worldbuild do
-  usuário ou Lore geral) ou da mesa (`TableState.items`); a lista mostra os nomes e, ao lado, o cartão **editável** (`ItemCardView`). Editar ali é
+- **Aba Inventário** (`SheetInventory`): `InventoryEntry { itemId, table? }` referencia um item do mundo (Worldbuild do
+  mundo da mesa) ou da mesa (`TableState.items`); a lista mostra os nomes e, ao lado, o cartão **editável** (`ItemCardView`). Editar ali é
   **cópia sob demanda**: só o que mudou vai para a entrada (`name`, `tags`, `blobId`) e vale no lugar do original —
   o item do mundo e os outros inventários não mudam. "Voltar ao item original" limpa a personalização; imagens
   personalizadas são apagadas ao trocar, voltar, tirar o item ou excluir o personagem. "+ Item" busca itens das
-  fontes (Lore geral, Worldbuild — escondido no papel de jogador — e itens da mesa) ou cria um novo: o **mestre** cria
+  fontes (itens do mundo — o jogador só vê os revelados na aba Lore, `canSeeLoreItem` — e itens da mesa) ou cria um novo: o **mestre** cria
   no Worldbuild; o **jogador** cria só **nesta mesa** (`session.createTableItem`, `InventoryEntry.table`), nunca no
   Worldbuild. Fichas base do bestiário (`npc-base`/`world`) não usam itens da mesa. Item da mesa (`TableItem`, com
   `ownerUserId` e imagem própria): quem o criou e o mestre editam **o próprio item** pelo cartão do inventário
@@ -487,7 +493,7 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - Igual à do personagem, **sem a aba Anotações e sem o card Relações** (abas Ficha, Inventário, Habilidades).
   NPCs também têm as barras de status (`hasSheet`). Ações de NPC também usam as tags dos temas.
 - **Três níveis** (`SheetData.level`), todos pela mesma tela e pelo `SheetStore`:
-  1. **Bestiário** (`world`): a ficha base no Worldbuild/Lore geral.
+  1. **Bestiário** (`world`): a ficha base no Worldbuild do mundo.
   2. **NPC da mesa** (`npc-base`): `TableEntry.worldNpcId` (+ `worldNpcGlobal`) é **só uma referência** — ficha,
      imagem e token padrão vêm da base (`worldNpcOf`, `tokenOf`, `sheetOf`, `updateSheet`, `updateEntryToken` gravam
      lá); o nome acompanha o original (`entries` substitui pelo nome atual). Ações, controle e visibilidade são da
@@ -701,11 +707,15 @@ O `MapStage` recebe `insets` para enquadrar o mapa só na área livre entre as b
 |---|---|
 | `users` | `StoredUser[]` |
 | `tables` | `GameTable[]` (todas; filtradas por `ownerId`) |
-| `worldbuild:<userId>` | `WorldItem[]` (inclui os itens do mundo com cartão e os NPCs do bestiário) |
-| `lore:global` | `WorldItem[]` da Lore geral (igual para todos) |
+| `worlds:<userId>` | `World[]` (mundos do usuário; ausente = só o primeiro) |
+| `worldbuild:<userId>` | `WorldItem[]` do primeiro mundo (`DEFAULT_WORLD_ID`; itens, NPCs do bestiário, raças…) |
+| `worldbuild:<userId>:<worldId>` | `WorldItem[]` dos outros mundos |
+| `lore:global` | `WorldItem[]` da antiga Lore geral — **sem uso**, cópia de segurança (importada para o primeiro mundo) |
+| `lore:global:imported` | id do usuário que recebeu a importação da Lore geral (marca de "já importado") |
 | `table-state:<tableId>` | `TableState` (cenas com tokens/névoa/memória/paredes/portas/desenhos/anotações/camadas/vista, pastas de cenas, cena ativa, arquivos — com a ficha do personagem em `sheet` e os NPCs como referência ao bestiário —, tokens de NPC com ficha própria, volume mestre, chat, organização da Lore, itens criados na mesa por jogadores) |
 | `blob:<id>` | `Blob` de imagem/mapa/áudio/imagem de token |
 | `localStorage: dicetag.session` | id do usuário logado |
+| `localStorage: dicetag.world.<userId>` | último mundo aberto pelo usuário |
 | `localStorage: dicetag.sidebarCollapsed` | preferência da barra lateral |
 
 O banco e as chaves do `localStorage` mantêm o prefixo `dicetag` (nome antigo do projeto) — assim como o prefixo
@@ -737,7 +747,7 @@ repositórios por domínio, servidor autoritativo (névoa, rolagens, permissões
 - Movimento de tokens (arrastar ou WASD) não colide com paredes.
 - Ctrl+Z cobre só desenhos (não tokens, paredes ou anotações).
 - Backend + multiplayer em tempo real; permissões reais de mestre/jogador; convite de jogadores.
-- Lore geral: hoje qualquer usuário edita; com backend, só o dono do mundo deve editar (os demais só leem).
+- Mundos: limite fixo de 2 por usuário; trocar o mundo de uma mesa já criada ainda não é possível.
 - Mural de notícias alimentado por API/CMS (`NewsService.posts`).
 - Testes de componentes (hoje têm testes as funções puras de `utils/` e `state/`, as regras da ficha no modelo, a
   `FxLayer` e a fachada `TableSessionService`, num teste de integração).

@@ -29,6 +29,18 @@
       </mat-form-field>
     </div>
 
+    <!-- Mundo: a aba Lore da mesa traz os itens dele -->
+    <mat-form-field appearance="outline" class="w-full">
+      <mat-label>Mundo</mat-label>
+      <!-- select nativo (matNativeControl): mesmo visual, sem carregar o MatSelect no bundle inicial -->
+      <select matNativeControl formControlName="worldId">
+        @for (world of worlds.worlds(); track world.id) {
+          <option [value]="world.id">{{ world.name }}</option>
+        }
+      </select>
+      <mat-hint>Os itens deste mundo aparecem na aba Lore da mesa.</mat-hint>
+    </mat-form-field>
+
     <!-- Descrição -->
     <mat-form-field appearance="outline" class="w-full">
       <mat-label>Descrição (opcional)</mat-label>

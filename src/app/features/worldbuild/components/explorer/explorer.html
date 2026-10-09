@@ -1,6 +1,32 @@
 <!-- ===== Cabeçalho do painel ===== -->
 <header class="flex h-14 shrink-0 items-center gap-1 border-b border-white/5 pl-4 pr-2">
-  <h2 class="flex-1 font-display text-base text-star-300">{{ service.title }}</h2>
+  @if (worldSwitcher() && renamingWorld()) {
+    <!-- Renomear o mundo aberto -->
+    <input
+      #worldInput
+      appAutoFocus
+      class="h-8 min-w-0 flex-1 rounded bg-ink-950 px-2 font-display text-sm text-slate-100 outline-none ring-1 ring-astral-500/60"
+      aria-label="Nome do mundo"
+      [value]="service.title()"
+      (keydown.enter)="finishWorldRename(worldInput.value)"
+      (keydown.escape)="renamingWorld.set(false)"
+      (blur)="finishWorldRename(worldInput.value)"
+    />
+  } @else if (worldSwitcher()) {
+    <!-- Mundo aberto: trocar, criar, renomear, excluir -->
+    <button
+      type="button"
+      class="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg py-1 text-left hover:text-white"
+      matTooltip="Mundos"
+      [matMenuTriggerFor]="worldMenu"
+    >
+      <mat-icon class="!size-5 shrink-0 !text-[20px] text-sky-300">public</mat-icon>
+      <h2 class="min-w-0 truncate font-display text-base text-star-300">{{ service.title() }}</h2>
+      <mat-icon class="!size-4 shrink-0 !text-[16px] text-slate-500">expand_more</mat-icon>
+    </button>
+  } @else {
+    <h2 class="min-w-0 flex-1 truncate font-display text-base text-star-300">{{ service.title() }}</h2>
+  }
 
   <button mat-icon-button matTooltip="Criar" [matMenuTriggerFor]="createMenu" [matMenuTriggerData]="{ parentId: null }">
     <mat-icon>add</mat-icon>
@@ -222,6 +248,31 @@
       <span>Mapa / imagem</span>
     </button>
   </ng-template>
+</mat-menu>
+
+<!-- Menu de mundos (página do Worldbuild) -->
+<mat-menu #worldMenu="matMenu">
+  <p class="px-4 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-widest text-slate-500">Mundos</p>
+  @for (world of worlds.worlds(); track world.id) {
+    <button mat-menu-item (click)="worlds.select(world.id)">
+      <mat-icon [class]="world.id === worlds.activeId() ? 'text-astral-300' : 'text-slate-500'">
+        {{ world.id === worlds.activeId() ? 'radio_button_checked' : 'radio_button_unchecked' }}
+      </mat-icon>
+      <span>{{ world.name }}</span>
+    </button>
+  }
+  <button mat-menu-item [disabled]="!worlds.canCreate()" (click)="createWorld()">
+    <mat-icon class="text-astral-300">add</mat-icon>
+    <span>{{ worlds.canCreate() ? 'Novo mundo' : 'Novo mundo (limite de ' + maxWorlds + ')' }}</span>
+  </button>
+  <button mat-menu-item (click)="renamingWorld.set(true)">
+    <mat-icon>edit</mat-icon>
+    <span>Renomear este mundo</span>
+  </button>
+  <button mat-menu-item [disabled]="worlds.worlds().length <= 1" (click)="removeWorld()">
+    <mat-icon class="!text-red-400">delete</mat-icon>
+    <span class="text-red-300">Excluir este mundo</span>
+  </button>
 </mat-menu>
 
 <!-- Menu de opções de um item -->

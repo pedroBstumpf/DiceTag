@@ -3,7 +3,6 @@ import { MatIconModule } from '@angular/material/icon';
 import { Tag } from '../../../../core/models/tag.model';
 import { SheetStore } from '../../../../core/services/sheet-store';
 import { ItemCardView } from '../../../worldbuild/components/item-card/item-card-view';
-import { LoreService } from '../../../worldbuild/services/lore.service';
 import { WorldbuildService } from '../../../worldbuild/services/worldbuild.service';
 import { BlobUrlService } from '../../services/blob-url.service';
 import { TableSessionService } from '../../services/table-session.service';
@@ -68,7 +67,6 @@ export class EquippedItemWindow {
   private readonly store = inject(SheetStore);
   private readonly session = inject(TableSessionService);
   private readonly worldbuild = inject(WorldbuildService);
-  private readonly loreGeneral = inject(LoreService);
   readonly blobs = inject(BlobUrlService);
 
   readonly sheetId = input.required<string>();
@@ -77,7 +75,7 @@ export class EquippedItemWindow {
   /** O item como o inventário da ficha o mostra (personalização ou original). */
   readonly row = computed(() => {
     const entry = this.store.inventoryOf(this.sheetId()).find((i) => i.id === this.inventoryId());
-    return entry ? inventoryRow(entry, itemSources(this.loreGeneral, this.worldbuild, this.session)) : null;
+    return entry ? inventoryRow(entry, itemSources(this.worldbuild, this.session)) : null;
   });
   /** Texto do item excluído (de onde ele sumiu). */
   readonly origin = computed(() => {

@@ -72,9 +72,9 @@ describe('raça na ficha', () => {
     expect(raceTraitsOf(base)).toEqual([]);
   });
 
-  it('raceKey separa Lore geral e Worldbuild', () => {
-    expect(raceKey({ id: 'x', global: true })).toBe('g:x');
-    expect(raceKey({ id: 'x' })).toBe('w:x');
+  it('raceKey é o id: referências antigas da Lore geral acham a raça importada', () => {
+    expect(raceKey({ id: 'x', global: true })).toBe('x');
+    expect(raceKey({ id: 'x' })).toBe('x');
     expect(raceKey(undefined)).toBe('');
   });
 });

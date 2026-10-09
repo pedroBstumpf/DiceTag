@@ -6,7 +6,6 @@ import { ItemCardView } from './item-card-view';
 /**
  * Cartão de um item do mundo (janela do item no Worldbuild ou na mesa):
  * carrega o item do serviço e grava imagem, nome e etiquetas nele.
- * Funciona com o WorldbuildService ou com a Lore geral (diretiva appLoreScope).
  * O visual fica no ItemCardView (também usado pelo inventário da ficha).
  */
 @Component({

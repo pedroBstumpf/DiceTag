@@ -4,7 +4,7 @@ import { EMPTY_LORE } from './table-state';
 
 /**
  * Comandos da organização da aba Lore nesta mesa (pastas e ajustes locais) e dos itens
- * criados na mesa. Nada aqui altera ou apaga os itens do Worldbuild / Lore geral.
+ * criados na mesa. Nada aqui altera ou apaga os itens do mundo (Worldbuild).
  */
 
 // --- Pastas ------------------------------------------------------------------
@@ -50,7 +50,7 @@ export function moveLoreItem(state: TableState, p: { itemId: string; folderId: s
   return patchLoreItem(state, p.itemId, { folderId: p.folderId ?? undefined });
 }
 
-/** Remove o item desta mesa (o original continua no Worldbuild / Lore geral). */
+/** Remove o item desta mesa (o original continua no mundo). */
 export function hideLoreItem(state: TableState, { itemId }: { itemId: string }): TableState {
   return patchLoreItem(state, itemId, { hidden: true });
 }

@@ -176,7 +176,7 @@ export interface TableEntry {
    * na própria entrada (criado antes do bestiário).
    */
   worldNpcId?: string;
-  /** npc: a ficha base está na Lore geral (senão, no Worldbuild de quem criou a mesa). */
+  /** Legado: a ficha base estava na antiga Lore geral (hoje importada para o mundo, com o mesmo id; ignorado). */
   worldNpcGlobal?: boolean;
   /** npc: conta do jogador autorizado pelo mestre a ver, editar e controlar o NPC (ausente = só o mestre). */
   controllerUserId?: string;
@@ -247,7 +247,7 @@ export type ThemeTagList = 'tags' | 'flaws';
 
 /**
  * Item no inventário do personagem: referência a um item do mundo (tipo `item` do
- * worldbuild do usuário ou da Lore geral) + personalização própria.
+ * Worldbuild do mundo da mesa) ou da mesa + personalização própria.
  *
  * Cópia sob demanda: `name`, `tags` e `blobId` só existem depois que o jogador edita
  * o cartão no inventário e, quando presentes, valem no lugar dos do original — sem
@@ -256,7 +256,7 @@ export type ThemeTagList = 'tags' | 'flaws';
 export interface InventoryEntry {
   id: string;
   itemId: string;
-  /** O item vem da Lore geral (senão, do worldbuild do usuário). */
+  /** Legado: o item vinha da antiga Lore geral (hoje importada para o mundo, com o mesmo id; ignorado). */
   global?: boolean;
   /** O item foi criado nesta mesa (`TableState.items`), fora do Worldbuild. */
   table?: boolean;
@@ -315,7 +315,7 @@ export interface CharacterSheet {
   race: string;
   /** Nome da sub-raça (o da Raça escolhida em `subraceRef`; fichas antigas: texto livre). */
   subrace: string;
-  /** Raça escolhida da lista (Worldbuild ou Lore geral). Ausente = nenhuma (ou texto antigo). */
+  /** Raça escolhida da lista (Raças do mundo). Ausente = nenhuma (ou texto antigo). */
   raceRef?: RaceRef;
   /** Sub-raça escolhida da lista (também uma Raça cadastrada). */
   subraceRef?: RaceRef;
@@ -339,7 +339,7 @@ export interface CharacterSheet {
 /** Campo da ficha que recebe uma Raça. */
 export type RaceSlot = 'race' | 'subrace';
 
-/** Referência a uma Raça do Worldbuild do mestre ou (global) da Lore geral. */
+/** Referência a uma Raça do mundo. `global` = legado (era da antiga Lore geral, hoje importada; ignorado). */
 export interface RaceRef {
   id: string;
   global?: boolean;
@@ -629,12 +629,12 @@ export interface TableItem {
 
 /**
  * Organização própria da aba Lore de uma mesa. Os itens continuam vindo do
- * worldbuild e da Lore geral; aqui ficam só ajustes locais (pastas, nomes,
+ * mundo da mesa; aqui ficam só ajustes locais (pastas, nomes,
  * itens removidos), que não alteram nem apagam os originais.
  */
 export interface TableLore {
   folders: LoreFolder[];
-  /** Ajustes por item (chave = id do item do worldbuild ou da Lore geral). */
+  /** Ajustes por item (chave = id do item do mundo ou da mesa). */
   items: Record<string, LoreItemOverride>;
 }
 

@@ -88,10 +88,10 @@ export class RaceImage {
 }
 
 /**
- * Cartão de uma Raça (janela no Worldbuild, na Lore geral e na mesa): nome, características (texto),
+ * Cartão de uma Raça (janela no Worldbuild e na mesa): nome, características (texto),
  * imagens padrão masculina e feminina (opcionais) e modificadores de status (Corpo, Mente,
  * Espírito). Escolhida na ficha, a raça soma as etiquetas aos rótulos e os modificadores
- * ao máximo das barras. Funciona com o WorldbuildService ou com a Lore geral (appLoreScope).
+ * ao máximo das barras.
  */
 @Component({
   selector: 'app-race-card',

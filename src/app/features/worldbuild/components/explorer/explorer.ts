@@ -6,6 +6,8 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { WORLD_ITEM_META, WorldItem, WorldItemType } from '../../../../core/models/world-item.model';
+import { MAX_WORLDS } from '../../../../core/models/world.model';
+import { WorldsService } from '../../../../core/services/worlds.service';
 import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
 import { WorldbuildService } from '../../services/worldbuild.service';
 
@@ -67,6 +69,32 @@ export class Explorer {
   readonly hide = output<void>();
   /** Mostra o botão "Esconder painel" (falso quando o explorador está numa janela, ex.: na mesa). */
   readonly hideable = input(true);
+  /** Mostra o seletor de mundos no cabeçalho (página do Worldbuild; na mesa o mundo é o da mesa). */
+  readonly worldSwitcher = input(false);
+
+  // --- Mundos --------------------------------------------------------------
+  readonly worlds = inject(WorldsService);
+  readonly maxWorlds = MAX_WORLDS;
+  readonly renamingWorld = signal(false);
+
+  createWorld(): void {
+    void this.worlds.create();
+  }
+
+  finishWorldRename(value: string): void {
+    if (!this.renamingWorld()) return;
+    const id = this.worlds.activeId();
+    void this.worlds.rename(id, value);
+    this.renamingWorld.set(false);
+  }
+
+  /** Exclui o mundo aberto (com confirmação; só se nenhuma mesa se passa nele). */
+  async removeWorld(): Promise<void> {
+    const world = this.worlds.active();
+    if (!world || !confirm(`Excluir o mundo "${world.name}" e todos os itens dele? Isso não pode ser desfeito.`)) return;
+    const error = await this.worlds.remove(world.id);
+    this.snackBar.open(error ?? `Mundo "${world.name}" excluído.`);
+  }
 
   // --- Abas ----------------------------------------------------------------
   readonly views: { id: ExplorerView; icon: string; label: string }[] = [

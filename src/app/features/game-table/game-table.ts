@@ -15,10 +15,10 @@ import { ImageViewer } from '../worldbuild/components/image-viewer/image-viewer'
 import { ItemCard } from '../worldbuild/components/item-card/item-card';
 import { RaceCard } from '../worldbuild/components/race-card/race-card';
 import { TimelineEditor } from '../worldbuild/components/timeline-editor/timeline-editor';
-import { LoreScope } from '../worldbuild/directives/lore-scope.directive';
 import { WorldNpcSheet } from '../worldbuild/directives/world-npc-sheet.directive';
-import { LoreService } from '../worldbuild/services/lore.service';
 import { WorldbuildService } from '../worldbuild/services/worldbuild.service';
+import { DEFAULT_WORLD_ID } from '../../core/models/world.model';
+import { WorldsService } from '../../core/services/worlds.service';
 import { ActionBar } from './components/action-bar/action-bar';
 import { CharacterSheetView } from './components/character-sheet/character-sheet';
 import { EntryWindow } from './components/entry-window/entry-window';
@@ -28,7 +28,7 @@ import { inventoryRow } from './utils/inventory';
 import { TableItemWindow } from './components/table-item-window/table-item-window';
 import { MapStage } from './components/map-stage/map-stage';
 import { SceneBar } from './components/scene-bar/scene-bar';
-import { LORE_WINDOW, SidePanel, WORLDBUILD_WINDOW } from './components/side-panel/side-panel';
+import { SidePanel, WORLDBUILD_WINDOW } from './components/side-panel/side-panel';
 import { TABLE_TOOLS, ToolBar, toolAllowed } from './components/tool-bar/tool-bar';
 import { TokenWindow } from './components/token-window/token-window';
 import { BlobUrlService } from './services/blob-url.service';
@@ -44,8 +44,6 @@ interface WindowContent {
   color: string;
   /** Tipo de conteúdo, usado para escolher o componente. */
   type: 'entry' | 'sheet' | 'token' | 'equipped' | 'table-item' | 'explorer' | 'document' | 'timeline' | 'image' | 'item' | 'npc' | 'race';
-  /** O conteúdo vem da Lore geral (os editores usam o LoreService). */
-  global?: boolean;
 }
 
 /** Prefixo do id das janelas "Token" (token:<id do token colocado>). */
@@ -99,7 +97,6 @@ const PANEL_SPACE = { top: 60, left: 76, right: 344, bottom: 100 };
     TokenWindow,
     EquippedItemWindow,
     TableItemWindow,
-    LoreScope,
     WorldNpcSheet,
     Explorer,
     DocumentEditor,
@@ -131,7 +128,7 @@ export class GameTablePage {
   readonly windows = inject(WindowManagerService);
   private readonly tables = inject(GameTablesService);
   private readonly worldbuild = inject(WorldbuildService);
-  private readonly loreGeneral = inject(LoreService);
+  private readonly worlds = inject(WorldsService);
   private readonly snackBar = inject(MatSnackBar);
 
   /** Id da mesa (parâmetro da rota /mesa/:id). */
@@ -164,6 +161,13 @@ export class GameTablePage {
     });
     inject(DestroyRef).onDestroy(() => this.session.flush());
 
+    // Abre o mundo da mesa: a aba Lore, o bestiário, os itens e as raças vêm dele
+    effect(() => {
+      const table = this.table();
+      if (!table || !this.worlds.loaded()) return;
+      untracked(() => this.worlds.select(table.worldId ?? DEFAULT_WORLD_ID));
+    });
+
     // Fecha janelas "Token" e fichas de token de tokens removidos do mapa
     effect(() => {
       const stale = this.windows.windows().filter((w) => {
@@ -176,14 +180,11 @@ export class GameTablePage {
 
   // --- Janelas -------------------------------------------------------------
 
-  /** Descobre o que mostrar numa janela (arquivo/token da mesa ou item do worldbuild / Lore geral). */
+  /** Descobre o que mostrar numa janela (arquivo/token da mesa ou item do mundo da mesa). */
   content(id: string): WindowContent | null {
-    // Os exploradores do Worldbuild e da Lore geral são só do mestre
+    // O explorador do mundo é só do mestre
     if (id === WORLDBUILD_WINDOW) {
-      return this.isGm() ? { title: 'Worldbuild', icon: 'public', color: 'text-sky-300', type: 'explorer' } : null;
-    }
-    if (id === LORE_WINDOW) {
-      return this.isGm() ? { title: 'Lore geral', icon: 'auto_stories', color: 'text-star-400', type: 'explorer', global: true } : null;
+      return this.isGm() ? { title: this.worldbuild.title(), icon: 'public', color: 'text-sky-300', type: 'explorer' } : null;
     }
     if (id.startsWith(TOKEN_WINDOW)) {
       const token = this.session.resolvedTokenById(id.slice(TOKEN_WINDOW.length));
@@ -194,7 +195,7 @@ export class GameTablePage {
     if (equipped) {
       const item = this.session.inventoryOf(equipped.sheetId).find((i) => i.id === equipped.inventoryId);
       if (!item || !this.session.canOpenSheet(equipped.sheetId)) return null;
-      const name = inventoryRow(item, itemSources(this.loreGeneral, this.worldbuild, this.session)).name;
+      const name = inventoryRow(item, itemSources(this.worldbuild, this.session)).name;
       return { title: name, icon: 'inventory_2', color: 'text-amber-300', type: 'equipped' };
     }
     // Ficha própria de um token de NPC (cópia individual)
@@ -221,11 +222,10 @@ export class GameTablePage {
     }
     // Itens da lore: o título usa o nome desta mesa (pode ter sido renomeado só aqui).
     // O jogador só abre itens de pastas da aba Lore que o mestre revelou.
-    const globalItem = this.loreGeneral.byId().get(id);
-    const item = globalItem ?? this.worldbuild.byId().get(id);
+    const item = this.worldbuild.byId().get(id);
     if (item && item.type !== 'folder' && this.session.canSeeLoreItem(item.id)) {
       const meta = WORLD_ITEM_META[item.type];
-      return { title: this.session.loreName(item), icon: meta.icon, color: meta.color, type: item.type, global: !!globalItem };
+      return { title: this.session.loreName(item), icon: meta.icon, color: meta.color, type: item.type };
     }
     return null;
   }

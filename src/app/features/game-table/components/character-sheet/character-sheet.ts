@@ -29,7 +29,6 @@ import { BlobUrlService } from '../../services/blob-url.service';
 import { SheetStore } from '../../../../core/services/sheet-store';
 import { TableSessionService } from '../../services/table-session.service';
 import { LevelPips } from '../level-pips/level-pips';
-import { LoreService } from '../../../worldbuild/services/lore.service';
 import { WorldbuildService } from '../../../worldbuild/services/worldbuild.service';
 import { equippedWindowId } from '../equipped-item-window/equipped-item-window';
 import { inventoryRow } from '../../utils/inventory';
@@ -75,7 +74,6 @@ export class CharacterSheetView {
   readonly blobs = inject(BlobUrlService);
   private readonly auth = inject(AuthService);
   private readonly worldbuild = inject(WorldbuildService);
-  private readonly loreGeneral = inject(LoreService);
 
   /** Id da ficha no SheetStore. */
   readonly sheetId = input.required<string>();
@@ -227,23 +225,19 @@ export class CharacterSheetView {
     this.update({ labels: (this.sheet()?.labels ?? []).filter((l) => l !== label) });
   }
 
-  // --- Raça e sub-raça (Raças da Lore geral e do Worldbuild) ---------------
+  // --- Raça e sub-raça (Raças do mundo) ------------------------------------
 
   readonly raceSlots: { id: RaceSlot; label: string }[] = [
     { id: 'race', label: 'Raça' },
     { id: 'subrace', label: 'Sub-raça' },
   ];
 
-  /**
-   * Raças que podem ser escolhidas: as da Lore geral e as do Worldbuild (com appLoreScope o
-   * serviço já é a Lore geral, e só ela entra). Na mesa, as removidas da aba Lore desta mesa saem.
-   */
+  /** Raças que podem ser escolhidas: as do mundo aberto (na mesa, o mundo dela, sem as removidas da aba Lore). */
   readonly raceOptions = computed(() => {
     const hidden = this.session?.lore().items ?? {};
-    const options: { key: string; ref: RaceRef; item: WorldItem }[] = [
-      ...this.loreGeneral.worldRaces().map((item) => ({ key: raceKey({ id: item.id, global: true }), ref: { id: item.id, global: true }, item })),
-      ...(this.worldbuild === this.loreGeneral ? [] : this.worldbuild.worldRaces()).map((item) => ({ key: raceKey({ id: item.id }), ref: { id: item.id }, item })),
-    ];
+    const options: { key: string; ref: RaceRef; item: WorldItem }[] = this.worldbuild
+      .worldRaces()
+      .map((item) => ({ key: raceKey({ id: item.id }), ref: { id: item.id }, item }));
     return options.filter((o) => !hidden[o.item.id]?.hidden);
   });
 
@@ -386,7 +380,7 @@ export class CharacterSheetView {
 
   /** Itens marcados como equipados no inventário (com a personalização da ficha). */
   readonly equipped = computed(() => {
-    const sources = itemSources(this.loreGeneral, this.worldbuild, this.session);
+    const sources = itemSources(this.worldbuild, this.session);
     return (this.sheet()?.inventory ?? []).filter((i) => i.equipped).map((i) => inventoryRow(i, sources));
   });
 

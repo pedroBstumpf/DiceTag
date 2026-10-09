@@ -82,6 +82,17 @@ export function npcTokenOf(item: WorldItem): TokenSettings {
   return { ...token, bars: withStatusBars(token.bars) };
 }
 
+/** Arquivos (Blobs) que pertencem ao item: imagem, token e inventário do NPC, imagens da raça. */
+export function worldItemBlobIds(item: WorldItem): string[] {
+  return [
+    item.blobId,
+    item.token?.blobId,
+    item.maleBlobId,
+    item.femaleBlobId,
+    ...(item.sheet?.inventory ?? []).map((i) => i.blobId),
+  ].filter((b): b is string => !!b);
+}
+
 /**
  * Características de uma Raça (texto). Raças criadas antes guardavam etiquetas com cor e nível
  * em `tags`: vale só o texto delas.

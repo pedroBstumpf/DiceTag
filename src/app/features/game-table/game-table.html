@@ -87,57 +87,30 @@
               <app-table-item-window [itemId]="win.id" />
             }
           }
-          <!-- Lore: mesmos componentes do worldbuild; itens da Lore geral usam o LoreService (appLoreScope). Jogador: só leitura -->
-          @if (c.global) {
-            @switch (c.type) {
-              @case ('explorer') {
-                <app-explorer appLoreScope [hideable]="false" (opened)="open($event)" (removed)="windows.closeMany($event)" />
-              }
-              @case ('document') {
-                <app-document-editor appLoreScope [itemId]="win.id" [readonly]="!isGm()" />
-              }
-              @case ('timeline') {
-                <app-timeline-editor appLoreScope [itemId]="win.id" [readonly]="!isGm()" />
-              }
-              @case ('image') {
-                <app-image-viewer appLoreScope [itemId]="win.id" />
-              }
-              @case ('item') {
-                <app-item-card appLoreScope [itemId]="win.id" [readonly]="!isGm()" />
-              }
-              @case ('race') {
-                <app-race-card appLoreScope [itemId]="win.id" [readonly]="!isGm()" />
-              }
-              @case ('npc') {
-                <!-- Ficha base do bestiário da Lore geral -->
-                <app-character-sheet appLoreScope appWorldNpcSheet [sheetId]="win.id" [readonly]="!isGm()" (openEntry)="open($event)" />
-              }
+          <!-- Lore: itens do mundo da mesa, com os mesmos componentes do Worldbuild. Jogador: só leitura -->
+          @switch (c.type) {
+            @case ('explorer') {
+              <!-- Pastas do mundo dentro da mesa: os itens abrem em janelas aqui mesmo -->
+              <app-explorer [hideable]="false" (opened)="open($event)" (removed)="windows.closeMany($event)" />
             }
-          } @else {
-            @switch (c.type) {
-              @case ('explorer') {
-                <!-- Pastas do worldbuild dentro da mesa: os itens abrem em janelas aqui mesmo -->
-                <app-explorer [hideable]="false" (opened)="open($event)" (removed)="windows.closeMany($event)" />
-              }
-              @case ('document') {
-                <app-document-editor [itemId]="win.id" [readonly]="!isGm()" />
-              }
-              @case ('timeline') {
-                <app-timeline-editor [itemId]="win.id" [readonly]="!isGm()" />
-              }
-              @case ('image') {
-                <app-image-viewer [itemId]="win.id" />
-              }
-              @case ('item') {
-                <app-item-card [itemId]="win.id" [readonly]="!isGm()" />
-              }
-              @case ('race') {
-                <app-race-card [itemId]="win.id" [readonly]="!isGm()" />
-              }
-              @case ('npc') {
-                <!-- Ficha base do bestiário do Worldbuild -->
-                <app-character-sheet appWorldNpcSheet [sheetId]="win.id" [readonly]="!isGm()" (openEntry)="open($event)" />
-              }
+            @case ('document') {
+              <app-document-editor [itemId]="win.id" [readonly]="!isGm()" />
+            }
+            @case ('timeline') {
+              <app-timeline-editor [itemId]="win.id" [readonly]="!isGm()" />
+            }
+            @case ('image') {
+              <app-image-viewer [itemId]="win.id" />
+            }
+            @case ('item') {
+              <app-item-card [itemId]="win.id" [readonly]="!isGm()" />
+            }
+            @case ('race') {
+              <app-race-card [itemId]="win.id" [readonly]="!isGm()" />
+            }
+            @case ('npc') {
+              <!-- Ficha base do bestiário do mundo -->
+              <app-character-sheet appWorldNpcSheet [sheetId]="win.id" [readonly]="!isGm()" (openEntry)="open($event)" />
             }
           }
         </app-floating-window>

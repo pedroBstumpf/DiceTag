@@ -61,7 +61,7 @@ src/
         ├── home/           # landing
         ├── auth/           # diálogo Entrar/Criar conta
         ├── tables/         # "Minhas mesas" + diálogo de criação
-        ├── worldbuild/     # Worldbuild e Lore geral (mesma página, serviços diferentes)
+        ├── worldbuild/     # Worldbuild do mundo aberto (o usuário tem até 2 mundos)
         └── game-table/     # mesa de jogo (a maior feature)
 ```
 
@@ -80,7 +80,7 @@ A regra **não é verificada automaticamente** e hoje tem três exceções conhe
 | De → para | O que é importado | Por quê |
 |---|---|---|
 | `shared` → `features` | `QuickActionsService` importa `AuthDialog` e `CreateTableDialog` | as ações rápidas (barra lateral e Home) abrem esses diálogos |
-| `game-table` → `worldbuild` | editores, `Explorer`, `ItemCardView`, diretivas, `WorldbuildService`/`LoreService` | abrir a lore e os itens do mundo sem sair da mesa |
+| `game-table` → `worldbuild` | editores, `Explorer`, `ItemCardView`, `RaceCard`, diretiva `appWorldNpcSheet`, `WorldbuildService` | abrir a lore e os itens do mundo sem sair da mesa |
 | `worldbuild` → `game-table` | `CharacterSheetView` e `BlobUrlService` | a ficha base dos NPCs do bestiário é a mesma tela da mesa |
 
 As duas últimas formam um **ciclo** entre as features (ver o plano em [`SPEC.md`](SPEC.md)).
@@ -111,7 +111,6 @@ Definidas em [`app.routes.ts`](src/app/app.routes.ts); **todas as páginas são 
 | `''` | `Home` | `Shell` |
 | `mesas` | `Tables` | `Shell` |
 | `worldbuild` | `Worldbuild` (aceita `?novo=<tipo>` e `?abrir=<id>`) | `Shell` |
-| `lore` | `Worldbuild` com `LoreService` (via `LORE_ROUTES`) | `Shell` |
 | `mesa/:id` | `GameTablePage` | tela cheia, **fora** do `Shell` |
 | `**` | redireciona para `''` | — |
 
@@ -128,7 +127,7 @@ quase toda dúvida de "por que isso sumiu/persistiu".
 
 | Nível | Onde | Vida útil | Exemplos |
 |---|---|---|---|
-| **Persistido global** | serviços `providedIn: 'root'` → IndexedDB | sempre | contas, mesas, worldbuild do usuário, Lore geral |
+| **Persistido global** | serviços `providedIn: 'root'` → IndexedDB | sempre | contas, mesas, mundos e o Worldbuild de cada mundo |
 | **Persistido por mesa** | `TableSessionService.state` → `table-state:<id>` | enquanto a mesa existir | cenas, tokens, paredes, fichas, chat, organização da lore |
 | **Sessão da mesa** (não persistido) | signals do `TableSessionService` e serviços da página | até sair da mesa | ferramenta ativa, papel, tokens selecionados, tokens copiados, pincel, barras visíveis, efeitos na tela, desfazer |
 | **Local do componente** | `signal` dentro do componente | enquanto o componente existir | campo em edição, aba aberta, arraste em andamento |
@@ -143,8 +142,8 @@ preferência de interface (`dicetag.sidebarCollapsed`).
 | `StorageService` | conexão com o banco (wrapper chave/valor `get`/`set`/`delete`) e pedido de armazenamento persistente (`requestPersistence`) | — |
 | `AuthService` | `user` (conta logada ou visitante), `isLoggedIn`, `isGuest` | `users` + `localStorage dicetag.session` |
 | `GameTablesService` | lista de mesas, filtrada pelo usuário atual | `tables` |
-| `WorldbuildService` | árvore de `WorldItem` do usuário (`items`, `byId`, `worldItems`, `worldNpcs`) | `worldbuild:<userId>` |
-| `LoreService` | igual ao anterior, mas global (`extends WorldbuildService`, só troca `keyFor()`) | `lore:global` |
+| `WorldsService` | mundos do usuário (até 2) e o mundo aberto (`activeId`); criar, renomear, excluir | `worlds:<userId>` + `localStorage dicetag.world.<userId>` |
+| `WorldbuildService` | árvore de `WorldItem` do **mundo aberto** (`items`, `byId`, `worldItems`, `worldNpcs`, `worldRaces`) | `worldbuild:<userId>` (1º mundo) ou `worldbuild:<userId>:<worldId>` |
 | `LayoutService` | barra lateral recolhida / modo mobile | `localStorage dicetag.sidebarCollapsed` |
 | `NewsService` | notícias do mural (vazio por enquanto) | — |
 | `QuickActionsService` | atalhos globais (login, criar mesa, abrir worldbuild) — sem estado próprio | — |
@@ -173,7 +172,7 @@ Estes serviços existem **uma vez por página aberta** e morrem com ela:
 
 ### 5.1 Leitura → mutação → persistência
 
-Os serviços com edição frequente (`TableSessionService` e `WorldbuildService`/`LoreService`) seguem este
+Os serviços com edição frequente (`TableSessionService` e `WorldbuildService`) seguem este
 ciclo. `GameTablesService` e `AuthService` mudam pouco e gravam na hora (`await storage.set`), sem debounce.
 
 ```
@@ -208,35 +207,32 @@ Ao carregar, o dado salvo passa por uma função de normalização que preenche 
 
 Por isso **todo campo novo nos modelos é opcional** e tem valor padrão na leitura.
 
-**Troca de usuário:** `WorldbuildService` e `GameTablesService` observam `auth.user()` com um `effect`.
+**Troca de usuário ou de mundo:** `WorldsService`, `WorldbuildService` e `GameTablesService` observam
+`auth.user()` com um `effect`; o `WorldbuildService` também observa o mundo aberto (`WorldsService.activeId`).
 
-- `WorldbuildService` grava as pendências do usuário anterior antes de trocar a chave e descarta
-  carregamentos que terminem depois da troca.
+- `WorldbuildService` grava as pendências do mundo/usuário anterior antes de trocar a chave e descarta
+  carregamentos que terminem depois da troca. Ao carregar o primeiro mundo, importa uma única vez a antiga
+  Lore geral (`utils/legacy-lore.ts`), mantendo os ids.
 - `GameTablesService` só recarrega a lista (todas as mesas ficam numa chave e são filtradas por
   `ownerId`); não tem pendências nem proteção contra um carregamento antigo terminar depois.
 
 ### 5.3 Injeção de dependência como "escopo de dados"
 
-A mesma tela funciona com fontes de dados diferentes trocando o provedor no elemento:
+A mesma tela de ficha funciona com fontes de dados diferentes trocando o provedor no elemento:
 
 ```
                      ┌── na mesa ──────────► TableSessionService  (fichas da mesa)
 CharacterSheetView ──┤
  inject(SheetStore)  └── appWorldNpcSheet ─► WorldNpcStore       (ficha base do bestiário)
-
-                     ┌── padrão ───────────► WorldbuildService   (worldbuild:<userId>)
-Explorer / editores ─┤
- inject(Worldbuild…) └── appLoreScope / ───► LoreService         (lore:global)
-                         rota /lore
 ```
 
 - **`SheetStore`** (`core/services/sheet-store.ts`) é uma classe abstrata: declara como ler/gravar uma
   ficha (`sheetData`, `updateSheet`, `updateStatus`…) e implementa as operações de inventário comuns.
   `TableSessionService` e `WorldNpcStore` são as duas implementações.
-- **`appLoreScope`** fornece `{ provide: WorldbuildService, useExisting: LoreService }`.
 - **`appWorldNpcSheet`** fornece `{ provide: SheetStore, useExisting: WorldNpcStore }`.
 
-Assim nenhum editor precisa saber de onde vêm os dados.
+Os editores do Worldbuild (`Explorer`, `DocumentEditor`, `RaceCard`…) usam sempre o `WorldbuildService`,
+que carrega o **mundo aberto**; na mesa, o mundo aberto é o da mesa. Nenhum editor precisa saber de qual mundo vêm os dados.
 
 ### 5.4 Effects: armadilhas evitadas
 
@@ -328,8 +324,8 @@ GameTablePage  (providers da mesa; atalhos de teclado na window; abre janelas)
 | `token:<id do token>` | janela "Token" (fecha sozinha se o token sair do mapa) |
 | `equip:<ficha>:<item>` | cartão de item equipado |
 | `<id de item da mesa>` | `TableItemWindow` |
-| `<id de item da lore>` | editor do worldbuild/Lore geral (com `appLoreScope` se global) |
-| `worldbuild:explorer` / `lore:explorer` | explorador numa janela (só mestre) |
+| `<id de item da lore>` | editor do Worldbuild (item do mundo da mesa) |
+| `worldbuild:explorer` | explorador do mundo numa janela (só mestre) |
 
 O `WindowManagerService` só guarda geometria e ordem; abrir de novo o mesmo id foca a janela.
 
@@ -361,16 +357,19 @@ Mudar o volume de um som ou o nome de uma ficha não muda as origens de visão, 
 
 ---
 
-## 7. Worldbuild e Lore geral (`features/worldbuild`)
+## 7. Mundos e Worldbuild (`core/services/worlds.service.ts`, `features/worldbuild`)
 
-- **Página** `Worldbuild`: explorador à esquerda + área de janelas flutuantes. Serve `/worldbuild` e `/lore`.
+- **Mundos**: cada usuário tem até 2 (`WorldsService`, em `core/` porque Worldbuild, mesas e barra lateral o usam).
+  Cada mundo é um Worldbuild separado; cada mesa se passa num mundo (`GameTable.worldId`).
+- **Página** `Worldbuild`: explorador (com seletor de mundo no cabeçalho) à esquerda + área de janelas flutuantes.
 - **Dados**: lista plana de `WorldItem` com `parentId` (árvore). Tipos: `folder`, `document`, `timeline`,
-  `image`, `item`, `npc`, `race`. Uma lista por chave (`worldbuild:<userId>` ou `lore:global`).
+  `image`, `item`, `npc`, `race`. Uma lista por mundo (`worldbuild:<userId>` no primeiro, `worldbuild:<userId>:<worldId>` nos demais).
+- **Lore geral removida**: o conteúdo antigo (`lore:global`) foi importado para o primeiro mundo, com os mesmos ids.
 - **Componentes**: `Explorer` (abas em ícones: Arquivos/Itens/NPCs/Raças/Linhas do tempo/Documentos/Mapas), `RaceCard`, `DocumentEditor` (sobre o `RichTextEditor`/Tiptap),
   `TimelineEditor` (mapa mental; layout puro em `utils/timeline-layout.ts`), `ImageViewer`,
   `ItemCard`/`ItemCardView`, e a ficha de NPC reaproveitada da mesa com `appWorldNpcSheet`.
-- **Na mesa**, os mesmos editores são abertos em janelas; a aba Lore lista itens da Lore geral e do
-  worldbuild sem duplicá-los. A organização local (pastas, nomes, itens escondidos) fica em
+- **Na mesa**, os mesmos editores são abertos em janelas; a aba Lore lista os itens do mundo da mesa
+  sem duplicá-los. A organização local (pastas, nomes, itens escondidos) fica em
   `TableState.lore` e nunca altera o original.
 
 ---

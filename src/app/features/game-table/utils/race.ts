@@ -25,9 +25,12 @@ export interface RaceChoice {
   statusMods?: StatusMods;
 }
 
-/** Chave única de uma raça na lista ("g:" Lore geral / "w:" Worldbuild + id). */
+/**
+ * Chave de uma raça na lista: o id. Referências antigas marcadas como da Lore geral (`global`)
+ * acham a mesma raça, importada para o mundo com o mesmo id.
+ */
 export function raceKey(ref: RaceRef | undefined): string {
-  return ref ? `${ref.global ? 'g' : 'w'}:${ref.id}` : '';
+  return ref?.id ?? '';
 }
 
 /** Máximo nunca abaixo de 1. */

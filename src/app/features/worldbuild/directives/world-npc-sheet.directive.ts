@@ -4,8 +4,7 @@ import { WorldNpcStore } from '../services/world-npc.store';
 
 /**
  * Faz a ficha onde é aplicada ler e gravar a ficha base de um NPC do bestiário:
- * `<app-character-sheet appWorldNpcSheet [sheetId]="item.id" />`. Junto com
- * `appLoreScope`, usa os NPCs da Lore geral.
+ * `<app-character-sheet appWorldNpcSheet [sheetId]="item.id" />` (NPCs do mundo aberto).
  */
 @Directive({
   selector: '[appWorldNpcSheet]',

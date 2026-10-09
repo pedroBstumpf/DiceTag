@@ -1,7 +1,6 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { Point } from '../../../core/models/geometry.model';
 import { WorldItem, npcSheetOf, npcTokenOf } from '../../../core/models/world-item.model';
-import { LoreService } from '../../worldbuild/services/lore.service';
 import { WorldbuildService } from '../../worldbuild/services/worldbuild.service';
 import {
   BRUSH_COLORS,
@@ -173,9 +172,8 @@ function sameItems<T>(a: readonly T[], b: readonly T[]): boolean {
 @Injectable()
 export class TableSessionService extends SheetStore {
   private readonly auth = inject(AuthService);
-  /** Bestiário: fichas base dos NPCs-referência (Worldbuild do usuário e Lore geral). */
+  /** Mundo da mesa: bestiário (fichas base dos NPCs-referência), itens e raças. */
   private readonly worldbuild = inject(WorldbuildService);
-  private readonly loreGeneral = inject(LoreService);
 
   // --- Estado persistido ---------------------------------------------------
   private readonly state = signal<TableState>(EMPTY_STATE);
@@ -884,43 +882,38 @@ export class TableSessionService extends SheetStore {
   // --- NPCs do bestiário (referências) -------------------------------------
 
   /**
-   * NPCs do bestiário por chave ("g:" Lore geral / "w:" Worldbuild + id). Igualdade por
-   * referência dos itens: editar documentos ou outros itens do Worldbuild não recalcula
-   * tokens e fichas da mesa — só mudanças nos próprios NPCs.
+   * NPCs do bestiário do mundo da mesa, por id. Igualdade por referência dos itens: editar
+   * documentos ou outros itens do Worldbuild não recalcula tokens e fichas da mesa — só
+   * mudanças nos próprios NPCs.
    */
-  private readonly worldNpcMap = computed(
-    () =>
-      new Map([
-        ...this.loreGeneral.worldNpcs().map((i) => [`g:${i.id}`, i] as const),
-        ...this.worldbuild.worldNpcs().map((i) => [`w:${i.id}`, i] as const),
-      ]),
-    { equal: (a, b) => a.size === b.size && [...a].every(([k, v]) => b.get(k) === v) },
-  );
+  private readonly worldNpcMap = computed(() => new Map(this.worldbuild.worldNpcs().map((i) => [i.id, i] as const)), {
+    equal: (a, b) => a.size === b.size && [...a].every(([k, v]) => b.get(k) === v),
+  });
 
-  /** Ficha base no bestiário de um NPC-referência (undefined se não for referência ou se o original sumiu). */
+  /**
+   * Ficha base no bestiário de um NPC-referência (undefined se não for referência ou se o original
+   * sumiu). Referências antigas à Lore geral (`worldNpcGlobal`) acham o NPC importado para o mundo.
+   */
   worldNpcOf(entry: TableEntry): WorldItem | undefined {
-    if (!entry.worldNpcId) return undefined;
-    return this.worldNpcMap().get(`${entry.worldNpcGlobal ? 'g' : 'w'}:${entry.worldNpcId}`);
+    return entry.worldNpcId ? this.worldNpcMap().get(entry.worldNpcId) : undefined;
   }
 
-  /** Worldbuild ou Lore geral, conforme onde mora a ficha base do NPC. */
-  private worldServiceOf(entry: TableEntry): WorldbuildService {
-    return entry.worldNpcGlobal ? this.loreGeneral : this.worldbuild;
+  /** Onde mora a ficha base dos NPCs-referência: o Worldbuild do mundo da mesa. */
+  private worldServiceOf(_entry: TableEntry): WorldbuildService {
+    return this.worldbuild;
   }
 
-  /** NPCs do bestiário (Lore geral + Worldbuild) que podem entrar na mesa. */
-  readonly bestiary = computed(() =>
-    [...this.worldNpcMap()].map(([key, item]) => ({ item, global: key.startsWith('g:') })),
-  );
+  /** NPCs do bestiário do mundo que podem entrar na mesa. */
+  readonly bestiary = computed(() => [...this.worldNpcMap().values()]);
 
   /** Põe na mesa um NPC do bestiário (a entrada é só uma referência à ficha base). */
-  addNpcReference(item: WorldItem, global: boolean): TableEntry {
-    return this.addEntry('npc', { name: item.name, worldNpcId: item.id, ...(global && { worldNpcGlobal: true }) });
+  addNpcReference(item: WorldItem): TableEntry {
+    return this.addEntry('npc', { name: item.name, worldNpcId: item.id });
   }
 
-  /** Cria um NPC novo no Worldbuild do usuário e já o põe na mesa. */
+  /** Cria um NPC novo no Worldbuild do mundo e já o põe na mesa. */
   createWorldNpc(): TableEntry {
-    return this.addNpcReference(this.worldbuild.create('npc'), false);
+    return this.addNpcReference(this.worldbuild.create('npc'));
   }
 
   // --- Fichas (SheetStore) -------------------------------------------------
@@ -1038,7 +1031,7 @@ export class TableSessionService extends SheetStore {
   itemTagsOf(sheetId: string | undefined): SheetTagOption[] {
     const data = sheetId ? this.sheetData(sheetId) : null;
     if (!data) return [];
-    const sources = { global: this.loreGeneral.byId(), own: this.worldbuild.byId(), table: this.tableItemById() };
+    const sources = { own: this.worldbuild.byId(), table: this.tableItemById() };
     return data.sheet.inventory
       .filter((i) => i.equipped)
       .flatMap((i) => {
@@ -1191,7 +1184,7 @@ export class TableSessionService extends SheetStore {
   }
 
   // --- Lore da mesa (pastas e ajustes locais) -----------------------------
-  // Nada aqui altera ou apaga os itens do worldbuild / Lore geral.
+  // Nada aqui altera ou apaga os itens do mundo.
 
   /** Nome do item da lore nesta mesa (o local, se renomeado aqui). */
   loreName(item: { id: string; name: string }): string {
@@ -1234,7 +1227,7 @@ export class TableSessionService extends SheetStore {
     this.dispatch('moveLoreItem', { itemId, folderId });
   }
 
-  /** Remove o item desta mesa (o original continua no worldbuild / Lore geral). */
+  /** Remove o item desta mesa (o original continua no mundo). */
   hideLoreItem(itemId: string): void {
     this.dispatch('hideLoreItem', { itemId });
   }

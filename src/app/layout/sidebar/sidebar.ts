@@ -1,12 +1,15 @@
 import { Component, computed, inject } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { filter, map } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { Router, RouterLink, RouterLinkActive } from '@angular/router';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { GameTablesService } from '../../core/services/game-tables.service';
+import { WorldsService } from '../../core/services/worlds.service';
 import { LayoutService } from '../../core/services/layout.service';
 import { QuickActionsService } from '../../shared/services/quick-actions.service';
 
@@ -21,8 +24,8 @@ interface NavLink {
 }
 
 /**
- * Barra lateral principal: navegação entre páginas, Lore geral do mundo,
- * atalhos para as mesas do usuário e área da conta. Recolhível no desktop e gaveta no mobile.
+ * Barra lateral principal: navegação entre páginas, os mundos do usuário (cada um abre
+ * o Worldbuild dele), atalhos para as mesas e área da conta. Recolhível no desktop e gaveta no mobile.
  */
 @Component({
   selector: 'app-sidebar',
@@ -54,6 +57,24 @@ export class Sidebar {
   createTable(): void {
     this.layout.closeMobile();
     this.actions.createTable();
+  }
+
+  // --- Mundos --------------------------------------------------------------
+  readonly worlds = inject(WorldsService);
+  /** Página atual é o Worldbuild? (destaca o mundo aberto) */
+  readonly onWorldbuild = toSignal(
+    this.router.events.pipe(
+      filter((e) => e instanceof NavigationEnd),
+      map(() => this.router.url.startsWith('/worldbuild')),
+    ),
+    { initialValue: this.router.url.startsWith('/worldbuild') },
+  );
+
+  /** Abre o mundo no Worldbuild. */
+  openWorld(id: string): void {
+    this.worlds.select(id);
+    this.layout.closeMobile();
+    void this.router.navigate(['/worldbuild']);
   }
 
   /** Rótulos visíveis? (expandida no desktop ou gaveta aberta no mobile) */

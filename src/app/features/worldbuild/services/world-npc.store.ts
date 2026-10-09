@@ -6,9 +6,8 @@ import { SheetData, SheetStore } from '../../../core/services/sheet-store';
 import { WorldbuildService } from './worldbuild.service';
 
 /**
- * Fichas base dos NPCs do bestiário (itens `npc` do Worldbuild ou da Lore geral),
- * lidas e gravadas no WorldbuildService do elemento (a diretiva appLoreScope troca
- * para a Lore geral). Usada pela ficha no Worldbuild e nas janelas do bestiário na mesa.
+ * Fichas base dos NPCs do bestiário (itens `npc` do mundo aberto), lidas e gravadas no
+ * WorldbuildService. Usada pela ficha no Worldbuild e nas janelas do bestiário na mesa.
  * Fornecida pela diretiva `appWorldNpcSheet`.
  */
 @Injectable()

@@ -13,29 +13,32 @@ export function quantityOf(item: InventoryEntry): number {
 /** O que o inventário usa do item original (do mundo ou da mesa). */
 export type CardItem = Pick<WorldItem, 'id' | 'name' | 'tags' | 'blobId' | 'description'>;
 
-/** De onde vem o original de um item do inventário. */
-export type ItemSource = 'global' | 'own' | 'table';
+/** De onde vem o original de um item do inventário: o mundo (Worldbuild) ou a mesa. */
+export type ItemSource = 'own' | 'table';
 
-/** Onde procurar os originais: Lore geral, worldbuild do usuário e itens da mesa. */
+/** Onde procurar os originais: itens do mundo aberto e itens da mesa. */
 export interface ItemSources {
-  global: ReadonlyMap<string, CardItem>;
   own: ReadonlyMap<string, CardItem>;
   table: ReadonlyMap<string, CardItem>;
 }
 
+/**
+ * Origem do item. Entradas antigas marcadas como da Lore geral (`global`) são procuradas no
+ * mundo: a Lore geral foi importada para ele com os mesmos ids.
+ */
 function sourceOf(entry: InventoryEntry): ItemSource {
-  return entry.table ? 'table' : entry.global ? 'global' : 'own';
+  return entry.table ? 'table' : 'own';
 }
 
-/** "desta mesa", "da Lore geral" ou "do Worldbuild" (texto do item excluído). */
+/** "desta mesa" ou "do mundo" (texto do item excluído). */
 export function itemOrigin(entry: InventoryEntry): string {
-  return { table: 'desta mesa', global: 'da Lore geral', own: 'do Worldbuild' }[sourceOf(entry)];
+  return { table: 'desta mesa', own: 'do mundo' }[sourceOf(entry)];
 }
 
 /** Linha do inventário: o que o cartão mostra (personalização ou original). */
 export interface InventoryRow {
   entry: InventoryEntry;
-  /** Item original (ausente quando foi excluído do worldbuild / Lore geral). */
+  /** Item original (ausente quando foi excluído do mundo ou da mesa). */
   item?: CardItem;
   name: string;
   tags: Tag[];
@@ -51,7 +54,7 @@ export interface InventoryRow {
 
 /**
  * Monta a linha de um item do inventário: a personalização da ficha vale no lugar do
- * original (item da mesa, da Lore geral ou do worldbuild do usuário).
+ * original (item da mesa ou do mundo).
  */
 export function inventoryRow(entry: InventoryEntry, sources: ItemSources): InventoryRow {
   const item = sources[sourceOf(entry)].get(entry.itemId);
@@ -112,7 +115,6 @@ export function addOne(list: InventoryEntry[], unit: InventoryEntry, newId: () =
 function sameStack(a: InventoryEntry, b: Omit<InventoryEntry, 'id'>): boolean {
   return (
     a.itemId === b.itemId &&
-    !!a.global === !!b.global &&
     !!a.table === !!b.table &&
     !a.blobId &&
     a.name === b.name &&

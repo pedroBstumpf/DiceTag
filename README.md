@@ -42,7 +42,7 @@ src/
     │   └── utils/             # viewport (pan/zoom puro)
     ├── layout/
     │   ├── shell/             # barra lateral + área de conteúdo
-    │   └── sidebar/           # navegação, Lore geral, conta
+    │   └── sidebar/           # navegação, mundos, mesas, conta
     └── features/
         ├── home/              # landing: banner, atalhos, notícias
         ├── auth/              # diálogo de login / cadastro
@@ -53,11 +53,11 @@ src/
         │   │                  # janelas de NPC e token, mixer
         │   ├── services/      # table-session (estado + vínculo de tokens), sound-mixer, blob-url
         │   └── utils/         # geometria, visão (ray casting), simplificação de traços
-        └── worldbuild/        # explorador de pastas + janelas flutuantes (também é a página /lore)
-            ├── components/    # explorer, document-editor, timeline-editor, image-viewer, item-card
-            ├── directives/    # lore-scope (editores usando a Lore geral)
-            ├── services/      # worldbuild (dados + migração), lore (Lore geral, dados globais)
-            └── utils/         # layout da linha do tempo em mapa mental
+        └── worldbuild/        # explorador de pastas (com seletor de mundo) + janelas flutuantes
+            ├── components/    # explorer, document-editor, timeline-editor, image-viewer, item-card, race-card
+            ├── directives/    # world-npc-sheet (ficha base dos NPCs do bestiário)
+            ├── services/      # worldbuild (itens do mundo aberto + migrações), world-npc store
+            └── utils/         # layout da linha do tempo em mapa mental, importação da antiga Lore geral
 ```
 
 ## Modo de teste (sem conta)
@@ -75,9 +75,8 @@ O mapa ocupa a tela inteira e as barras flutuam por cima — todas escondíveis:
   desenhar (D), névoa de guerra (F, só mestre) com paredes (W), anotação (N), efeitos especiais (E), zoom. A grade
   é ligada e desligada nas opções da cena.
 - **Direita — painel:** Chat (mensagens e rolagens), Fichas (personagens e NPCs — arraste para o mapa; a imagem enviada na ficha é a do
-  token; personagens abrem a ficha completa), Lore (cada pasta tem um olho: os jogadores só leem as pastas que o
-  mestre revelar; o Worldbuild e a Lore geral inteiros ficam só com o mestre), Lore (itens da Lore geral e do worldbuild, com pastas próprias da mesa; renomear e remover valem
-  só para a mesa), Sons (mixer), Ações (automações por personagem, NPC ou gerais do mestre).
+  token; personagens abrem a ficha completa), Lore (itens do mundo da mesa, com pastas próprias da mesa; renomear e remover valem só para a mesa;
+  cada pasta tem um olho: os jogadores só leem as pastas que o mestre revelar), Sons (mixer), Ações (automações por personagem, NPC ou gerais do mestre).
 - **Baixo — ações:** 10 espaços (teclas 1–0) com as ações de quem está agindo: o jogador vê as do personagem
   dele; o mestre escolhe no menu "Agindo" um personagem ou NPC fixo, as ações gerais ou seguir o token selecionado.
   À direita, o botão **Rolar** faz a rolagem básica (2d12 ou 3d6 + modificador na hora), somando se quiser as tags e
@@ -171,10 +170,11 @@ texto, cor e opção "só o mestre vê".
 ### Sons
 Várias faixas tocando juntas, cada uma com volume e repetição, mais volume mestre e "Parar tudo".
 
-## Worldbuild e Lore geral
+## Mundos e Worldbuild
 
-O **Worldbuild** é de cada usuário. A **Lore geral** (`/lore`, na barra lateral) é a lore oficial do mundo,
-igual para todos — mesma página e mesmos editores, com dados globais.
+Cada usuário tem até **2 mundos**, e cada mundo é um **Worldbuild** separado (escolha e crie no cabeçalho do
+explorador ou pela barra lateral). Cada mesa se passa num mundo, escolhido ao criá-la, e a aba Lore dela mostra os
+itens desse mundo. A antiga **Lore geral** foi removida; o conteúdo dela foi importado para o primeiro mundo.
 
 - **Explorador** (escondível): pastas livres, arrastar para mover, renomear com duplo clique, busca.
 - **Janelas flutuantes**: cada item abre numa janela que pode ser movida, redimensionada e maximizada (duplo clique na barra).
@@ -185,6 +185,7 @@ igual para todos — mesma página e mesmos editores, com dados globais.
 - **NPCs (bestiário)**: aba própria no explorador com as fichas base dos NPCs, usadas pelas mesas.
 - **Itens**: aba própria no explorador para criar e listar os itens do mundo; cada item tem um cartão com
   imagem, nome e etiquetas e pode ir para o inventário dos personagens. Também acessível dentro da mesa.
+- **Raças**: características, imagens padrão e modificadores de status; escolhidas na ficha (raça e sub-raça).
 
 ## Dados (provisório)
 

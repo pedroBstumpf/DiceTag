@@ -99,10 +99,11 @@ abstract class TableSessionRepository {  // a mesa aberta (ver §1)
   abstract onCommand(fn: (command: TableCommand, version: number) => void): () => void;
 }
 
-abstract class WorldRepository {         // Worldbuild do usuário e Lore geral
-  abstract list(scope: 'own' | 'global'): Promise<WorldItem[]>;
-  abstract save(scope: 'own' | 'global', item: WorldItem): Promise<void>;
-  abstract remove(scope: 'own' | 'global', ids: string[]): Promise<void>;
+abstract class WorldRepository {         // mundos do usuário e o Worldbuild de cada um
+  abstract worlds(): Promise<World[]>;
+  abstract list(worldId: string): Promise<WorldItem[]>;
+  abstract save(worldId: string, item: WorldItem): Promise<void>;
+  abstract remove(worldId: string, ids: string[]): Promise<void>;
 }
 
 abstract class FilesRepository {         // mapas, imagens, áudios (hoje "blob:<id>")
@@ -182,7 +183,7 @@ As funções de `utils/dice.ts` já são puras e recebem o sorteio como parâmet
   tabela "comando → regra" (ex.: `moveToken` exige `canEdit` da ficha do token; `setFog` exige mestre).
 - O **papel** deixa de ser escolhido na mesa: vem da conta e do convite (dono da mesa = mestre). O botão
   Mestre/Jogador da barra de ações sai, ou passa a ser uma "visão de jogador" só para o mestre.
-- A Lore geral passa a ter dono: só ele edita, os demais leem.
+- O mundo da mesa é do mestre: os jogadores leem só o que ele revelar na aba Lore (o servidor não envia o resto).
 
 ### Quando
 No **back-end**, junto com o §1. Não há como fazer antes: sem servidor, não há quem aplique as regras.

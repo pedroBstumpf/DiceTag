@@ -40,27 +40,36 @@
       }
     </ul>
 
-    <!-- ===== Mundo: Lore geral (a lore oficial do mundo, igual para todos) ===== -->
-    <section>
-      @if (expanded()) {
-        <h4 class="mb-2 px-3 text-[11px] font-semibold uppercase tracking-widest text-slate-500">Mundo</h4>
-      } @else {
-        <hr class="mx-3 mb-3 border-white/5" />
-      }
-      <a
-        routerLink="/lore"
-        routerLinkActive="!bg-astral-500/15 !text-astral-300"
-        [matTooltip]="expanded() ? '' : 'Lore geral'"
-        matTooltipPosition="right"
-        class="flex h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium text-slate-300 transition-colors hover:bg-white/5 hover:text-white"
-        (click)="layout.closeMobile()"
-      >
-        <mat-icon class="shrink-0 text-star-400">auto_stories</mat-icon>
+    <!-- ===== Mundos do usuário (cada um é um Worldbuild) ===== -->
+    @if (auth.isLoggedIn()) {
+      <section>
         @if (expanded()) {
-          <span class="truncate">Lore geral</span>
+          <h4 class="mb-2 px-3 text-[11px] font-semibold uppercase tracking-widest text-slate-500">Mundo</h4>
+        } @else {
+          <hr class="mx-3 mb-3 border-white/5" />
         }
-      </a>
-    </section>
+        <ul class="flex flex-col gap-1">
+          @for (world of worlds.worlds(); track world.id) {
+            @let active = onWorldbuild() && world.id === worlds.activeId();
+            <li>
+              <button
+                type="button"
+                [matTooltip]="expanded() ? '' : world.name"
+                matTooltipPosition="right"
+                class="flex h-10 w-full items-center gap-3 rounded-xl px-3 text-left text-sm transition-colors hover:bg-white/5 hover:text-white"
+                [class]="active ? '!bg-astral-500/15 !text-astral-300' : 'text-slate-300'"
+                (click)="openWorld(world.id)"
+              >
+                <mat-icon class="shrink-0 text-sky-300">public</mat-icon>
+                @if (expanded()) {
+                  <span class="truncate">{{ world.name }}</span>
+                }
+              </button>
+            </li>
+          }
+        </ul>
+      </section>
+    }
 
     <!-- ===== Mesas do usuário (atalhos para abrir) ===== -->
     @if (auth.isLoggedIn()) {
