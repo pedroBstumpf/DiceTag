@@ -37,6 +37,8 @@ export class WorldbuildService {
   readonly worldItems = computed(() => this.ofType('item'));
   /** NPCs do bestiário (fichas base), em ordem alfabética. */
   readonly worldNpcs = computed(() => this.ofType('npc'));
+  /** Raças, em ordem alfabética. */
+  readonly worldRaces = computed(() => this.ofType('race'));
 
   /** Chave do usuário cujos dados estão (ou estão sendo) carregados. */
   private storageKey: string | null = null;
@@ -108,6 +110,7 @@ export class WorldbuildService {
       ...(type === 'document' && { content: '' }),
       ...(type === 'timeline' && { events: [], links: [] }),
       ...(type === 'item' && { tags: [] }),
+      ...(type === 'race' && { tags: [], statusMods: {} }),
       ...(type === 'npc' && { sheet: defaultSheet(), token: defaultToken('npc') }),
     };
     this._items.update((list) => [...list, item]);
@@ -133,6 +136,22 @@ export class WorldbuildService {
     await this.storage.set(`blob:${blobId}`, file);
     this.update(id, { blobId });
     if (old) this.storage.delete(`blob:${old}`);
+  }
+
+  /** Troca (ou define) a imagem padrão masculina/feminina de uma Raça e apaga a anterior. */
+  async setRaceImage(id: string, field: 'maleBlobId' | 'femaleBlobId', file: File): Promise<void> {
+    const old = this.byId().get(id)?.[field];
+    const blobId = await this.storeBlob(file);
+    this.update(id, { [field]: blobId });
+    if (old) this.deleteBlob(old);
+  }
+
+  /** Tira a imagem padrão masculina/feminina de uma Raça (e apaga o arquivo). */
+  clearRaceImage(id: string, field: 'maleBlobId' | 'femaleBlobId'): void {
+    const old = this.byId().get(id)?.[field];
+    if (!old) return;
+    this.update(id, { [field]: undefined });
+    this.deleteBlob(old);
   }
 
   // --- Edição --------------------------------------------------------------
@@ -167,9 +186,15 @@ export class WorldbuildService {
     this._items.update((list) => list.filter((i) => !ids.has(i.id)));
     this.persist();
 
-    // Limpa os arquivos de imagem associados (inclui imagem e inventário dos NPCs)
+    // Limpa os arquivos de imagem associados (inclui imagem e inventário dos NPCs e imagens das raças)
     for (const item of removed) {
-      const blobIds = [item.blobId, item.token?.blobId, ...(item.sheet?.inventory ?? []).map((i) => i.blobId)];
+      const blobIds = [
+        item.blobId,
+        item.token?.blobId,
+        item.maleBlobId,
+        item.femaleBlobId,
+        ...(item.sheet?.inventory ?? []).map((i) => i.blobId),
+      ];
       for (const blobId of blobIds) if (blobId) this.storage.delete(`blob:${blobId}`);
     }
     return [...ids];
@@ -219,6 +244,7 @@ export class WorldbuildService {
       image: WORLD_ITEM_META.image.label,
       item: 'Novo item',
       npc: 'Novo NPC',
+      race: 'Nova raça',
     }[type];
     const siblings = new Set(this.childrenOf(parentId).map((i) => i.name));
     let name = base;

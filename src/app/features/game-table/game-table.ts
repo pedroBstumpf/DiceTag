@@ -13,6 +13,7 @@ import { DocumentEditor } from '../worldbuild/components/document-editor/documen
 import { Explorer } from '../worldbuild/components/explorer/explorer';
 import { ImageViewer } from '../worldbuild/components/image-viewer/image-viewer';
 import { ItemCard } from '../worldbuild/components/item-card/item-card';
+import { RaceCard } from '../worldbuild/components/race-card/race-card';
 import { TimelineEditor } from '../worldbuild/components/timeline-editor/timeline-editor';
 import { LoreScope } from '../worldbuild/directives/lore-scope.directive';
 import { WorldNpcSheet } from '../worldbuild/directives/world-npc-sheet.directive';
@@ -42,7 +43,7 @@ interface WindowContent {
   icon: string;
   color: string;
   /** Tipo de conteúdo, usado para escolher o componente. */
-  type: 'entry' | 'sheet' | 'token' | 'equipped' | 'table-item' | 'explorer' | 'document' | 'timeline' | 'image' | 'item' | 'npc';
+  type: 'entry' | 'sheet' | 'token' | 'equipped' | 'table-item' | 'explorer' | 'document' | 'timeline' | 'image' | 'item' | 'npc' | 'race';
   /** O conteúdo vem da Lore geral (os editores usam o LoreService). */
   global?: boolean;
 }
@@ -63,6 +64,7 @@ const WINDOW_SIZES: Record<WindowContent['type'], { width: number; height: numbe
   image: { width: 720, height: 520 },
   item: { width: 420, height: 600 },
   npc: { width: 880, height: 700 },
+  race: { width: 460, height: 680 },
 };
 
 /** Espaço ocupado por cada barra (para enquadrar o mapa na área livre). */
@@ -104,6 +106,7 @@ const PANEL_SPACE = { top: 60, left: 76, right: 344, bottom: 100 };
     TimelineEditor,
     ImageViewer,
     ItemCard,
+    RaceCard,
   ],
   providers: [
     TableSessionService,

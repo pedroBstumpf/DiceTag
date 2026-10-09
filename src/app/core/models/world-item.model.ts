@@ -1,12 +1,14 @@
 import { Tag } from './tag.model';
-import { CharacterSheet, TokenSettings, defaultToken, normalizeSheet, withStatusBars } from './table-session.model';
+import { CharacterSheet, StatusMods, TokenSettings, defaultToken, normalizeSheet, withStatusBars } from './table-session.model';
 
 /**
  * Tipos de item que podem existir no worldbuild.
  * `item` = objeto do mundo (espada, poção…) com cartão: imagem, nome e etiquetas.
  * `npc` = ficha base de um NPC/criatura (bestiário); as mesas usam referências a ela.
+ * `race` = Raça: etiquetas, imagens padrão (masculina/feminina) e modificadores de status;
+ *          escolhida na ficha (raça ou sub-raça), aplica etiquetas e modificadores.
  */
-export type WorldItemType = 'folder' | 'document' | 'timeline' | 'image' | 'item' | 'npc';
+export type WorldItemType = 'folder' | 'document' | 'timeline' | 'image' | 'item' | 'npc' | 'race';
 
 /** Evento de uma linha do tempo. A data é texto livre (calendários de fantasia). */
 export interface TimelineEvent {
@@ -52,8 +54,13 @@ export interface WorldItem {
   links?: TimelineLink[];
   /** image / item: id da imagem salva no IndexedDB (no item, é opcional). */
   blobId?: string;
-  /** item: etiquetas do cartão. Padrão: []. */
+  /** item / race: etiquetas. Padrão: []. */
   tags?: Tag[];
+  /** race: imagens padrão opcionais (masculina e feminina), salvas no IndexedDB. */
+  maleBlobId?: string;
+  femaleBlobId?: string;
+  /** race: modificadores do máximo das barras de status (Corpo, Mente, Espírito). Padrão: 0. */
+  statusMods?: StatusMods;
   /** item: descrição do cartão (texto livre). Padrão: ''. */
   description?: string;
   /** npc: ficha base (temas, inventário…). Padrão: normalizeSheet(undefined). */
@@ -81,6 +88,7 @@ export const WORLD_ITEM_META: Record<WorldItemType, { icon: string; label: strin
   image: { icon: 'map', label: 'Mapa / Imagem', color: 'text-violet-300' },
   item: { icon: 'inventory_2', label: 'Item', color: 'text-amber-300' },
   npc: { icon: 'smart_toy', label: 'NPC', color: 'text-violet-300' },
+  race: { icon: 'diversity_3', label: 'Raça', color: 'text-rose-300' },
 };
 
 /** Cores disponíveis para eventos da linha do tempo. */

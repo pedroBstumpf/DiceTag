@@ -105,6 +105,9 @@
               @case ('item') {
                 <app-item-card appLoreScope [itemId]="win.id" [readonly]="!isGm()" />
               }
+              @case ('race') {
+                <app-race-card appLoreScope [itemId]="win.id" [readonly]="!isGm()" />
+              }
               @case ('npc') {
                 <!-- Ficha base do bestiário da Lore geral -->
                 <app-character-sheet appLoreScope appWorldNpcSheet [sheetId]="win.id" [readonly]="!isGm()" (openEntry)="open($event)" />
@@ -127,6 +130,9 @@
               }
               @case ('item') {
                 <app-item-card [itemId]="win.id" [readonly]="!isGm()" />
+              }
+              @case ('race') {
+                <app-race-card [itemId]="win.id" [readonly]="!isGm()" />
               }
               @case ('npc') {
                 <!-- Ficha base do bestiário do Worldbuild -->

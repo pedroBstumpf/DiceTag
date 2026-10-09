@@ -202,6 +202,10 @@
       <mat-icon [class]="meta.npc.color">{{ meta.npc.icon }}</mat-icon>
       <span>NPC</span>
     </button>
+    <button mat-menu-item (click)="create('race', parentId)">
+      <mat-icon [class]="meta.race.color">{{ meta.race.icon }}</mat-icon>
+      <span>Raça</span>
+    </button>
     <button mat-menu-item (click)="pickImages(fileInput, parentId)">
       <mat-icon [class]="meta.image.color">add_photo_alternate</mat-icon>
       <span>Mapa / imagem</span>

@@ -302,7 +302,9 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - Tipos: `folder`, `document` (HTML do Tiptap em `content`), `timeline` (`events[]` + `links[]`), `image` (`blobId`),
   `item` (cartão: `blobId` opcional = imagem, nome, `description` e `tags: Tag[]`; a descrição também pode ser
   personalizada no inventário, como nome e etiquetas), `npc` (bestiário: `sheet` + `token` padrão;
-  padrões em `npcSheetOf` / `npcTokenOf`).
+  padrões em `npcSheetOf` / `npcTokenOf`), `race` (Raça: `tags`, imagens padrão opcionais `maleBlobId` /
+  `femaleBlobId` — só guardadas por enquanto — e `statusMods` por barra de status; editor `RaceCard`, menu Criar →
+  "Raça"; `setRaceImage` / `clearRaceImage`; excluir apaga as imagens).
 - **Bestiário (NPCs):** aba **NPCs** do explorador (e "NPC" no menu Criar). A ficha base abre com a mesma
   `CharacterSheetView` + `WorldNpcStore` (diretiva `appWorldNpcSheet`), sem Relações, Anotações nem Habilidades.
   Excluir um NPC do Worldbuild apaga a imagem e as imagens personalizadas do inventário dele.

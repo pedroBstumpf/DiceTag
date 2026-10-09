@@ -373,6 +373,12 @@ export const STATUS_BARS = [
   { id: 'status-spirit', label: 'Espírito', color: '#4f86f7' },
 ] as const;
 
+/** Id de uma barra de status fixa (Corpo, Mente, Espírito). */
+export type StatusBarId = (typeof STATUS_BARS)[number]['id'];
+
+/** Modificadores do máximo das barras de status (ex.: de uma Raça). Ausente = 0. */
+export type StatusMods = Partial<Record<StatusBarId, number>>;
+
 /** Valor máximo inicial das barras de status. */
 export const DEFAULT_STATUS_MAX = 24;
 

@@ -75,6 +75,9 @@
               @case ('item') {
                 <app-item-card [itemId]="item.id" />
               }
+              @case ('race') {
+                <app-race-card [itemId]="item.id" />
+              }
               @case ('npc') {
                 <!-- Ficha base do bestiário (as mesas usam referências a ela) -->
                 <app-character-sheet appWorldNpcSheet [sheetId]="item.id" (openEntry)="open($event)" />
@@ -105,6 +108,10 @@
           <button mat-stroked-button (click)="createAndOpen('npc')">
             <mat-icon [class]="meta.npc.color">{{ meta.npc.icon }}</mat-icon>
             NPC
+          </button>
+          <button mat-stroked-button (click)="createAndOpen('race')">
+            <mat-icon [class]="meta.race.color">{{ meta.race.icon }}</mat-icon>
+            Raça
           </button>
         </app-empty-state>
       }

@@ -365,7 +365,7 @@ Mudar o volume de um som ou o nome de uma ficha não muda as origens de visão, 
 
 - **Página** `Worldbuild`: explorador à esquerda + área de janelas flutuantes. Serve `/worldbuild` e `/lore`.
 - **Dados**: lista plana de `WorldItem` com `parentId` (árvore). Tipos: `folder`, `document`, `timeline`,
-  `image`, `item`, `npc`. Uma lista por chave (`worldbuild:<userId>` ou `lore:global`).
+  `image`, `item`, `npc`, `race`. Uma lista por chave (`worldbuild:<userId>` ou `lore:global`).
 - **Componentes**: `Explorer` (abas Arquivos/Itens/NPCs), `DocumentEditor` (sobre o `RichTextEditor`/Tiptap),
   `TimelineEditor` (mapa mental; layout puro em `utils/timeline-layout.ts`), `ImageViewer`,
   `ItemCard`/`ItemCardView`, e a ficha de NPC reaproveitada da mesa com `appWorldNpcSheet`.
