@@ -87,7 +87,13 @@ export class EntryWindow {
   readonly linkedTags = computed(() => this.ownerTags().filter((t) => this.linkedSigns().has(t.id)));
   /** Composição do modificador, ex.: "+1 fixo +3 Esgrima −2 Medo −1 Pesada = +1". */
   readonly breakdown = computed(() => {
-    const parts = [`${this.modifierText(this.roll().modifier)} fixo`, ...this.linkedTags().map((t) => `${this.modifierText(this.tagValue(t))} ${t.text}`)];
+    const parts = [
+      `${this.modifierText(this.roll().modifier)} fixo`,
+      // Estudos não entram no modificador (só acumulam SA)
+      ...this.linkedTags()
+        .filter((t) => !t.study)
+        .map((t) => `${this.modifierText(this.tagValue(t))} ${t.text}`),
+    ];
     const total = this.linkedTags().reduce((sum, t) => sum + this.tagValue(t), this.roll().modifier);
     return `${parts.join(' ')} = ${this.modifierText(total)}`;
   });
@@ -120,12 +126,14 @@ export class EntryWindow {
   tagClass(tag: SheetTagOption): string {
     const sign = this.signOf(tag);
     if (!sign) return 'bg-white/5 text-slate-400 ring-1 ring-white/10 hover:bg-white/10 hover:text-slate-200';
+    if (tag.study) return 'bg-amber-400/15 text-amber-100 ring-1 ring-amber-300/50';
     if (tag.item && sign > 0) return 'bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-400/50';
     return tag.flaw || sign < 0 ? 'bg-red-500/15 text-red-200 ring-1 ring-red-400/50' : 'bg-astral-500/20 text-astral-200 ring-1 ring-astral-400/50';
   }
 
   /** Dica da tag: tema (ou item equipado) de origem e, nos itens, o que o próximo clique faz. */
   tagHint(tag: SheetTagOption): string {
+    if (tag.study) return 'Estudo ou treino: sem modificador; a cada uso, 12+ soma 1 SA e sucesso crítico soma 2';
     if (!tag.item) return tag.theme + (tag.flaw ? ' · defeito' : '');
     const sign = this.signOf(tag);
     const next = sign > 0 ? 'clique: penalidade' : sign < 0 ? 'clique: tirar' : 'clique: bônus';

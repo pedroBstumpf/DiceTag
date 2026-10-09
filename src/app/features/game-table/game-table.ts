@@ -34,7 +34,7 @@ import { BlobUrlService } from './services/blob-url.service';
 import { SheetStore } from '../../core/services/sheet-store';
 import { SoundMixerService } from './services/sound-mixer.service';
 import { TableSessionService, tokenSheetPlacement } from './services/table-session.service';
-import { formatModifier } from './utils/dice';
+import { formatModifier, levelUpText } from './utils/dice';
 
 /** O que uma janela da mesa está exibindo. */
 interface WindowContent {
@@ -264,10 +264,12 @@ export class GameTablePage {
    * o deixa no mouse. O aviso resume o resultado (o detalhe fica no chat).
    */
   onActionUsed(entry: TableEntry, sheetId?: string): void {
-    const { author, roll, armed } = this.session.useAction(entry, sheetId);
+    const { author, roll, armed, levelUps } = this.session.useAction(entry, sheetId);
     const formula = roll.dice + formatModifier(roll.modifier);
     const text = `${author} · ${roll.action}: ${formula} = ${roll.total} — ${ROLL_OUTCOMES[roll.outcome].label}`;
     this.snackBar.open(armed ? `${text} · arraste no mapa para lançar o efeito` : text, undefined, { duration: 3500 });
+    // Estudo que alcançou o SN: notificação em destaque (também vai para o chat)
+    if (levelUps.length) this.snackBar.open(levelUpText(levelUps), 'OK', { duration: 8000 });
   }
 
   /** Atalhos de teclado da mesa (ignorados enquanto se digita). */

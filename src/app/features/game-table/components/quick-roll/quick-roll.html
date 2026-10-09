@@ -156,7 +156,31 @@
       </section>
     }
 
-    @if (!themeGroups().length && !itemGroups().length && !statusTags().length) {
+    <!-- ===== Estudos e Treinos (sem modificador: 12+ soma 1 SA, crítico soma 2) ===== -->
+    @if (studies().length) {
+      <section>
+        <h4 class="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-500">Estudos e Treinos · sem modificador</h4>
+        <div class="flex flex-wrap gap-1">
+          @for (study of studies(); track study.id) {
+            @let on = isStudying(study);
+            <button
+              type="button"
+              class="flex h-7 items-center gap-1.5 rounded-md px-2 text-xs ring-1 transition-colors"
+              [class]="on ? 'bg-amber-400/15 text-amber-100 ring-amber-300/50' : 'bg-white/[0.03] text-slate-400 ring-white/10 hover:text-slate-200'"
+              [attr.aria-pressed]="on"
+              matTooltip="Treinar nesta rolagem: 12+ soma 1 SA, sucesso crítico soma 2"
+              (click)="toggleStudy(study)"
+            >
+              <mat-icon class="!size-3.5 !text-[14px]">school</mat-icon>
+              {{ study.text }}
+              <span class="tabular-nums text-slate-500">{{ studyProgress(study) }}</span>
+            </button>
+          }
+        </div>
+      </section>
+    }
+
+    @if (!themeGroups().length && !itemGroups().length && !statusTags().length && !studies().length) {
       <p class="text-[11px] leading-relaxed text-slate-500">
         Sem tags para somar: selecione o token de quem rola (ou escolha em "Agindo") para usar as tags e etiquetas da ficha.
       </p>

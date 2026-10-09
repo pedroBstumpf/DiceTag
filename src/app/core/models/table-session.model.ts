@@ -225,6 +225,23 @@ export interface CharacterTheme {
 /** Marcadores de avanço do objetivo de cada tema. */
 export const GOAL_STEPS = 5;
 
+/**
+ * Estudo ou treino do personagem: uma etiqueta (sem cor) que ele desenvolve rolando.
+ * Ligada a uma rolagem (sem modificador), soma 1 SA com 12+ e 2 com sucesso crítico;
+ * ao chegar no SN (definido pelo mestre), sobe de nível.
+ */
+export interface CharacterStudy {
+  id: string;
+  text: string;
+  /** Sucessos Acumulados. */
+  sa: number;
+  /** Sucessos Necessários (0 = ainda não definido pelo mestre). */
+  sn: number;
+}
+
+/** Quantidade fixa de cards de "Estudos e Treinos". */
+export const SHEET_STUDY_COUNT = 3;
+
 /** Lista de tags de um tema: positivas ou defeitos. */
 export type ThemeTagList = 'tags' | 'flaws';
 
@@ -307,6 +324,8 @@ export interface CharacterSheet {
   notes: NotePage[];
   /** Personagem: Eiros (moeda) que possui, gastos ao comprar itens de NPCs. */
   eiros: number;
+  /** Personagem: sempre SHEET_STUDY_COUNT cards de "Estudos e Treinos". */
+  studies: CharacterStudy[];
 }
 
 /** Ficha vazia de um personagem. */
@@ -327,12 +346,14 @@ export function defaultSheet(): CharacterSheet {
     inventory: [],
     notes: withFixedNotePages([]),
     eiros: 0,
+    studies: Array.from({ length: SHEET_STUDY_COUNT }, (_, i) => ({ id: `study-${i + 1}`, text: '', sa: 0, sn: 0 })),
   };
 }
 
 /**
  * Ficha salva com os valores padrão dos campos ausentes: sempre SHEET_THEME_COUNT temas
- * (com `flaws` e objetivo) e as páginas fixas das anotações no início. Fichas antigas sempre abrem.
+ * (com `flaws` e objetivo), SHEET_STUDY_COUNT estudos e as páginas fixas das anotações
+ * no início. Fichas antigas sempre abrem.
  */
 export function normalizeSheet(raw: Partial<CharacterSheet> | undefined): CharacterSheet {
   const empty = defaultSheet();
@@ -341,7 +362,8 @@ export function normalizeSheet(raw: Partial<CharacterSheet> | undefined): Charac
     const saved = sheet.themes[i];
     return { ...theme, ...saved, flaws: saved?.flaws ?? [], goal: saved?.goal ?? '', goalProgress: saved?.goalProgress ?? 0 };
   });
-  return { ...sheet, themes, notes: withFixedNotePages(sheet.notes) };
+  const studies = empty.studies.map((study, i) => ({ ...study, ...sheet.studies?.[i] }));
+  return { ...sheet, themes, studies, notes: withFixedNotePages(sheet.notes) };
 }
 
 /** Barras de status fixas do personagem, na ordem da ficha (também exibidas sobre o token). */

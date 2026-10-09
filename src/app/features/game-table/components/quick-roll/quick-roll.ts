@@ -6,7 +6,7 @@ import { DICE_KINDS, DiceKind, ROLL_OUTCOMES } from '../../../../core/models/tab
 import { Tag } from '../../../../core/models/tag.model';
 import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
 import { SheetTagOption, TableSessionService } from '../../services/table-session.service';
-import { StatusPick, formatModifier, quickModifier } from '../../utils/dice';
+import { StatusPick, formatModifier, levelUpText, quickModifier } from '../../utils/dice';
 
 /** Tags e defeitos de um tema (ou etiquetas de um item equipado), para agrupar no painel. */
 interface ThemeGroup {
@@ -61,6 +61,27 @@ export class QuickRoll {
   readonly itemGroups = computed(() => groupByTheme(this.session.itemTagsOf(this.sheetId() ?? undefined)));
   /** Etiquetas de status da ficha (as mesmas do token). */
   readonly statusTags = computed<Tag[]>(() => this.data()?.tags ?? []);
+  /** Estudos e Treinos do personagem (ligados sem modificador; acumulam SA ao rolar). */
+  readonly studies = computed(() => this.session.studyTagsOf(this.sheetId() ?? undefined));
+  private readonly studyPicks = signal(new Set<string>());
+
+  isStudying(study: SheetTagOption): boolean {
+    return this.studyPicks().has(study.id);
+  }
+
+  toggleStudy(study: SheetTagOption): void {
+    this.studyPicks.update((set) => {
+      const next = new Set(set);
+      if (!next.delete(study.id)) next.add(study.id);
+      return next;
+    });
+  }
+
+  /** SA/SN atuais de um estudo (para mostrar o avanço no botão). */
+  studyProgress(study: SheetTagOption): string {
+    const s = this.data()?.sheet.studies.find((x) => x.id === study.id);
+    return s ? `${s.sa}/${s.sn || '?'}` : '';
+  }
 
   // --- Escolhas (só desta rolagem) -----------------------------------------
 
@@ -144,9 +165,12 @@ export class QuickRoll {
   // --- Rolar ---------------------------------------------------------------
 
   roll(): void {
-    const { author, roll } = this.session.quickRoll(this.dice(), this.modifier(), this.sheetId(), this.itemModifier());
+    const studies = this.studies().filter((s) => this.studyPicks().has(s.id)).map((s) => s.id);
+    const { author, roll, levelUps } = this.session.quickRoll(this.dice(), this.modifier(), this.sheetId(), this.itemModifier(), studies);
     const text = `${author} · ${roll.dice}${formatModifier(roll.modifier)} = ${roll.total} — ${ROLL_OUTCOMES[roll.outcome].label}`;
     this.snackBar.open(text, undefined, { duration: 3500 });
+    // Estudo que alcançou o SN: notificação em destaque (também vai para o chat)
+    if (levelUps.length) this.snackBar.open(levelUpText(levelUps), 'OK', { duration: 8000 });
     this.done.emit();
   }
 }

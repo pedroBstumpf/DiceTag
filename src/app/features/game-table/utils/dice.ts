@@ -1,4 +1,4 @@
-import { DiceKind, RollConfig, RollOutcome } from '../../../core/models/table-session.model';
+import { CharacterStudy, DiceKind, RollConfig, RollOutcome } from '../../../core/models/table-session.model';
 
 /** Quantidade de dados e faces de cada tipo de rolagem. */
 const DICE: Record<DiceKind, { count: number; sides: number }> = {
@@ -105,6 +105,28 @@ export function rollOutcome(dice: DiceKind, total: number): RollOutcome {
   if (total < 18) return 'partial';
   if (total < 24) return 'success';
   return 'critical-success';
+}
+
+// --- Estudos e Treinos ---------------------------------------------------------
+
+/** SA ganhos por um estudo ligado à rolagem: 2 no sucesso crítico, 1 com total 12 ou mais, senão 0. */
+export function studyGain(total: number, outcome: RollOutcome): number {
+  if (outcome === 'critical-success') return 2;
+  return total >= 12 ? 1 : 0;
+}
+
+/**
+ * Soma `gain` SA ao estudo. `leveledUp`: passou a alcançar o SN nesta rolagem (o SN precisa
+ * estar definido, > 0, e o estudo ainda não o tinha alcançado).
+ */
+export function trainStudy(study: CharacterStudy, gain: number): { study: CharacterStudy; leveledUp: boolean } {
+  const sa = study.sa + gain;
+  return { study: { ...study, sa }, leveledUp: study.sn > 0 && study.sa < study.sn && sa >= study.sn };
+}
+
+/** Aviso de estudos que subiram de nível: "⭐ Esgrima subiu de nível!" (um por linha). */
+export function levelUpText(names: readonly string[]): string {
+  return names.map((name) => `⭐ ${name} subiu de nível!`).join('\n');
 }
 
 /** Modificador como texto: "+3", "−2" ou "" (zero). */

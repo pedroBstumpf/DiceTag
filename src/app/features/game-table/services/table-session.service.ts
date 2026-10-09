@@ -51,7 +51,7 @@ import {
 } from '../../../core/models/table-session.model';
 import { AuthService } from '../../../core/services/auth.service';
 import { newId } from '../../../core/utils/id';
-import { TagLevels, formatRoll, keepValidItemTags, rollDice } from '../utils/dice';
+import { TagLevels, baseTagId, formatRoll, keepValidItemTags, levelUpText, rollDice, studyGain, trainStudy } from '../utils/dice';
 import { addOne, inventoryRow, itemTagId, itemTagLevel, quantityOf, takeOne } from '../utils/inventory';
 import { SheetData, SheetStore } from '../../../core/services/sheet-store';
 import { FxDrawing, buildFx, seededRandom } from '../utils/effects';
@@ -108,6 +108,8 @@ export interface ActionUse {
   roll: RollResult;
   /** A ação tinha efeito especial (agora armado no mouse). */
   armed: boolean;
+  /** Estudos e Treinos que subiram de nível nesta rolagem (nomes das etiquetas). */
+  levelUps: string[];
 }
 
 
@@ -142,6 +144,8 @@ export interface SheetTagOption {
   flaw: boolean;
   /** Etiqueta de um item equipado (nível dela, sem nível = 1). */
   item?: boolean;
+  /** Estudo ou treino: não muda o modificador (nível 0); só acumula SA ao rolar. */
+  study?: boolean;
 }
 
 /** Modo da ferramenta Névoa. */
@@ -548,26 +552,35 @@ export class TableSessionService extends SheetStore {
     const roll: RollResult = { action: entry.name, icon: entry.icon ?? 'bolt', dice: config.dice, ...rollDice(config, Math.random, levels) };
     const author = (sheet && this.sheetData(sheet)?.name) ?? this.actor()?.name ?? this.userName();
     this.pushChat({ author, roll });
+    // Estudos ligados à ação acumulam SA conforme o resultado
+    const levelUps = this.trainStudies(sheet, (config.attributes ?? []).map(baseTagId), roll);
 
     if (entry.effect) {
       if (this.tool() !== 'fx') this.fxReturnTool = this.tool();
       this.armedFx.set({ ...entry.effect, action: entry.name });
       this.tool.set('fx');
     }
-    return { author, roll, armed: !!entry.effect };
+    return { author, roll, armed: !!entry.effect, levelUps };
   }
 
   /**
    * Rolagem básica (botão "Rolar dados" da barra de ações): não é uma ação salva — dado e
    * modificador (já com as tags escolhidas) valem só para esta rolagem. Vai para o chat em
-   * nome da ficha `sheetId` (ou do mestre/conta, sem ficha).
+   * nome da ficha `sheetId` (ou do mestre/conta, sem ficha). `studies`: estudos ligados a esta
+   * rolagem (sem modificador; acumulam SA conforme o resultado).
    */
-  quickRoll(dice: DiceKind, modifier: number, sheetId: string | null, itemModifier = 0): { author: string; roll: RollResult } {
+  quickRoll(
+    dice: DiceKind,
+    modifier: number,
+    sheetId: string | null,
+    itemModifier = 0,
+    studies: readonly string[] = [],
+  ): { author: string; roll: RollResult; levelUps: string[] } {
     // `itemModifier`: parte de `modifier` que vem dos itens equipados (exibida à parte no chat)
     const roll: RollResult = { action: 'Rolagem', icon: 'casino', dice, ...rollDice({ dice, modifier }), itemModifier };
     const author = (sheetId && this.sheetData(sheetId)?.name) || this.userName();
     this.pushChat({ author, roll });
-    return { author, roll };
+    return { author, roll, levelUps: this.trainStudies(sheetId, studies, roll) };
   }
 
   // --- Chat ----------------------------------------------------------------
@@ -1091,9 +1104,40 @@ export class TableSessionService extends SheetStore {
       });
   }
 
-  /** Tudo o que pode entrar no modificador de uma rolagem: tags dos temas + etiquetas dos itens equipados. */
+  /** Estudos e Treinos do personagem com etiqueta preenchida (ligados à rolagem sem modificador). */
+  studyTagsOf(sheetId: string | undefined): SheetTagOption[] {
+    const data = sheetId ? this.sheetData(sheetId) : null;
+    if (data?.kind !== 'character') return [];
+    return data.sheet.studies
+      .filter((s) => s.text.trim())
+      .map((s) => ({ id: s.id, text: s.text.trim(), level: 0, theme: 'Estudos e Treinos', flaw: false, study: true }));
+  }
+
+  /** Tudo o que pode ser ligado a uma rolagem: tags dos temas, etiquetas dos itens equipados e estudos. */
   rollTagsOf(sheetId: string | undefined): SheetTagOption[] {
-    return [...this.themeTagsOf(sheetId), ...this.itemTagsOf(sheetId)];
+    return [...this.themeTagsOf(sheetId), ...this.itemTagsOf(sheetId), ...this.studyTagsOf(sheetId)];
+  }
+
+  /**
+   * Aplica uma rolagem aos estudos ligados a ela (`studyIds`): 12+ soma 1 SA, sucesso crítico
+   * soma 2. Quem alcança o SN sobe de nível: aviso no chat (mestre e jogadores veem) e o
+   * nome volta para quem rolou mostrar a notificação.
+   */
+  private trainStudies(sheetId: string | null | undefined, studyIds: readonly string[], roll: RollResult): string[] {
+    const data = sheetId ? this.sheetData(sheetId) : null;
+    const ids = new Set(studyIds);
+    const gain = studyGain(roll.total, roll.outcome);
+    if (!sheetId || !data || !gain || !data.sheet.studies.some((s) => ids.has(s.id) && s.text.trim())) return [];
+    const levelUps: string[] = [];
+    const studies = data.sheet.studies.map((s) => {
+      if (!ids.has(s.id) || !s.text.trim()) return s;
+      const trained = trainStudy(s, gain);
+      if (trained.leveledUp) levelUps.push(s.text.trim());
+      return trained.study;
+    });
+    this.updateSheet(sheetId, { studies });
+    if (levelUps.length) this.pushChat({ author: data.name, text: levelUpText(levelUps) });
+    return levelUps;
   }
 
   /** Nível atual de cada tag do personagem (somado ao modificador das ações que a usam). */

@@ -380,6 +380,71 @@
               }
             </div>
           </section>
+
+          <!-- ===== Estudos e Treinos (só personagem): etiqueta + SA / SN ===== -->
+          @if (!isNpc()) {
+            <section class="sheet-card mt-3">
+              <h3 class="sheet-title">
+                <mat-icon class="!size-4 !text-[16px]">school</mat-icon>
+                Estudos e Treinos
+              </h3>
+              <fieldset class="grid min-w-0 gap-3 @2xl:grid-cols-3" [disabled]="!canEdit()">
+                @for (study of s.studies; track study.id; let i = $index) {
+                  @let done = study.sn > 0 && study.sa >= study.sn;
+                  <div class="rounded-lg p-2 ring-1" [class]="done ? 'bg-amber-400/10 ring-amber-300/40' : 'bg-white/[0.03] ring-white/5'">
+                    <input
+                      #studyText
+                      class="sheet-input w-full"
+                      [placeholder]="'Etiqueta ' + (i + 1)"
+                      [attr.aria-label]="'Etiqueta do estudo ' + (i + 1)"
+                      [value]="study.text"
+                      (input)="updateStudy(study.id, { text: studyText.value })"
+                    />
+                    <div class="mt-2 grid grid-cols-2 gap-2">
+                      <label class="sheet-label" title="Sucessos Acumulados">
+                        SA
+                        <input
+                          #saInput
+                          type="number"
+                          min="0"
+                          class="sheet-input w-full text-center tabular-nums"
+                          [value]="study.sa"
+                          (change)="setStudyNumber(study.id, 'sa', saInput.value)"
+                        />
+                      </label>
+                      <label class="sheet-label" [title]="gmRole() ? 'Sucessos Necessários' : 'Sucessos Necessários (definido pelo mestre)'">
+                        SN
+                        <input
+                          #snInput
+                          type="number"
+                          min="0"
+                          class="sheet-input w-full text-center tabular-nums disabled:opacity-60"
+                          [disabled]="!gmRole()"
+                          [value]="study.sn || ''"
+                          placeholder="—"
+                          (change)="setStudyNumber(study.id, 'sn', snInput.value)"
+                        />
+                      </label>
+                    </div>
+                    <!-- Avanço: SA de SN -->
+                    <div class="mt-2 h-1.5 overflow-hidden rounded-sm bg-white/10">
+                      <div class="h-full bg-amber-300 transition-[width] duration-200" [style.width.%]="studyPercent(study)"></div>
+                    </div>
+                    @if (done) {
+                      <p class="mt-1.5 flex items-center gap-1 text-[11px] font-semibold text-amber-200">
+                        <mat-icon class="!size-3.5 !text-[14px]">star</mat-icon>
+                        Subiu de nível!
+                      </p>
+                    }
+                  </div>
+                }
+              </fieldset>
+              <p class="mt-2 text-[11px] leading-relaxed text-slate-500">
+                Ligue um estudo numa rolagem (botão Rolar ou numa habilidade): sem modificador, 12+ soma 1 SA e sucesso
+                crítico soma 2. O mestre define o SN; ao alcançá-lo, a etiqueta sobe de nível.
+              </p>
+            </section>
+          }
         }
       }
 

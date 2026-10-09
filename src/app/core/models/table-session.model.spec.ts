@@ -51,6 +51,15 @@ describe('padrões da ficha', () => {
   it('ficha vazia tem três temas', () => {
     expect(defaultSheet().themes).toHaveLength(3);
   });
+
+  it('fichas antigas ganham objetivo nos temas e os três estudos', () => {
+    const old = normalizeSheet({ themes: [{ id: 'theme-1', name: 'Espada', tags: [], flaws: [] } as never] });
+    expect(old.themes[0]).toMatchObject({ name: 'Espada', goal: '', goalProgress: 0 });
+    expect(old.studies.map((s) => s.id)).toEqual(['study-1', 'study-2', 'study-3']);
+    const kept = normalizeSheet({ studies: [{ id: 'study-1', text: 'Alquimia', sa: 2, sn: 5 }] });
+    expect(kept.studies[0]).toEqual({ id: 'study-1', text: 'Alquimia', sa: 2, sn: 5 });
+    expect(kept.studies).toHaveLength(3);
+  });
 });
 
 describe('páginas fixas das anotações', () => {

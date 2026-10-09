@@ -1,4 +1,4 @@
-import { effectiveModifier, formatModifier, formatRoll, itemModifier, quickModifier, rollDice, rollOutcome } from './dice';
+import { effectiveModifier, formatModifier, formatRoll, itemModifier, quickModifier, rollDice, rollOutcome, studyGain, trainStudy } from './dice';
 
 /** Random que devolve os valores na ordem (para dados previsíveis). */
 function sequence(...values: number[]) {
@@ -114,5 +114,22 @@ describe('etiquetas de itens nas ações (bônus ou penalidade)', () => {
     const r = rollDice(roll, () => 0, levels);
     expect(r.modifier).toBe(5);
     expect(r.itemModifier).toBe(1);
+  });
+});
+
+describe('estudos e treinos', () => {
+  it('12+ soma 1 SA, sucesso crítico soma 2, abaixo de 12 nada', () => {
+    expect(studyGain(11, 'failure')).toBe(0);
+    expect(studyGain(12, 'partial')).toBe(1);
+    expect(studyGain(13, 'good-luck')).toBe(1);
+    expect(studyGain(25, 'critical-success')).toBe(2);
+  });
+
+  it('sobe de nível só ao alcançar o SN definido nesta rolagem', () => {
+    const study = { id: 'study-1', text: 'Esgrima', sa: 3, sn: 4 };
+    expect(trainStudy(study, 1)).toEqual({ study: { ...study, sa: 4 }, leveledUp: true });
+    expect(trainStudy({ ...study, sa: 4 }, 1).leveledUp).toBe(false);
+    expect(trainStudy({ ...study, sn: 0 }, 2).leveledUp).toBe(false);
+    expect(trainStudy(study, 0)).toEqual({ study, leveledUp: false });
   });
 });

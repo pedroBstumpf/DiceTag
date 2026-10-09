@@ -6,6 +6,7 @@ import { Tag } from '../../../../core/models/tag.model';
 import {
   CharacterRelation,
   CharacterSheet,
+  CharacterStudy,
   CharacterTheme,
   CURRENCY,
   GOAL_STEPS,
@@ -306,6 +307,26 @@ export class CharacterSheetView {
   /** Clicar no último marcador aceso desmarca ele (permite voltar a 0). */
   setGoalProgress(theme: CharacterTheme, value: number): void {
     this.updateTheme(theme.id, { goalProgress: value === theme.goalProgress ? value - 1 : value });
+  }
+
+  // --- Estudos e Treinos (personagem) --------------------------------------
+
+  /** O SN é definido pelo mestre (no papel de mestre, na mesa). */
+  readonly gmRole = computed(() => this.session?.role() === 'gm');
+
+  updateStudy(id: string, patch: Partial<CharacterStudy>): void {
+    this.update({ studies: (this.sheet()?.studies ?? []).map((s) => (s.id === id ? { ...s, ...patch } : s)) });
+  }
+
+  /** SA ou SN digitado (inteiro ≥ 0; texto inválido é ignorado; SN vazio = 0, sem definir). */
+  setStudyNumber(id: string, field: 'sa' | 'sn', raw: string): void {
+    const n = raw.trim() === '' ? 0 : Number(raw);
+    if (Number.isFinite(n)) this.updateStudy(id, { [field]: Math.max(0, Math.round(n)) });
+  }
+
+  /** Avanço do estudo em % (SA de SN; sem SN = 0). */
+  studyPercent(study: CharacterStudy): number {
+    return study.sn > 0 ? Math.min(100, (study.sa / study.sn) * 100) : 0;
   }
 
   // --- Equipados (personagem) ----------------------------------------------
