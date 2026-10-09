@@ -24,8 +24,8 @@ const OUTCOME_GUIDE: Record<DiceKind, { outcome: RollOutcome; range: string }[]>
   '2d12': [
     { outcome: 'critical-failure', range: '< 0' },
     { outcome: 'failure', range: '0–11' },
-    { outcome: 'partial', range: '12–16' },
-    { outcome: 'success', range: '17–23' },
+    { outcome: 'partial', range: '12–17' },
+    { outcome: 'success', range: '18–23' },
     { outcome: 'critical-success', range: '24+' },
   ],
   '3d6': [

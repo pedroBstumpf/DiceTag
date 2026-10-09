@@ -95,14 +95,14 @@ export function rollDice(roll: RollConfig, random: Random = Math.random, levels:
 
 /**
  * Resultado do total:
- * - 2d12: < 0 falha crítica · < 12 falha · < 17 sucesso parcial · < 24 sucesso · 24+ sucesso crítico
+ * - 2d12: < 0 falha crítica · < 12 falha · 12–17 sucesso parcial · 18–23 sucesso · 24+ sucesso crítico
  * - 3d6: até 9 azar · 10–12 neutro · 13+ sorte
  */
 export function rollOutcome(dice: DiceKind, total: number): RollOutcome {
   if (dice === '3d6') return total <= 9 ? 'bad-luck' : total <= 12 ? 'neutral' : 'good-luck';
   if (total < 0) return 'critical-failure';
   if (total < 12) return 'failure';
-  if (total < 17) return 'partial';
+  if (total < 18) return 'partial';
   if (total < 24) return 'success';
   return 'critical-success';
 }

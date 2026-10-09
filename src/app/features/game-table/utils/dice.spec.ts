@@ -12,8 +12,8 @@ describe('rollOutcome', () => {
     expect(rollOutcome('2d12', 0)).toBe('failure');
     expect(rollOutcome('2d12', 11)).toBe('failure');
     expect(rollOutcome('2d12', 12)).toBe('partial');
-    expect(rollOutcome('2d12', 16)).toBe('partial');
-    expect(rollOutcome('2d12', 17)).toBe('success');
+    expect(rollOutcome('2d12', 17)).toBe('partial');
+    expect(rollOutcome('2d12', 18)).toBe('success');
     expect(rollOutcome('2d12', 23)).toBe('success');
     expect(rollOutcome('2d12', 24)).toBe('critical-success');
     expect(rollOutcome('2d12', 30)).toBe('critical-success');
