@@ -721,13 +721,16 @@ export const MAX_TOKEN_SPEED = 12;
 /** Paleta para barras e etiquetas de tokens (a mesma das etiquetas em geral). */
 export const TOKEN_COLORS = TAG_COLORS;
 
+/** Tamanho (em quadrados) dos tokens de fichas novas. */
+export const DEFAULT_TOKEN_SIZE = 3;
+
 /**
  * Token padrão de uma ficha: personagens e NPCs têm as barras de status
  * (Corpo, Mente, Espírito); só personagens começam enxergando.
  */
 export function defaultToken(kind: TableEntryKind): TokenSettings {
   return {
-    size: 1,
+    size: DEFAULT_TOKEN_SIZE,
     vision: { enabled: kind === 'character', range: DEFAULT_VISION_RANGE },
     bars: hasSheet(kind) ? withStatusBars([]) : [],
     tags: [],

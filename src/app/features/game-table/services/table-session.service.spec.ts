@@ -152,6 +152,14 @@ describe('TableSessionService (fachada)', () => {
     expect(session.selectedTokenIds().size).toBe(2);
   });
 
+  it('tokens de fichas novas entram no mapa com tamanho 3', async () => {
+    await session.addScene();
+    const pc = session.placeToken(session.addEntry('character').id, { x: 0, y: 0 })!;
+    const npc = session.placeToken(session.addEntry('npc').id, { x: 0, y: 0 })!;
+    expect(session.resolvedTokenById(pc.id)?.size).toBe(3);
+    expect(session.resolvedTokenById(npc.id)?.size).toBe(3);
+  });
+
   it('flush grava o estado na chave da mesa', async () => {
     await session.addScene();
     session.sendChat('olá');

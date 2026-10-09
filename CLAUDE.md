@@ -573,7 +573,7 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 ### Tokens — regra de vínculo (único lugar: `resolveToken` / `splitTokenPatch` em `state/tokens.ts`)
 - `TableEntry.token` (ficha): `blobId`, `size` (0.5–6 quadrados; `TOKEN_SIZES` vai até 6 para criaturas enormes), `vision { enabled, range (m) }`, `speed?`, `bars`, `tags`
   (`TokenTag.level` opcional, ex.: Exaustão 2). Cores de barras/etiquetas: paleta `TOKEN_COLORS` ou cor livre.
-  Padrão (`defaultToken`): tamanho 1, visão 18 m (ligada para personagem, desligada para NPC).
+  Padrão (`defaultToken`): tamanho 3 (`DEFAULT_TOKEN_SIZE`; fichas que já existiam mantêm o seu), visão 18 m (ligada para personagem, desligada para NPC).
 - `Scene.tokens: TokenPlacement { id, entryId, x, y (centro), size?, vision?, bars?, tags? }`.
 - **Personagem:** vinculado — tamanho, visão, barras e etiquetas vêm da ficha; alterar qualquer token altera a ficha e todos.
 - **NPC:** ao ser colocado, copia tamanho, **visão**, barras, etiquetas **e a ficha** para a própria colocação (cada goblin
