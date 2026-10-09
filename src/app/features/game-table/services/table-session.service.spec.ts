@@ -82,10 +82,10 @@ describe('TableSessionService (fachada)', () => {
     const orig = session.placeToken(npc.id, { x: 0, y: 0 })!;
     session.updateToken(orig.id, { size: 2, vision: { enabled: true, range: 9 } });
     session.renameSheet(`npc:${orig.id}`, 'Chefe');
-    expect(session.copyToken(orig.id)).toBe(true);
+    expect(session.copyTokens([orig.id])).toBe(1);
 
     await session.addScene();
-    const pasted = session.pasteToken({ x: 140, y: 70 })!;
+    const [pasted] = session.pasteTokens({ x: 140, y: 70 });
     expect(session.activeScene()?.tokens?.map((t) => t.id)).toEqual([pasted.id]);
     expect(session.selectedTokenId()).toBe(pasted.id);
     const token = session.resolvedTokenById(pasted.id)!;
@@ -103,11 +103,53 @@ describe('TableSessionService (fachada)', () => {
     const npc = session.addEntry('npc');
     const t = session.placeToken(npc.id, { x: 0, y: 0 })!;
     session.setRole('player');
-    expect(session.copyToken(t.id)).toBe(false);
+    expect(session.copyTokens([t.id])).toBe(0);
     session.setRole('gm');
-    expect(session.copyToken(t.id)).toBe(true);
+    expect(session.copyTokens([t.id])).toBe(1);
     session.removeEntry(npc.id);
-    expect(session.pasteToken({ x: 0, y: 0 })).toBeNull();
+    expect(session.pasteTokens({ x: 0, y: 0 })).toEqual([]);
+  });
+
+  it('seleção: Shift+clique, caixa e remoção mantêm o grupo e o principal coerentes', async () => {
+    await session.addScene();
+    const npc = session.addEntry('npc');
+    const [a, b, c] = [0, 70, 140].map((x) => session.placeToken(npc.id, { x, y: 0 })!);
+    // placeToken seleciona só o último colocado
+    expect([...session.selectedTokenIds()]).toEqual([c.id]);
+    session.toggleTokenSelection(a.id);
+    expect(session.selectedTokenId()).toBe(a.id);
+    expect(session.movableSelection().map((t) => t.placement.id)).toEqual([a.id, c.id]);
+
+    session.selectTokens([b.id], true);
+    expect(session.selectedTokenIds().size).toBe(3);
+    session.removeToken(a.id);
+    expect(session.selectedTokenIds().has(a.id)).toBe(false);
+    expect(session.selectedTokenId()).not.toBeNull();
+
+    // O jogador não move NPC que não controla: fica fora do grupo móvel
+    session.setRole('player');
+    expect(session.movableSelection()).toEqual([]);
+  });
+
+  it('grupo: moveTokens move todos; copiar e colar mantém a formação', async () => {
+    await session.addScene();
+    const pc = session.addEntry('character');
+    const a = session.placeToken(pc.id, { x: 0, y: 0 })!;
+    const b = session.placeToken(pc.id, { x: 70, y: 140 })!;
+    session.moveTokens([
+      { placementId: a.id, x: 70, y: 70 },
+      { placementId: b.id, x: 140, y: 210 },
+    ]);
+    expect(session.resolvedTokenById(b.id)?.placement).toMatchObject({ x: 140, y: 210 });
+
+    expect(session.copyTokens([a.id, b.id])).toBe(2);
+    const pasted = session.pasteTokens({ x: 700, y: 700 });
+    expect(pasted.map((t) => [t.x, t.y])).toEqual([
+      [700, 700],
+      [770, 840],
+    ]);
+    expect(session.selectedTokenId()).toBe(pasted[0].id);
+    expect(session.selectedTokenIds().size).toBe(2);
   });
 
   it('flush grava o estado na chave da mesa', async () => {

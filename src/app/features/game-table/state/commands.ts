@@ -27,7 +27,7 @@ import {
   setActiveScene,
   updateScene,
 } from './scenes';
-import { moveToken, placeToken, removeToken, toggleTokenPublic, updatePlacement } from './tokens';
+import { moveToken, moveTokens, placeToken, removeToken, toggleTokenPublic, updatePlacement } from './tokens';
 
 /**
  * Catálogo de comandos da mesa: toda alteração do `TableState` é um destes nomes + um payload.
@@ -63,6 +63,7 @@ export const TABLE_COMMANDS = {
   placeToken,
   updatePlacement,
   moveToken,
+  moveTokens,
   removeToken,
   toggleTokenPublic,
   // Névoa e paredes

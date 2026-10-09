@@ -4,6 +4,7 @@ import { findPlacement } from './helpers';
 import {
   copyPlacement,
   moveToken,
+  moveTokens,
   placeToken,
   removeToken,
   resolveToken,
@@ -115,6 +116,20 @@ describe('comandos: tokens', () => {
     expect(findPlacement(after.scenes, 't2')).toMatchObject({ x: 5, y: 6 });
     expect(after.scenes[0]).toBe(before.scenes[0]);
     expect(moveToken(before, { placementId: 'nao-existe', x: 0, y: 0 })).toBe(before);
+  });
+
+  it('moveTokens move o grupo em um comando, em cenas diferentes se preciso', () => {
+    const before = table();
+    const after = moveTokens(before, {
+      moves: [
+        { placementId: 't1', x: 1, y: 2 },
+        { placementId: 't2', x: 3, y: 4 },
+        { placementId: 'nao-existe', x: 0, y: 0 },
+      ],
+    });
+    expect(findPlacement(after.scenes, 't1')).toMatchObject({ x: 1, y: 2 });
+    expect(findPlacement(after.scenes, 't2')).toMatchObject({ x: 3, y: 4 });
+    expect(moveTokens(before, { moves: [] })).toBe(before);
   });
 
   it('updatePlacement mescla campos e toggleTokenPublic alterna (desligado = ausente)', () => {

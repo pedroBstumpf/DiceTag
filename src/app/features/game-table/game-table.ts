@@ -311,17 +311,22 @@ export class GameTablePage {
   }
 
   /**
-   * Ctrl+C copia o token selecionado; Ctrl+V cola. Texto selecionado na página tem prioridade
-   * (o Ctrl+C copia o texto, como sempre). Retorna true se tratou a tecla.
+   * Ctrl+C copia os tokens selecionados (o principal é a referência ao colar); Ctrl+V cola o grupo.
+   * Texto selecionado na página tem prioridade (o Ctrl+C copia o texto, como sempre).
+   * Retorna true se tratou a tecla.
    */
   private copyPasteToken(key: string): boolean {
     if (key === 'c') {
-      const selected = this.session.selectedTokenId();
-      if (!selected || window.getSelection()?.toString() || !this.session.copyToken(selected)) return false;
-      this.snackBar.open('Token copiado: Ctrl+V cola uma cópia sob o mouse.', undefined, { duration: 2000 });
+      const primary = this.session.selectedTokenId();
+      if (!primary || window.getSelection()?.toString()) return false;
+      const ids = [primary, ...[...this.session.selectedTokenIds()].filter((id) => id !== primary)];
+      const count = this.session.copyTokens(ids);
+      if (!count) return false;
+      const what = count === 1 ? 'Token copiado' : `${count} tokens copiados`;
+      this.snackBar.open(`${what}: Ctrl+V cola sob o mouse.`, undefined, { duration: 2000 });
       return true;
     }
-    return key === 'v' && !!this.map()?.pasteToken();
+    return key === 'v' && !!this.map()?.pasteTokens();
   }
 
   /** Atalho W: ferramenta Névoa já no modo "Parede — linha". */

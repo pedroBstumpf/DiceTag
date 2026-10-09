@@ -130,7 +130,7 @@ quase toda dúvida de "por que isso sumiu/persistiu".
 |---|---|---|---|
 | **Persistido global** | serviços `providedIn: 'root'` → IndexedDB | sempre | contas, mesas, worldbuild do usuário, Lore geral |
 | **Persistido por mesa** | `TableSessionService.state` → `table-state:<id>` | enquanto a mesa existir | cenas, tokens, paredes, fichas, chat, organização da lore |
-| **Sessão da mesa** (não persistido) | signals do `TableSessionService` e serviços da página | até sair da mesa | ferramenta ativa, papel, token selecionado, pincel, barras visíveis, efeitos na tela, desfazer |
+| **Sessão da mesa** (não persistido) | signals do `TableSessionService` e serviços da página | até sair da mesa | ferramenta ativa, papel, tokens selecionados, tokens copiados, pincel, barras visíveis, efeitos na tela, desfazer |
 | **Local do componente** | `signal` dentro do componente | enquanto o componente existir | campo em edição, aba aberta, arraste em andamento |
 
 Fora do IndexedDB, o `localStorage` guarda a sessão (`dicetag.session`, id do usuário logado) e uma
@@ -260,7 +260,7 @@ Um por mesa aberta. Guarda o `TableState` inteiro num único `signal` privado e 
 | Vista isométrica e camadas | `isometric`, `mapLevels`, `playerLevel`, `currentLevel` |
 | Névoa e paredes | `walls` da camada em foco, origens de visão, polígonos de visão, `fogView` |
 | Memória da névoa | máscara de áreas exploradas (bitset em base64) |
-| Estado da sessão | `tool`, `role`, `selectedTokenId`, `wallMode`, `brush`, `panels`, `immersive` |
+| Estado da sessão | `tool`, `role`, seleção de tokens (`selectedTokenId` principal + `selectedTokenIds`, alterada só por `selectToken`/`toggleTokenSelection`/`selectTokens`), `wallMode`, `brush`, `panels`, `immersive` |
 | Ações e quem age | `actor`, `actorSheetId`, `hotbar`, `useAction`, `quickRoll` |
 | Permissões | `canEdit`, `sheetAccess`, `canOpenSheet`… (delegam a `state/permissions.ts`) |
 | Chat / Efeitos | mensagens (máx. 300) / efeitos transitórios na tela |
@@ -405,6 +405,7 @@ Funções sem Angular, testadas com **Vitest** (`npx ng test --watch=false`):
 | `game-table/utils/simplify.ts` | Ramer–Douglas–Peucker dos traços |
 | `game-table/utils/dice.ts` | rolagens 2d12/3d6, faixas, modificadores, estudos |
 | `game-table/utils/inventory.ts` | quantidade, transferência, linha do inventário |
+| `game-table/utils/selection.ts` | seleção de vários tokens: principal, Shift+clique, caixa de seleção, formação do grupo |
 | `game-table/utils/effects.ts` | os 20 efeitos especiais descritos como dados SVG |
 
 Também têm specs:

@@ -108,6 +108,11 @@ export function moveToken(state: TableState, p: { placementId: string; x: number
   return mapPlacement(state, p.placementId, (t) => ({ ...t, x: p.x, y: p.y }));
 }
 
+/** Move vários tokens de uma vez (grupo selecionado): um comando só, com a posição final de cada um. */
+export function moveTokens(state: TableState, { moves }: { moves: { placementId: string; x: number; y: number }[] }): TableState {
+  return moves.reduce((s, m) => moveToken(s, m), state);
+}
+
 /** Remove o token do mapa (a ficha continua). */
 export function removeToken(state: TableState, { placementId }: { placementId: string }): TableState {
   return {

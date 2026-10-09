@@ -53,6 +53,7 @@ import { FxDrawing, buildFx, seededRandom } from '../utils/effects';
 import { createMask, decodeMask, encodeMask, markPolygons, maskFits } from '../utils/fog-memory';
 import { computeVisibilityPolygon, doorSeen, wallsToSegments } from '../utils/visibility';
 import { FogView, visibleDoorsFor, visibleNotesFor, visibleTokensFor } from '../state/player-view';
+import { NO_SELECTION, TokenSelection, keepOnly, selectMany, selectOne, toggleInSelection, without } from '../utils/selection';
 import { TableCommandPayload, TableCommandType, applyCommand } from '../state/commands';
 import { RemovedStroke, strokesToErase } from '../state/drawings';
 import { findPlacement, levelOf, tokenSheetPlacement, uniqueName } from '../state/helpers';
@@ -342,8 +343,37 @@ export class TableSessionService extends SheetStore {
     this.role.set(role);
     if (role === 'player' && this.tool() === 'fog') this.tool.set('select');
   }
-  /** Token selecionado no mapa (anel azul). */
-  readonly selectedTokenId = signal<string | null>(null);
+  // Seleção de tokens (regras puras em utils/selection.ts). Só se altera pelos métodos abaixo,
+  // para o grupo e o principal ficarem sempre coerentes.
+  private readonly selection = signal<TokenSelection>(NO_SELECTION);
+  /** Token principal (o último clicado; anel azul com alça): janela, ficha, quem age, camadas. */
+  readonly selectedTokenId = computed(() => this.selection().primary);
+  /** Todos os tokens selecionados (o grupo se move, é removido e copiado junto). */
+  readonly selectedTokenIds = computed(() => this.selection().ids);
+
+  /** Seleciona só este token (null = nenhum). */
+  selectToken(id: string | null): void {
+    this.selection.set(selectOne(id));
+  }
+
+  /** Shift+clique: põe ou tira o token da seleção. */
+  toggleTokenSelection(id: string): void {
+    this.selection.update((sel) => toggleInSelection(sel, id));
+  }
+
+  /** Caixa de seleção: estes tokens (`additive` = somados aos já selecionados). */
+  selectTokens(ids: readonly string[], additive: boolean): void {
+    this.selection.update((sel) => selectMany(sel, ids, additive));
+  }
+
+  /** Tokens selecionados da camada em foco que a conta pode mover (o principal primeiro). */
+  readonly movableSelection = computed(() => {
+    const ids = this.selectedTokenIds();
+    const primary = this.selectedTokenId();
+    return this.visibleTokens()
+      .filter((t) => ids.has(t.placement.id) && this.canEdit(t.entry))
+      .sort((a, b) => (a.placement.id === primary ? -1 : b.placement.id === primary ? 1 : 0));
+  });
   /** Modo da ferramenta Névoa: desenhar parede em linha, em círculo ou apagar. */
   readonly wallMode = signal<WallMode>('line');
   /** Mestre: mostrar paredes mesmo fora da ferramenta Névoa. */
@@ -645,7 +675,7 @@ export class TableSessionService extends SheetStore {
       notes: [],
     };
     this.dispatch('addScene', { scene });
-    this.selectedTokenId.set(null);
+    this.selectToken(null);
     return scene;
   }
 
@@ -664,7 +694,7 @@ export class TableSessionService extends SheetStore {
 
   setActiveScene(id: string): void {
     this.dispatch('setActiveScene', { sceneId: id });
-    this.selectedTokenId.set(null);
+    this.selectToken(null);
   }
 
   /** Exclui a cena e apaga os arquivos dos mapas dela (térreo e camadas). */
@@ -713,13 +743,16 @@ export class TableSessionService extends SheetStore {
 
   // --- Camadas do mapa -----------------------------------------------------
 
-  /** Mestre: passa a olhar outra camada (a seleção sai se o token não estiver nela). */
+  /** Mestre: passa a olhar outra camada (saem da seleção os tokens que não estão nela). */
   viewLevel(level: number): void {
     const target = this.clampLevel(level);
     this.gmLevel.set(target);
-    const selected = this.selectedTokenId();
-    const token = selected ? this.findPlacement(selected) : undefined;
-    if (token && levelOf(token) !== target) this.selectedTokenId.set(null);
+    this.selection.update((sel) =>
+      keepOnly(sel, (id) => {
+        const token = this.findPlacement(id);
+        return !token || levelOf(token) === target;
+      }),
+    );
   }
 
   /** Cria uma camada vazia ("ar") no topo e passa a olhá-la. */
@@ -1343,7 +1376,7 @@ export class TableSessionService extends SheetStore {
       }),
     };
     this.dispatch('placeToken', { sceneId: scene.id, placement });
-    this.selectedTokenId.set(placement.id);
+    this.selectToken(placement.id);
     // As imagens personalizadas do inventário copiado ganham cópias próprias
     if (placement.sheet?.inventory.some((i) => i.blobId)) void this.cloneTokenInventoryBlobs(placement.id);
     return placement;
@@ -1368,44 +1401,59 @@ export class TableSessionService extends SheetStore {
     this.dispatch('moveToken', { placementId, x: p.x, y: p.y });
   }
 
+  /** Move vários tokens de uma vez (grupo selecionado), num comando só. */
+  moveTokens(moves: { placementId: string; x: number; y: number }[]): void {
+    if (moves.length) this.dispatch('moveTokens', { moves });
+  }
+
   /** Remove o token do mapa (a ficha continua; a cópia do NPC, com o inventário dela, some). */
   removeToken(placementId: string): void {
     this.deleteInventoryBlobs(this.findPlacement(placementId)?.sheet?.inventory);
     this.dispatch('removeToken', { placementId });
-    if (this.selectedTokenId() === placementId) this.selectedTokenId.set(null);
+    this.selection.update((sel) => without(sel, [placementId]));
   }
 
   // --- Copiar e colar tokens (Ctrl+C / Ctrl+V) -----------------------------
 
-  /** Token copiado (sessão, não salvo): como estava no Ctrl+C; vale para colar em qualquer cena desta mesa. */
-  private readonly clipboard = signal<TokenPlacement | null>(null);
-  /** Token copiado com as configurações efetivas (null = nada copiado ou a ficha foi excluída). */
-  readonly copiedToken = computed(() => {
-    const copied = this.clipboard();
-    return copied ? this.resolveToken(copied) : null;
-  });
+  /**
+   * Tokens copiados (sessão, não salvo), como estavam no Ctrl+C, o principal primeiro.
+   * Valem para colar em qualquer cena desta mesa.
+   */
+  private readonly clipboard = signal<TokenPlacement[]>([]);
+  /** Tokens copiados com as configurações efetivas (sem os de fichas já excluídas). */
+  readonly copiedTokens = computed(() => this.clipboard().flatMap((p) => this.resolveToken(p) ?? []));
 
-  /** Copia o token (só quem pode editá-lo). Retorna false se não copiou. */
-  copyToken(placementId: string): boolean {
-    const token = this.resolvedTokenById(placementId);
-    if (!token || !this.canEdit(token.entry)) return false;
-    this.clipboard.set(structuredClone(token.placement));
-    return true;
+  /** Copia os tokens (só os que a conta pode editar; o primeiro é a referência ao colar). Retorna quantos copiou. */
+  copyTokens(placementIds: readonly string[]): number {
+    const tokens = placementIds.flatMap((id) => this.resolvedTokenById(id) ?? []).filter((t) => this.canEdit(t.entry));
+    if (tokens.length) this.clipboard.set(tokens.map((t) => structuredClone(t.placement)));
+    return tokens.length;
   }
 
   /**
-   * Cola uma cópia exata do token copiado na cena ativa, com centro em `p`, na camada em foco,
-   * e a seleciona. As imagens do inventário (NPC) ganham cópias próprias. Pode colar várias vezes.
+   * Cola cópias exatas dos tokens copiados na cena ativa, na camada em foco: o primeiro com centro
+   * em `p` e os demais na mesma formação. Seleciona o grupo colado. As imagens do inventário (NPC)
+   * ganham cópias próprias. Pode colar várias vezes.
    */
-  pasteToken(p: Point): TokenPlacement | null {
-    const copied = this.copiedToken();
+  pasteTokens(p: Point): TokenPlacement[] {
+    const copied = this.copiedTokens().filter((t) => this.canEdit(t.entry));
     const sceneId = this.activeSceneId();
-    if (!copied || !sceneId || !this.canEdit(copied.entry)) return null;
-    const placement = copyPlacement(copied.placement, { id: newId(), x: p.x, y: p.y, level: this.currentLevel() });
-    this.dispatch('placeToken', { sceneId, placement });
-    this.selectedTokenId.set(placement.id);
-    if (placement.sheet?.inventory.some((i) => i.blobId)) void this.cloneTokenInventoryBlobs(placement.id);
-    return placement;
+    if (!copied.length || !sceneId) return [];
+    const anchor = copied[0].placement;
+    const pasted = copied.map((t) =>
+      copyPlacement(t.placement, {
+        id: newId(),
+        x: p.x + t.placement.x - anchor.x,
+        y: p.y + t.placement.y - anchor.y,
+        level: this.currentLevel(),
+      }),
+    );
+    for (const placement of pasted) {
+      this.dispatch('placeToken', { sceneId, placement });
+      if (placement.sheet?.inventory.some((i) => i.blobId)) void this.cloneTokenInventoryBlobs(placement.id);
+    }
+    this.selection.set(selectMany(NO_SELECTION, pasted.map((t) => t.id), false));
+    return pasted;
   }
 
   // --- Névoa e paredes -----------------------------------------------------
