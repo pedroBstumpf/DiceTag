@@ -149,6 +149,15 @@ describe('estudos e treinos', () => {
     expect(studyGain(25, 'critical-success')).toBe(2);
   });
 
+  it('falha crítica tira 1 SA, sem deixar o SA negativo', () => {
+    expect(studyGain(-1, 'critical-failure')).toBe(-1);
+    const study = { id: 'study-1', text: 'Esgrima', sa: 3, sn: 4 };
+    expect(trainStudy(study, -1)).toEqual({ study: { ...study, sa: 2 }, leveledUp: false });
+    expect(trainStudy({ ...study, sa: 0 }, -1)).toEqual({ study: { ...study, sa: 0 }, leveledUp: false });
+    // Quem já tinha alcançado o SN pode cair abaixo dele, sem "subir de nível" de novo
+    expect(trainStudy({ ...study, sa: 4 }, -1)).toEqual({ study: { ...study, sa: 3 }, leveledUp: false });
+  });
+
   it('rolagens de 3d6 não treinam (não usam etiquetas)', () => {
     expect(studyGain(13, 'good-luck')).toBe(0);
     expect(studyGain(12, 'neutral')).toBe(0);

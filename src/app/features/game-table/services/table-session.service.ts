@@ -1033,7 +1033,7 @@ export class TableSessionService extends SheetStore {
 
   /**
    * Aplica uma rolagem aos estudos ligados a ela (`studyIds`): 12+ soma 1 SA, sucesso crítico
-   * soma 2. Quem alcança o SN sobe de nível: aviso no chat (mestre e jogadores veem) e o
+   * soma 2, falha crítica tira 1 (regra em `studyGain`/`trainStudy`). Quem alcança o SN sobe de nível: aviso no chat (mestre e jogadores veem) e o
    * nome volta para quem rolou mostrar a notificação.
    */
   private trainStudies(sheetId: string | null | undefined, studyIds: readonly string[], roll: RollResult): string[] {

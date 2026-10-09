@@ -80,6 +80,25 @@ describe('TableSessionService (fachada)', () => {
     expect(session.drawings().map((d) => d.color)).toEqual(['#fff']);
   });
 
+  it('estudos: falha crítica no 2d12 tira 1 SA; 3d6 não treina', () => {
+    const pc = session.addEntry('character');
+    const studies = [
+      { id: 's1', text: 'Esgrima', sa: 2, sn: 4 },
+      { id: 's2', text: '', sa: 0, sn: 0 },
+      { id: 's3', text: '', sa: 0, sn: 0 },
+    ];
+    session.updateSheet(pc.id, { studies });
+    const saOf = () => session.sheetData(pc.id)?.sheet.studies.find((s) => s.id === 's1')?.sa;
+
+    // −30 garante total < 0 no 2d12 (falha crítica)
+    const { roll } = session.quickRoll('2d12', -30, pc.id, 0, ['s1']);
+    expect(roll.outcome).toBe('critical-failure');
+    expect(saOf()).toBe(1);
+
+    session.quickRoll('3d6', 30, pc.id, 0, ['s1']);
+    expect(saOf()).toBe(1);
+  });
+
   it('permissões seguem o papel: o jogador não edita NPC que não controla', () => {
     const npc = session.addEntry('npc');
     expect(session.canEdit(npc)).toBe(true);

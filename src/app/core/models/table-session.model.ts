@@ -227,8 +227,8 @@ export const GOAL_STEPS = 5;
 
 /**
  * Estudo ou treino do personagem: uma etiqueta (sem cor) que ele desenvolve rolando.
- * Ligada a uma rolagem (sem modificador), soma 1 SA com 12+ e 2 com sucesso crítico;
- * ao chegar no SN (definido pelo mestre), sobe de nível.
+ * Ligada a uma rolagem de 2d12 (sem modificador), soma 1 SA com 12+ e 2 com sucesso crítico,
+ * e tira 1 SA na falha crítica (nunca abaixo de 0); ao chegar no SN (definido pelo mestre), sobe de nível.
  */
 export interface CharacterStudy {
   id: string;

@@ -135,7 +135,7 @@ export class EntryWindow {
 
   /** Dica da tag: tema (ou item equipado) de origem e, nos itens, o que o próximo clique faz. */
   tagHint(tag: SheetTagOption): string {
-    if (tag.study) return 'Estudo ou treino: sem modificador; a cada uso, 12+ soma 1 SA e sucesso crítico soma 2';
+    if (tag.study) return 'Estudo ou treino: sem modificador; a cada uso, 12+ soma 1 SA, sucesso crítico soma 2 e falha crítica tira 1';
     if (!tag.item) return tag.theme + (tag.flaw ? ' · defeito' : '');
     const sign = this.signOf(tag);
     const next = sign > 0 ? 'clique: penalidade' : sign < 0 ? 'clique: tirar' : 'clique: bônus';

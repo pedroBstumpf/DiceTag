@@ -120,21 +120,24 @@ export function rollOutcome(dice: DiceKind, total: number): RollOutcome {
 // --- Estudos e Treinos ---------------------------------------------------------
 
 /**
- * SA ganhos por um estudo ligado à rolagem: 2 no sucesso crítico, 1 com total 12 ou mais, senão 0.
+ * SA ganhos por um estudo ligado à rolagem: 2 no sucesso crítico, 1 com total 12 ou mais,
+ * −1 na falha crítica (o estudo regride), senão 0.
  * Rolagens de 3d6 não usam etiquetas, então não treinam.
  */
 export function studyGain(total: number, outcome: RollOutcome): number {
   if (outcome === 'bad-luck' || outcome === 'neutral' || outcome === 'good-luck') return 0;
   if (outcome === 'critical-success') return 2;
+  if (outcome === 'critical-failure') return -1;
   return total >= 12 ? 1 : 0;
 }
 
 /**
- * Soma `gain` SA ao estudo. `leveledUp`: passou a alcançar o SN nesta rolagem (o SN precisa
- * estar definido, > 0, e o estudo ainda não o tinha alcançado).
+ * Soma `gain` SA ao estudo (negativo na falha crítica; o SA nunca fica abaixo de 0).
+ * `leveledUp`: passou a alcançar o SN nesta rolagem (o SN precisa estar definido, > 0,
+ * e o estudo ainda não o tinha alcançado).
  */
 export function trainStudy(study: CharacterStudy, gain: number): { study: CharacterStudy; leveledUp: boolean } {
-  const sa = study.sa + gain;
+  const sa = Math.max(0, study.sa + gain);
   return { study: { ...study, sa }, leveledUp: study.sn > 0 && study.sa < study.sn && sa >= study.sn };
 }
 

@@ -425,7 +425,7 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
     o "equipado".
   - **Estudos e Treinos** (só personagem, abaixo dos Equipados): `CharacterSheet.studies`, sempre `SHEET_STUDY_COUNT` = 3
     (`CharacterStudy { text, sa, sn }`; etiqueta sem cor). SN só o mestre edita. Ligado a uma rolagem (painel "Rolar" ou
-    ação, via `studyTagsOf` em `rollTagsOf`, nível 0 = sem modificador): `studyGain` (12+ → 1 SA, sucesso crítico → 2) e
+    ação, via `studyTagsOf` em `rollTagsOf`, nível 0 = sem modificador): `studyGain` (só 2d12: 12+ → 1 SA, sucesso crítico → 2, **falha crítica → −1**, SA nunca abaixo de 0) e
     `trainStudy` (`utils/dice.ts`); `session.trainStudies` grava e, ao alcançar o SN, avisa no chat e devolve os nomes
     (`levelUps`) para o aviso "⭐ … subiu de nível!" de quem rolou.
 - **Aba Inventário** (`SheetInventory`): `InventoryEntry { itemId, global?, table? }` referencia um item do mundo (Worldbuild do
