@@ -80,8 +80,9 @@ O mapa ocupa a tela inteira e as barras flutuam por cima — todas escondíveis:
   dele; o mestre escolhe no menu "Agindo" um personagem ou NPC fixo, as ações gerais ou seguir o token selecionado.
   À direita, o botão **Rolar** faz a rolagem básica (2d12 ou 3d6 + modificador na hora), somando se quiser as tags e
   defeitos dos temas e as etiquetas dos itens equipados e de status (como bônus ou penalidade) de quem
-  está agindo — nada fica salvo. Ações automatizadas também podem usar as etiquetas dos itens equipados; se o item for
-  desequipado, a etiqueta sai da ação.
+  está agindo — nada fica salvo. Ações automatizadas também podem usar as etiquetas dos itens equipados, como bônus ou
+  penalidade; se o item for desequipado, a etiqueta sai da ação. No chat, cada rolagem mostra o resultado em destaque,
+  os dados e o total e, separados, o modificador do personagem e o dos itens.
 - **Janelas:** todo arquivo abre numa janela que pode ser movida, redimensionada, minimizada (vira uma barra
   estreita), maximizada e fixada.
 - **Visão de Jogador:** sem a ferramenta Névoa, sem as cenas da barra superior e sem as abas Sons e Ações; move

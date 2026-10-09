@@ -434,6 +434,12 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   `item:<linha do inventário>:<etiqueta>`, valor = nível, sem nível 1); `rollTagsOf` = temas + itens, usado por
   `tagLevelsOf`. Ao mudar o inventário de uma ficha de entrada (`updateSheet` com `inventory`), `pruneItemTags` tira das
   ações dela as etiquetas de itens que não estão mais equipados (`keepValidItemTags`, puro + spec).
+  Na ação, a etiqueta de item alterna desligada → bônus → **penalidade** (id com o prefixo `-`, `NEGATED_TAG_PREFIX`;
+  `effectiveModifier` subtrai). Regras de sinal e de prefixo em `utils/dice.ts` (`baseTagId`, `attributeSign`).
+- **Cartão de rolagem no chat:** resultado (Sucesso, Falha…) grande no topo, dados e total no centro e, embaixo, o
+  modificador do **personagem** (ícone `person`: fixo + temas + status) e o dos **itens** (ícone `shield`).
+  `RollResult.itemModifier` guarda a parte dos itens (`itemModifier` em `utils/dice.ts`; no "Rolar", calculada no
+  painel); rolagens antigas mostram ±0 nos itens.
 
 ### Ficha de NPC (mesma `CharacterSheetView`, `isNpc`)
 - Igual à do personagem, **sem a aba Anotações e sem o card Relações** (abas Ficha, Inventário, Habilidades).
