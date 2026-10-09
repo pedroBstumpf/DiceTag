@@ -400,7 +400,7 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   (`canEdit`: NPC só com controle; `MapStage.canMoveToken`, sem alça) e **criar ações pela barra de baixo** (cria na
   aba Habilidades da própria ficha).
 - Estado de sessão **não persistido**: ferramenta ativa, papel, visibilidade das barras, janelas abertas,
-  token selecionado, pincel, modo de parede, sons tocando, pilha de desfazer dos desenhos, efeitos na tela.
+  token selecionado, pincel, modo de parede, sons tocando, pilha de desfazer dos desenhos, efeitos na tela, token copiado (Ctrl+C).
 
 ### Ficha de personagem (`CharacterSheetView`, `TableEntry.sheet`)
 - Personagens jogadores (`character`) e NPCs (ver "Ficha de NPC"). Dados em `CharacterSheet { race, subrace, labels,
@@ -583,6 +583,12 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   Delete remove do mapa. **WASD/setas** com token selecionado: desliza na velocidade da ficha
   (`TokenSettings.speed`, padrão 2 quadrados/s, 0,5–12, editada na janela "Token"; vem sempre da ficha, inclusive no NPC; Shift ×2,5);
   ao soltar, alinha à grade se ela estiver visível. Movimento não colide com paredes.
+- **Copiar e colar** (`Ctrl+C` / `Ctrl+V`, só quem edita o token — `canEdit`): `copyToken` guarda na sessão uma cópia
+  do `TokenPlacement` como estava; `MapStage.pasteToken` cola sob o mouse (fora do mapa: centro da área livre), alinhado
+  à grade se visível, na camada em foco e em qualquer cena da mesa. A cópia é exata e independente (`copyPlacement`
+  em `state/tokens.ts`: tamanho, visão, barras, etiquetas, nome, ficha do NPC, liberações), com id novo; as imagens do
+  inventário do NPC são duplicadas. Personagem colado continua vinculado à ficha. Texto selecionado na página tem
+  prioridade no Ctrl+C.
 
 ### Névoa de guerra e paredes
 - `Scene.fog { enabled, memory? }` por cena; `Scene.walls`: `LineWall` (polilinha), `CircleWall` (vira 24 lados
@@ -612,7 +618,7 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 `V` selecionar · `M` mover mapa · `R` régua · `P` ping · `D` desenhar · `F` névoa · `W` parede (névoa em modo linha) ·
 `N` anotação · `E` efeitos especiais · `+`/`-` zoom · `1`–`0` ações · `\` modo imersivo · `Delete` remove o token (ou a parede,
 no modo editar) selecionado · `Esc` cancela parede/fecha anotação/desarma efeito de ação/limpa seleção · `Enter` finaliza parede ·
-`Ctrl+Z` desfaz desenho · **`WASD`/setas** movem o token selecionado (nesse caso W/D não trocam de ferramenta) ·
+`Ctrl+Z` desfaz desenho · **`Ctrl+C`/`Ctrl+V`** copia o token selecionado / cola uma cópia sob o mouse · **`WASD`/setas** movem o token selecionado (nesse caso W/D não trocam de ferramenta) ·
 **`PageUp`/`PageDown`** (mestre, isométrica) sobem/descem o token selecionado ou a camada em foco.
 Botão do meio do mouse sempre move o mapa; roda do mouse = zoom no cursor.
 

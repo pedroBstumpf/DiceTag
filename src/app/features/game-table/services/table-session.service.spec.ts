@@ -76,6 +76,40 @@ describe('TableSessionService (fachada)', () => {
     expect(session.resolvedTokenById(b.id)?.vision.enabled).toBe(false);
   });
 
+  it('copiar e colar: cópia exata do token, inclusive em outra cena', async () => {
+    const first = await session.addScene();
+    const npc = session.addEntry('npc');
+    const orig = session.placeToken(npc.id, { x: 0, y: 0 })!;
+    session.updateToken(orig.id, { size: 2, vision: { enabled: true, range: 9 } });
+    session.renameSheet(`npc:${orig.id}`, 'Chefe');
+    expect(session.copyToken(orig.id)).toBe(true);
+
+    await session.addScene();
+    const pasted = session.pasteToken({ x: 140, y: 70 })!;
+    expect(session.activeScene()?.tokens?.map((t) => t.id)).toEqual([pasted.id]);
+    expect(session.selectedTokenId()).toBe(pasted.id);
+    const token = session.resolvedTokenById(pasted.id)!;
+    expect(token).toMatchObject({ name: 'Chefe', size: 2, vision: { enabled: true, range: 9 } });
+    expect(token.placement).toMatchObject({ x: 140, y: 70 });
+
+    // A cópia é independente do original
+    session.updateToken(pasted.id, { size: 1 });
+    session.setActiveScene(first.id);
+    expect(session.resolvedTokenById(orig.id)?.size).toBe(2);
+  });
+
+  it('copiar e colar respeita as permissões e a ficha excluída', async () => {
+    await session.addScene();
+    const npc = session.addEntry('npc');
+    const t = session.placeToken(npc.id, { x: 0, y: 0 })!;
+    session.setRole('player');
+    expect(session.copyToken(t.id)).toBe(false);
+    session.setRole('gm');
+    expect(session.copyToken(t.id)).toBe(true);
+    session.removeEntry(npc.id);
+    expect(session.pasteToken({ x: 0, y: 0 })).toBeNull();
+  });
+
   it('flush grava o estado na chave da mesa', async () => {
     await session.addScene();
     session.sendChat('olá');

@@ -60,7 +60,7 @@ import { clampLevelIn, levelCountOf } from '../state/levels';
 import * as rules from '../state/permissions';
 import { SheetAccess, Viewer } from '../state/permissions';
 import { EMPTY_LORE, EMPTY_STATE, normalizeState } from '../state/table-state';
-import { ResolvedToken, TokenPatch, resolveToken, splitTokenPatch } from '../state/tokens';
+import { ResolvedToken, TokenPatch, copyPlacement, resolveToken, splitTokenPatch } from '../state/tokens';
 
 // Tipos e auxiliares que os componentes já importam daqui (moram em state/)
 export type { ResolvedToken, SheetAccess, TokenPatch };
@@ -1372,6 +1372,39 @@ export class TableSessionService extends SheetStore {
     this.deleteInventoryBlobs(this.findPlacement(placementId)?.sheet?.inventory);
     this.dispatch('removeToken', { placementId });
     if (this.selectedTokenId() === placementId) this.selectedTokenId.set(null);
+  }
+
+  // --- Copiar e colar tokens (Ctrl+C / Ctrl+V) -----------------------------
+
+  /** Token copiado (sessão, não salvo): como estava no Ctrl+C; vale para colar em qualquer cena desta mesa. */
+  private readonly clipboard = signal<TokenPlacement | null>(null);
+  /** Token copiado com as configurações efetivas (null = nada copiado ou a ficha foi excluída). */
+  readonly copiedToken = computed(() => {
+    const copied = this.clipboard();
+    return copied ? this.resolveToken(copied) : null;
+  });
+
+  /** Copia o token (só quem pode editá-lo). Retorna false se não copiou. */
+  copyToken(placementId: string): boolean {
+    const token = this.resolvedTokenById(placementId);
+    if (!token || !this.canEdit(token.entry)) return false;
+    this.clipboard.set(structuredClone(token.placement));
+    return true;
+  }
+
+  /**
+   * Cola uma cópia exata do token copiado na cena ativa, com centro em `p`, na camada em foco,
+   * e a seleciona. As imagens do inventário (NPC) ganham cópias próprias. Pode colar várias vezes.
+   */
+  pasteToken(p: Point): TokenPlacement | null {
+    const copied = this.copiedToken();
+    const sceneId = this.activeSceneId();
+    if (!copied || !sceneId || !this.canEdit(copied.entry)) return null;
+    const placement = copyPlacement(copied.placement, { id: newId(), x: p.x, y: p.y, level: this.currentLevel() });
+    this.dispatch('placeToken', { sceneId, placement });
+    this.selectedTokenId.set(placement.id);
+    if (placement.sheet?.inventory.some((i) => i.blobId)) void this.cloneTokenInventoryBlobs(placement.id);
+    return placement;
   }
 
   // --- Névoa e paredes -----------------------------------------------------

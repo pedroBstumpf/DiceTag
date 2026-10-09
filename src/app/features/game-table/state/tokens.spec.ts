@@ -1,7 +1,16 @@
-import { Scene, TableEntry, TableState, TokenSettings, defaultToken } from '../../../core/models/table-session.model';
+import { Scene, TableEntry, TableState, TokenPlacement, TokenSettings, defaultToken } from '../../../core/models/table-session.model';
 import { addEntry, removeEntry, setSoundMaster, updateEntry } from './entries';
 import { findPlacement } from './helpers';
-import { moveToken, placeToken, removeToken, resolveToken, splitTokenPatch, toggleTokenPublic, updatePlacement } from './tokens';
+import {
+  copyPlacement,
+  moveToken,
+  placeToken,
+  removeToken,
+  resolveToken,
+  splitTokenPatch,
+  toggleTokenPublic,
+  updatePlacement,
+} from './tokens';
 
 const entry = (id: string, kind: TableEntry['kind'], extra: Partial<TableEntry> = {}): TableEntry => ({
   id,
@@ -57,6 +66,40 @@ describe('regra de vínculo dos tokens', () => {
     expect(splitTokenPatch('npc', { size: 2, vision })).toEqual({ settings: null, placement: { size: 2, vision } });
     expect(splitTokenPatch('npc', { vision })).toEqual({ settings: null, placement: { vision } });
     expect(splitTokenPatch('npc', { speed: 0 })).toEqual({ settings: { speed: 0 }, placement: null });
+  });
+});
+
+describe('copiar e colar tokens', () => {
+  const source: TokenPlacement = {
+    id: 'orig',
+    entryId: 'npc',
+    x: 10,
+    y: 20,
+    level: 2,
+    size: 2,
+    name: 'Chefe',
+    vision: { enabled: true, range: 30 },
+    bars: [{ id: 'b', label: 'PV', value: 3, max: 10, color: '#f00' }],
+    tags: [{ id: 't', text: 'Envenenado', color: '#0f0' }],
+    sheetPublic: true,
+  };
+
+  it('copia tudo, com outro id, posição e camada', () => {
+    const copy = copyPlacement(source, { id: 'novo', x: 100, y: 200, level: 1 });
+    const { id: _a, x: _b, y: _c, level: _d, ...rest } = source;
+    expect(copy).toMatchObject({ ...rest, id: 'novo', x: 100, y: 200, level: 1 });
+  });
+
+  it('colar no térreo não leva a camada do original', () => {
+    expect(copyPlacement(source, { id: 'novo', x: 0, y: 0, level: 0 }).level).toBeUndefined();
+  });
+
+  it('a cópia é independente: alterar uma não muda a outra', () => {
+    const copy = copyPlacement(source, { id: 'novo', x: 0, y: 0, level: 0 });
+    copy.bars![0].value = 0;
+    copy.vision!.enabled = false;
+    expect(source.bars![0].value).toBe(3);
+    expect(source.vision!.enabled).toBe(true);
   });
 });
 

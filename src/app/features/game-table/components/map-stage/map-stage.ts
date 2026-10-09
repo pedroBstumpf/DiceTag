@@ -259,6 +259,8 @@ export class MapStage {
 
   private gesture: Gesture | null = null;
   private lastTap = { key: '', time: 0, x: 0, y: 0 };
+  /** Posição do mouse sobre o mapa, em px da área (null = fora do mapa). Usada para colar tokens. */
+  pointerAt: Point | null = null;
   /** Teclas de movimento pressionadas (WASD/setas) e o laço de animação delas. */
   private readonly heldKeys = new Set<string>();
   private keyFrame = 0;
@@ -593,6 +595,7 @@ export class MapStage {
   // --- Ponteiro: movimento e fim -------------------------------------------
 
   onPointerMove(event: PointerEvent): void {
+    this.pointerAt = this.toScreen(event);
     // Prévia do próximo trecho da parede em linha
     const draft = this.wallDraft();
     if (draft?.kind === 'line') {
@@ -815,6 +818,28 @@ export class MapStage {
     this.placeToken(entryId, this.toWorld(event));
   }
 
+  // --- Colar token (Ctrl+V) ------------------------------------------------
+
+  /**
+   * Cola o token copiado sob o mouse ou, com o mouse fora do mapa, no centro da área livre
+   * entre as barras. Alinha à grade se ela estiver visível. Retorna false se não colou.
+   */
+  pasteToken(): boolean {
+    const copied = this.session.copiedToken();
+    if (!copied) return false;
+    const el = this.stage().nativeElement;
+    const i = this.insets();
+    const screen = this.pointerAt ?? {
+      x: i.left + (el.clientWidth - i.left - i.right) / 2,
+      y: i.top + (el.clientHeight - i.top - i.bottom) / 2,
+    };
+    const p = unproject(this.view(), this.matrix(), screen.x, screen.y);
+    const center = this.snapping() ? snapTokenCenter(p, copied.size, this.gridSize()) : p;
+    if (!this.session.pasteToken(center)) return false;
+    this.session.tool.set('select');
+    return true;
+  }
+
   // --- Internos ------------------------------------------------------------
 
   private placeToken(entryId: string, p: Point): void {
@@ -855,8 +880,14 @@ export class MapStage {
 
   /** Converte a posição do mouse para coordenadas do mapa. */
   private toWorld(event: MouseEvent): Point {
+    const { x, y } = this.toScreen(event);
+    return unproject(this.view(), this.matrix(), x, y);
+  }
+
+  /** Posição do mouse relativa à área do mapa (px de tela). */
+  private toScreen(event: MouseEvent): Point {
     const rect = this.stage().nativeElement.getBoundingClientRect();
-    return unproject(this.view(), this.matrix(), event.clientX - rect.left, event.clientY - rect.top);
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
   }
 
   /**

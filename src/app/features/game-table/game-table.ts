@@ -282,6 +282,11 @@ export class GameTablePage {
       if (this.session.undoDrawing()) event.preventDefault();
       return;
     }
+    // Ctrl+C / Ctrl+V: copia o token selecionado / cola uma cópia sob o mouse (inclusive em outra cena)
+    if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && this.copyPasteToken(event.key.toLowerCase())) {
+      event.preventDefault();
+      return;
+    }
     if (event.ctrlKey || event.metaKey || event.altKey) return;
 
     // Teclas que dependem da seleção/ferramenta do mapa (Delete, Esc…)
@@ -303,6 +308,20 @@ export class GameTablePage {
     else return;
 
     event.preventDefault();
+  }
+
+  /**
+   * Ctrl+C copia o token selecionado; Ctrl+V cola. Texto selecionado na página tem prioridade
+   * (o Ctrl+C copia o texto, como sempre). Retorna true se tratou a tecla.
+   */
+  private copyPasteToken(key: string): boolean {
+    if (key === 'c') {
+      const selected = this.session.selectedTokenId();
+      if (!selected || window.getSelection()?.toString() || !this.session.copyToken(selected)) return false;
+      this.snackBar.open('Token copiado: Ctrl+V cola uma cópia sob o mouse.', undefined, { duration: 2000 });
+      return true;
+    }
+    return key === 'v' && !!this.map()?.pasteToken();
   }
 
   /** Atalho W: ferramenta Névoa já no modo "Parede — linha". */

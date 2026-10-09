@@ -82,6 +82,17 @@ export function splitTokenPatch(
   };
 }
 
+/**
+ * Cópia exata de um token colocado (Ctrl+C / Ctrl+V): tudo dele (tamanho, visão, barras,
+ * etiquetas, nome próprio, ficha do NPC, liberações aos jogadores), com outro id, posição e
+ * camada. Objeto novo em profundidade: alterar a cópia não mexe no original.
+ * As imagens do inventário continuam com os mesmos `blobId`: quem cola as duplica.
+ */
+export function copyPlacement(source: TokenPlacement, at: { id: string; x: number; y: number; level: number }): TokenPlacement {
+  const { level: _level, ...copy } = structuredClone(source);
+  return { ...copy, id: at.id, x: at.x, y: at.y, ...(at.level > 0 && { level: at.level }) };
+}
+
 // --- Comandos ----------------------------------------------------------------
 
 /** Coloca um token (já montado: id, posição, camada e, no NPC, as cópias) na cena. */
