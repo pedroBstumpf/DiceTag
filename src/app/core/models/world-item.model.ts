@@ -20,6 +20,8 @@ export interface TimelineEvent {
   /** Posição do cartão no quadro (canto superior esquerdo). Linhas antigas são migradas ao carregar. */
   x?: number;
   y?: number;
+  /** Ids de itens do mundo citados pelo evento (mapa, documento, raça, item, NPC, outra linha do tempo…). */
+  refs?: string[];
 }
 
 /** Conexão (seta) entre dois eventos da linha do tempo. */

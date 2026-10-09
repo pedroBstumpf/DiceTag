@@ -97,7 +97,7 @@
               <app-document-editor [itemId]="win.id" [readonly]="!isGm()" />
             }
             @case ('timeline') {
-              <app-timeline-editor [itemId]="win.id" [readonly]="!isGm()" />
+              <app-timeline-editor [itemId]="win.id" [readonly]="!isGm()" (openItem)="open($event)" />
             }
             @case ('image') {
               <app-image-viewer [itemId]="win.id" />

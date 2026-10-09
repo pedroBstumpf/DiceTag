@@ -144,6 +144,42 @@
               [value]="ev.description"
               (input)="change(ev.id, { description: $any($event.target).value })"
             ></textarea>
+            <!-- Referências a itens do mundo -->
+            <div class="flex flex-col gap-1">
+              @if (refsOf(ev).length) {
+                <div class="flex flex-wrap gap-1">
+                  @for (ref of refsOf(ev); track ref.id) {
+                    <span class="flex h-6 max-w-full items-center gap-1 rounded bg-white/5 pl-1.5 pr-0.5 text-[11px] text-slate-200 ring-1 ring-white/10">
+                      <mat-icon class="!size-3.5 shrink-0 !text-[14px]" [class]="metaOf(ref).color">{{ metaOf(ref).icon }}</mat-icon>
+                      <span class="truncate">{{ ref.name }}</span>
+                      <button type="button" class="grid size-4 shrink-0 place-items-center rounded text-slate-500 hover:text-white" [attr.aria-label]="'Remover referência ' + ref.name" (click)="removeRef(ev, ref.id)">
+                        <mat-icon class="!size-3 !text-[12px]">close</mat-icon>
+                      </button>
+                    </span>
+                  }
+                </div>
+              }
+              <input
+                #refInput
+                class="h-7 rounded-md bg-ink-950 px-2 text-xs text-slate-100 outline-none ring-1 ring-white/10 placeholder:text-slate-600 focus:ring-astral-500/60"
+                placeholder="+ Referência (mapa, documento, raça…)"
+                aria-label="Buscar item para referenciar"
+                [value]="refQuery()"
+                (input)="refQuery.set(refInput.value)"
+              />
+              @if (refQuery()) {
+                <div class="flex max-h-36 flex-col overflow-y-auto rounded-md bg-ink-950/80 p-0.5 ring-1 ring-white/10">
+                  @for (option of refCandidates(ev); track option.id) {
+                    <button type="button" class="flex h-7 items-center gap-1.5 rounded px-1.5 text-left text-xs text-slate-300 hover:bg-white/5 hover:text-white" (click)="addRef(ev, option.id)">
+                      <mat-icon class="!size-3.5 shrink-0 !text-[14px]" [class]="metaOf(option).color">{{ metaOf(option).icon }}</mat-icon>
+                      <span class="truncate">{{ option.name }}</span>
+                    </button>
+                  } @empty {
+                    <p class="px-1.5 py-1 text-[11px] text-slate-500">Nada encontrado.</p>
+                  }
+                </div>
+              }
+            </div>
             <div class="flex items-center gap-1.5">
               @for (color of colors; track color) {
                 <button
@@ -172,8 +208,29 @@
               {{ ev.date || 'Sem data' }}
             </span>
             <span class="truncate text-sm font-medium text-slate-100">{{ ev.title || 'Evento sem título' }}</span>
-            <!-- Só leitura: o cartão selecionado mostra a descrição inteira -->
-            <p class="whitespace-pre-line text-xs leading-snug text-slate-400" [class.line-clamp-2]="!(readonly() && selected)">{{ ev.description }}</p>
+            @let refs = refsOf(ev);
+            <!-- Só leitura: o cartão selecionado mostra a descrição inteira (com referências, 1 linha no cartão fechado) -->
+            <p
+              class="whitespace-pre-line text-xs leading-snug text-slate-400"
+              [class.line-clamp-2]="!(readonly() && selected) && !refs.length"
+              [class.line-clamp-1]="!(readonly() && selected) && !!refs.length"
+            >{{ ev.description }}</p>
+            <!-- Referências: clique abre o item na janela dele -->
+            @if (refs.length) {
+              <div class="mt-auto flex gap-1 overflow-hidden pt-0.5" [class.flex-wrap]="readonly() && selected">
+                @for (ref of refs; track ref.id) {
+                  <button
+                    type="button"
+                    class="flex h-5 max-w-28 shrink-0 items-center gap-1 rounded bg-white/5 px-1.5 text-[10px] text-slate-300 ring-1 ring-white/10 hover:bg-astral-500/20 hover:text-white"
+                    [matTooltip]="'Abrir ' + ref.name"
+                    (click)="openItem.emit(ref.id)"
+                  >
+                    <mat-icon class="!size-3 shrink-0 !text-[12px]" [class]="metaOf(ref).color">{{ metaOf(ref).icon }}</mat-icon>
+                    <span class="truncate">{{ ref.name }}</span>
+                  </button>
+                }
+              </div>
+            }
           </div>
           @if (!readonly()) {
           <button

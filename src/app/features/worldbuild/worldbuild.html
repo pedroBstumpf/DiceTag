@@ -72,7 +72,7 @@
                 <app-document-editor [itemId]="item.id" />
               }
               @case ('timeline') {
-                <app-timeline-editor [itemId]="item.id" />
+                <app-timeline-editor [itemId]="item.id" (openItem)="open($event)" />
               }
               @case ('image') {
                 <app-image-viewer [itemId]="item.id" />

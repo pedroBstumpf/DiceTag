@@ -231,7 +231,13 @@ export class GameTablePage {
   }
 
   open(id: string): void {
-    const type = this.content(id)?.type ?? 'entry';
+    const content = this.content(id);
+    // Sem permissão (ex.: jogador clicando numa referência a um item que o mestre não revelou): não abre
+    if (!content) {
+      if (this.worldbuild.byId().has(id)) this.snackBar.open('Este item não foi revelado para os jogadores.');
+      return;
+    }
+    const type = content.type;
     const el = this.windowLayer()?.nativeElement;
     this.windows.open(id, { width: el?.clientWidth ?? 1200, height: el?.clientHeight ?? 800 }, WINDOW_SIZES[type]);
   }

@@ -353,6 +353,11 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   naquela direção, arrastar até outro cartão cria a seta. Shift ao mover alinha à grade (24px).
 - Delete remove o evento (e suas setas) ou a seta selecionada. "Organizar automaticamente" = árvore da
   esquerda para a direita a partir dos eventos sem entrada (`treeLayout`).
+- **Referências** (`TimelineEvent.refs` = ids de itens do mundo): na edição do evento, busca (sem acento) por qualquer
+  item que não seja pasta nem a própria linha do tempo (`referenceCandidates`, `utils/references.ts` + spec) e chips com
+  ×; no cartão, chips clicáveis abrem o item na janela dele (`TimelineEditor.openItem` → `open()` do Worldbuild ou da
+  mesa). Itens excluídos somem das referências (`resolveReferences`). Na mesa, o jogador só abre o que o mestre revelou
+  (`GameTablePage.open` não abre nada sem permissão e avisa).
 
 ### Mesa de jogo (`TableSessionService`, um por mesa aberta)
 - **Cenas:** nome, mapa opcional (`blobId`), `gridSize` (20–300px, padrão 70), `showGrid`, `tokens`, `fog`,

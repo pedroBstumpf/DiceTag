@@ -1,13 +1,14 @@
-import { Component, ElementRef, afterNextRender, computed, inject, input, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, afterNextRender, computed, inject, input, output, signal, viewChild } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { Point } from '../../../../core/models/geometry.model';
-import { TIMELINE_COLORS, TimelineEvent, TimelineLink } from '../../../../core/models/world-item.model';
+import { TIMELINE_COLORS, TimelineEvent, TimelineLink, WORLD_ITEM_META, WorldItem } from '../../../../core/models/world-item.model';
 import { newId } from '../../../../core/utils/id';
 import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
 import { Viewport, fitRect, screenToWorld, zoomAt } from '../../../../shared/utils/viewport';
 import { WorldbuildService } from '../../services/worldbuild.service';
+import { referenceCandidates, resolveReferences } from '../../utils/references';
 import {
   CardSide,
   TIMELINE_CARD,
@@ -48,6 +49,8 @@ const HANDLE_CLASS: Record<CardSide, string> = {
  * - Duplo clique no fundo ou "+ Evento": cria evento
  * - Alças "+" do cartão selecionado: clique cria evento conectado; arraste conecta a outro cartão
  * - Arrastar cartão move (Shift alinha à grade); Delete remove o evento ou a seta selecionada
+ * - Eventos referenciam itens do mundo (mapa, documento, raça, item, NPC, outra linha do tempo…);
+ *   clicar na referência abre o item na janela dele (`openItem`)
  * Salva automaticamente (o serviço agrupa as gravações).
  */
 @Component({
@@ -64,6 +67,8 @@ export class TimelineEditor {
   readonly itemId = input.required<string>();
   /** Só leitura (jogador na mesa): navega e lê, sem criar, mover, ligar nem editar. */
   readonly readonly = input(false);
+  /** Pedido para abrir um item referenciado por um evento (na janela dele, como no Worldbuild). */
+  readonly openItem = output<string>();
 
   // --- Dados ---------------------------------------------------------------
   private readonly item = computed(() => this.service.byId().get(this.itemId()));
@@ -170,11 +175,41 @@ export class TimelineEditor {
     if (this.readonly()) return;
     this.selectedId.set(id);
     this.editingId.set(id);
+    this.refQuery.set('');
   }
 
   finishEditing(): void {
     this.editingId.set(null);
     this.focusHost();
+  }
+
+  // --- Referências a itens do mundo ----------------------------------------
+
+  /** Busca do evento em edição por itens para referenciar. */
+  readonly refQuery = signal('');
+
+  /** Itens referenciados pelo evento (os excluídos do mundo somem). */
+  refsOf(ev: TimelineEvent): WorldItem[] {
+    return resolveReferences(ev.refs, this.service.byId());
+  }
+
+  /** Itens que o evento em edição ainda pode referenciar (sem a própria linha do tempo). */
+  refCandidates(ev: TimelineEvent): WorldItem[] {
+    return referenceCandidates(this.service.items(), this.refQuery(), new Set([this.itemId(), ...(ev.refs ?? [])]), 6);
+  }
+
+  addRef(ev: TimelineEvent, itemId: string): void {
+    this.change(ev.id, { refs: [...(ev.refs ?? []), itemId] });
+    this.refQuery.set('');
+  }
+
+  removeRef(ev: TimelineEvent, itemId: string): void {
+    const refs = (ev.refs ?? []).filter((id) => id !== itemId);
+    this.change(ev.id, { refs: refs.length ? refs : undefined });
+  }
+
+  metaOf(item: WorldItem) {
+    return WORLD_ITEM_META[item.type];
   }
 
   // --- Ponteiro ------------------------------------------------------------
