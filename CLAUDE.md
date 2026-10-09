@@ -137,9 +137,15 @@ src/
         └── game-table/         # MESA DE JOGO (rota /mesa/:id, tela cheia, fora do Shell)
             ├── game-table.ts           # página: orquestra barras, janelas e atalhos
             ├── services/
-            │   ├── table-session.service.ts  # estado da mesa + regra de vínculo dos tokens
+            │   ├── table-session.service.ts  # FACHADA da mesa: signals, Blobs, sessão; toda mutação via dispatch + spec
             │   ├── sound-mixer.service.ts    # um HTMLAudioElement por som
             │   └── blob-url.service.ts       # object URLs com cache (imagens de token)
+            ├── state/                  # puro + specs: comandos (estado, payload) → estado, permissões, visão
+            │   ├── commands.ts         # TABLE_COMMANDS, TableCommand, applyCommand (catálogo de comandos)
+            │   ├── scenes.ts levels.ts entries.ts tokens.ts fog.ts drawings.ts notes.ts chat.ts lore.ts
+            │   ├── permissions.ts      # canEdit, sheetAccess, canSeeLoreItem… com Viewer { role, userId }
+            │   ├── player-view.ts      # o que o jogador vê sob a névoa (tokens, anotações, portas)
+            │   └── table-state.ts helpers.ts  # EMPTY_STATE, normalizeState, mapScene/mapPlacement…
             ├── utils/                  # funções puras + specs Vitest
             │   ├── geometry.ts         # snap de token/canto, alça de tamanho, distâncias
             │   ├── visibility.ts       # visão por ray casting, paredes/portas → segmentos, ponto-em-polígono, doorSeen
@@ -202,8 +208,15 @@ Rotas (`app.routes.ts`, todas lazy):
   Evite também spread (`[...]`) e `+`/`-` unários em expressões de template: use um método.
 - **Lógica geométrica pura** (visão, colisão, layouts, simplificação) fica em `utils/`, sem Angular,
   sempre com `*.spec.ts` ao lado.
-- **Dados novos nos modelos são opcionais**, com valor padrão na leitura (`normalizeState` no
-  `TableSessionService`, `migrateTimeline` no `WorldbuildService`): dados salvos antigos sempre abrem.
+- **Dados novos nos modelos são opcionais**, com valor padrão na leitura (`normalizeState` em
+  `game-table/state/table-state.ts`, `migrateTimeline` no `WorldbuildService`): dados salvos antigos sempre abrem.
+- **Mutações da mesa são comandos** (preparação do multiplayer, ver `SPEC.md`): nova alteração do `TableState`
+  = função pura `(estado, payload) → novo estado` no arquivo do assunto em `game-table/state/`, registrada em
+  `TABLE_COMMANDS` e chamada pelo serviço com `this.dispatch('nome', payload)`. O payload é serializável: ids
+  (`newId()`), horários e sorteios são gerados no serviço, nunca no comando. Nada de `state.update` direto.
+  Blobs e o Worldbuild continuam no serviço. Comando sem efeito devolve o mesmo objeto.
+- **Permissões e visibilidade novas** entram em `state/permissions.ts` ou `state/player-view.ts` (puras, com
+  `Viewer`), nunca só no template: o servidor vai reaplicá-las.
 - **Commits:** um por feature/fase, em branch separada da `main`, no formato Conventional Commits em PT-BR
   (`feat(mesa): …`, `fix(mesas): …`), com corpo explicando o que mudou.
 
@@ -474,7 +487,7 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   (barra de status em 0) mostra o inventário aos jogadores sempre — só aquele token. O NPC do painel (ficha base) só
   abre para quem o edita: o jogador não o vê no painel; vê NPCs pelos tokens (duplo clique), só as abas liberadas,
   em **somente leitura**. Sem nada liberado, o duplo clique não abre nada.
-- **Regras (único lugar, `TableSessionService`):** `canEdit` (mestre; NPC → só `controlsNpc`; personagens seguem livres),
+- **Regras (único lugar: `game-table/state/permissions.ts`, puras; o `TableSessionService` só repassa o `Viewer`):** `canEdit` (mestre; NPC → só `controlsNpc`; personagens seguem livres),
   `sheetAccess(sheetId)` → `{ edit, sheet, inventory }`, `canOpenSheet`, `myNpcs`; o `actor` do jogador inclui o NPC
   que ele controla.
 - **Somente leitura** = `<fieldset [disabled]>` em volta do conteúdo editável (desabilita inputs/botões nativos;
@@ -549,7 +562,7 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   `volume`, `loop` (padrão `true`) e o mestre são persistidos; tocando/pausado não.
 - Envio de vários arquivos `audio/*` (ou extensão de áudio) pelo botão ou arrastando para a aba Sons.
 
-### Tokens — regra de vínculo (único lugar: `resolveToken` / `updateToken`)
+### Tokens — regra de vínculo (único lugar: `resolveToken` / `splitTokenPatch` em `state/tokens.ts`)
 - `TableEntry.token` (ficha): `blobId`, `size` (0.5–6 quadrados; `TOKEN_SIZES` vai até 6 para criaturas enormes), `vision { enabled, range (m) }`, `speed?`, `bars`, `tags`
   (`TokenTag.level` opcional, ex.: Exaustão 2). Cores de barras/etiquetas: paleta `TOKEN_COLORS` ou cor livre.
   Padrão (`defaultToken`): tamanho 1, visão 18 m (ligada para personagem, desligada para NPC).
@@ -631,7 +644,8 @@ O `MapStage` recebe `insets` para enquadrar o mapa só na área livre entre as b
   **6** tokens visíveis · **7** portas e paredes · **8** efeitos, régua e ping · **9** interface (popover, avisos — fora do mundo).
 - Na ferramenta Selecionar, token ou anotação sob o cursor tem prioridade; o fundo move o mapa.
 - Mutações de cena passam pelo `TableSessionService` (`moveToken`, `updateToken`, `addWall`, `removeWall`,
-  `addStroke`, `eraseStrokes`, `undoDrawing`, `addNote`…), sempre com o debounce de persistência.
+  `addStroke`, `eraseStrokes`, `undoDrawing`, `addNote`…), que as aplica como comandos de `state/` (`dispatch`),
+  sempre com o debounce de persistência.
 - Teclas que dependem da ferramenta/seleção (Enter, Esc, Delete, WASD/setas) chegam via `MapStage.handleKey`;
   soltar tecla e perder o foco via `handleKeyUp` / `stopKeyMove`.
 
@@ -657,11 +671,16 @@ do hash das senhas — para não perder dados, sessões e contas já salvos. **N
 sessão) ao criar uma mesa ou um item do Worldbuild/Lore, para o navegador não apagar o IndexedDB quando falta espaço.
 Não protege contra o usuário limpar os dados do site.
 
-Para conectar um backend no futuro: trocar `StorageService` e `AuthService` mantendo as interfaces públicas.
+Para conectar um backend: o `StorageService` chave/valor e o `AuthService` local **não** são a interface de uma
+API; serão trocados por repositórios por domínio fornecidos por injeção de dependência. Plano em `SPEC.md` §2.
 
 ---
 
 ## 10. Pendências e próximos passos sugeridos
+
+As decisões para o back-end e o multiplayer estão no **`SPEC.md`**: sincronização por comandos e conflitos,
+repositórios por domínio, servidor autoritativo (névoa, rolagens, permissões) e outras pendências
+(exportar/importar, arquivos esquecidos ao excluir mesa, ciclo entre features, OnPush).
 
 - Inventário sem peso; "Dar para" e compra passam uma unidade por vez; relações por nome livre (sem vínculo com
   fichas da mesa).
@@ -676,7 +695,8 @@ Para conectar um backend no futuro: trocar `StorageService` e `AuthService` mant
 - Backend + multiplayer em tempo real; permissões reais de mestre/jogador; convite de jogadores.
 - Lore geral: hoje qualquer usuário edita; com backend, só o dono do mundo deve editar (os demais só leem).
 - Mural de notícias alimentado por API/CMS (`NewsService.posts`).
-- Testes de componentes (hoje só as funções puras de `utils/`, as regras da ficha no modelo e a `FxLayer` têm testes).
+- Testes de componentes (hoje têm testes as funções puras de `utils/` e `state/`, as regras da ficha no modelo, a
+  `FxLayer` e a fachada `TableSessionService`, num teste de integração).
 
 ---
 

@@ -31,7 +31,8 @@ Três princípios guiam o código:
 2. **Fluxo unidirecional.** Componentes leem `signal`/`computed` e chamam métodos do serviço; o serviço
    produz um novo objeto de estado (imutável), os `computed` se recalculam e a tela se atualiza.
 3. **Lógica pura separada.** Geometria, visão, dados, inventário e efeitos ficam em `utils/` como
-   funções puras (sem Angular), cada uma com seu `*.spec.ts`.
+   funções puras (sem Angular), cada uma com seu `*.spec.ts`. Na mesa, as mutações do estado, as
+   permissões e o que cada papel vê também são puros, em `game-table/state/` (ver §6.1).
 
 ---
 
@@ -92,6 +93,7 @@ features/<feature>/
 ├── services/               # estado da feature
 ├── components/<nome>/      # componentes da feature (standalone, Tailwind)
 ├── directives/             # diretivas que trocam provedores (ver §5.3)
+├── state/                  # (mesa) comandos puros do estado, permissões e visão do jogador + specs
 └── utils/                  # funções puras + *.spec.ts
 ```
 
@@ -180,12 +182,16 @@ componente                    serviço                           IndexedDB
     │◄───────────────────────────│ computed(() => state().scenes)   │
     │                            │                                  │
     │  session.moveToken(id, p)  │                                  │
-    │───────────────────────────►│ patchState(s => novo objeto)     │
-    │                            │   ├─ state.update(...)           │
+    │───────────────────────────►│ dispatch('moveToken', payload)   │
+    │                            │   ├─ applyCommand (state/, puro) │
+    │                            │   ├─ state.set(novo estado)      │
     │◄── computed recalculam ────│   └─ agenda flush() em 300ms     │
     │                            │                                  │
     │                            │ flush() ────── storage.set ─────►│
 ```
+
+Na mesa, a mutação é um **comando** (ver §6.1). No `WorldbuildService`, ela ainda é feita direto
+no signal (`_items.update`), seguida do mesmo `persist()` com debounce.
 
 - **Debounce de 300ms**: várias alterações seguidas viram uma gravação só.
 - **`flush()` imediato** em `pagehide` e ao destruir a página, para não perder a última alteração.
@@ -252,17 +258,35 @@ Um por mesa aberta. Guarda o `TableState` inteiro num único `signal` privado e 
 |---|---|
 | Estado persistido | `state`, `scenes`, `entries`, `activeScene`, `entryById`, `soundMaster`, `lore` |
 | Vista isométrica e camadas | `isometric`, `mapLevels`, `playerLevel`, `currentLevel` |
-| Névoa e paredes | `walls` da camada em foco, origens de visão, polígonos de visão |
+| Névoa e paredes | `walls` da camada em foco, origens de visão, polígonos de visão, `fogView` |
 | Memória da névoa | máscara de áreas exploradas (bitset em base64) |
 | Estado da sessão | `tool`, `role`, `selectedTokenId`, `wallMode`, `brush`, `panels`, `immersive` |
 | Ações e quem age | `actor`, `actorSheetId`, `hotbar`, `useAction`, `quickRoll` |
-| Permissões | `canEdit`, `sheetAccess`, `canOpenSheet` (único lugar das regras de acesso) |
+| Permissões | `canEdit`, `sheetAccess`, `canOpenSheet`… (delegam a `state/permissions.ts`) |
 | Chat / Efeitos | mensagens (máx. 300) / efeitos transitórios na tela |
-| Cenas, pastas, camadas, arquivos, NPCs, fichas, lojas, lore, itens, tokens, paredes, desenhos, anotações | métodos de mutação |
-| Persistência | `patchState` (debounce) e `flush` |
+| Cenas, pastas, camadas, arquivos, NPCs, fichas, lojas, lore, itens, tokens, paredes, desenhos, anotações | métodos públicos que montam o payload e chamam `dispatch` |
+| Comandos e persistência | `dispatch` (único ponto de alteração; debounce) e `flush` |
 
-Regras com dono único dentro do serviço: vínculo dos tokens (`resolveToken`/`updateToken`), quem age
-(`actor`), permissões (`sheetAccess`) e transferência de itens (`transferItem`).
+O serviço é uma **fachada**: os componentes só conhecem os métodos dele. O que **não é puro** fica nele
+(ids e horários novos, Blobs, o Worldbuild dos NPCs do bestiário, os signals da sessão); o que é puro
+fica em `state/`:
+
+| Arquivo em `state/` | Conteúdo |
+|---|---|
+| `commands.ts` | catálogo `TABLE_COMMANDS`, tipo `TableCommand` e `applyCommand` |
+| `scenes.ts`, `levels.ts` | cenas, pastas de cenas e camadas do mapa |
+| `entries.ts` | arquivos da mesa e volume mestre |
+| `tokens.ts` | colocar/mover/alterar/remover tokens e a **regra de vínculo** (`resolveToken`, `splitTokenPatch`) |
+| `fog.ts`, `drawings.ts`, `notes.ts`, `chat.ts`, `lore.ts` | névoa e paredes, desenhos, anotações, chat, Lore da mesa e itens da mesa |
+| `permissions.ts` | regras de acesso puras (`canEdit`, `sheetAccess`, `canSeeLoreItem`…), com quem olha (`Viewer`) como parâmetro |
+| `player-view.ts` | o que o jogador vê sob a névoa (`visibleTokensFor`, `visibleNotesFor`, `visibleDoorsFor`) |
+| `table-state.ts`, `helpers.ts` | estado vazio, `normalizeState` e auxiliares (`mapScene`, `mapPlacement`, `findPlacement`…) |
+
+Cada comando é `(estado, payload) → novo estado`, com payload serializável: ids, horários e sorteios
+já vêm prontos do serviço. Comando que não muda nada devolve o mesmo objeto, e o `dispatch` não grava.
+
+Regras com dono único: vínculo dos tokens (`state/tokens.ts`), quem age (`actor`), permissões
+(`state/permissions.ts`) e transferência de itens (`transferItem`, ainda no serviço: envolve Blobs e duas fichas).
 
 ### 6.2 Composição da página
 
@@ -383,7 +407,12 @@ Funções sem Angular, testadas com **Vitest** (`npx ng test --watch=false`):
 | `game-table/utils/inventory.ts` | quantidade, transferência, linha do inventário |
 | `game-table/utils/effects.ts` | os 20 efeitos especiais descritos como dados SVG |
 
-Além desses, há specs para `table-session.model.ts` e para a `FxLayer`.
+Também têm specs:
+- os comandos, as permissões e a visão do jogador em `game-table/state/` (`commands`, `scenes`, `tokens`,
+  `map`, `lore`, `permissions`, `player-view`);
+- `table-session.model.ts` e a `FxLayer`;
+- o `TableSessionService`, num teste de integração da fachada com o armazenamento em memória
+  (`table-session.service.spec.ts`).
 
 ---
 
@@ -402,10 +431,18 @@ Além desses, há specs para `table-session.model.ts` e para a `FxLayer`.
 
 ## 11. Rumo ao backend
 
-O app foi desenhado para trocar o armazenamento sem mexer nas telas:
+O plano completo, com as decisões e a ordem de execução, está no [`SPEC.md`](SPEC.md). Em resumo:
 
-- **`StorageService`** e **`AuthService`** têm a interface pública que uma API real manteria.
-- O estado da mesa já é um único documento (`TableState`) com mutações centralizadas em
-  `TableSessionService`, o ponto natural para sincronizar com um servidor em tempo real.
-- Permissões já passam por um único lugar (`sheetAccess`, `canEdit`); hoje o papel é escolhido na mesa,
-  no futuro virá da conta e do convite.
+- **O que já ajuda:**
+  - toda mutação da mesa é um comando puro e serializável, aplicado por um único `dispatch`: é o que
+    será enviado ao servidor, e o servidor aplicará a mesma função;
+  - permissões e visão do jogador são funções puras que o servidor pode reaproveitar;
+  - a rolagem recebe o sorteio como parâmetro.
+- **O que ainda não é a interface de uma API:**
+  - o `StorageService` é chave/valor (`get`/`set` de `worldbuild:<userId>`…), e não operações de domínio;
+  - o `AuthService` guarda contas no IndexedDB, sem tokens nem expiração.
+
+  Ambos serão trocados por **repositórios por domínio** fornecidos por injeção de dependência (SPEC §2).
+- **O que só o servidor pode garantir:** a projeção do estado por jogador (névoa, segredos do mestre),
+  as rolagens e a validação de cada comando (SPEC §3). Hoje o papel é escolhido na mesa; no futuro virá
+  da conta e do convite.
