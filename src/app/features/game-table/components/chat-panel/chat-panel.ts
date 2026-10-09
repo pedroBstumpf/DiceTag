@@ -45,11 +45,11 @@ import { characterModifier, formatModifier } from '../../utils/dice';
               @let added = roll.itemsAdded !== false;
               <span
                 class="flex items-center gap-1"
-                [class]="added ? 'text-emerald-200' : 'text-slate-500'"
+                [class]="added ? 'text-emerald-200' : 'text-slate-300'"
                 [matTooltip]="added ? 'Etiquetas dos itens equipados (somadas ao total)' : 'Etiquetas dos itens equipados (fora do total)'"
               >
                 <mat-icon class="!size-4 !text-[16px]" [class]="added ? 'text-emerald-300' : 'text-slate-500'">shield</mat-icon>
-                <span [class.line-through]="!added">{{ itemModifier(roll) }}</span>
+                {{ itemModifier(roll) }}
               </span>
             </div>
 

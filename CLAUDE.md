@@ -478,8 +478,8 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   (e no resultado) com a chave "Somar itens ao total" ligada — na ação `RollConfig.addItems` (`EntryWindow`), no "Rolar"
   um sinal do `QuickRoll` (não salvo, começa desligado). `effectiveModifier` só soma etiquetas de itens com `addItems`.
 - **Cartão de rolagem no chat:** resultado (Sucesso, Falha…) grande no topo, dados e total no centro e, embaixo, o
-  modificador do **personagem** (ícone `person`: fixo + temas + status) e o dos **itens** (ícone `shield`; riscado e
-  cinza quando ficou fora do total). `RollResult.itemModifier` guarda o valor dos itens e `RollResult.itemsAdded` se ele
+  modificador do **personagem** (ícone `person`: fixo + temas + status) e o dos **itens** (ícone `shield`; fora do total,
+  só o escudo fica apagado — o número nunca é riscado, para continuar legível). `RollResult.itemModifier` guarda o valor dos itens e `RollResult.itemsAdded` se ele
   entrou no total; rolagens antigas (sem `itemsAdded`) somaram os itens. `characterModifier` (puro) separa a parte do
   personagem nos dois casos.
 
