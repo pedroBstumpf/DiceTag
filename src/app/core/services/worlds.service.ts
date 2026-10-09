@@ -89,6 +89,8 @@ export class WorldsService {
     const items = (await this.storage.get<WorldItem[]>(key)) ?? [];
     await Promise.all(items.flatMap(worldItemBlobIds).map((b) => this.storage.delete(`blob:${b}`)));
     await this.storage.delete(key);
+    // Janelas salvas da mesa de trabalho deste mundo (WorldbuildService.saveDesk)
+    await this.storage.delete(`desk:${this.userId}:${id}`);
     this._worlds.update((list) => list.filter((w) => w.id !== id));
     await this.persist();
     if (this._activeId() === id) this.select(this._worlds()[0].id);

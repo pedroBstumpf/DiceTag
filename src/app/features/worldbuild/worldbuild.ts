@@ -17,6 +17,7 @@ import { CharacterSheetView } from '../game-table/components/character-sheet/cha
 import { BlobUrlService } from '../game-table/services/blob-url.service';
 import { ItemCard } from './components/item-card/item-card';
 import { RaceCard } from './components/race-card/race-card';
+import { FolderView } from './components/folder-view/folder-view';
 import { WorldNpcSheet } from './directives/world-npc-sheet.directive';
 import { TimelineEditor } from './components/timeline-editor/timeline-editor';
 import { WorldbuildService } from './services/worldbuild.service';
@@ -25,10 +26,11 @@ import { WorldbuildService } from './services/worldbuild.service';
 const URL_CREATABLE_TYPES: readonly WorldItemType[] = ['document', 'timeline', 'folder', 'item', 'npc', 'race'];
 
 /**
- * Página de Worldbuild.
- * À esquerda, o explorador (pastas e itens, pode ser escondido).
- * À direita, a área de trabalho, onde cada item abre numa janela
- * flutuante que pode ser movida, redimensionada e maximizada.
+ * Página de Worldbuild do mundo aberto.
+ * À esquerda, o explorador (pastas e itens, com o seletor de mundo; pode ser escondido).
+ * À direita, a mesa de trabalho, onde cada item (e cada pasta) abre numa janela
+ * flutuante que pode ser movida, redimensionada e maximizada. As janelas ficam salvas
+ * por mundo (WorldbuildService.desk) e voltam iguais depois de recarregar a página.
  *
  * Parâmetros de URL (vindos da barra lateral):
  *   ?novo=document|timeline|folder|item|npc|race → cria um item novo
@@ -48,6 +50,7 @@ const URL_CREATABLE_TYPES: readonly WorldItemType[] = ['document', 'timeline', '
     ImageViewer,
     ItemCard,
     RaceCard,
+    FolderView,
     CharacterSheetView,
     WorldNpcSheet,
   ],
@@ -76,6 +79,19 @@ export class Worldbuild {
   private readonly workspace = viewChild<ElementRef<HTMLElement>>('workspace');
 
   constructor() {
+    // Mesa de trabalho: quando o mundo termina de carregar, volta às janelas salvas dele
+    // (antes das ações da URL, que podem abrir mais uma janela por cima)
+    effect(() => {
+      if (!this.service.loaded()) return;
+      const saved = this.service.desk();
+      untracked(() => this.windows.restore(saved.filter((w) => this.service.byId().has(w.id))));
+    });
+    // Toda mudança nas janelas (abrir, mover, redimensionar, minimizar, fixar) é guardada no mundo
+    effect(() => {
+      const list = this.windows.windows();
+      untracked(() => this.service.saveDesk(list));
+    });
+
     // Executa as ações pedidas pela URL assim que os dados estiverem carregados
     effect(() => {
       const type = this.novo();

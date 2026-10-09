@@ -6,6 +6,7 @@ import { AuthService } from '../../../core/services/auth.service';
 import { StorageService } from '../../../core/services/storage.service';
 import { WorldsService } from '../../../core/services/worlds.service';
 import { newId } from '../../../core/utils/id';
+import { OpenWindow } from '../../../shared/services/window-manager.service';
 import { LEGACY_LORE_IMPORTED_KEY, LEGACY_LORE_KEY, mergeLegacyLore } from '../utils/legacy-lore';
 import { columnLayout } from '../utils/timeline-layout';
 
@@ -41,9 +42,19 @@ export class WorldbuildService {
   /** Raças, em ordem alfabética. */
   readonly worldRaces = computed(() => this.ofType('race'));
 
+  /**
+   * Mesa de trabalho do mundo aberto (página Worldbuild): janelas abertas com posição, tamanho
+   * e estado, salvas por mundo para voltarem iguais depois de recarregar a página.
+   */
+  readonly desk = signal<OpenWindow[]>([]);
+
   /** Chave do usuário cujos dados estão (ou estão sendo) carregados. */
   private storageKey: string | null = null;
   private saveTimer?: ReturnType<typeof setTimeout>;
+  /** Chave da mesa de trabalho do mundo aberto e a gravação pendente dela. */
+  private deskKey: string | null = null;
+  private pendingDesk: OpenWindow[] | null = null;
+  private deskTimer?: ReturnType<typeof setTimeout>;
 
   constructor() {
     // Garante que nada se perca ao fechar ou recarregar a aba
@@ -59,7 +70,9 @@ export class WorldbuildService {
         this.flush();
         this.loaded.set(false);
         this._items.set([]);
+        this.desk.set([]);
         this.storageKey = user && ready ? worldbuildKey(user.id, worldId) : null;
+        this.deskKey = user && ready ? `desk:${user.id}:${worldId}` : null;
         // A Lore geral antiga é importada uma vez, para o primeiro mundo
         const first = this.worlds.worlds()[0]?.id === worldId;
         if (this.storageKey && user) void this.load(this.storageKey, first ? user.id : null);
@@ -247,12 +260,29 @@ export class WorldbuildService {
 
   /** Carrega os itens da chave. `importLoreFor`: usuário que recebe a Lore geral antiga, se ainda não foi importada. */
   private async load(key: string, importLoreFor: string | null): Promise<void> {
+    const deskKey = this.deskKey;
     let items = ((await this.storage.get<WorldItem[]>(key)) ?? []).map(migrateTimeline);
     if (importLoreFor) items = await this.importLegacyLore(items, importLoreFor, key);
+    const desk = deskKey ? ((await this.storage.get<OpenWindow[]>(deskKey)) ?? []) : [];
     // O usuário ou o mundo mudou durante o carregamento: descarta o resultado antigo
     if (key !== this.storageKey) return;
     this._items.set(items);
+    this.desk.set(desk);
     this.loaded.set(true);
+  }
+
+  /** Guarda as janelas abertas na mesa de trabalho do mundo (gravação agrupada, como os itens). */
+  saveDesk(windows: OpenWindow[]): void {
+    if (!this.loaded() || !this.deskKey) return;
+    this.pendingDesk = windows;
+    clearTimeout(this.deskTimer);
+    this.deskTimer = setTimeout(() => this.flushDesk(), 300);
+  }
+
+  private flushDesk(): void {
+    clearTimeout(this.deskTimer);
+    if (this.pendingDesk && this.deskKey) this.storage.set(this.deskKey, this.pendingDesk);
+    this.pendingDesk = null;
   }
 
   /**
@@ -280,10 +310,11 @@ export class WorldbuildService {
     this.saveTimer = setTimeout(() => this.flush(), 300);
   }
 
-  /** Grava imediatamente o que estiver pendente. */
+  /** Grava imediatamente o que estiver pendente (itens e mesa de trabalho). */
   private flush(): void {
     clearTimeout(this.saveTimer);
     if (this.loaded() && this.storageKey) this.storage.set(this.storageKey, this._items());
+    this.flushDesk();
   }
 }
 

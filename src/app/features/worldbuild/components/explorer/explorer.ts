@@ -71,6 +71,8 @@ export class Explorer {
   readonly hideable = input(true);
   /** Mostra o seletor de mundos no cabeçalho (página do Worldbuild; na mesa o mundo é o da mesa). */
   readonly worldSwitcher = input(false);
+  /** Pastas podem abrir como janela na mesa de trabalho (página do Worldbuild). */
+  readonly folderWindows = input(false);
 
   // --- Mundos --------------------------------------------------------------
   readonly worlds = inject(WorldsService);

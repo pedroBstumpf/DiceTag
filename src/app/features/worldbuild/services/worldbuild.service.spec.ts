@@ -80,6 +80,22 @@ describe('WorldbuildService (mundos e importação da Lore geral)', () => {
     expect(service.items()).toEqual([]);
   });
 
+  it('mesa de trabalho: janelas salvas por mundo voltam ao reabrir o mundo', async () => {
+    const { service, worlds } = start();
+    await settle();
+    const win = { id: 'doc', geometry: { x: 40, y: 60, width: 500, height: 400 }, maximized: false, minimized: true, pinned: true, z: 3 };
+    service.saveDesk([win]);
+    const other = (await worlds.create('B'))!;
+    await settle();
+    // Trocar de mundo grava a mesa do anterior e começa vazia no novo
+    expect(storage.data.get('desk:guest:default')).toEqual([win]);
+    expect(service.desk()).toEqual([]);
+    worlds.select('default');
+    await settle();
+    expect(service.desk()).toEqual([win]);
+    expect(storage.data.has(`desk:guest:${other.id}`)).toBe(false);
+  });
+
   it('trocar de mundo carrega os itens do outro mundo (e grava o anterior)', async () => {
     const { service, worlds } = start();
     await settle();

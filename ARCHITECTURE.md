@@ -365,6 +365,8 @@ Mudar o volume de um som ou o nome de uma ficha não muda as origens de visão, 
 - **Dados**: lista plana de `WorldItem` com `parentId` (árvore). Tipos: `folder`, `document`, `timeline`,
   `image`, `item`, `npc`, `race`. Uma lista por mundo (`worldbuild:<userId>` no primeiro, `worldbuild:<userId>:<worldId>` nos demais).
 - **Lore geral removida**: o conteúdo antigo (`lore:global`) foi importado para o primeiro mundo, com os mesmos ids.
+- **Mesa de trabalho persistida**: as janelas da página Worldbuild são salvas por mundo (`WorldbuildService.desk`,
+  `desk:<userId>:<worldId>`) e restauradas pelo `WindowManagerService.restore`. Pastas abrem como janela (`FolderView`).
 - **Componentes**: `Explorer` (abas em ícones: Arquivos/Itens/NPCs/Raças/Linhas do tempo/Documentos/Mapas), `RaceCard`, `DocumentEditor` (sobre o `RichTextEditor`/Tiptap),
   `TimelineEditor` (mapa mental; layout puro em `utils/timeline-layout.ts`), `ImageViewer`,
   `ItemCard`/`ItemCardView`, e a ficha de NPC reaproveitada da mesa com `appWorldNpcSheet`.

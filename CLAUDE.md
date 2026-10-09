@@ -319,6 +319,11 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - **Itens do mundo:** aba **Itens** do explorador; itens também ficam na árvore. O cartão (`ItemCard`) é editável na janela do item e só
   leitura no inventário da ficha. Trocar a imagem usa `setImage` (apaga a anterior). Como os demais itens, aparecem
   na aba Lore da mesa e abrem em janela lá.
+- **Mesa de trabalho** (página Worldbuild): as janelas abertas ficam salvas **por mundo** (`WorldbuildService.desk` /
+  `saveDesk`, chave `desk:<usuário>:<mundo>`, debounce de 300ms + `flush`) e voltam iguais ao recarregar
+  (`WindowManagerService.restore`; janelas de itens excluídos são descartadas). **Pastas** também abrem como janela
+  ("Abrir na mesa de trabalho" no menu da pasta, `Explorer.folderWindows`): `FolderView` mostra o conteúdo e cada item
+  clicado abre a janela dele. Na mesa de jogo as janelas não são salvas (e pastas não abrem como janela).
 - Árvore por `parentId` (`null` = raiz). Ordenação: pastas primeiro, depois nome (pt-BR, numérico).
 - Nomes padrão sem repetição na mesma pasta ("Novo documento 2"...).
 - Mover: proibido mover uma pasta para dentro dela mesma ou de um descendente.
@@ -714,6 +719,7 @@ O `MapStage` recebe `insets` para enquadrar o mapa só na área livre entre as b
 | `lore:global:imported` | id do usuário que recebeu a importação da Lore geral (marca de "já importado") |
 | `table-state:<tableId>` | `TableState` (cenas com tokens/névoa/memória/paredes/portas/desenhos/anotações/camadas/vista, pastas de cenas, cena ativa, arquivos — com a ficha do personagem em `sheet` e os NPCs como referência ao bestiário —, tokens de NPC com ficha própria, volume mestre, chat, organização da Lore, itens criados na mesa por jogadores) |
 | `blob:<id>` | `Blob` de imagem/mapa/áudio/imagem de token |
+| `desk:<userId>:<worldId>` | `OpenWindow[]`: janelas da mesa de trabalho do Worldbuild daquele mundo (posição, tamanho, estado) |
 | `localStorage: dicetag.session` | id do usuário logado |
 | `localStorage: dicetag.world.<userId>` | último mundo aberto pelo usuário |
 | `localStorage: dicetag.sidebarCollapsed` | preferência da barra lateral |

@@ -18,6 +18,7 @@
       >
         <app-explorer
           [worldSwitcher]="true"
+          [folderWindows]="true"
           (opened)="open($event)"
           (removed)="windows.closeMany($event)"
           (hide)="explorerOpen.set(false)"
@@ -64,6 +65,9 @@
             (closed)="windows.close(win.id)"
           >
             @switch (item.type) {
+              @case ('folder') {
+                <app-folder-view [itemId]="item.id" (opened)="open($event)" />
+              }
               @case ('document') {
                 <app-document-editor [itemId]="item.id" />
               }

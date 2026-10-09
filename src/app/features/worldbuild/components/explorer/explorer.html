@@ -283,6 +283,12 @@
         <mat-icon>add</mat-icon>
         <span>Criar aqui</span>
       </button>
+      @if (folderWindows()) {
+        <button mat-menu-item (click)="opened.emit(item.id)">
+          <mat-icon>open_in_new</mat-icon>
+          <span>Abrir na mesa de trabalho</span>
+        </button>
+      }
     } @else {
       <button mat-menu-item (click)="opened.emit(item.id)">
         <mat-icon>open_in_new</mat-icon>
