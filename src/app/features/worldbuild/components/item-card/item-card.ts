@@ -21,7 +21,9 @@ import { ItemCardView } from './item-card-view';
         [name]="it.name"
         [tags]="tags()"
         [imageUrl]="src()"
+        [description]="it.description ?? ''"
         (renamed)="service.rename(it.id, $event)"
+        (descriptionChange)="service.update(it.id, { description: $event })"
         (tagsChange)="setTags(it.id, $event)"
         (imagePicked)="service.setImage(it.id, $event)"
       />

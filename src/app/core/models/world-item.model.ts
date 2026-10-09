@@ -54,6 +54,8 @@ export interface WorldItem {
   blobId?: string;
   /** item: etiquetas do cartão. Padrão: []. */
   tags?: Tag[];
+  /** item: descrição do cartão (texto livre). Padrão: ''. */
+  description?: string;
   /** npc: ficha base (temas, inventário…). Padrão: normalizeSheet(undefined). */
   sheet?: CharacterSheet;
   /** npc: token padrão (imagem, tamanho, visão, barras e etiquetas). Padrão: defaultToken('npc'). */

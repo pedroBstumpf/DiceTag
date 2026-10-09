@@ -1305,7 +1305,7 @@ export class TableSessionService extends SheetStore {
     return !!item && (this.role() === 'gm' || item.ownerUserId === this.auth.user()?.id);
   }
 
-  updateTableItem(itemId: string, patch: Partial<Pick<TableItem, 'name' | 'tags'>>): void {
+  updateTableItem(itemId: string, patch: Partial<Pick<TableItem, 'name' | 'tags' | 'description'>>): void {
     this.patchState((s) => ({ ...s, items: (s.items ?? []).map((i) => (i.id === itemId ? { ...i, ...patch } : i)) }));
   }
 

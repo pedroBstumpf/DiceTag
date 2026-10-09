@@ -46,7 +46,9 @@ export function parseEquippedWindow(id: string): { sheetId: string; inventoryId:
             [name]="r.name"
             [tags]="r.tags"
             [imageUrl]="blobs.url(r.blobId)"
+            [description]="r.description"
             (renamed)="update({ name: $event })"
+            (descriptionChange)="update({ description: $event })"
             (tagsChange)="update({ tags: $event })"
             (imagePicked)="setImage($event)"
           />
@@ -94,7 +96,7 @@ export class EquippedItemWindow {
     return row?.entry.table && !row.custom && this.session.canEditTableItem(row.entry.itemId) ? row.entry.itemId : null;
   });
 
-  update(patch: { name?: string; tags?: Tag[] }): void {
+  update(patch: { name?: string; tags?: Tag[]; description?: string }): void {
     const itemId = this.tableItemId();
     if (itemId) this.session.updateTableItem(itemId, patch);
     else this.store.updateInventoryItem(this.sheetId(), this.inventoryId(), patch);

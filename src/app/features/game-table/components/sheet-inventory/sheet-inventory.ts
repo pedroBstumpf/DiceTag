@@ -109,6 +109,11 @@ export class SheetInventory {
     else this.store.updateInventoryItem(this.sheetId(), row.entry.id, { name });
   }
 
+  describe(row: InventoryRow, description: string): void {
+    if (this.editsTableItem(row)) this.session?.updateTableItem(row.entry.itemId, { description });
+    else this.store.updateInventoryItem(this.sheetId(), row.entry.id, { description });
+  }
+
   setTags(row: InventoryRow, tags: Tag[]): void {
     if (this.editsTableItem(row)) this.session?.updateTableItem(row.entry.itemId, { tags });
     else this.store.updateInventoryItem(this.sheetId(), row.entry.id, { tags });

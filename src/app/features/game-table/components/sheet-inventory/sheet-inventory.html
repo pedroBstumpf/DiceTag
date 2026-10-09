@@ -215,7 +215,9 @@
         [name]="row.name"
         [tags]="row.tags"
         [imageUrl]="blobs.url(row.blobId)"
+        [description]="row.description"
         (renamed)="rename(row, $event)"
+        (descriptionChange)="describe(row, $event)"
         (tagsChange)="setTags(row, $event)"
         (imagePicked)="setImage(row, $event)"
       />

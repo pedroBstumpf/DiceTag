@@ -11,7 +11,7 @@ export function quantityOf(item: InventoryEntry): number {
 // --- Linha do inventário (personalização x original) ------------------------
 
 /** O que o inventário usa do item original (do mundo ou da mesa). */
-export type CardItem = Pick<WorldItem, 'id' | 'name' | 'tags' | 'blobId'>;
+export type CardItem = Pick<WorldItem, 'id' | 'name' | 'tags' | 'blobId' | 'description'>;
 
 /** De onde vem o original de um item do inventário. */
 export type ItemSource = 'global' | 'own' | 'table';
@@ -39,6 +39,7 @@ export interface InventoryRow {
   item?: CardItem;
   name: string;
   tags: Tag[];
+  description: string;
   blobId?: string;
   /** Unidades (na loja, 0 = esgotado). */
   quantity: number;
@@ -54,12 +55,13 @@ export interface InventoryRow {
  */
 export function inventoryRow(entry: InventoryEntry, sources: ItemSources): InventoryRow {
   const item = sources[sourceOf(entry)].get(entry.itemId);
-  const custom = entry.name !== undefined || entry.tags !== undefined || entry.blobId !== undefined;
+  const custom = entry.name !== undefined || entry.tags !== undefined || entry.blobId !== undefined || entry.description !== undefined;
   return {
     entry,
     item,
     name: entry.name ?? item?.name ?? 'Item excluído',
     tags: entry.tags ?? item?.tags ?? [],
+    description: entry.description ?? item?.description ?? '',
     blobId: entry.blobId ?? item?.blobId,
     quantity: quantityOf(entry),
     custom,
@@ -114,6 +116,7 @@ function sameStack(a: InventoryEntry, b: Omit<InventoryEntry, 'id'>): boolean {
     !!a.table === !!b.table &&
     !a.blobId &&
     a.name === b.name &&
+    a.description === b.description &&
     JSON.stringify(a.tags) === JSON.stringify(b.tags)
   );
 }

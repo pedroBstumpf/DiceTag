@@ -20,7 +20,9 @@ import { TableSessionService } from '../../services/table-session.service';
           [name]="it.name"
           [tags]="it.tags ?? []"
           [imageUrl]="blobs.url(it.blobId)"
+          [description]="it.description ?? ''"
           (renamed)="update({ name: $event })"
+          (descriptionChange)="update({ description: $event })"
           (tagsChange)="update({ tags: $event })"
           (imagePicked)="session.setTableItemImage(it.id, $event)"
         />
@@ -41,7 +43,7 @@ export class TableItemWindow {
   readonly item = computed(() => this.session.tableItemById().get(this.itemId()) ?? null);
   readonly canEdit = computed(() => this.session.canEditTableItem(this.itemId()));
 
-  update(patch: { name?: string; tags?: Tag[] }): void {
+  update(patch: { name?: string; tags?: Tag[]; description?: string }): void {
     this.session.updateTableItem(this.itemId(), patch);
   }
 }

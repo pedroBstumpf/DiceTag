@@ -62,7 +62,7 @@ export abstract class SheetStore {
   updateInventoryItem(
     id: string,
     inventoryId: string,
-    patch: Pick<InventoryEntry, 'name' | 'tags' | 'price' | 'quantity' | 'equipped'>,
+    patch: Pick<InventoryEntry, 'name' | 'tags' | 'description' | 'price' | 'quantity' | 'equipped'>,
   ): void {
     this.updateSheet(id, { inventory: this.inventoryOf(id).map((i) => (i.id === inventoryId ? { ...i, ...patch } : i)) });
   }
@@ -76,11 +76,11 @@ export abstract class SheetStore {
     if (old) this.storage.delete(`blob:${old}`);
   }
 
-  /** Volta o item ao original (descarta nome, etiquetas e imagem personalizados; mantém preço e quantidade). */
+  /** Volta o item ao original (descarta nome, etiquetas, descrição e imagem personalizados; mantém preço e quantidade). */
   resetInventoryItem(id: string, inventoryId: string): void {
     const item = this.inventoryOf(id).find((i) => i.id === inventoryId);
     if (!item) return;
-    const { name: _name, tags: _tags, blobId: _blobId, ...kept } = item;
+    const { name: _name, tags: _tags, blobId: _blobId, description: _description, ...kept } = item;
     this.updateSheet(id, { inventory: this.inventoryOf(id).map((i) => (i.id === inventoryId ? kept : i)) });
     if (item.blobId) this.storage.delete(`blob:${item.blobId}`);
   }

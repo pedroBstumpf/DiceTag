@@ -240,6 +240,8 @@ export interface InventoryEntry {
   name?: string;
   /** Etiquetas personalizadas (ausente = as do original). */
   tags?: Tag[];
+  /** Descrição personalizada (ausente = a do original). */
+  description?: string;
   /** Imagem personalizada no IndexedDB (ausente = a do original). Apagada ao tirar o item. */
   blobId?: string;
   /** Inventário de NPC (loja): preço em Eiros (ausente = não está à venda). */
@@ -536,6 +538,8 @@ export interface TableItem {
   name: string;
   /** Etiquetas do cartão. Padrão: []. */
   tags?: Tag[];
+  /** Descrição do cartão. Padrão: ''. */
+  description?: string;
   /** Imagem do cartão no IndexedDB (apagada ao excluir a mesa). */
   blobId?: string;
   /** Conta de quem criou o item. */
