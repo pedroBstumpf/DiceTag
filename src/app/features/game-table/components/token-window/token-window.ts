@@ -48,7 +48,7 @@ import { TokenEditor } from '../token-editor/token-editor';
         </div>
       </div>
 
-      <app-token-editor [value]="t" (changed)="session.updateToken(t.placement.id, $event)" />
+      <app-token-editor [value]="t" [lockStatusMax]="!session.canEditStatusMax()" (changed)="session.updateToken(t.placement.id, $event)" />
 
       <div class="mt-6 flex flex-wrap gap-2 border-t border-white/5 pt-4">
         <!-- NPC: a ficha própria deste token; personagem: a ficha dele -->

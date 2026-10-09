@@ -311,8 +311,16 @@ export function withFixedNotePages(notes: NotePage[]): NotePage[] {
  * Espírito) ficam no token da ficha (`TableEntry.token`), assim aparecem também no mapa.
  */
 export interface CharacterSheet {
+  /** Nome da raça (o da Raça escolhida em `raceRef`; fichas antigas: texto livre). */
   race: string;
+  /** Nome da sub-raça (o da Raça escolhida em `subraceRef`; fichas antigas: texto livre). */
   subrace: string;
+  /** Raça escolhida da lista (Worldbuild ou Lore geral). Ausente = nenhuma (ou texto antigo). */
+  raceRef?: RaceRef;
+  /** Sub-raça escolhida da lista (também uma Raça cadastrada). */
+  subraceRef?: RaceRef;
+  /** O que a raça e a sub-raça aplicaram (rótulos e modificadores), para desfazer ao trocar. */
+  appliedRaces?: Partial<Record<RaceSlot, AppliedRace>>;
   /** Rótulos de personagem (texto livre: "Nobre", "Exilado"…). */
   labels: string[];
   relations: CharacterRelation[];
@@ -326,6 +334,21 @@ export interface CharacterSheet {
   eiros: number;
   /** Personagem: sempre SHEET_STUDY_COUNT cards de "Estudos e Treinos". */
   studies: CharacterStudy[];
+}
+
+/** Campo da ficha que recebe uma Raça. */
+export type RaceSlot = 'race' | 'subrace';
+
+/** Referência a uma Raça do Worldbuild do mestre ou (global) da Lore geral. */
+export interface RaceRef {
+  id: string;
+  global?: boolean;
+}
+
+/** O que uma Raça aplicou na ficha: rótulos que ela acrescentou e modificadores somados ao máximo. */
+export interface AppliedRace {
+  labels: string[];
+  mods: StatusMods;
 }
 
 /** Ficha vazia de um personagem. */

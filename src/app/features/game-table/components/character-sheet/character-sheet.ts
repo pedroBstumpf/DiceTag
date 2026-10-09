@@ -3,6 +3,7 @@ import { Component, computed, inject, input, output, signal } from '@angular/cor
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { Tag } from '../../../../core/models/tag.model';
+import { WorldItem } from '../../../../core/models/world-item.model';
 import {
   CharacterRelation,
   CharacterSheet,
@@ -11,6 +12,8 @@ import {
   CURRENCY,
   GOAL_STEPS,
   NPC_TOKEN_SHEET,
+  RaceRef,
+  RaceSlot,
   SHEET_MAX_LEVEL,
   TableEntry,
   ThemeTag,
@@ -30,6 +33,7 @@ import { LoreService } from '../../../worldbuild/services/lore.service';
 import { WorldbuildService } from '../../../worldbuild/services/worldbuild.service';
 import { equippedWindowId } from '../equipped-item-window/equipped-item-window';
 import { inventoryRow } from '../../utils/inventory';
+import { applyRace, raceKey } from '../../utils/race';
 import { SheetInventory, itemSources } from '../sheet-inventory/sheet-inventory';
 import { SheetNotes } from '../sheet-notes/sheet-notes';
 
@@ -223,6 +227,51 @@ export class CharacterSheetView {
     this.update({ labels: (this.sheet()?.labels ?? []).filter((l) => l !== label) });
   }
 
+  // --- Raça e sub-raça (Raças da Lore geral e do Worldbuild) ---------------
+
+  readonly raceSlots: { id: RaceSlot; label: string }[] = [
+    { id: 'race', label: 'Raça' },
+    { id: 'subrace', label: 'Sub-raça' },
+  ];
+
+  /**
+   * Raças que podem ser escolhidas: as da Lore geral e as do Worldbuild (com appLoreScope o
+   * serviço já é a Lore geral, e só ela entra). Na mesa, as removidas da aba Lore desta mesa saem.
+   */
+  readonly raceOptions = computed(() => {
+    const hidden = this.session?.lore().items ?? {};
+    const options: { key: string; ref: RaceRef; item: WorldItem }[] = [
+      ...this.loreGeneral.worldRaces().map((item) => ({ key: raceKey({ id: item.id, global: true }), ref: { id: item.id, global: true }, item })),
+      ...(this.worldbuild === this.loreGeneral ? [] : this.worldbuild.worldRaces()).map((item) => ({ key: raceKey({ id: item.id }), ref: { id: item.id }, item })),
+    ];
+    return options.filter((o) => !hidden[o.item.id]?.hidden);
+  });
+
+  /** Chave da raça escolhida no campo (vazia = nenhuma). */
+  raceKeyOf(slot: RaceSlot): string {
+    const sheet = this.sheet();
+    return raceKey(slot === 'race' ? sheet?.raceRef : sheet?.subraceRef);
+  }
+
+  /** Nome salvo no campo que não corresponde a uma raça da lista (texto antigo ou raça excluída). */
+  orphanRaceName(slot: RaceSlot): string {
+    const name = this.sheet()?.[slot] ?? '';
+    const key = this.raceKeyOf(slot);
+    return name && !this.raceOptions().some((o) => o.key === key) ? name : '';
+  }
+
+  /** Escolhe (ou limpa, com chave vazia) a raça do campo: aplica etiquetas e modificadores, desfazendo os da anterior. */
+  chooseRace(slot: RaceSlot, key: string): void {
+    const sheet = this.sheet();
+    const data = this.data();
+    if (!sheet || !data) return;
+    const option = this.raceOptions().find((o) => o.key === key);
+    const choice = option ? { ref: option.ref, name: option.item.name, tags: option.item.tags ?? [], statusMods: option.item.statusMods } : null;
+    const result = applyRace(sheet, data.bars, slot, choice);
+    this.update(result.sheet);
+    this.store.updateStatus(this.sheetId(), { bars: result.bars });
+  }
+
   // --- Eiros (moeda do personagem) -----------------------------------------
 
   readonly currency = CURRENCY;
@@ -240,8 +289,12 @@ export class CharacterSheetView {
     this.patchBar(bar.id, { value: Math.min(bar.max, Math.max(0, bar.value + delta)) });
   }
 
+  /** Máximo das barras de status: na mesa, só o mestre edita à mão (fora da mesa, quem edita a ficha). */
+  readonly canEditMax = computed(() => !this.session || this.session.canEditStatusMax());
+
   /** Valor/máximo digitado (ignora texto inválido). */
   setBarNumber(bar: TokenBar, field: 'value' | 'max', raw: string): void {
+    if (field === 'max' && !this.canEditMax()) return;
     const n = Number(raw);
     if (raw !== '' && Number.isFinite(n)) this.patchBar(bar.id, { [field]: Math.max(0, Math.round(n)) });
   }

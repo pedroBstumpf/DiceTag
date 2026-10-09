@@ -451,6 +451,9 @@ export class TableSessionService extends SheetStore {
     return rules.canEdit(entry, this.viewer());
   }
 
+  /** Pode editar à mão o máximo das barras de status (só o mestre). */
+  readonly canEditStatusMax = computed(() => rules.canEditStatusMax(this.viewer()));
+
   /** O que a conta atual pode fazer com a ficha `sheetId` (regra em `rules.sheetAccess`). */
   sheetAccess(sheetId: string): SheetAccess {
     const placementId = tokenSheetPlacement(sheetId);

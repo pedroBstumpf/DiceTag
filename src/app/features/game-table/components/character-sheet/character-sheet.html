@@ -125,15 +125,26 @@
                       (keydown.enter)="nameInput.blur()"
                     />
                   </label>
+                  <!-- Raça e sub-raça: Raças do Worldbuild / Lore geral; escolher aplica etiquetas e modificadores -->
                   <div class="grid grid-cols-2 gap-2">
-                    <label class="sheet-label">
-                      Raça
-                      <input #raceInput class="sheet-input" placeholder="Ex.: Humano" [value]="s.race" (input)="update({ race: raceInput.value })" />
-                    </label>
-                    <label class="sheet-label">
-                      Sub-raça
-                      <input #subraceInput class="sheet-input" placeholder="Ex.: Nórdico" [value]="s.subrace" (input)="update({ subrace: subraceInput.value })" />
-                    </label>
+                    @for (slot of raceSlots; track slot.id) {
+                      @let orphan = orphanRaceName(slot.id);
+                      <label class="sheet-label">
+                        {{ slot.label }}
+                        <select
+                          #raceSelect
+                          class="sheet-input"
+                          [value]="raceKeyOf(slot.id)"
+                          (change)="chooseRace(slot.id, raceSelect.value)"
+                          [matTooltip]="raceOptions().length ? '' : 'Crie Raças no Worldbuild ou na Lore geral'"
+                        >
+                          <option value="">{{ orphan || '— Nenhuma —' }}</option>
+                          @for (o of raceOptions(); track o.key) {
+                            <option [value]="o.key" [selected]="o.key === raceKeyOf(slot.id)">{{ o.item.name }}{{ o.ref.global ? ' · Lore geral' : '' }}</option>
+                          }
+                        </select>
+                      </label>
+                    }
                   </div>
                   <!-- Jogador dono do personagem -->
                   @if (!isNpc()) {
@@ -207,8 +218,10 @@
                           #maxInput
                           type="number"
                           min="0"
-                          class="h-6 w-9 rounded bg-ink-950 text-center text-xs text-slate-100 outline-none ring-1 ring-white/10 focus:ring-astral-500/60"
+                          class="h-6 w-9 rounded bg-ink-950 text-center text-xs text-slate-100 outline-none ring-1 ring-white/10 focus:ring-astral-500/60 disabled:text-slate-400 disabled:ring-white/5"
                           [attr.aria-label]="bar.label + ': máximo'"
+                          [matTooltip]="canEditMax() ? '' : 'Só o mestre altera o máximo'"
+                          [disabled]="!canEditMax()"
                           [value]="bar.max"
                           (input)="setBarNumber(bar, 'max', maxInput.value)"
                         />

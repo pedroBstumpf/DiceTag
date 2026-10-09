@@ -156,6 +156,7 @@ src/
             │   ├── projection.ts       # matriz 2D/isométrica, tela↔mundo, enquadramento, "em pé" (upright)
             │   ├── inventory.ts        # quantidade e transferência de unidades entre inventários + spec
             │   ├── selection.ts        # seleção de vários tokens (principal, Shift, caixa, formação) + spec
+            │   ├── race.ts             # raça/sub-raça na ficha: rótulos e modificadores de status (aplicar/desfazer) + spec
             │   ├── dice.ts             # rolagem 2d12/3d6, faixas de resultado, effectiveModifier (fixo + níveis das tags ligadas) + spec
             │   └── effects.ts          # buildFx: os 20 efeitos descritos como dados (partes SVG + animações)
             └── components/
@@ -414,11 +415,20 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   gravados por `updateSheet(entryId, patch)`.
 - **Aba Ficha** — cards em grade (container query):
   - **Básico:** imagem (= token), nome, raça, sub-raça, jogador dono ("Vincular à minha conta") e **rótulos** (texto livre, Enter adiciona).
+    **Raça e sub-raça** são listas com as Raças da Lore geral e do Worldbuild (na mesa, menos as removidas da aba Lore
+    desta mesa; com `appLoreScope`, só as da Lore geral). Escolher aplica (`applyRace`, puro em `utils/race.ts` + spec):
+    as etiquetas da raça viram **rótulos** e os `statusMods` somam ao **máximo** de Corpo/Mente/Espírito (o valor atual
+    acompanha, entre 0 e o máximo; máximo ≥ 1). Raça e sub-raça somam; trocar ou limpar um campo desfaz só o que ele
+    aplicou (`CharacterSheet.appliedRaces`; `raceRef`/`subraceRef` guardam a escolha). Fichas antigas com texto livre
+    mostram o texto até uma raça ser escolhida. Etiquetas que já eram rótulos não são duplicadas nem removidas.
   - **Status:** três barras fixas **Corpo** (vermelha), **Mente** (verde), **Espírito** (azul) + **etiquetas** do personagem.
     Barras e etiquetas ficam no **token da ficha** (`TableEntry.token.bars/tags`), então aparecem no mapa.
     `withStatusBars` garante as três barras (ids `status-*`, rótulo e cor fixos) em personagens novos (`defaultToken`),
     antigos (`normalizeState`) e em toda gravação (`updateEntryToken`); a janela "Token" não as renomeia nem remove.
     Fichas novas (personagem e NPC) começam com as três barras em **24/24** (`DEFAULT_STATUS_MAX`).
+    **Máximo das barras de status:** na mesa, só o mestre edita à mão (`canEditStatusMax` em `state/permissions.ts`;
+    campo desabilitado na ficha e na janela "Token", `TokenEditor.lockStatusMax`). O jogador muda o valor atual, e o
+    máximo dele só muda pela raça. Fora da mesa (bestiário no Worldbuild) quem edita a ficha edita o máximo.
   - **Relações:** nome, nível **1–6** (`LevelPips`) e descrição.
   - **Temas (3):** nome + tags com nível **1–6** e, embaixo, **Defeitos** (`flaws`) com nível **-1 a -6**
     (`LevelPips` com `negative`). Fichas antigas ganham `flaws: []` em `sheetOf`. Só personagem: **Objetivo** abaixo dos

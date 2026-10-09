@@ -75,6 +75,14 @@ export function canSeeLoreItem(lore: TableLore, itemId: string, isTableItem: boo
   return !!folder?.public;
 }
 
+/**
+ * Editar à mão o valor MÁXIMO das barras de status (Corpo, Mente, Espírito): só o mestre.
+ * O jogador muda o valor atual; o máximo dele só muda por regra (ex.: escolher a raça).
+ */
+export function canEditStatusMax(viewer: Viewer): boolean {
+  return viewer.role === 'gm';
+}
+
 /** Quem criou o item da mesa (e o mestre) edita o original; os demais só a cópia do inventário. */
 export function canEditTableItem(item: TableItem | undefined, viewer: Viewer): boolean {
   return !!item && (viewer.role === 'gm' || item.ownerUserId === viewer.userId);

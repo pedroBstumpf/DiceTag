@@ -4,6 +4,7 @@ import {
   NO_ACCESS,
   Viewer,
   canEdit,
+  canEditStatusMax,
   canEditTableItem,
   canSeeLoreItem,
   controlsNpc,
@@ -54,6 +55,11 @@ describe('permissões: fichas', () => {
       inventory: false,
     });
     expect(sheetAccess(ana, { entry: npc, bars: down }, token)).toEqual({ edit: false, sheet: false, inventory: true });
+  });
+
+  it('máximo das barras de status: só o mestre edita à mão', () => {
+    expect(canEditStatusMax(gm)).toBe(true);
+    expect(canEditStatusMax(ana)).toBe(false);
   });
 
   it('fora da mesa (sem entrada) a ficha é editável', () => {

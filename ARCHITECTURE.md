@@ -405,6 +405,7 @@ Funções sem Angular, testadas com **Vitest** (`npx ng test --watch=false`):
 | `game-table/utils/simplify.ts` | Ramer–Douglas–Peucker dos traços |
 | `game-table/utils/dice.ts` | rolagens 2d12/3d6, faixas, modificadores, estudos |
 | `game-table/utils/inventory.ts` | quantidade, transferência, linha do inventário |
+| `game-table/utils/race.ts` | raça e sub-raça na ficha: rótulos e modificadores de status, aplicar e desfazer |
 | `game-table/utils/selection.ts` | seleção de vários tokens: principal, Shift+clique, caixa de seleção, formação do grupo |
 | `game-table/utils/effects.ts` | os 20 efeitos especiais descritos como dados SVG |
 
