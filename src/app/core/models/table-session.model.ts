@@ -590,7 +590,7 @@ export interface TableState {
   entries: TableEntry[];
   /** Volume mestre dos sons da mesa (0–1). Padrão: 1. */
   soundMaster?: number;
-  /** Organização da aba Lore nesta mesa. Padrão: sem pastas nem ajustes. */
+  /** Pastas do mundo reveladas aos jogadores nesta mesa. Padrão: nenhuma. */
   lore?: TableLore;
   /** Chat da mesa (mensagens e rolagens). Padrão: []. */
   chat?: ChatMessage[];
@@ -623,32 +623,15 @@ export interface TableItem {
 // --- Lore da mesa ------------------------------------------------------------
 
 /**
- * Organização própria da aba Lore de uma mesa. Os itens continuam vindo do
- * mundo da mesa; aqui ficam só ajustes locais (pastas, nomes,
- * itens removidos), que não alteram nem apagam os originais.
+ * O que é desta mesa na aba Lore. A aba mostra a árvore do mundo da mesa (os mesmos itens
+ * e pastas do Worldbuild); aqui fica só o que o mestre revelou aos jogadores NESTA mesa.
  */
 export interface TableLore {
-  folders: LoreFolder[];
-  /** Ajustes por item (chave = id do item do mundo ou da mesa). */
-  items: Record<string, LoreItemOverride>;
-}
-
-/** Pasta da aba Lore (existe só nesta mesa). */
-export interface LoreFolder {
-  id: string;
-  name: string;
-  /** Os jogadores veem (só leitura) os itens desta pasta. Padrão: false — a lore é segredo do mestre. */
-  public?: boolean;
-}
-
-/** Ajustes locais de um item da lore nesta mesa. */
-export interface LoreItemOverride {
-  /** Nome usado só nesta mesa (ausente = nome original). */
-  name?: string;
-  /** Pasta da mesa onde o item fica (ausente = raiz). */
-  folderId?: string;
-  /** Removido desta mesa (o original continua existindo). */
-  hidden?: boolean;
+  /**
+   * Ids das pastas do mundo reveladas aos jogadores (o "olho"). Revelar uma pasta revela
+   * tudo dentro dela, inclusive subpastas. Padrão: [] — a lore é segredo do mestre.
+   */
+  revealed: string[];
 }
 
 // --- Tokens ------------------------------------------------------------------

@@ -1,4 +1,4 @@
-import { TableEntry, TableLore, withStatusBars } from '../../../core/models/table-session.model';
+import { TableEntry, withStatusBars } from '../../../core/models/table-session.model';
 import {
   FULL_ACCESS,
   NO_ACCESS,
@@ -68,25 +68,33 @@ describe('permissões: fichas', () => {
 });
 
 describe('permissões: lore e itens da mesa', () => {
-  const lore: TableLore = {
-    folders: [
-      { id: 'aberta', name: 'A', public: true },
-      { id: 'fechada', name: 'F' },
-    ],
-    items: { a: { folderId: 'aberta' }, f: { folderId: 'fechada' }, h: { folderId: 'aberta', hidden: true } },
-  };
+  // Árvore do mundo: aberta/{a, sub/{b}} · fechada/{f} · solto (na raiz)
+  const parents: Record<string, string | null> = { aberta: null, a: 'aberta', sub: 'aberta', b: 'sub', fechada: null, f: 'fechada', solto: null };
+  const parentOf = (id: string) => parents[id];
+  const revealed = new Set(['aberta']);
 
-  it('jogador vê só itens em pastas reveladas e não escondidos; mestre vê tudo', () => {
-    expect(canSeeLoreItem(lore, 'a', false, ana)).toBe(true);
-    expect(canSeeLoreItem(lore, 'f', false, ana)).toBe(false);
-    expect(canSeeLoreItem(lore, 'h', false, ana)).toBe(false);
-    expect(canSeeLoreItem(lore, 'solto', false, ana)).toBe(false);
-    expect(canSeeLoreItem(lore, 'f', false, gm)).toBe(true);
+  it('jogador vê a pasta revelada e tudo dentro dela (subpastas também); mestre vê tudo', () => {
+    expect(canSeeLoreItem(revealed, parentOf, 'aberta', false, ana)).toBe(true);
+    expect(canSeeLoreItem(revealed, parentOf, 'a', false, ana)).toBe(true);
+    expect(canSeeLoreItem(revealed, parentOf, 'b', false, ana)).toBe(true);
+    expect(canSeeLoreItem(revealed, parentOf, 'f', false, ana)).toBe(false);
+    expect(canSeeLoreItem(revealed, parentOf, 'solto', false, ana)).toBe(false);
+    expect(canSeeLoreItem(revealed, parentOf, 'f', false, gm)).toBe(true);
   });
 
-  it('itens criados na mesa ficam à vista na raiz', () => {
-    expect(canSeeLoreItem(lore, 'solto', true, ana)).toBe(true);
-    expect(canSeeLoreItem(lore, 'f', true, ana)).toBe(false);
+  it('pasta dentro de pasta escondida pode ser revelada sozinha', () => {
+    const sub = new Set(['sub']);
+    expect(canSeeLoreItem(sub, parentOf, 'b', false, ana)).toBe(true);
+    expect(canSeeLoreItem(sub, parentOf, 'a', false, ana)).toBe(false);
+  });
+
+  it('ciclo nos dados (pasta pai dela mesma) não trava', () => {
+    const loop = (id: string) => (id === 'x' ? 'y' : 'x');
+    expect(canSeeLoreItem(new Set(), loop, 'x', false, ana)).toBe(false);
+  });
+
+  it('itens criados na mesa ficam à vista de todos', () => {
+    expect(canSeeLoreItem(new Set(), parentOf, 'novo', true, ana)).toBe(true);
   });
 
   it('item da mesa: quem criou e o mestre editam', () => {

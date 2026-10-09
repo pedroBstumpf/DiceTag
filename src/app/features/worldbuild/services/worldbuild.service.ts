@@ -9,6 +9,13 @@ import { newId } from '../../../core/utils/id';
 import { OpenWindow } from '../../../shared/services/window-manager.service';
 import { columnLayout } from '../utils/timeline-layout';
 
+/** Ordem da árvore: pastas primeiro, depois nome (pt-BR, numérico). */
+export function byTreeOrder(a: WorldItem, b: WorldItem): number {
+  if (a.type === 'folder' && b.type !== 'folder') return -1;
+  if (b.type === 'folder' && a.type !== 'folder') return 1;
+  return a.name.localeCompare(b.name, 'pt-BR', { numeric: true });
+}
+
 /**
  * Fonte única de dados do Worldbuild do mundo aberto (`WorldsService.activeId`) do usuário.
  *
@@ -83,11 +90,7 @@ export class WorldbuildService {
   childrenOf(parentId: string | null): WorldItem[] {
     return this._items()
       .filter((i) => i.parentId === parentId)
-      .sort((a, b) =>
-        a.type === 'folder' && b.type !== 'folder' ? -1
-        : b.type === 'folder' && a.type !== 'folder' ? 1
-        : a.name.localeCompare(b.name, 'pt-BR', { numeric: true }),
-      );
+      .sort(byTreeOrder);
   }
 
   /** true se `id` está dentro (em qualquer nível) da pasta `ancestorId`. */

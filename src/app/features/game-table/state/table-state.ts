@@ -10,8 +10,8 @@ import {
 /** Mesa nova (ou sem dados salvos). */
 export const EMPTY_STATE: TableState = { scenes: [], activeSceneId: null, entries: [] };
 
-/** Aba Lore sem pastas nem ajustes. */
-export const EMPTY_LORE: TableLore = { folders: [], items: {} };
+/** Aba Lore sem nada revelado. */
+export const EMPTY_LORE: TableLore = { revealed: [] };
 
 /**
  * Completa um estado salvo com os valores padrão dos campos novos.
@@ -21,6 +21,9 @@ export function normalizeState(raw: TableState | undefined): TableState {
   if (!raw) return EMPTY_STATE;
   return {
     ...raw,
+    // Mesas antigas tinham pastas e nomes próprios na aba Lore; hoje ela espelha o mundo
+    // e a mesa guarda só as pastas reveladas
+    lore: { revealed: raw.lore?.revealed ?? [] },
     scenes: raw.scenes.map((sc) => ({
       ...sc,
       tokens: sc.tokens ?? [],

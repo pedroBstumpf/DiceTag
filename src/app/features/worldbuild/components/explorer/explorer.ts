@@ -9,7 +9,7 @@ import { WORLD_ITEM_META, WorldItem, WorldItemType } from '../../../../core/mode
 import { MAX_WORLDS } from '../../../../core/models/world.model';
 import { WorldsService } from '../../../../core/services/worlds.service';
 import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
-import { WorldbuildService } from '../../services/worldbuild.service';
+import { WorldbuildService, byTreeOrder } from '../../services/worldbuild.service';
 
 /** Abas do explorador: árvore de arquivos ou a lista de um tipo de item. */
 type ExplorerView = 'files' | Exclude<WorldItemType, 'folder'>;
@@ -42,6 +42,9 @@ const LIST_VIEWS: ListView[] = [
  * - Arrastar itens para dentro de pastas (ou para a raiz)
  * - Soltar arquivos de imagem do computador em qualquer pasta
  * - Buscar por nome
+ *
+ * Também é a aba Lore da mesa: o mestre edita o mundo direto dali e revela pastas aos
+ * jogadores (`revealed`); o jogador vê só as pastas reveladas (`visible`), em só leitura.
  */
 @Component({
   selector: 'app-explorer',
@@ -73,6 +76,56 @@ export class Explorer {
   readonly worldSwitcher = input(false);
   /** Pastas podem abrir como janela na mesa de trabalho (página do Worldbuild). */
   readonly folderWindows = input(false);
+
+  // --- Aba Lore da mesa ----------------------------------------------------
+  /** Só leitura (jogador na mesa): sem criar, renomear, mover nem excluir. */
+  readonly readonly = input(false);
+  /**
+   * Filtro de itens visíveis (jogador na mesa: só o que está em pastas reveladas). Deve ser
+   * fechado para baixo: se uma pasta é visível, tudo dentro dela também é. null = tudo.
+   */
+  readonly visible = input<((id: string) => boolean) | null>(null);
+  /** Pastas reveladas aos jogadores (mestre na mesa): mostra o "olho" nas pastas. null = sem olho. */
+  readonly revealed = input<ReadonlySet<string> | null>(null);
+  /** Clique no "olho" de uma pasta. */
+  readonly revealToggled = output<string>();
+
+  /** Estado do "olho" de uma pasta: revelada, visível por uma pasta acima ou escondida. */
+  revealOf(item: WorldItem): 'revealed' | 'inherited' | 'hidden' {
+    const shown = this.revealed();
+    if (!shown) return 'hidden';
+    if (shown.has(item.id)) return 'revealed';
+    const byId = this.service.byId();
+    const seen = new Set<string>();
+    for (let id = item.parentId; id && !seen.has(id); id = byId.get(id)?.parentId ?? null) {
+      if (shown.has(id)) return 'inherited';
+      seen.add(id);
+    }
+    return 'hidden';
+  }
+
+  /** Itens que passam pelo filtro `visible`. */
+  private readonly visibleItems = computed(() => {
+    const visible = this.visible();
+    const items = this.service.items();
+    return visible ? items.filter((i) => visible(i.id)) : items;
+  });
+
+  /** Raiz da árvore com filtro: itens visíveis cuja pasta não é visível (pastas reveladas soltas). */
+  private readonly visibleRoots = computed(() => {
+    const visible = this.visible();
+    if (!visible) return [];
+    return this.visibleItems()
+      .filter((i) => !i.parentId || !visible(i.parentId))
+      .sort(byTreeOrder);
+  });
+
+  /** Filhos de uma pasta na árvore (null = raiz), respeitando o filtro. */
+  childrenOf(parentId: string | null): WorldItem[] {
+    const visible = this.visible();
+    if (!visible) return this.service.childrenOf(parentId);
+    return parentId ? this.service.childrenOf(parentId).filter((i) => visible(i.id)) : this.visibleRoots();
+  }
 
   // --- Mundos --------------------------------------------------------------
   readonly worlds = inject(WorldsService);
@@ -110,7 +163,7 @@ export class Explorer {
   /** Itens de cada tipo, em ordem alfabética (uma passada pela lista). */
   private readonly byType = computed(() => {
     const map = new Map<string, WorldItem[]>();
-    for (const item of this.service.items()) map.set(item.type, [...(map.get(item.type) ?? []), item]);
+    for (const item of this.visibleItems()) map.set(item.type, [...(map.get(item.type) ?? []), item]);
     for (const list of map.values()) list.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { numeric: true }));
     return map;
   });
@@ -143,7 +196,7 @@ export class Explorer {
   readonly searchResults = computed(() => {
     const q = this.query().trim().toLowerCase();
     if (!q) return null;
-    return this.service.items().filter((i) => i.name.toLowerCase().includes(q));
+    return this.visibleItems().filter((i) => i.name.toLowerCase().includes(q));
   });
 
   private draggedId: string | null = null;
@@ -202,6 +255,7 @@ export class Explorer {
   // --- Arrastar e soltar ---------------------------------------------------
 
   onDragStart(event: DragEvent, item: WorldItem): void {
+    if (this.readonly()) return;
     this.draggedId = item.id;
     event.dataTransfer?.setData('text/plain', item.name);
     if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
@@ -215,13 +269,14 @@ export class Explorer {
   /** Permite soltar sobre pastas (targetId) ou na raiz (null). */
   onDragOver(event: DragEvent, targetId: string | null): void {
     const hasFiles = event.dataTransfer?.types.includes('Files');
-    if (!this.draggedId && !hasFiles) return;
+    if (this.readonly() || (!this.draggedId && !hasFiles)) return;
     event.preventDefault();
     event.stopPropagation();
     this.dropTargetId.set(targetId);
   }
 
   async onDrop(event: DragEvent, targetId: string | null): Promise<void> {
+    if (this.readonly()) return;
     event.preventDefault();
     event.stopPropagation();
     this.dropTargetId.set(undefined);

@@ -128,7 +128,7 @@ quase toda dúvida de "por que isso sumiu/persistiu".
 | Nível | Onde | Vida útil | Exemplos |
 |---|---|---|---|
 | **Persistido global** | serviços `providedIn: 'root'` → IndexedDB | sempre | contas, mesas, mundos e o Worldbuild de cada mundo |
-| **Persistido por mesa** | `TableSessionService.state` → `table-state:<id>` | enquanto a mesa existir | cenas, tokens, paredes, fichas, chat, organização da lore |
+| **Persistido por mesa** | `TableSessionService.state` → `table-state:<id>` | enquanto a mesa existir | cenas, tokens, paredes, fichas, chat, pastas da lore reveladas |
 | **Sessão da mesa** (não persistido) | signals do `TableSessionService` e serviços da página | até sair da mesa | ferramenta ativa, papel, tokens selecionados, tokens copiados, pincel, barras visíveis, efeitos na tela, desfazer |
 | **Local do componente** | `signal` dentro do componente | enquanto o componente existir | campo em edição, aba aberta, arraste em andamento |
 
@@ -272,7 +272,7 @@ fica em `state/`:
 | `scenes.ts`, `levels.ts` | cenas, pastas de cenas e camadas do mapa |
 | `entries.ts` | arquivos da mesa e volume mestre |
 | `tokens.ts` | colocar/mover/alterar/remover tokens e a **regra de vínculo** (`resolveToken`, `splitTokenPatch`) |
-| `fog.ts`, `drawings.ts`, `notes.ts`, `chat.ts`, `lore.ts` | névoa e paredes, desenhos, anotações, chat, Lore da mesa e itens da mesa |
+| `fog.ts`, `drawings.ts`, `notes.ts`, `chat.ts`, `lore.ts` | névoa e paredes, desenhos, anotações, chat, pastas da Lore reveladas e itens da mesa |
 | `permissions.ts` | regras de acesso puras (`canEdit`, `sheetAccess`, `canSeeLoreItem`…), com quem olha (`Viewer`) como parâmetro |
 | `player-view.ts` | o que o jogador vê sob a névoa (`visibleTokensFor`, `visibleNotesFor`, `visibleDoorsFor`) |
 | `table-state.ts`, `helpers.ts` | estado vazio, `normalizeState` e auxiliares (`mapScene`, `mapPlacement`, `findPlacement`…) |
@@ -295,12 +295,13 @@ GameTablePage  (providers da mesa; atalhos de teclado na window; abre janelas)
 ├── ToolBar             ← esquerda: ferramentas + DrawMenu / FogMenu / FxMenu / LevelsMenu
 ├── SidePanel           ← direita: abas Chat · Fichas · Lore · Sons · Ações
 │   ├── ChatPanel
+│   ├── Explorer        ← aba Lore: a árvore do mundo da mesa (do worldbuild)
 │   └── SoundList
 ├── ActionBar           ← baixo: 10 espaços de ações + QuickRoll (overlay do CDK)
 └── camada de janelas   ← FloatingWindow por janela aberta; o conteúdo é escolhido por tipo:
     CharacterSheetView (SheetInventory, SheetNotes, LevelPips) · TokenWindow (TokenEditor)
     · EntryWindow (FxPicker) · EquippedItemWindow · TableItemWindow
-    · Explorer · DocumentEditor · TimelineEditor · ImageViewer · ItemCard   (do worldbuild)
+    · DocumentEditor · TimelineEditor · ImageViewer · ItemCard   (do worldbuild)
 ```
 
 - **`MapStage`** decide o que cada evento de ponteiro faz conforme a ferramenta e chama o
@@ -323,8 +324,7 @@ GameTablePage  (providers da mesa; atalhos de teclado na window; abre janelas)
 | `token:<id do token>` | janela "Token" (fecha sozinha se o token sair do mapa) |
 | `equip:<ficha>:<item>` | cartão de item equipado |
 | `<id de item da mesa>` | `TableItemWindow` |
-| `<id de item da lore>` | editor do Worldbuild (item do mundo da mesa) |
-| `worldbuild:explorer` | explorador do mundo numa janela (só mestre) |
+| `<id de item da lore>` | editor do Worldbuild (item do mundo da mesa; jogador: só em pasta revelada) |
 
 O `WindowManagerService` só guarda geometria e ordem; abrir de novo o mesmo id foca a janela.
 
@@ -368,9 +368,9 @@ Mudar o volume de um som ou o nome de uma ficha não muda as origens de visão, 
 - **Componentes**: `Explorer` (abas em ícones: Arquivos/Itens/NPCs/Raças/Linhas do tempo/Documentos/Mapas), `RaceCard`, `DocumentEditor` (sobre o `RichTextEditor`/Tiptap),
   `TimelineEditor` (mapa mental; layout puro em `utils/timeline-layout.ts`), `ImageViewer`,
   `ItemCard`/`ItemCardView`, e a ficha de NPC reaproveitada da mesa com `appWorldNpcSheet`.
-- **Na mesa**, os mesmos editores são abertos em janelas; a aba Lore lista os itens do mundo da mesa
-  sem duplicá-los. A organização local (pastas, nomes, itens escondidos) fica em
-  `TableState.lore` e nunca altera o original.
+- **Na mesa**, a aba Lore é o próprio `Explorer` do mundo da mesa (mesmo `WorldbuildService`): o que o mestre
+  muda ali muda o mundo, e vice-versa. A mesa guarda só as pastas reveladas aos jogadores
+  (`TableState.lore.revealed`); para o jogador, o `Explorer` fica em só leitura e filtrado (`readonly`, `visible`).
 
 ---
 
@@ -424,7 +424,7 @@ Também têm specs:
 - **Angular Material** (M3, escuro) para botões, menus, diálogos, tooltips e snackbars; overrides em `styles.scss`.
 - **CDK** para reordenar as páginas das anotações (`cdkDropList`) e para o overlay do `QuickRoll`.
 - **Arrastar nativo do HTML5** (`draggable` + `dragstart`/`drop`) para levar fichas do painel ao mapa,
-  itens às pastas da aba Lore e itens entre pastas no `Explorer`.
+  e itens entre pastas no `Explorer` (também na aba Lore da mesa).
 - **`FloatingWindow`** é a peça central da UX: arrastar, redimensionar, minimizar, maximizar e fixar,
   com estado em `model()` controlado pelo `WindowManagerService` da página.
 

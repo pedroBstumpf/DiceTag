@@ -1,4 +1,4 @@
-import { TableEntry, TableItem, TableLore, TableRole, TokenBar, TokenPlacement, isDown } from '../../../core/models/table-session.model';
+import { TableEntry, TableItem, TableRole, TokenBar, TokenPlacement, isDown } from '../../../core/models/table-session.model';
 
 /**
  * Regras de permissão da mesa em funções puras: quem vê e quem edita o quê.
@@ -62,17 +62,24 @@ export function sheetAccess(
 }
 
 /**
- * O jogador pode ver este item da lore? Só se estiver numa pasta da mesa que o mestre revelou
- * (e não removido desta mesa). Itens criados na mesa ficam à vista na raiz ou em pasta revelada.
- * O mestre vê tudo.
+ * O jogador pode ver este item da lore? Só se ele (pasta) ou alguma pasta acima dele no mundo
+ * foi revelada nesta mesa (`revealed`). Itens criados na mesa ficam à vista de todos.
+ * O mestre vê tudo. `parentOf` dá a pasta de um item do mundo (null/undefined = raiz).
  */
-export function canSeeLoreItem(lore: TableLore, itemId: string, isTableItem: boolean, viewer: Viewer): boolean {
-  if (viewer.role === 'gm') return true;
-  const override = lore.items[itemId];
-  if (override?.hidden) return false;
-  const folder = override?.folderId ? lore.folders.find((f) => f.id === override.folderId) : undefined;
-  if (isTableItem) return !folder || !!folder.public;
-  return !!folder?.public;
+export function canSeeLoreItem(
+  revealed: ReadonlySet<string>,
+  parentOf: (id: string) => string | null | undefined,
+  itemId: string,
+  isTableItem: boolean,
+  viewer: Viewer,
+): boolean {
+  if (viewer.role === 'gm' || isTableItem) return true;
+  const seen = new Set<string>();
+  for (let id: string | null | undefined = itemId; id && !seen.has(id); id = parentOf(id)) {
+    if (revealed.has(id)) return true;
+    seen.add(id);
+  }
+  return false;
 }
 
 /**

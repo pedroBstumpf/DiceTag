@@ -4,18 +4,7 @@ import { addEntry, removeEntry, setSoundMaster, updateEntry } from './entries';
 import { addWall, removeWall, setExplored, setFog, setFogMemory, toggleDoor, updateWall } from './fog';
 import { addStroke, eraseStrokes, restoreStrokes } from './drawings';
 import { addLevel, removeLevel, renameLevel, setLevelImage, setPlayerLevel } from './levels';
-import {
-  addLoreFolder,
-  addTableItem,
-  hideLoreItem,
-  moveLoreItem,
-  removeLoreFolder,
-  renameLoreFolder,
-  renameLoreItem,
-  restoreLoreItems,
-  toggleLoreFolderPublic,
-  updateTableItem,
-} from './lore';
+import { addTableItem, toggleLoreReveal, updateTableItem } from './lore';
 import { addNote, removeNote, updateNote } from './notes';
 import {
   addScene,
@@ -84,15 +73,8 @@ export const TABLE_COMMANDS = {
   // Chat
   addChatMessage,
   clearChat,
-  // Lore da mesa e itens criados na mesa
-  addLoreFolder,
-  renameLoreFolder,
-  toggleLoreFolderPublic,
-  removeLoreFolder,
-  renameLoreItem,
-  moveLoreItem,
-  hideLoreItem,
-  restoreLoreItems,
+  // Lore da mesa (pastas reveladas) e itens criados na mesa
+  toggleLoreReveal,
   addTableItem,
   updateTableItem,
 } as const;

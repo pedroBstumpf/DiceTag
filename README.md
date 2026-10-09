@@ -75,8 +75,8 @@ O mapa ocupa a tela inteira e as barras flutuam por cima — todas escondíveis:
   desenhar (D), névoa de guerra (F, só mestre) com paredes (W), anotação (N), efeitos especiais (E), zoom. A grade
   é ligada e desligada nas opções da cena.
 - **Direita — painel:** Chat (mensagens e rolagens), Fichas (personagens e NPCs — arraste para o mapa; a imagem enviada na ficha é a do
-  token; personagens abrem a ficha completa), Lore (itens do mundo da mesa, com pastas próprias da mesa; renomear e remover valem só para a mesa;
-  cada pasta tem um olho: os jogadores só leem as pastas que o mestre revelar), Sons (mixer), Ações (automações por personagem, NPC ou gerais do mestre).
+  token; personagens abrem a ficha completa), Lore (a árvore do mundo da mesa: o que o mestre muda ali muda o mundo;
+  cada pasta tem um olho, valendo só para aquela mesa: os jogadores só leem as pastas que o mestre revelar), Sons (mixer), Ações (automações por personagem, NPC ou gerais do mestre).
 - **Baixo — ações:** 10 espaços (teclas 1–0) com as ações de quem está agindo: o jogador vê as do personagem
   dele; o mestre escolhe no menu "Agindo" um personagem ou NPC fixo, as ações gerais ou seguir o token selecionado.
   À direita, o botão **Rolar** faz a rolagem básica (2d12 ou 3d6 + modificador na hora), somando se quiser as tags e

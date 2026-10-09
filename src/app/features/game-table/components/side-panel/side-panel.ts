@@ -4,10 +4,10 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { WORLD_ITEM_META, WorldItem } from '../../../../core/models/world-item.model';
-import { LoreFolder, TABLE_ENTRY_META, TableEntry, TableEntryKind, hasSheet } from '../../../../core/models/table-session.model';
+import { WorldItem } from '../../../../core/models/world-item.model';
+import { TABLE_ENTRY_META, TableEntry, TableEntryKind, hasSheet } from '../../../../core/models/table-session.model';
 import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
-import { WorldbuildService } from '../../../worldbuild/services/worldbuild.service';
+import { Explorer } from '../../../worldbuild/components/explorer/explorer';
 import { BlobUrlService } from '../../services/blob-url.service';
 import { TableSessionService } from '../../services/table-session.service';
 import { TOKEN_DRAG_TYPE } from '../map-layers/tokens-layer/tokens-layer';
@@ -17,49 +17,31 @@ import { SoundList } from '../sound-list/sound-list';
 /** Abas do painel lateral direito. */
 type PanelTab = 'chat' | 'sheets' | 'lore' | 'sounds' | 'automations';
 
-/** Id da janela que mostra as pastas do mundo da mesa (Worldbuild) dentro da mesa. */
-export const WORLDBUILD_WINDOW = 'worldbuild:explorer';
-
-/** O que a aba Lore usa de cada item (do mundo ou criado na mesa). */
-type LoreRowItem = Pick<WorldItem, 'id' | 'name' | 'type'>;
-
-/** Item da aba Lore com o nome desta mesa. */
-interface LoreRow {
-  item: LoreRowItem;
-  name: string;
-  /** Item criado nesta mesa por um jogador (TableState.items). */
-  table: boolean;
-}
-
 /**
  * Painel lateral direito da mesa, com abas:
  * - Chat: mensagens e resultados das rolagens
  * - Fichas: personagens e NPCs
- * - Lore: documentos, linhas do tempo, mapas, raças… do mundo da mesa, mais os
- *   itens criados na mesa pelos jogadores, organizados em pastas próprias da mesa
- *   (renomear/remover vale só aqui)
+ * - Lore: a árvore do mundo da mesa (o mesmo explorador do Worldbuild: o que o mestre muda
+ *   aqui muda no mundo) com o "olho" que revela pastas aos jogadores nesta mesa, mais os
+ *   itens criados na mesa pelos jogadores
  * - Sons: mixer de trilhas e ambientação (tocam direto na lista)
  * - Ações: automações agrupadas por dono (gerais do mestre, cada personagem, cada NPC)
  * Fichas, lore e automações abrem numa janela flutuante.
  */
 @Component({
   selector: 'app-side-panel',
-  imports: [NgTemplateOutlet, MatButtonModule, MatIconModule, MatMenuModule, MatTooltipModule, AutoFocus, SoundList, ChatPanel],
+  imports: [NgTemplateOutlet, MatButtonModule, MatIconModule, MatMenuModule, MatTooltipModule, AutoFocus, SoundList, ChatPanel, Explorer],
   templateUrl: './side-panel.html',
   host: { class: 'flex h-full flex-col' },
 })
 export class SidePanel {
   readonly session = inject(TableSessionService);
-  private readonly worldbuild = inject(WorldbuildService);
   private readonly blobs = inject(BlobUrlService);
-
-  /** Id da janela do explorador do mundo na mesa. */
-  readonly worldbuildWindow = WORLDBUILD_WINDOW;
 
   /** Pedido para abrir um arquivo (da mesa ou do worldbuild) numa janela. */
   readonly opened = output<string>();
-  /** Arquivo excluído (para fechar a janela). */
-  readonly removed = output<string>();
+  /** Arquivos excluídos (para fechar as janelas). */
+  readonly removed = output<string[]>();
 
   // --- Abas ----------------------------------------------------------------
   private readonly allTabs: { id: PanelTab; icon: string; label: string; gmOnly?: boolean }[] = [
@@ -80,7 +62,6 @@ export class SidePanel {
     this.chosenTab.set(tab);
   }
   readonly renamingId = signal<string | null>(null);
-  readonly query = signal('');
 
   /** Quantas mensagens do chat já foram vistas (para o aviso de novidade na aba). */
   private readonly seenChat = signal(0);
@@ -102,61 +83,18 @@ export class SidePanel {
 
   // --- Lore da mesa --------------------------------------------------------
 
-  /** O mestre organiza a Lore; o jogador só vê as pastas que o mestre revelou. */
+  /** O mestre edita a lore (o próprio mundo) e revela pastas; o jogador só lê o que foi revelado. */
   readonly isGm = computed(() => this.session.role() === 'gm');
 
-  /**
-   * Itens (exceto pastas) do mundo da mesa e os criados na mesa pelos jogadores, que não
-   * foram removidos desta mesa. Jogador: os que estão em pastas reveladas pelo mestre e os
-   * itens criados na mesa (registro dos feitos dos jogadores).
-   */
-  private readonly loreRows = computed<LoreRow[]>(() => {
-    const overrides = this.session.lore().items;
-    const rows = (items: LoreRowItem[], table: boolean) =>
-      items
-        .filter((i) => i.type !== 'folder' && !overrides[i.id]?.hidden && this.session.canSeeLoreItem(i.id))
-        .map((item) => ({ item, name: overrides[item.id]?.name ?? item.name, table }));
-    const tableItems = this.session.tableItems().map((i): LoreRowItem => ({ id: i.id, name: i.name, type: 'item' }));
-    return [...rows(this.worldbuild.items(), false), ...rows(tableItems, true)].sort((a, b) =>
-      a.name.localeCompare(b.name, 'pt-BR', { numeric: true }),
-    );
-  });
+  /** Filtro do explorador: o jogador só vê itens em pastas reveladas nesta mesa. */
+  readonly loreFilter = computed(() => (this.isGm() ? null : (id: string) => this.session.canSeeLoreItem(id)));
 
-  /** Pastas da mesa, em ordem alfabética (jogador: só as reveladas). */
-  readonly loreFolders = computed(() =>
-    this.session
-      .lore()
-      .folders.filter((f) => this.isGm() || f.public)
-      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { numeric: true })),
+  /** Itens criados nesta mesa pelos jogadores (registro dos feitos deles; todos veem). */
+  readonly tableItems = computed(() =>
+    [...this.session.tableItems()].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { numeric: true })),
   );
-
-  /** Itens agrupados por pasta da mesa (null = raiz; pasta inexistente também cai na raiz). */
-  private readonly loreByFolder = computed(() => {
-    const folderIds = new Set(this.session.lore().folders.map((f) => f.id));
-    const overrides = this.session.lore().items;
-    const groups = new Map<string | null, LoreRow[]>();
-    for (const row of this.loreRows()) {
-      const folderId = overrides[row.item.id]?.folderId;
-      const key = folderId && folderIds.has(folderId) ? folderId : null;
-      groups.set(key, [...(groups.get(key) ?? []), row]);
-    }
-    return groups;
-  });
-
-  /** Resultado da busca (lista plana) quando há texto digitado. */
-  readonly loreSearch = computed(() => {
-    const q = this.query().trim().toLowerCase();
-    return q ? this.loreRows().filter((r) => r.name.toLowerCase().includes(q)) : null;
-  });
-
-  /** Quantos itens foram removidos desta mesa (podem ser restaurados). */
-  readonly hiddenLoreCount = computed(() => Object.values(this.session.lore().items).filter((o) => o.hidden).length);
-
-  /** Pastas da mesa abertas na lista (só nesta sessão). */
-  readonly expandedFolders = signal(new Set<string>());
-  /** Pasta sob o item arrastado (null = raiz; undefined = nenhuma). */
-  readonly loreDropTarget = signal<string | null | undefined>(undefined);
-  private draggedLoreId: string | null = null;
+  /** Lista "Itens da mesa" aberta. */
+  readonly tableItemsOpen = signal(true);
 
   // --- Ações ---------------------------------------------------------------
 
@@ -211,97 +149,12 @@ export class SidePanel {
       : `Excluir "${entry.name}"?`;
     if (!confirm(question)) return;
     this.session.removeEntry(entry.id);
-    this.removed.emit(entry.id);
-  }
-
-  // --- Ações da Lore (valem só nesta mesa) -------------------------------
-
-  /** Itens de uma pasta da mesa (null = raiz). */
-  loreIn(folderId: string | null): LoreRow[] {
-    return this.loreByFolder().get(folderId) ?? [];
-  }
-
-  createLoreFolder(): void {
-    const folder = this.session.addLoreFolder();
-    this.renamingId.set(folder.id);
-  }
-
-  toggleFolder(id: string): void {
-    this.setFolderOpen(id, !this.expandedFolders().has(id));
-  }
-
-  finishFolderRename(folder: LoreFolder, value: string): void {
-    if (this.renamingId() !== folder.id) return;
-    this.session.renameLoreFolder(folder.id, value);
-    this.renamingId.set(null);
-  }
-
-  removeLoreFolder(folder: LoreFolder): void {
-    if (!confirm(`Excluir a pasta "${folder.name}"? Os itens dela voltam para a lista principal.`)) return;
-    this.session.removeLoreFolder(folder.id);
-  }
-
-  finishLoreRename(row: LoreRow, value: string): void {
-    if (this.renamingId() !== row.item.id) return;
-    this.session.renameLoreItem(row.item, value);
-    this.renamingId.set(null);
-  }
-
-  /** Remove o item só da aba Lore desta mesa (o original continua no mundo / inventários). */
-  hideLore(row: LoreRow): void {
-    const where = row.table ? 'nos inventários dos personagens' : 'no Worldbuild do mundo';
-    if (!confirm(`Remover "${row.name}" da aba Lore desta mesa? O item continua ${where}.`)) return;
-    this.session.hideLoreItem(row.item.id);
-    this.removed.emit(row.item.id);
-  }
-
-  // --- Arrastar itens da Lore para as pastas da mesa ---------------------
-
-  onLoreDragStart(event: DragEvent, row: LoreRow): void {
-    if (!this.isGm()) return;
-    this.draggedLoreId = row.item.id;
-    event.dataTransfer?.setData('text/plain', row.name);
-    if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
-  }
-
-  onLoreDragEnd(): void {
-    this.draggedLoreId = null;
-    this.loreDropTarget.set(undefined);
-  }
-
-  /** Aceita soltar sobre uma pasta (folderId) ou na lista principal (null). */
-  onLoreDragOver(event: DragEvent, folderId: string | null): void {
-    if (!this.draggedLoreId) return;
-    event.preventDefault();
-    event.stopPropagation();
-    this.loreDropTarget.set(folderId);
-  }
-
-  onLoreDrop(event: DragEvent, folderId: string | null): void {
-    if (!this.draggedLoreId) return;
-    event.preventDefault();
-    event.stopPropagation();
-    this.session.moveLoreItem(this.draggedLoreId, folderId);
-    if (folderId) this.setFolderOpen(folderId, true);
-    this.onLoreDragEnd();
-  }
-
-  private setFolderOpen(id: string, open: boolean): void {
-    this.expandedFolders.update((set) => {
-      const next = new Set(set);
-      if (open) next.add(id);
-      else next.delete(id);
-      return next;
-    });
+    this.removed.emit([entry.id]);
   }
 
   /** Ícone/cor de um tipo de arquivo (tipado para os templates). */
   metaOf(kind: TableEntryKind) {
     return TABLE_ENTRY_META[kind];
-  }
-
-  loreMeta(item: LoreRowItem) {
-    return WORLD_ITEM_META[item.type];
   }
 
   private byKind(kind: TableEntryKind): TableEntry[] {

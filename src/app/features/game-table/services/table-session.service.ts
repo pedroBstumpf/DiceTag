@@ -16,7 +16,6 @@ import {
   MapLevel,
   SceneFolder,
   RollResult,
-  LoreFolder,
   METERS_PER_SQUARE,
   MapNote,
   NOTE_COLORS,
@@ -193,7 +192,7 @@ export class TableSessionService extends SheetStore {
   readonly entryById = computed(() => new Map(this.entries().map((e) => [e.id, e])));
   /** Volume mestre dos sons (0–1). */
   readonly soundMaster = computed(() => this.state().soundMaster ?? 1);
-  /** Organização da aba Lore nesta mesa (pastas e ajustes locais). */
+  /** Aba Lore nesta mesa: as pastas do mundo reveladas aos jogadores. */
   readonly lore = computed(() => this.state().lore ?? EMPTY_LORE);
 
   // --- Vista isométrica e camadas do mapa (cena ativa) ---------------------
@@ -1180,58 +1179,28 @@ export class TableSessionService extends SheetStore {
     return true;
   }
 
-  // --- Lore da mesa (pastas e ajustes locais) -----------------------------
-  // Nada aqui altera ou apaga os itens do mundo.
+  // --- Lore da mesa (pastas do mundo reveladas) ----------------------------
+  // A aba Lore espelha a árvore do mundo: criar, renomear, mover e excluir vão
+  // direto para o WorldbuildService. A mesa guarda só o que foi revelado.
 
-  /** Nome do item da lore nesta mesa (o local, se renomeado aqui). */
-  loreName(item: { id: string; name: string }): string {
-    return this.lore().items[item.id]?.name ?? item.name;
-  }
+  /** Pastas do mundo reveladas aos jogadores nesta mesa. */
+  readonly revealedLore = computed(() => new Set(this.lore().revealed));
 
-  /** Cria uma pasta na aba Lore ("Nova pasta", "Nova pasta 2"…). */
-  addLoreFolder(): LoreFolder {
-    const folder: LoreFolder = { id: newId(), name: uniqueName('Nova pasta', this.lore().folders.map((f) => f.name)) };
-    this.dispatch('addLoreFolder', { folder });
-    return folder;
-  }
-
-  renameLoreFolder(id: string, name: string): void {
-    this.dispatch('renameLoreFolder', { folderId: id, name });
-  }
-
-  /** Mestre: revela ou esconde dos jogadores tudo o que está na pasta. */
-  toggleLoreFolderPublic(id: string): void {
-    this.dispatch('toggleLoreFolderPublic', { folderId: id });
+  /** Mestre: revela ou esconde dos jogadores uma pasta do mundo (e tudo dentro dela). */
+  toggleLoreReveal(folderId: string): void {
+    this.dispatch('toggleLoreReveal', { folderId });
   }
 
   /** O jogador pode ver este item da lore? (regra em `rules.canSeeLoreItem`; o mestre vê tudo) */
   canSeeLoreItem(itemId: string): boolean {
-    return rules.canSeeLoreItem(this.lore(), itemId, this.tableItemById().has(itemId), this.viewer());
-  }
-
-  /** Exclui a pasta da mesa; os itens dela voltam para a raiz da aba Lore. */
-  removeLoreFolder(id: string): void {
-    this.dispatch('removeLoreFolder', { folderId: id });
-  }
-
-  /** Renomeia o item só nesta mesa (nome vazio ou igual ao original volta ao original). */
-  renameLoreItem(item: { id: string; name: string }, name: string): void {
-    this.dispatch('renameLoreItem', { itemId: item.id, originalName: item.name, name });
-  }
-
-  /** Move o item para uma pasta da mesa (null = raiz). */
-  moveLoreItem(itemId: string, folderId: string | null): void {
-    this.dispatch('moveLoreItem', { itemId, folderId });
-  }
-
-  /** Remove o item desta mesa (o original continua no mundo). */
-  hideLoreItem(itemId: string): void {
-    this.dispatch('hideLoreItem', { itemId });
-  }
-
-  /** Traz de volta todos os itens removidos desta mesa. */
-  restoreLoreItems(): void {
-    this.dispatch('restoreLoreItems', {});
+    const byId = this.worldbuild.byId();
+    return rules.canSeeLoreItem(
+      this.revealedLore(),
+      (id) => byId.get(id)?.parentId,
+      itemId,
+      this.tableItemById().has(itemId),
+      this.viewer(),
+    );
   }
 
   // --- Itens da mesa (criados por jogadores, fora do Worldbuild) -----------

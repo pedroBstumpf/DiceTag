@@ -392,22 +392,19 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - **Janela por tipo:** personagem, NPC e token de NPC (`npc:<id do token>`) abrem a ficha completa
   (`CharacterSheetView`, janela `sheet`, 880×700); NPC do bestiário aberto pelo explorador = janela `npc`
   (`appWorldNpcSheet`); automação abre a `EntryWindow`; item equipado (`equip:…`) abre a `EquippedItemWindow`. Sem permissão, `content()` → null (não abre).
-- **Lore** não é duplicada: a aba Lore lista os itens (exceto pastas) do **mundo da mesa** e os abre com os mesmos
-  editores. "Abrir pastas do mundo" abre o `Explorer` numa janela (`worldbuild:explorer`) **sem sair da mesa**.
-- **Organização da Lore por mesa (`TableState.lore`):** pastas próprias da mesa (um nível, `LoreFolder`) e
-  ajustes por item (`LoreItemOverride { name?, folderId?, hidden? }`). Renomear muda só o nome **nesta mesa**
-  (vazio = volta ao original; o título da janela usa `loreName`); a lixeira **esconde** o item desta mesa
-  ("Restaurar N itens" traz de volta); excluir pasta devolve os itens à raiz. **Nunca** altera nem apaga o
-  original. Itens entram nas pastas arrastando.
-- **Lore x jogadores:** cada pasta da mesa tem um **olho** (`LoreFolder.public`, fechado por padrão). O jogador só vê
-  as pastas reveladas e os itens dentro delas (`canSeeLoreItem`; itens soltos na raiz são só do mestre) e os abre
-  em **só leitura** (`readonly` em DocumentEditor/RichTextEditor `editable`, TimelineEditor, ItemCard e na ficha do
-  NPC do bestiário). Organizar a aba (pastas, renomear, remover, arrastar) e abrir o explorador do mundo é só do
-  mestre; no papel de jogador essa janela não abre (`content()` → null).
-- **Itens criados na mesa** (`TableState.items`) também entram na aba Lore (ícone verde de mesa) e ficam **visíveis aos
-  jogadores** na raiz ou em pasta revelada (registro dos feitos deles, sem criar o item duas vezes). O mestre os organiza
-  como os demais (pastas, renomear, remover da aba). Abrem na janela `TableItemWindow` (tipo `table-item`): editável
-  por quem criou e pelo mestre.
+- **Aba Lore = a árvore do mundo da mesa.** É o mesmo `Explorer` do Worldbuild, embutido no painel (não há cópia nem
+  organização própria da mesa): o que o mestre cria, renomeia, move ou exclui ali (com confirmação) **muda o mundo**, e
+  o que muda no Worldbuild aparece na mesa (mesmo `WorldbuildService`). Itens abrem nos mesmos editores.
+- **Lore x jogadores:** cada pasta tem um **olho** que vale **só nesta mesa** (`TableState.lore.revealed` = ids das pastas
+  do mundo, comando `toggleLoreReveal`; fechado por padrão). Revelar uma pasta revela tudo dentro dela, inclusive
+  subpastas (no explorador, o olho delas fica aceso e esmaecido). O jogador vê o explorador em **só leitura**
+  (`Explorer` `readonly` + filtro `visible`; pastas reveladas aparecem na raiz) e só abre o que está em pasta revelada
+  (`canSeeLoreItem`, que sobe pelos `parentId`); abre em só leitura (`readonly` em DocumentEditor/RichTextEditor
+  `editable`, TimelineEditor, ItemCard e na ficha do NPC do bestiário). Mesas antigas tinham pastas e nomes próprios na
+  aba Lore: `normalizeState` os descarta e a mesa abre sem nada revelado.
+- **Itens criados na mesa** (`TableState.items`) ficam na seção "Itens da mesa", abaixo do explorador, **visíveis a
+  todos** (registro dos feitos dos jogadores). Abrem na janela `TableItemWindow` (tipo `table-item`): editável por
+  quem criou e pelo mestre.
 - **Grade:** escondida (menu da cena: "Remover grade") = tokens e paredes se movem livres; visível = alinham (Shift = livre).
   Não há botão nem atalho de grade na barra de ferramentas.
 - **Papel (`role`)**: alternado manualmente na barra de ações (Mestre/Jogador, `session.setRole`) — não há permissões
@@ -426,8 +423,7 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   gravados por `updateSheet(entryId, patch)`.
 - **Aba Ficha** — cards em grade (container query):
   - **Básico:** imagem (= token), nome, raça, sub-raça, jogador dono ("Vincular à minha conta") e **rótulos** (texto livre, Enter adiciona).
-    **Raça e sub-raça** são listas com as Raças do mundo aberto (na mesa, o mundo dela, menos as removidas da aba Lore
-    desta mesa). Escolher aplica (`applyRace`, puro em `utils/race.ts` + spec):
+    **Raça e sub-raça** são listas com as Raças do mundo aberto (na mesa, o mundo dela). Escolher aplica (`applyRace`, puro em `utils/race.ts` + spec):
     as características da raça viram **rótulos** e os `statusMods` somam ao **máximo** de Corpo/Mente/Espírito (o valor atual
     acompanha, entre 0 e o máximo; máximo ≥ 1). Raça e sub-raça somam; trocar ou limpar um campo desfaz só o que ele
     aplicou (`CharacterSheet.appliedRaces`; `raceRef`/`subraceRef` guardam a escolha). Fichas antigas com texto livre

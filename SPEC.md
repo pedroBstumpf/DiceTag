@@ -51,7 +51,7 @@ Não usar CRDT no estado da mesa: é complexo demais para o ganho. A exceção �
 
 | Hoje | Problema com duas pessoas | Mudança |
 |---|---|---|
-| `toggleDoor`, `toggleTokenPublic`, `toggleLoreFolderPublic` | Dois cliques ao mesmo tempo se anulam | Trocar por "definir" com o valor final: `setDoorOpen { open }`, `setTokenPublic { part, value }`… |
+| `toggleDoor`, `toggleTokenPublic`, `toggleLoreReveal` | Dois cliques ao mesmo tempo se anulam | Trocar por "definir" com o valor final: `setDoorOpen { open }`, `setTokenPublic { part, value }`… |
 | Ficha gravada inteira (`updateEntry { sheet }`, `updatePlacement { sheet }` montados com `{ ...fichaAtual, ...patch }`) | Um apaga a alteração do outro: o cliente lê a ficha, muda um campo e regrava tudo | Comandos de ficha por campo ou por item: `setSheetField`, `addInventoryItem`, `setInventoryQuantity`, `setTagLevel`… |
 | `transferItem`, `buyItem`, `lootItem` (várias gravações no cliente) | Dois jogadores comprando a última unidade duplicam o item | **Um comando só, executado no servidor**, que confere estoque e Eiros e faz tudo de uma vez |
 | `updateScene { patch }` genérico | O servidor não sabe o que está sendo alterado (permissão) | Comandos específicos para os campos que o jogador pode mexer; o patch genérico fica só para o mestre |

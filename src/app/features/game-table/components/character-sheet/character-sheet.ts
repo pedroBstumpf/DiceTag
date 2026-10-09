@@ -239,14 +239,12 @@ export class CharacterSheetView {
     { id: 'subrace', label: 'Sub-raça' },
   ];
 
-  /** Raças que podem ser escolhidas: as do mundo aberto (na mesa, o mundo dela, sem as removidas da aba Lore). */
-  readonly raceOptions = computed(() => {
-    const hidden = this.session?.lore().items ?? {};
-    const options: { key: string; ref: RaceRef; item: WorldItem }[] = this.worldbuild
+  /** Raças que podem ser escolhidas: as do mundo aberto (na mesa, o mundo dela). */
+  readonly raceOptions = computed(() =>
+    this.worldbuild
       .worldRaces()
-      .map((item) => ({ key: raceKey({ id: item.id }), ref: { id: item.id }, item }));
-    return options.filter((o) => !hidden[o.item.id]?.hidden);
-  });
+      .map((item): { key: string; ref: RaceRef; item: WorldItem } => ({ key: raceKey({ id: item.id }), ref: { id: item.id }, item })),
+  );
 
   /** Chave da raça escolhida no campo (vazia = nenhuma). */
   raceKeyOf(slot: RaceSlot): string {

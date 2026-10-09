@@ -10,7 +10,6 @@ import { GameTablesService } from '../../core/services/game-tables.service';
 import { FloatingWindow } from '../../shared/components/floating-window/floating-window';
 import { WindowManagerService } from '../../shared/services/window-manager.service';
 import { DocumentEditor } from '../worldbuild/components/document-editor/document-editor';
-import { Explorer } from '../worldbuild/components/explorer/explorer';
 import { ImageViewer } from '../worldbuild/components/image-viewer/image-viewer';
 import { ItemCard } from '../worldbuild/components/item-card/item-card';
 import { RaceCard } from '../worldbuild/components/race-card/race-card';
@@ -28,7 +27,7 @@ import { inventoryRow } from './utils/inventory';
 import { TableItemWindow } from './components/table-item-window/table-item-window';
 import { MapStage } from './components/map-stage/map-stage';
 import { SceneBar } from './components/scene-bar/scene-bar';
-import { SidePanel, WORLDBUILD_WINDOW } from './components/side-panel/side-panel';
+import { SidePanel } from './components/side-panel/side-panel';
 import { TABLE_TOOLS, ToolBar, toolAllowed } from './components/tool-bar/tool-bar';
 import { TokenWindow } from './components/token-window/token-window';
 import { BlobUrlService } from './services/blob-url.service';
@@ -43,7 +42,7 @@ interface WindowContent {
   icon: string;
   color: string;
   /** Tipo de conteúdo, usado para escolher o componente. */
-  type: 'entry' | 'sheet' | 'token' | 'equipped' | 'table-item' | 'explorer' | 'document' | 'timeline' | 'image' | 'item' | 'npc' | 'race';
+  type: 'entry' | 'sheet' | 'token' | 'equipped' | 'table-item' | 'document' | 'timeline' | 'image' | 'item' | 'npc' | 'race';
 }
 
 /** Prefixo do id das janelas "Token" (token:<id do token colocado>). */
@@ -56,7 +55,6 @@ const WINDOW_SIZES: Record<WindowContent['type'], { width: number; height: numbe
   token: { width: 460, height: 560 },
   equipped: { width: 420, height: 600 },
   'table-item': { width: 420, height: 600 },
-  explorer: { width: 340, height: 540 },
   document: { width: 720, height: 600 },
   timeline: { width: 620, height: 560 },
   image: { width: 720, height: 520 },
@@ -98,7 +96,6 @@ const PANEL_SPACE = { top: 60, left: 76, right: 344, bottom: 100 };
     EquippedItemWindow,
     TableItemWindow,
     WorldNpcSheet,
-    Explorer,
     DocumentEditor,
     TimelineEditor,
     ImageViewer,
@@ -135,7 +132,7 @@ export class GameTablePage {
   readonly id = input.required<string>();
 
   readonly table = computed(() => this.tables.getById(this.id()));
-  /** Mestre: único que acessa o Worldbuild na mesa e edita a lore (o jogador só lê o que foi revelado). */
+  /** Mestre: único que edita a lore na mesa (o jogador só lê o que foi revelado). */
   readonly isGm = computed(() => this.session.role() === 'gm');
   readonly tablesLoaded = this.tables.loaded;
 
@@ -182,10 +179,6 @@ export class GameTablePage {
 
   /** Descobre o que mostrar numa janela (arquivo/token da mesa ou item do mundo da mesa). */
   content(id: string): WindowContent | null {
-    // O explorador do mundo é só do mestre
-    if (id === WORLDBUILD_WINDOW) {
-      return this.isGm() ? { title: this.worldbuild.title(), icon: 'public', color: 'text-sky-300', type: 'explorer' } : null;
-    }
     if (id.startsWith(TOKEN_WINDOW)) {
       const token = this.session.resolvedTokenById(id.slice(TOKEN_WINDOW.length));
       return token ? { title: `Token: ${token.name}`, icon: 'token', color: TABLE_ENTRY_META[token.entry.kind].color, type: 'token' } : null;
@@ -218,14 +211,13 @@ export class GameTablePage {
     const tableItem = this.session.tableItemById().get(id);
     if (tableItem) {
       if (!this.session.canSeeLoreItem(id)) return null;
-      return { title: this.session.loreName(tableItem), icon: 'inventory_2', color: 'text-amber-300', type: 'table-item' };
+      return { title: tableItem.name, icon: 'inventory_2', color: 'text-amber-300', type: 'table-item' };
     }
-    // Itens da lore: o título usa o nome desta mesa (pode ter sido renomeado só aqui).
-    // O jogador só abre itens de pastas da aba Lore que o mestre revelou.
+    // Itens do mundo da mesa: o jogador só abre os que estão em pastas reveladas nesta mesa
     const item = this.worldbuild.byId().get(id);
     if (item && item.type !== 'folder' && this.session.canSeeLoreItem(item.id)) {
       const meta = WORLD_ITEM_META[item.type];
-      return { title: this.session.loreName(item), icon: meta.icon, color: meta.color, type: item.type };
+      return { title: item.name, icon: meta.icon, color: meta.color, type: item.type };
     }
     return null;
   }

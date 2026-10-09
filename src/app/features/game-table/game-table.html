@@ -33,7 +33,7 @@
           <mat-icon class="!text-[18px]">right_panel_close</mat-icon>
         </button>
       </header>
-      <app-side-panel class="min-h-0 flex-1" (opened)="open($event)" (removed)="windows.close($event)" />
+      <app-side-panel class="min-h-0 flex-1" (opened)="open($event)" (removed)="windows.closeMany($event)" />
     </aside>
   }
 
@@ -89,10 +89,6 @@
           }
           <!-- Lore: itens do mundo da mesa, com os mesmos componentes do Worldbuild. Jogador: só leitura -->
           @switch (c.type) {
-            @case ('explorer') {
-              <!-- Pastas do mundo dentro da mesa: os itens abrem em janelas aqui mesmo -->
-              <app-explorer [hideable]="false" (opened)="open($event)" (removed)="windows.closeMany($event)" />
-            }
             @case ('document') {
               <app-document-editor [itemId]="win.id" [readonly]="!isGm()" />
             }

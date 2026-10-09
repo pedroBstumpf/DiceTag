@@ -28,9 +28,11 @@
     <h2 class="min-w-0 flex-1 truncate font-display text-base text-star-300">{{ service.title() }}</h2>
   }
 
-  <button mat-icon-button matTooltip="Criar" [matMenuTriggerFor]="createMenu" [matMenuTriggerData]="{ parentId: null }">
-    <mat-icon>add</mat-icon>
-  </button>
+  @if (!readonly()) {
+    <button mat-icon-button matTooltip="Criar" [matMenuTriggerFor]="createMenu" [matMenuTriggerData]="{ parentId: null }">
+      <mat-icon>add</mat-icon>
+    </button>
+  }
   @if (hideable()) {
     <button mat-icon-button matTooltip="Esconder painel" (click)="hide.emit()">
       <mat-icon>left_panel_close</mat-icon>
@@ -81,18 +83,20 @@
   <!-- ===== Lista plana de um tipo (Itens, NPCs, Raças, Linhas do tempo, Documentos, Mapas) ===== -->
   <div class="min-h-0 flex-1 overflow-y-auto px-2 py-3">
     <h3 class="mb-2 px-2 text-xs font-semibold uppercase tracking-widest text-slate-500">{{ lv.label }}</h3>
-    <button
-      type="button"
-      class="mb-2 flex h-9 w-full items-center gap-2 rounded-lg border border-dashed border-white/10 px-3 text-sm text-astral-300 transition-colors hover:border-astral-400/40 hover:bg-astral-500/10"
-      (click)="createInView(lv, fileInput)"
-    >
-      <mat-icon class="!size-5 !text-[20px]">{{ lv.id === 'image' ? 'add_photo_alternate' : 'add' }}</mat-icon>
-      {{ lv.newLabel }}
-    </button>
+    @if (!readonly()) {
+      <button
+        type="button"
+        class="mb-2 flex h-9 w-full items-center gap-2 rounded-lg border border-dashed border-white/10 px-3 text-sm text-astral-300 transition-colors hover:border-astral-400/40 hover:bg-astral-500/10"
+        (click)="createInView(lv, fileInput)"
+      >
+        <mat-icon class="!size-5 !text-[20px]">{{ lv.id === 'image' ? 'add_photo_alternate' : 'add' }}</mat-icon>
+        {{ lv.newLabel }}
+      </button>
+    }
     @for (item of itemResults(); track item.id) {
       <ng-container *ngTemplateOutlet="row; context: { $implicit: item, depth: 0 }" />
     } @empty {
-      <p class="px-3 py-6 text-center text-sm text-slate-500">{{ query() ? 'Nada encontrado.' : lv.empty }}</p>
+      <p class="px-3 py-6 text-center text-sm text-slate-500">{{ query() ? 'Nada encontrado.' : readonly() ? 'Nada revelado aqui ainda.' : lv.empty }}</p>
     }
   </div>
 
@@ -107,14 +111,16 @@
   (drop)="onDrop($event, null)"
 >
   <!-- Nova pasta na raiz (os demais tipos ficam no "+" do cabeçalho e nas outras abas) -->
-  <button
-    type="button"
-    class="mb-2 flex h-9 w-full items-center gap-2 rounded-lg border border-dashed border-white/10 px-3 text-sm text-astral-300 transition-colors hover:border-astral-400/40 hover:bg-astral-500/10"
-    (click)="create('folder')"
-  >
-    <mat-icon class="!size-5 !text-[20px]">create_new_folder</mat-icon>
-    Nova pasta
-  </button>
+  @if (!readonly()) {
+    <button
+      type="button"
+      class="mb-2 flex h-9 w-full items-center gap-2 rounded-lg border border-dashed border-white/10 px-3 text-sm text-astral-300 transition-colors hover:border-astral-400/40 hover:bg-astral-500/10"
+      (click)="create('folder')"
+    >
+      <mat-icon class="!size-5 !text-[20px]">create_new_folder</mat-icon>
+      Nova pasta
+    </button>
+  }
   @if (searchResults(); as results) {
     <!-- Resultado de busca: lista plana -->
     @for (item of results; track item.id) {
@@ -122,8 +128,10 @@
     } @empty {
       <p class="px-3 py-6 text-center text-sm text-slate-500">Nada encontrado.</p>
     }
-  } @else if (service.childrenOf(null).length) {
+  } @else if (childrenOf(null).length) {
     <ng-container *ngTemplateOutlet="tree; context: { $implicit: null, depth: 0 }" />
+  } @else if (readonly()) {
+    <p class="px-3 py-6 text-center text-sm text-slate-500">O mestre ainda não revelou nada da lore.</p>
   } @else {
     <!-- Worldbuild vazio -->
     <div class="flex flex-col items-center gap-3 px-4 py-10 text-center">
@@ -137,9 +145,11 @@
   }
 </div>
 
-<p class="shrink-0 border-t border-white/5 px-4 py-2 text-[11px] text-slate-500">
-  Arraste itens para organizar · solte imagens para enviar
-</p>
+@if (!readonly()) {
+  <p class="shrink-0 border-t border-white/5 px-4 py-2 text-[11px] text-slate-500">
+    Arraste itens para organizar · solte imagens para enviar
+  </p>
+}
 }
 
 <!-- Entrada de arquivo oculta (envio de mapas/imagens) -->
@@ -151,7 +161,7 @@
 
 <!-- Nível da árvore (recursivo) -->
 <ng-template #tree let-parentId let-depth="depth">
-  @for (item of service.childrenOf(parentId); track item.id) {
+  @for (item of childrenOf(parentId); track item.id) {
     <ng-container *ngTemplateOutlet="row; context: { $implicit: item, depth: depth }" />
     @if (item.type === 'folder' && expanded().has(item.id)) {
       <ng-container *ngTemplateOutlet="tree; context: { $implicit: item.id, depth: depth + 1 }" />
@@ -165,13 +175,13 @@
     class="group flex h-9 cursor-pointer select-none items-center gap-1.5 rounded-lg pr-1 text-sm text-slate-300 transition-colors hover:bg-white/5"
     [class]="dropTargetId() === item.id ? '!bg-astral-500/20 ring-1 ring-astral-500/50' : ''"
     [style.padding-left.px]="6 + depth * 16"
-    draggable="true"
+    [attr.draggable]="readonly() ? null : 'true'"
     (dragstart)="onDragStart($event, item)"
     (dragend)="onDragEnd()"
     (dragover)="onDragOver($event, item.type === 'folder' ? item.id : item.parentId)"
     (drop)="onDrop($event, item.type === 'folder' ? item.id : item.parentId)"
     (click)="activate(item)"
-    (dblclick)="renamingId.set(item.id)"
+    (dblclick)="!readonly() && renamingId.set(item.id)"
   >
     <!-- Seta (somente pastas) -->
     @if (item.type === 'folder') {
@@ -202,17 +212,42 @@
       <span class="min-w-0 flex-1 truncate">{{ item.name }}</span>
     }
 
+    <!-- Olho (aba Lore da mesa, mestre): revela a pasta e tudo dentro dela aos jogadores -->
+    @if (item.type === 'folder' && revealed()) {
+      @let state = revealOf(item);
+      @if (state === 'inherited') {
+        <!-- Já visível por uma pasta acima: o olho fica aceso, sem botão -->
+        <span class="grid size-7 shrink-0 place-items-center text-emerald-300/40" matTooltip="Visível: uma pasta acima está revelada">
+          <mat-icon class="!text-[16px]">visibility</mat-icon>
+        </span>
+      } @else {
+        <button
+          type="button"
+          class="grid size-7 shrink-0 place-items-center rounded-md hover:bg-white/10"
+          [class]="state === 'revealed' ? 'text-emerald-300' : 'text-slate-600 hover:text-slate-300'"
+          [attr.aria-label]="state === 'revealed' ? 'Esconder dos jogadores' : 'Revelar aos jogadores'"
+          [attr.aria-pressed]="state === 'revealed'"
+          [matTooltip]="state === 'revealed' ? 'Visível para os jogadores nesta mesa (clique para esconder)' : 'Escondida dos jogadores (clique para revelar nesta mesa)'"
+          (click)="$event.stopPropagation(); revealToggled.emit(item.id)"
+        >
+          <mat-icon class="!text-[16px]">{{ state === 'revealed' ? 'visibility' : 'visibility_off' }}</mat-icon>
+        </button>
+      }
+    }
+
     <!-- Menu de opções (aparece ao passar o mouse) -->
-    <button
-      type="button"
-      class="grid size-7 shrink-0 place-items-center rounded-md text-slate-400 opacity-0 transition-opacity hover:bg-white/10 hover:text-slate-100 focus:opacity-100 group-hover:opacity-100 max-lg:opacity-100"
-      aria-label="Opções"
-      [matMenuTriggerFor]="itemMenu"
-      [matMenuTriggerData]="{ item: item }"
-      (click)="$event.stopPropagation()"
-    >
-      <mat-icon class="!size-[18px] !text-[18px]">more_horiz</mat-icon>
-    </button>
+    @if (!readonly()) {
+      <button
+        type="button"
+        class="grid size-7 shrink-0 place-items-center rounded-md text-slate-400 opacity-0 transition-opacity hover:bg-white/10 hover:text-slate-100 focus:opacity-100 group-hover:opacity-100 max-lg:opacity-100"
+        aria-label="Opções"
+        [matMenuTriggerFor]="itemMenu"
+        [matMenuTriggerData]="{ item: item }"
+        (click)="$event.stopPropagation()"
+      >
+        <mat-icon class="!size-[18px] !text-[18px]">more_horiz</mat-icon>
+      </button>
+    }
   </div>
 </ng-template>
 
