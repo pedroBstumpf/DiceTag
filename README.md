@@ -110,7 +110,8 @@ Clicar num personagem no painel abre a ficha, com quatro abas:
 
 ### Ficha de NPC, bestiário e lojas
 A ficha de NPC é igual à de personagem (inclusive os itens **equipados**), sem Anotações e sem Relações. As fichas base ficam no **bestiário**
-(aba "NPCs" do Worldbuild); o NPC no painel da mesa é só uma referência a ela. Cada **token** de NPC colocado no
+(aba "NPCs" do Worldbuild); o NPC no painel da mesa é só uma referência a ela. As **habilidades** também ficam no
+NPC do bestiário e valem em todas as mesas do mundo. Cada **token** de NPC colocado no
 mapa é uma cópia individual — duplo clique abre a ficha daquele token, com status, etiquetas, temas e inventário
 próprios, sem mexer no NPC do painel nem no bestiário. NPCs são do mestre, que pode:
 - dar o **controle** de um NPC a um jogador específico (ele passa a ver, editar e usar o NPC);

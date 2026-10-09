@@ -59,6 +59,7 @@ import { clampLevelIn, levelCountOf } from '../state/levels';
 import * as rules from '../state/permissions';
 import { SheetAccess, Viewer } from '../state/permissions';
 import { EMPTY_LORE, EMPTY_STATE, normalizeState } from '../state/table-state';
+import { npcAbilitiesOf, toStoredAbility, withAbility, withoutAbility } from '../state/npc-abilities';
 import { ResolvedToken, TokenPatch, copyPlacement, resolveToken, splitTokenPatch } from '../state/tokens';
 
 // Tipos e auxiliares que os componentes já importam daqui (moram em state/)
@@ -181,13 +182,25 @@ export class TableSessionService extends SheetStore {
 
   readonly loaded = signal(false);
   readonly scenes = computed(() => this.state().scenes);
-  /** Arquivos da mesa; NPC-referência mostra sempre o nome atual da ficha base. */
-  readonly entries = computed(() =>
-    this.state().entries.map((e) => {
+  /**
+   * Habilidades dos NPCs-referência: moram no NPC do mundo e aparecem aqui como ações
+   * do NPC (valem em todas as mesas do mundo).
+   */
+  private readonly npcAbilities = computed(() => npcAbilitiesOf(this.state().entries, (e) => this.worldNpcOf(e)));
+  /** NPC do mundo onde mora cada habilidade (id da ação → id do NPC). */
+  private readonly abilityHome = computed(() => new Map(this.npcAbilities().map((a) => [a.entry.id, a.npcId])));
+
+  /**
+   * Arquivos da mesa; NPC-referência mostra sempre o nome atual da ficha base, e as
+   * habilidades dele (do mundo) entram como ações.
+   */
+  readonly entries = computed(() => [
+    ...this.state().entries.map((e) => {
       const base = this.worldNpcOf(e);
       return base && base.name !== e.name ? { ...e, name: base.name } : e;
     }),
-  );
+    ...this.npcAbilities().map((a) => a.entry),
+  ]);
   readonly activeScene = computed(() => this.scenes().find((s) => s.id === this.state().activeSceneId) ?? null);
   readonly entryById = computed(() => new Map(this.entries().map((e) => [e.id, e])));
   /** Volume mestre dos sons (0–1). */
@@ -641,6 +654,20 @@ export class TableSessionService extends SheetStore {
       this.activeSceneId();
       untracked(() => this.gmLevel.set(this.activeScene()?.playerLevel ?? 0));
     });
+
+    // Ações de NPCs-referência criadas antes (gravadas na mesa) passam a morar no NPC do mundo,
+    // com o mesmo id. Só move quando o NPC do mundo está carregado (o mundo certo).
+    effect(() => {
+      if (!this.loaded()) return;
+      const legacy = this.state().entries.filter((e) => e.kind === 'automation' && !!this.abilityTarget(e.ownerEntryId));
+      if (!legacy.length) return;
+      untracked(() => {
+        for (const action of legacy) {
+          this.dispatch('removeEntry', { entryId: action.id });
+          this.placeEntry(action);
+        }
+      });
+    });
   }
 
   // --- Carregamento --------------------------------------------------------
@@ -835,8 +862,21 @@ export class TableSessionService extends SheetStore {
       ...(kind === 'character' && { ownerUserId: this.auth.user()?.id }),
       ...extra,
     };
-    this.dispatch('addEntry', { entry });
+    this.placeEntry(entry);
     return entry;
+  }
+
+  /** Grava uma entrada nova: habilidade de NPC-referência vai para o NPC do mundo; o resto, para a mesa. */
+  private placeEntry(entry: TableEntry): void {
+    const npc = entry.kind === 'automation' ? this.abilityTarget(entry.ownerEntryId) : undefined;
+    if (npc) this.worldbuild.update(npc.id, { abilities: withAbility(npc.abilities, toStoredAbility(entry)) });
+    else this.dispatch('addEntry', { entry });
+  }
+
+  /** NPC do mundo que guarda as ações deste dono (só NPC-referência). */
+  private abilityTarget(ownerEntryId: string | undefined): WorldItem | undefined {
+    const owner = ownerEntryId ? this.state().entries.find((e) => e.id === ownerEntryId) : undefined;
+    return owner ? this.worldNpcOf(owner) : undefined;
   }
 
   /** Envia um arquivo de áudio e cria o som correspondente. */
@@ -856,12 +896,38 @@ export class TableSessionService extends SheetStore {
     this.dispatch('setSoundMaster', { volume });
   }
 
+  /**
+   * Altera um arquivo. Habilidade de NPC-referência é gravada no NPC do mundo; trocar o dono
+   * de uma ação a muda de lugar (mesa ↔ NPC do mundo), mantendo o id.
+   */
   updateEntry(id: string, patch: Partial<Omit<TableEntry, 'id' | 'kind'>>): void {
+    const current = this.entryById().get(id);
+    const ownerChanged = !!current && 'ownerEntryId' in patch && patch.ownerEntryId !== current.ownerEntryId;
+    const homeId = this.abilityHome().get(id);
+    const movesToWorld = ownerChanged && current.kind === 'automation' && !!this.abilityTarget(patch.ownerEntryId);
+    if (current && (ownerChanged ? homeId || movesToWorld : homeId)) {
+      const updated = { ...current, ...patch };
+      if (ownerChanged) {
+        this.removeEntry(id);
+        this.placeEntry(updated);
+      } else if (homeId) {
+        const npc = this.worldbuild.byId().get(homeId);
+        if (npc) this.worldbuild.update(homeId, { abilities: withAbility(npc.abilities, toStoredAbility(updated)) });
+      }
+      return;
+    }
     this.dispatch('updateEntry', { entryId: id, patch });
   }
 
   /** Exclui o arquivo, as ações dele, os tokens dele em todas as cenas e os arquivos (áudio/imagem). */
   removeEntry(id: string): void {
+    // Habilidade de NPC-referência: sai do NPC do mundo (de todas as mesas do mundo)
+    const homeId = this.abilityHome().get(id);
+    if (homeId) {
+      const npc = this.worldbuild.byId().get(homeId);
+      if (npc) this.worldbuild.update(homeId, { abilities: withoutAbility(npc.abilities, id) });
+      return;
+    }
     const entry = this.entryById().get(id);
     // Os tokens dele saem de todas as cenas (com as cópias de inventário)
     for (const sc of this.scenes()) {

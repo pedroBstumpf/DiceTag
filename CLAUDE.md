@@ -310,7 +310,9 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   `femaleBlobId` — só guardadas por enquanto — e `statusMods` por barra de status; editor `RaceCard`, menu Criar →
   "Raça"; `setRaceImage` / `clearRaceImage`; excluir apaga as imagens).
 - **Bestiário (NPCs):** aba **NPCs** do explorador (e "NPC" no menu Criar). A ficha base abre com a mesma
-  `CharacterSheetView` + `WorldNpcStore` (diretiva `appWorldNpcSheet`), sem Relações, Anotações nem Habilidades.
+  `CharacterSheetView` + `WorldNpcStore` (diretiva `appWorldNpcSheet`), sem Relações nem Anotações. A aba
+  **Habilidades** edita ali mesmo (nome, dados, modificador; ícone, tags e efeito só na mesa) as `WorldItem.abilities`
+  do NPC, que valem em todas as mesas do mundo (ver "Ações automatizadas").
   Excluir um NPC do Worldbuild apaga a imagem e as imagens personalizadas do inventário dele.
 - **Abas do explorador** (ícones com o nome na dica e contador; `LIST_VIEWS` em `explorer.ts`): **Arquivos** (árvore) e
   uma lista plana por tipo — Itens, NPCs, Raças, Linhas do tempo, Documentos e Mapas —, com busca e botão "Novo"
@@ -537,6 +539,12 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - **Dono** (`TableEntry.ownerEntryId`): personagem = ação do jogador dele; NPC = ação do mestre para aquele NPC
   (vale para cada token dele); ausente = ação geral do mestre. O papel **deriva do dono** (`role` é legado:
   automações antigas sem dono aparecem como gerais do mestre). Excluir a ficha exclui as ações dela.
+- **Habilidades de NPC do bestiário moram no NPC do mundo** (`WorldItem.abilities`, ações sem dono). Na mesa, cada
+  NPC-referência ganha as dele como ações (`npcAbilitiesOf` em `state/npc-abilities.ts` + spec; `entries` as inclui com
+  `ownerEntryId` = a referência; o mesmo NPC duas vezes na mesa: ficam com a primeira). `addEntry`/`updateEntry`/
+  `removeEntry` gravam no NPC do mundo (`abilityHome`); trocar o dono move a ação entre mesa e mundo **com o mesmo id**.
+  Tirar o NPC da mesa não apaga as habilidades. Ações antigas de NPC-referência gravadas na mesa são movidas para o NPC
+  do mundo ao abrir a mesa (effect no `TableSessionService`, só com o NPC do mundo carregado).
 - **Personagem x conta:** `ownerUserId` = conta que criou (ausente = de qualquer um); "Vincular à minha conta" na ficha.
 - **Quem age** (`session.actor`, único lugar da regra): mestre = o que ele escolhe no menu "Agindo" da barra
   (`gmActing`): uma ficha **fixa** (não muda ao clicar em tokens), "Ações gerais" (null) ou "Token selecionado"

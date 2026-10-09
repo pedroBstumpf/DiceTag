@@ -1,7 +1,16 @@
 import { TestBed } from '@angular/core/testing';
 import { TableState } from '../../../core/models/table-session.model';
 import { StorageService } from '../../../core/services/storage.service';
+import { WorldbuildService } from '../../worldbuild/services/worldbuild.service';
 import { TableSessionService } from './table-session.service';
+
+/** Deixa rodar os effects e as leituras assíncronas do armazenamento. */
+async function settle(): Promise<void> {
+  for (let i = 0; i < 8; i++) {
+    TestBed.tick();
+    await new Promise((r) => setTimeout(r));
+  }
+}
 
 /** IndexedDB em memória (o jsdom não tem IndexedDB). */
 class MemoryStorage {
@@ -198,6 +207,57 @@ describe('TableSessionService (fachada)', () => {
 
     session.quickRoll('3d6', 30, pc.id, 0, ['s1']);
     expect(saOf()).toBe(1);
+  });
+
+  it('habilidades de NPC do bestiário moram no NPC do mundo (e mudam de lugar ao trocar o dono)', async () => {
+    const worldbuild = TestBed.inject(WorldbuildService);
+    await settle();
+    const npc = session.createWorldNpc();
+    const abilitiesInWorld = () => worldbuild.byId().get(npc.worldNpcId!)?.abilities ?? [];
+
+    const action = session.addEntry('automation', { ownerEntryId: npc.id });
+    expect(abilitiesInWorld().map((a) => a.id)).toEqual([action.id]);
+    expect(session.automationsOf(npc.id).map((a) => a.id)).toEqual([action.id]);
+
+    session.updateEntry(action.id, { name: 'Mordida' });
+    expect(abilitiesInWorld()[0]).toMatchObject({ name: 'Mordida', kind: 'automation' });
+    expect(abilitiesInWorld()[0].ownerEntryId).toBeUndefined();
+
+    // Vira ação geral do mestre: sai do mundo e fica na mesa, com o mesmo id
+    session.updateEntry(action.id, { ownerEntryId: undefined });
+    expect(abilitiesInWorld()).toEqual([]);
+    expect(session.automationsOf(null).map((a) => [a.id, a.name])).toEqual([[action.id, 'Mordida']]);
+
+    // E volta para o NPC
+    session.updateEntry(action.id, { ownerEntryId: npc.id });
+    expect(abilitiesInWorld().map((a) => a.id)).toEqual([action.id]);
+    expect(session.automationsOf(null)).toEqual([]);
+
+    session.removeEntry(action.id);
+    expect(abilitiesInWorld()).toEqual([]);
+  });
+
+  it('ações antigas de NPC-referência (gravadas na mesa) passam para o NPC do mundo', async () => {
+    const worldbuild = TestBed.inject(WorldbuildService);
+    await settle();
+    const base = worldbuild.create('npc');
+    const old: TableState = {
+      scenes: [],
+      activeSceneId: null,
+      entries: [
+        { id: 'ref', kind: 'npc', name: 'Lobo', worldNpcId: base.id, createdAt: 0 },
+        { id: 'uivo', kind: 'automation', name: 'Uivo', ownerEntryId: 'ref', createdAt: 0 },
+        { id: 'geral', kind: 'automation', name: 'Trovão', createdAt: 0 },
+      ],
+    };
+    storage.data.set('table-state:antiga', old);
+    await session.load('antiga');
+    await settle();
+    expect(worldbuild.byId().get(base.id)?.abilities?.map((a) => a.id)).toEqual(['uivo']);
+    expect(session.automationsOf('ref').map((a) => a.id)).toEqual(['uivo']);
+    session.flush();
+    const saved = storage.data.get('table-state:antiga') as TableState;
+    expect(saved.entries.map((e) => e.id)).toEqual(['ref', 'geral']);
   });
 
   it('permissões seguem o papel: o jogador não edita NPC que não controla', () => {

@@ -1,5 +1,5 @@
 import { Tag } from './tag.model';
-import { CharacterSheet, StatusMods, TokenSettings, defaultToken, normalizeSheet, withStatusBars } from './table-session.model';
+import { CharacterSheet, StatusMods, TableEntry, TokenSettings, defaultToken, normalizeSheet, withStatusBars } from './table-session.model';
 
 /**
  * Tipos de item que podem existir no worldbuild.
@@ -71,6 +71,11 @@ export interface WorldItem {
   sheet?: CharacterSheet;
   /** npc: token padrão (imagem, tamanho, visão, barras e etiquetas). Padrão: defaultToken('npc'). */
   token?: TokenSettings;
+  /**
+   * npc: habilidades (ações automatizadas, `kind: 'automation'`, sem dono). Valem em todas as
+   * mesas do mundo: na mesa aparecem como ações do NPC-referência. Padrão: [].
+   */
+  abilities?: TableEntry[];
 }
 
 /** Ficha base de um NPC do bestiário, com os padrões aplicados. */

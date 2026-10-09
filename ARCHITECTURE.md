@@ -273,6 +273,7 @@ fica em `state/`:
 | `entries.ts` | arquivos da mesa e volume mestre |
 | `tokens.ts` | colocar/mover/alterar/remover tokens e a **regra de vínculo** (`resolveToken`, `splitTokenPatch`) |
 | `fog.ts`, `drawings.ts`, `notes.ts`, `chat.ts`, `lore.ts` | névoa e paredes, desenhos, anotações, chat, pastas da Lore reveladas e itens da mesa |
+| `npc-abilities.ts` | habilidades dos NPCs do bestiário: moram no NPC do mundo (`WorldItem.abilities`) e viram ações do NPC-referência na mesa (não é comando: o `TableSessionService` grava no `WorldbuildService`) |
 | `permissions.ts` | regras de acesso puras (`canEdit`, `sheetAccess`, `canSeeLoreItem`…), com quem olha (`Viewer`) como parâmetro |
 | `player-view.ts` | o que o jogador vê sob a névoa (`visibleTokensFor`, `visibleNotesFor`, `visibleDoorsFor`) |
 | `table-state.ts`, `helpers.ts` | estado vazio, `normalizeState` e auxiliares (`mapScene`, `mapPlacement`, `findPlacement`…) |
@@ -410,7 +411,7 @@ Funções sem Angular, testadas com **Vitest** (`npx ng test --watch=false`):
 
 Também têm specs:
 - os comandos, as permissões e a visão do jogador em `game-table/state/` (`commands`, `scenes`, `tokens`,
-  `map`, `lore`, `permissions`, `player-view`);
+  `map`, `lore`, `npc-abilities`, `permissions`, `player-view`);
 - `table-session.model.ts` e a `FxLayer`;
 - o `TableSessionService`, num teste de integração da fachada com o armazenamento em memória
   (`table-session.service.spec.ts`).

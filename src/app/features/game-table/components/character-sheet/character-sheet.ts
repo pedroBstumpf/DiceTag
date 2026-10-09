@@ -10,6 +10,7 @@ import {
   CharacterStudy,
   CharacterTheme,
   CURRENCY,
+  DEFAULT_ROLL,
   GOAL_STEPS,
   NPC_TOKEN_SHEET,
   RaceRef,
@@ -31,6 +32,7 @@ import { TableSessionService } from '../../services/table-session.service';
 import { LevelPips } from '../level-pips/level-pips';
 import { WorldbuildService } from '../../../worldbuild/services/worldbuild.service';
 import { equippedWindowId } from '../equipped-item-window/equipped-item-window';
+import { formatRoll } from '../../utils/dice';
 import { inventoryRow } from '../../utils/inventory';
 import { applyRace, raceKey } from '../../utils/race';
 import { SheetInventory, itemSources } from '../sheet-inventory/sheet-inventory';
@@ -148,8 +150,8 @@ export class CharacterSheetView {
     const data = this.data();
     if (!data) return [];
     let ids: SheetTab[] = this.isNpc() ? ['sheet', 'inventory', 'abilities'] : ['sheet', 'inventory', 'notes', 'abilities'];
-    // Ações só existem na mesa
-    if (!data.entry || !this.session) ids = ids.filter((id) => id !== 'abilities');
+    // Ações existem na mesa e nos NPCs do bestiário (onde moram as habilidades deles)
+    if ((!data.entry || !this.session) && data.level !== 'world') ids = ids.filter((id) => id !== 'abilities');
     const access = this.access();
     if (!access.edit) ids = ids.filter((id) => (id === 'sheet' && access.sheet) || (id === 'inventory' && access.inventory));
     return ids.map((id) => ({ id, ...TAB_META[id] }));
@@ -394,24 +396,81 @@ export class CharacterSheetView {
     this.openEntry.emit(equippedWindowId(this.sheetId(), inventoryId));
   }
 
-  // --- Habilidades (ações da ficha, só na mesa) ----------------------------
+  // --- Habilidades ---------------------------------------------------------
+  // Na mesa: as ações da entrada dona da ficha (NPC-referência: as do NPC do mundo).
+  // No bestiário: as habilidades guardadas no próprio NPC do mundo, editadas aqui mesmo.
 
-  /** Ações da entrada dona desta ficha (criadas pelo jogador ou pelo mestre). */
+  /** NPC do bestiário desta ficha (só fichas base abertas pelo Worldbuild/aba Lore). */
+  private readonly worldNpc = computed(() => (this.data()?.level === 'world' ? this.worldbuild.byId().get(this.sheetId()) : undefined));
+  /** Ficha do bestiário: habilidades editadas na própria ficha (sem janela de configuração). */
+  readonly worldAbilities = computed(() => !!this.worldNpc());
+  /** Texto de ajuda da aba conforme onde as habilidades moram. */
+  readonly abilitiesHint = computed(() => {
+    if (this.worldAbilities()) return 'Habilidades deste NPC, válidas em todas as mesas do mundo. Na mesa, elas ficam na barra de ações; lá também dá para escolher ícone, tags e efeito especial.';
+    if (this.data()?.level === 'character') return 'Ações deste personagem, criadas pelo jogador ou pelo mestre. Também ficam na barra de ações (teclas 1–0). Ao configurar uma habilidade, ligue tags dos temas: o nível delas entra no modificador e acompanha a ficha.';
+    if (this.entry()?.worldNpcId) return 'Habilidades deste NPC: ficam no NPC do mundo e valem em todas as mesas dele. Também aparecem na barra de ações (teclas 1–0).';
+    return 'Ações deste NPC. Também ficam na barra de ações (teclas 1–0).';
+  });
+
+  /** Ações desta ficha. */
   readonly abilities = computed(() => {
+    const npc = this.worldNpc();
+    if (npc) return npc.abilities ?? [];
     const entry = this.entry();
     return entry && this.session ? this.session.automationsOf(entry.id) : [];
   });
 
-  /** Cria uma habilidade e a abre para configurar. */
+  /** Cria uma habilidade (na mesa, já abre para configurar). */
   addAbility(): void {
+    const npc = this.worldNpc();
+    if (npc) {
+      const ability: TableEntry = {
+        id: newId(),
+        kind: 'automation',
+        name: `Habilidade ${this.abilities().length + 1}`,
+        icon: 'bolt',
+        roll: { ...DEFAULT_ROLL },
+        createdAt: Date.now(),
+      };
+      this.worldbuild.update(npc.id, { abilities: [...(npc.abilities ?? []), ability] });
+      return;
+    }
     const entry = this.entry();
     if (!entry || !this.session) return;
     const created = this.session.addEntry('automation', { ownerEntryId: entry.id });
     this.openEntry.emit(created.id);
   }
 
+  /** Bestiário: altera nome ou rolagem de uma habilidade do NPC do mundo. */
+  updateWorldAbility(id: string, patch: Partial<Pick<TableEntry, 'name' | 'roll'>>): void {
+    const npc = this.worldNpc();
+    if (npc) this.worldbuild.update(npc.id, { abilities: (npc.abilities ?? []).map((a) => (a.id === id ? { ...a, ...patch } : a)) });
+  }
+
+  /** Rolagem da habilidade (padrão: 2d12 + 0). */
+  rollOf(action: TableEntry) {
+    return action.roll ?? DEFAULT_ROLL;
+  }
+
+  /** Bestiário: rolagem da habilidade com um campo trocado (texto inválido no modificador é ignorado). */
+  setWorldRoll(action: TableEntry, patch: { dice?: string; modifier?: string }): void {
+    const roll = action.roll ?? DEFAULT_ROLL;
+    const modifier = patch.modifier === undefined ? roll.modifier : Number(patch.modifier || 0);
+    if (!Number.isFinite(modifier)) return;
+    const dice = patch.dice === '3d6' ? '3d6' : patch.dice === '2d12' ? '2d12' : roll.dice;
+    this.updateWorldAbility(action.id, { roll: { ...roll, dice, modifier: Math.round(modifier) } });
+  }
+
+  /** Bestiário: exclui a habilidade do NPC do mundo (some de todas as mesas). */
+  removeWorldAbility(action: TableEntry): void {
+    const npc = this.worldNpc();
+    if (!npc || !confirm(`Excluir a habilidade "${action.name}"? Ela some do NPC em todas as mesas do mundo.`)) return;
+    this.worldbuild.update(npc.id, { abilities: (npc.abilities ?? []).filter((a) => a.id !== action.id) });
+  }
+
   /** Fórmula com o nível atual das tags ligadas à habilidade (as desta ficha). */
   formula(action: TableEntry): string {
-    return this.session?.formulaOf(action, this.sheetId()) ?? '';
+    if (this.worldAbilities() || !this.session) return formatRoll(action.roll ?? DEFAULT_ROLL);
+    return this.session.formulaOf(action, this.sheetId());
   }
 }
