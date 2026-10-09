@@ -1,7 +1,7 @@
 import { Component, DestroyRef, ElementRef, computed, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { Point } from '../../../../core/models/geometry.model';
+import { Point, Rect } from '../../../../core/models/geometry.model';
 import { METERS_PER_SQUARE, Wall } from '../../../../core/models/table-session.model';
 import { newId } from '../../../../core/utils/id';
 import { Viewport, fitRect, zoomAt } from '../../../../shared/utils/viewport';
@@ -10,6 +10,7 @@ import { ResolvedToken, TableSessionService } from '../../services/table-session
 import { distanceToPolyline, sizeFromHandle, snapToCorner, snapTokenCenter } from '../../utils/geometry';
 import { isRadialFx } from '../../utils/effects';
 import { IDENTITY, Mat2, apply, invert, isoMatrix, matrixCss, project, projectedBounds, unproject, uprightMatrix, viewCss } from '../../utils/projection';
+import { pointInRect, rectFromCorners, shiftGroup } from '../../utils/selection';
 import { simplifyPath } from '../../utils/simplify';
 import { distanceToWall, handleAt, moveWallHandle, translateWall } from '../../utils/walls';
 import { DoorsLayer } from '../map-layers/doors-layer/doors-layer';
@@ -35,7 +36,25 @@ const HIT_TOLERANCE = 10;
 type Gesture =
   | { kind: 'pan'; sx: number; sy: number; ox: number; oy: number }
   | { kind: 'ruler' }
-  | { kind: 'token'; id: string; size: number; sx: number; sy: number; cx: number; cy: number }
+  /**
+   * Arrastar token: `group` = os outros tokens selecionados (posição inicial), que acompanham.
+   * `onClick` = o que um clique sem arrastar faz ao soltar: selecionar só este token (clique num
+   * token de um grupo) ou tirá-lo da seleção (Shift+clique num já selecionado).
+   */
+  | {
+      kind: 'token';
+      id: string;
+      size: number;
+      sx: number;
+      sy: number;
+      cx: number;
+      cy: number;
+      group: { id: string; x: number; y: number }[];
+      moved: boolean;
+      onClick: 'none' | 'only' | 'deselect';
+    }
+  /** Caixa de seleção (Selecionar, arrastar no fundo): canto inicial em px da área; Shift soma à seleção. */
+  | { kind: 'marquee'; sx: number; sy: number; additive: boolean }
   | { kind: 'resize'; id: string; cx: number; cy: number }
   | { kind: 'circle'; cx: number; cy: number }
   | { kind: 'door'; a: Point }
@@ -190,6 +209,8 @@ export class MapStage {
   // --- Interações ----------------------------------------------------------
   readonly panning = signal(false);
   readonly ruler = signal<{ from: Point; to: Point } | null>(null);
+  /** Caixa de seleção em andamento, em px da área do mapa (fora do mundo: sempre reta). */
+  readonly marquee = signal<Rect | null>(null);
   readonly pings = signal<(Point & { id: string })[]>([]);
   /** Parede sendo desenhada (ferramenta Névoa). */
   readonly wallDraft = signal<WallDraft | null>(null);
@@ -254,11 +275,14 @@ export class MapStage {
       return mode === 'erase' ? 'pointer' : mode === 'edit' ? 'move' : 'crosshair';
     }
     if (tool === 'draw') return this.session.brush().eraser ? 'cell' : 'crosshair';
+    if (tool === 'select') return 'default';
     return tool === 'ruler' || tool === 'ping' || tool === 'note' || tool === 'fx' ? 'crosshair' : 'grab';
   });
 
   private gesture: Gesture | null = null;
   private lastTap = { key: '', time: 0, x: 0, y: 0 };
+  /** Posição do mouse sobre o mapa, em px da área (null = fora do mapa). Usada para colar tokens. */
+  pointerAt: Point | null = null;
   /** Teclas de movimento pressionadas (WASD/setas) e o laço de animação delas. */
   private readonly heldKeys = new Set<string>();
   private keyFrame = 0;
@@ -371,17 +395,21 @@ export class MapStage {
     // Clicar fora fecha a anotação aberta
     this.openNoteId.set(null);
 
-    // Botão do meio sempre move o mapa; Selecionar/Mover arrastam o fundo
-    if (event.button === 1 || (event.button === 0 && (tool === 'pan' || tool === 'select'))) {
+    // Botão do meio sempre move o mapa; a ferramenta Mover arrasta o fundo
+    if (event.button === 1 || (event.button === 0 && tool === 'pan')) {
       event.preventDefault();
-      if (tool === 'select') this.session.selectedTokenId.set(null);
       this.startPan(event);
       return;
     }
     if (event.button !== 0) return;
 
     const p = this.toWorld(event);
-    if (tool === 'ruler') {
+    if (tool === 'select') {
+      // Selecionar: arrastar no fundo desenha a caixa de seleção (clique simples limpa a seleção)
+      const at = this.toScreen(event);
+      this.gesture = { kind: 'marquee', sx: at.x, sy: at.y, additive: event.shiftKey };
+      this.capture(event);
+    } else if (tool === 'ruler') {
       this.ruler.set({ from: p, to: p });
       this.gesture = { kind: 'ruler' };
       this.capture(event);
@@ -561,21 +589,50 @@ export class MapStage {
 
   // --- Ponteiro: tokens ----------------------------------------------------
 
-  /** Token pressionado: seleciona, move (com snap) ou redimensiona. Duplo clique abre a janela. */
+  /** Mestre move tudo; jogador, os personagens e os NPCs que controla (regra: session.canEdit). */
+  readonly canMoveToken = (token: ResolvedToken): boolean => this.session.canEdit(token.entry);
+
+  /**
+   * Token pressionado: seleciona, move (com snap) ou redimensiona. Duplo clique abre a janela.
+   * - Shift+clique põe o token na seleção (ou, se já estava, tira ao soltar sem arrastar).
+   * - Arrastar um token selecionado move o grupo todo junto, na mesma formação.
+   * Quem não pode mexer no token (jogador x NPC que não controla) só seleciona e abre.
+   */
   onTokenDown({ event, token, mode }: TokenPointerDown): void {
     const id = token.placement.id;
     this.openNoteId.set(null);
-    this.session.selectedTokenId.set(id);
+    const editable = this.session.canEdit(token.entry);
+    const selected = this.session.selectedTokenIds();
+    let onClick: 'none' | 'only' | 'deselect' = 'none';
+    if (event.shiftKey && mode !== 'resize' && editable) {
+      if (selected.has(id)) onClick = 'deselect';
+      else this.session.toggleTokenSelection(id);
+    } else if (selected.has(id) && selected.size > 1 && editable) {
+      // Mantém o grupo para poder arrastá-lo; um clique simples seleciona só este token
+      onClick = 'only';
+    } else {
+      this.session.selectToken(id);
+    }
     const { x: cx, y: cy } = token.placement;
 
+    if (!editable) {
+      if (this.isDoubleTap(id, event)) this.tokenOpened.emit(id);
+      return;
+    }
     if (mode === 'resize') {
       this.gesture = { kind: 'resize', id, cx, cy };
     } else {
       if (this.isDoubleTap(id, event)) {
+        this.session.selectToken(id);
         this.tokenOpened.emit(id);
         return;
       }
-      this.gesture = { kind: 'token', id, size: token.size, sx: event.clientX, sy: event.clientY, cx, cy };
+      // Os outros selecionados (que a conta pode mover) acompanham o arraste
+      const group = this.session
+        .movableSelection()
+        .filter((t) => t.placement.id !== id)
+        .map((t) => ({ id: t.placement.id, x: t.placement.x, y: t.placement.y }));
+      this.gesture = { kind: 'token', id, size: token.size, sx: event.clientX, sy: event.clientY, cx, cy, group, moved: false, onClick };
     }
     this.capture(event);
   }
@@ -583,6 +640,7 @@ export class MapStage {
   // --- Ponteiro: movimento e fim -------------------------------------------
 
   onPointerMove(event: PointerEvent): void {
+    this.pointerAt = this.toScreen(event);
     // Prévia do próximo trecho da parede em linha
     const draft = this.wallDraft();
     if (draft?.kind === 'line') {
@@ -598,12 +656,20 @@ export class MapStage {
     } else if (g.kind === 'ruler') {
       this.ruler.update((r) => (r ? { ...r, to: this.toWorld(event) } : r));
     } else if (g.kind === 'token') {
+      // Alguns px de folga: abaixo disso é um clique (não move)
+      if (!g.moved && Math.hypot(event.clientX - g.sx, event.clientY - g.sy) < 3) return;
+      g.moved = true;
       const d = this.screenDelta(event.clientX - g.sx, event.clientY - g.sy);
       let p = { x: g.cx + d.x, y: g.cy + d.y };
-      // Snap ao centro do quadrado (Shift ou grade escondida: livre)
+      // Snap ao centro do quadrado (Shift ou grade escondida: livre); o grupo segue o mesmo deslocamento
       if (this.snapOn(event)) p = snapTokenCenter(p, g.size, this.gridSize());
       const current = this.session.tokens().find((t) => t.id === g.id);
-      if (current && (current.x !== p.x || current.y !== p.y)) this.session.moveToken(g.id, p);
+      if (current && (current.x !== p.x || current.y !== p.y)) {
+        const delta = { x: p.x - g.cx, y: p.y - g.cy };
+        this.session.moveTokens([{ placementId: g.id, ...p }, ...shiftGroup(g.group, delta)]);
+      }
+    } else if (g.kind === 'marquee') {
+      this.marquee.set(rectFromCorners({ x: g.sx, y: g.sy }, this.toScreen(event)));
     } else if (g.kind === 'resize') {
       const size = sizeFromHandle({ x: g.cx, y: g.cy }, this.toWorld(event), this.gridSize());
       if (this.session.resolvedTokenById(g.id)?.size !== size) this.session.updateToken(g.id, { size });
@@ -645,6 +711,11 @@ export class MapStage {
     this.ruler.set(null);
 
     if (g?.kind === 'note' && !g.moved) this.openNoteId.set(g.id);
+    if (g?.kind === 'token' && !g.moved) {
+      if (g.onClick === 'only') this.session.selectToken(g.id);
+      if (g.onClick === 'deselect') this.session.toggleTokenSelection(g.id);
+    }
+    if (g?.kind === 'marquee') this.finishMarquee(g.additive);
     if (g?.kind === 'draw') this.finishStroke();
     if (g?.kind === 'fx') this.finishFx();
     if (g?.kind === 'erase') {
@@ -665,6 +736,25 @@ export class MapStage {
       }
       this.wallDraft.set(null);
     }
+  }
+
+  /**
+   * Fim da caixa de seleção: seleciona os tokens da camada em foco que a conta pode mover e cujo
+   * centro, na tela, está dentro da caixa (vale também na vista isométrica). Clique sem arrastar
+   * limpa a seleção (com Shift, mantém).
+   */
+  private finishMarquee(additive: boolean): void {
+    const rect = this.marquee();
+    this.marquee.set(null);
+    if (!rect || (rect.width < 4 && rect.height < 4)) {
+      if (!additive) this.session.selectToken(null);
+      return;
+    }
+    const ids = this.session
+      .visibleTokens()
+      .filter((t) => this.session.canEdit(t.entry) && pointInRect(project(this.view(), this.matrix(), t.placement), rect))
+      .map((t) => t.placement.id);
+    this.session.selectTokens(ids, additive);
   }
 
   // --- Teclado (encaminhado pela página da mesa) ---------------------------
@@ -706,7 +796,9 @@ export class MapStage {
     }
 
     // Editar paredes: Delete remove a parede selecionada, Esc desmarca
-    const wallId = this.editingWalls() ? this.session.selectedWallId() : null;
+    // (só se a parede for da camada em foco: a seleção pode ter ficado em outra camada)
+    const selectedWall = this.editingWalls() ? this.session.selectedWallId() : null;
+    const wallId = this.session.walls().some((w) => w.id === selectedWall) ? selectedWall : null;
     if (wallId && (event.key === 'Delete' || event.key === 'Backspace')) {
       this.session.removeWall(wallId);
       return true;
@@ -716,11 +808,13 @@ export class MapStage {
       return true;
     }
 
-    const tokenId = this.session.selectedTokenId();
+    // Tokens selecionados que a conta pode mexer (jogador: não move nem remove NPC que não controla)
+    const selected = this.session.selectedTokenId();
+    const group = this.session.movableSelection();
 
-    // WASD/setas: desliza o token selecionado enquanto a tecla estiver pressionada
+    // WASD/setas: desliza o grupo selecionado enquanto a tecla estiver pressionada
     const key = event.key.toLowerCase();
-    if (tokenId && this.selecting() && MOVE_KEYS[key]) {
+    if (group.length && this.selecting() && MOVE_KEYS[key]) {
       this.keyFast = event.shiftKey;
       if (!this.heldKeys.has(key)) {
         this.heldKeys.add(key);
@@ -729,18 +823,18 @@ export class MapStage {
       return true;
     }
 
-    if ((event.key === 'Delete' || event.key === 'Backspace') && tokenId) {
-      this.session.removeToken(tokenId);
+    if ((event.key === 'Delete' || event.key === 'Backspace') && group.length) {
+      for (const t of group) this.session.removeToken(t.placement.id);
       return true;
     }
-    if (event.key === 'Escape' && tokenId) {
-      this.session.selectedTokenId.set(null);
+    if (event.key === 'Escape' && selected) {
+      this.session.selectToken(null);
       return true;
     }
     return false;
   }
 
-  /** Soltar uma tecla de movimento; ao soltar todas, o token se alinha à grade (se visível). */
+  /** Soltar uma tecla de movimento; ao soltar todas, o grupo se alinha à grade (se visível). */
   handleKeyUp(event: KeyboardEvent): void {
     this.keyFast = event.shiftKey;
     if (this.heldKeys.delete(event.key.toLowerCase()) && !this.heldKeys.size) this.stopKeyMove();
@@ -754,15 +848,24 @@ export class MapStage {
     this.keyFrame = 0;
     if (!wasMoving) return;
 
-    const id = this.session.selectedTokenId();
-    const token = id ? this.session.resolvedTokenById(id) : null;
-    if (token && this.snapping()) this.session.moveToken(token.placement.id, snapTokenCenter(token.placement, token.size, this.gridSize()));
+    // Alinha o token principal à grade; os outros seguem o mesmo ajuste (mantém a formação)
+    const group = this.session.movableSelection();
+    const lead = group[0];
+    if (!lead || !this.snapping()) return;
+    const p = snapTokenCenter(lead.placement, lead.size, this.gridSize());
+    this.session.moveTokens(shiftGroup(this.origins(group), { x: p.x - lead.placement.x, y: p.y - lead.placement.y }));
+  }
+
+  /** Posição atual de cada token do grupo (para deslocar todos juntos). */
+  private origins(tokens: ResolvedToken[]): { id: string; x: number; y: number }[] {
+    return tokens.map((t) => ({ id: t.placement.id, x: t.placement.x, y: t.placement.y }));
   }
 
   /** Um quadro do movimento por teclado: velocidade constante, independente da taxa de quadros. */
   private glide(now: number, last: number): void {
-    const id = this.session.selectedTokenId();
-    const token = id ? this.session.resolvedTokenById(id) : null;
+    // O grupo anda junto, na velocidade do token principal (mantém a formação)
+    const group = this.session.movableSelection();
+    const token = group[0];
     if (!token || !this.heldKeys.size) {
       this.keyFrame = 0;
       return;
@@ -780,7 +883,7 @@ export class MapStage {
       // Diagonal com a mesma velocidade; no máximo 50ms por quadro (aba em segundo plano)
       const dt = Math.min(now - last, 50) / 1000;
       const step = (token.speed * (this.keyFast ? KEY_SPEED_FAST : 1) * this.gridSize() * dt) / len;
-      this.session.moveToken(token.placement.id, { x: token.placement.x + dx * step, y: token.placement.y + dy * step });
+      this.session.moveTokens(shiftGroup(this.origins(group), { x: dx * step, y: dy * step }));
     }
     this.keyFrame = requestAnimationFrame((t) => this.glide(t, now));
   }
@@ -798,6 +901,29 @@ export class MapStage {
     if (!entryId) return;
     event.preventDefault();
     this.placeToken(entryId, this.toWorld(event));
+  }
+
+  // --- Colar token (Ctrl+V) ------------------------------------------------
+
+  /**
+   * Cola os tokens copiados sob o mouse ou, com o mouse fora do mapa, no centro da área livre
+   * entre as barras: o primeiro (o principal ao copiar) fica ali, alinhado à grade se ela estiver
+   * visível, e os demais na mesma formação. Retorna false se não colou.
+   */
+  pasteTokens(): boolean {
+    const copied = this.session.copiedTokens()[0];
+    if (!copied) return false;
+    const el = this.stage().nativeElement;
+    const i = this.insets();
+    const screen = this.pointerAt ?? {
+      x: i.left + (el.clientWidth - i.left - i.right) / 2,
+      y: i.top + (el.clientHeight - i.top - i.bottom) / 2,
+    };
+    const p = unproject(this.view(), this.matrix(), screen.x, screen.y);
+    const center = this.snapping() ? snapTokenCenter(p, copied.size, this.gridSize()) : p;
+    if (!this.session.pasteTokens(center).length) return false;
+    this.session.tool.set('select');
+    return true;
   }
 
   // --- Internos ------------------------------------------------------------
@@ -840,8 +966,14 @@ export class MapStage {
 
   /** Converte a posição do mouse para coordenadas do mapa. */
   private toWorld(event: MouseEvent): Point {
+    const { x, y } = this.toScreen(event);
+    return unproject(this.view(), this.matrix(), x, y);
+  }
+
+  /** Posição do mouse relativa à área do mapa (px de tela). */
+  private toScreen(event: MouseEvent): Point {
     const rect = this.stage().nativeElement.getBoundingClientRect();
-    return unproject(this.view(), this.matrix(), event.clientX - rect.left, event.clientY - rect.top);
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
   }
 
   /**

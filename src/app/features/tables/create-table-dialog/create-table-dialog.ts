@@ -8,6 +8,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { GAME_SYSTEMS, GameTable, TABLE_ACCENTS } from '../../../core/models/game-table.model';
 import { GameTablesService } from '../../../core/services/game-tables.service';
+import { WorldsService } from '../../../core/services/worlds.service';
 
 /**
  * Diálogo de criação de mesa.
@@ -28,6 +29,7 @@ import { GameTablesService } from '../../../core/services/game-tables.service';
 })
 export class CreateTableDialog {
   private readonly tables = inject(GameTablesService);
+  readonly worlds = inject(WorldsService);
   private readonly dialogRef = inject(MatDialogRef<CreateTableDialog, GameTable>);
 
   readonly systems = GAME_SYSTEMS;
@@ -41,6 +43,8 @@ export class CreateTableDialog {
     description: ['', Validators.maxLength(400)],
     maxPlayers: [5, [Validators.required, Validators.min(1), Validators.max(20)]],
     accent: [TABLE_ACCENTS[0] as string],
+    // Mundo onde a mesa se passa (começa no mundo aberto no Worldbuild)
+    worldId: [this.worlds.activeId()],
   });
 
   /** Abre o diálogo de criação. */

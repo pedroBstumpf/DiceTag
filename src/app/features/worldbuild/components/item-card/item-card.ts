@@ -6,7 +6,6 @@ import { ItemCardView } from './item-card-view';
 /**
  * Cartão de um item do mundo (janela do item no Worldbuild ou na mesa):
  * carrega o item do serviço e grava imagem, nome e etiquetas nele.
- * Funciona com o WorldbuildService ou com a Lore geral (diretiva appLoreScope).
  * O visual fica no ItemCardView (também usado pelo inventário da ficha).
  */
 @Component({
@@ -15,14 +14,19 @@ import { ItemCardView } from './item-card-view';
   host: { class: 'block h-full overflow-y-auto p-5' },
   template: `
     @if (item(); as it) {
+      <!-- Só leitura: o fieldset desabilitado bloqueia imagem, nome e etiquetas -->
+      <fieldset class="min-w-0" [disabled]="readonly()">
       <app-item-card-view
         [name]="it.name"
         [tags]="tags()"
         [imageUrl]="src()"
+        [description]="it.description ?? ''"
         (renamed)="service.rename(it.id, $event)"
+        (descriptionChange)="service.update(it.id, { description: $event })"
         (tagsChange)="setTags(it.id, $event)"
         (imagePicked)="service.setImage(it.id, $event)"
       />
+      </fieldset>
     } @else {
       <p class="p-6 text-center text-sm text-slate-500">Este item não existe mais.</p>
     }
@@ -32,6 +36,8 @@ export class ItemCard {
   readonly service = inject(WorldbuildService);
 
   readonly itemId = input.required<string>();
+  /** Só leitura (jogador na mesa). */
+  readonly readonly = input(false);
 
   readonly item = computed(() => this.service.byId().get(this.itemId()));
   readonly tags = computed<Tag[]>(() => this.item()?.tags ?? []);

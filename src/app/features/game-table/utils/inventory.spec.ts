@@ -1,5 +1,6 @@
 import { InventoryEntry } from '../../../core/models/table-session.model';
-import { addOne, quantityOf, takeOne } from './inventory';
+import { keepValidItemTags } from './dice';
+import { addOne, itemTagId, itemTagLevel, quantityOf, takeOne } from './inventory';
 
 let n = 0;
 const id = () => `novo-${++n}`;
@@ -30,6 +31,18 @@ describe('inventário: quantidades', () => {
     expect(stacked).toEqual([{ id: 'a', itemId: 'x', name: 'Poção', quantity: 3 }]);
   });
 
+  it('addOne não empilha item da mesa com item do Worldbuild de mesmo id', () => {
+    const base: InventoryEntry[] = [{ id: 'a', itemId: 'x' }];
+    const added = addOne(base, { id: 'b', itemId: 'x', table: true }, id);
+    expect(added).toHaveLength(2);
+    expect(added[1].table).toBe(true);
+  });
+
+  it('addOne não leva o "equipado" de quem deu', () => {
+    const given = addOne([], { id: 'a', itemId: 'x', equipped: true }, id);
+    expect(given[0].equipped).toBeUndefined();
+  });
+
   it('addOne cria linha nova se a personalização ou a imagem diferem', () => {
     const base: InventoryEntry[] = [{ id: 'a', itemId: 'x' }];
     expect(addOne(base, { id: 'b', itemId: 'x', name: 'Outra' }, id)).toHaveLength(2);
@@ -37,5 +50,25 @@ describe('inventário: quantidades', () => {
     expect(withImage).toHaveLength(2);
     expect(withImage[1]).toMatchObject({ itemId: 'x', blobId: 'img' });
     expect(withImage[1].price).toBeUndefined();
+  });
+});
+
+describe('etiquetas de itens equipados nas rolagens', () => {
+  it('id por linha do inventário e valor = nível (sem nível vale 1)', () => {
+    expect(itemTagId('linha', 'tag')).toBe('item:linha:tag');
+    expect(itemTagLevel({ id: 't', text: 'Afiada', color: '#fff', level: 2 })).toBe(2);
+    expect(itemTagLevel({ id: 't', text: 'Mágica', color: '#fff' })).toBe(1);
+  });
+
+  it('keepValidItemTags tira só as etiquetas de itens que saíram e mantém as dos temas', () => {
+    const attrs = ['tema-1', itemTagId('espada', 'a'), itemTagId('escudo', 'b')];
+    expect(keepValidItemTags(attrs, new Set([itemTagId('espada', 'a')]))).toEqual(['tema-1', itemTagId('espada', 'a')]);
+    expect(keepValidItemTags(attrs, new Set([itemTagId('espada', 'a'), itemTagId('escudo', 'b')]))).toBeNull();
+  });
+
+  it('keepValidItemTags reconhece etiquetas ligadas como penalidade', () => {
+    const negated = '-' + itemTagId('escudo', 'b');
+    expect(keepValidItemTags(['tema-1', negated], new Set())).toEqual(['tema-1']);
+    expect(keepValidItemTags([negated], new Set([itemTagId('escudo', 'b')]))).toBeNull();
   });
 });

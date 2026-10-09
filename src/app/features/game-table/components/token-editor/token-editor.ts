@@ -40,6 +40,8 @@ export interface TokenEditorValue {
 })
 export class TokenEditor {
   readonly value = input.required<TokenEditorValue>();
+  /** Trava o máximo das barras de status (Corpo, Mente, Espírito): na mesa, só o mestre o altera. */
+  readonly lockStatusMax = input(false);
   readonly changed = output<TokenPatch>();
 
   readonly sizes = TOKEN_SIZES;
@@ -93,6 +95,7 @@ export class TokenEditor {
 
   /** Atualiza valor/máximo a partir de um campo numérico (ignora texto inválido). */
   setBarNumber(bar: TokenBar, field: 'value' | 'max', raw: string): void {
+    if (field === 'max' && this.maxLocked(bar)) return;
     const n = Number(raw);
     if (raw !== '' && Number.isFinite(n)) this.updateBar(bar.id, { [field]: n });
   }
@@ -105,6 +108,11 @@ export class TokenEditor {
   /** Barra de status da ficha do personagem (rótulo e cor fixos, não pode ser removida). */
   isStatus(bar: TokenBar): boolean {
     return isStatusBar(bar);
+  }
+
+  /** O máximo desta barra está travado? (barras de status, quando `lockStatusMax`) */
+  maxLocked(bar: TokenBar): boolean {
+    return this.lockStatusMax() && isStatusBar(bar);
   }
 
   removeBar(id: string): void {

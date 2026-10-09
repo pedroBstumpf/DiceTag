@@ -15,8 +15,8 @@ import {
   TableEntry,
   hasSheet,
 } from '../../../../core/models/table-session.model';
-import { TableSessionService } from '../../services/table-session.service';
-import { formatModifier } from '../../utils/dice';
+import { SheetTagOption, TableSessionService } from '../../services/table-session.service';
+import { NEGATED_TAG_PREFIX, attributeSign, baseTagId, formatModifier, rollUsesTags } from '../../utils/dice';
 import { FxPicker } from '../fx-picker/fx-picker';
 
 /** Faixas de resultado de cada dado (legenda da configuração da rolagem). */
@@ -24,8 +24,8 @@ const OUTCOME_GUIDE: Record<DiceKind, { outcome: RollOutcome; range: string }[]>
   '2d12': [
     { outcome: 'critical-failure', range: '< 0' },
     { outcome: 'failure', range: '0–11' },
-    { outcome: 'partial', range: '12–16' },
-    { outcome: 'success', range: '17–23' },
+    { outcome: 'partial', range: '12–17' },
+    { outcome: 'success', range: '18–23' },
     { outcome: 'critical-success', range: '24+' },
   ],
   '3d6': [
@@ -65,6 +65,8 @@ export class EntryWindow {
 
   readonly roll = computed<RollConfig>(() => this.entry()?.roll ?? DEFAULT_ROLL);
   readonly guide = computed(() => OUTCOME_GUIDE[this.roll().dice]);
+  /** O dado da ação aceita tags da ficha? (3d6: só o modificador fixo; as tags ligadas ficam salvas, mas não valem) */
+  readonly usesTags = computed(() => rollUsesTags(this.roll().dice));
 
   /** Trocar o dono desliga as tags do dono anterior. */
   setOwner(value: string): void {
@@ -79,35 +81,73 @@ export class EntryWindow {
     const owner = this.session.entryById().get(this.entry()?.ownerEntryId ?? '');
     return !!owner && hasSheet(owner.kind);
   });
-  /** Tags e defeitos dos temas do dono. */
-  readonly ownerTags = computed(() => this.session.themeTagsOf(this.entry()?.ownerEntryId));
+  /** Tags e defeitos dos temas do dono + etiquetas dos itens que ele tem equipados. */
+  readonly ownerTags = computed(() => this.session.rollTagsOf(this.entry()?.ownerEntryId));
+  /** Sinal de cada tag ligada (1; −1 = etiqueta de item ligada como penalidade), por id. */
+  private readonly linkedSigns = computed(() => new Map((this.roll().attributes ?? []).map((a) => [baseTagId(a), attributeSign(a)])));
   /** Tags ligadas a esta ação que ainda existem na ficha. */
-  readonly linkedTags = computed(() => {
-    const ids = new Set(this.roll().attributes ?? []);
-    return this.ownerTags().filter((t) => ids.has(t.id));
-  });
-  /** Composição do modificador, ex.: "+1 fixo +3 Esgrima −2 Medo = +2". */
-  readonly breakdown = computed(() => {
-    const parts = [`${this.modifierText(this.roll().modifier)} fixo`, ...this.linkedTags().map((t) => `${this.modifierText(t.level)} ${t.text}`)];
-    const total = this.linkedTags().reduce((sum, t) => sum + t.level, this.roll().modifier);
-    return `${parts.join(' ')} = ${this.modifierText(total)}`;
-  });
+  readonly linkedTags = computed(() => this.ownerTags().filter((t) => this.linkedSigns().has(t.id)));
+  /** Somar as etiquetas de itens ligadas ao total? (padrão: não; elas só aparecem na rolagem) */
+  readonly addItems = computed(() => !!this.roll().addItems);
+  /** O dono tem etiquetas de itens equipados (mostra a chave "Somar itens ao total"). */
+  readonly hasItemTags = computed(() => this.ownerTags().some((t) => t.item));
 
-  isLinked(tagId: string): boolean {
-    return (this.roll().attributes ?? []).includes(tagId);
+  toggleAddItems(): void {
+    this.patchRoll({ addItems: !this.addItems() || undefined });
   }
 
-  /** Liga/desliga a tag (ids de tags apagadas da ficha são descartados aqui). */
-  toggleTag(tagId: string): void {
+  /** Composição do modificador, ex.: "+1 fixo +3 Esgrima −2 Medo = +2 · itens +1 (fora do total)". */
+  readonly breakdown = computed(() => {
+    // Estudos não entram no modificador (só acumulam SA); itens só com "Somar itens ao total"
+    const counted = this.linkedTags().filter((t) => !t.study && (!t.item || this.addItems()));
+    const items = this.linkedTags().filter((t) => t.item && !this.addItems());
+    const parts = [`${this.modifierText(this.roll().modifier)} fixo`, ...counted.map((t) => `${this.modifierText(this.tagValue(t))} ${t.text}`)];
+    const total = counted.reduce((sum, t) => sum + this.tagValue(t), this.roll().modifier);
+    const itemSum = items.reduce((sum, t) => sum + this.tagValue(t), 0);
+    const outside = items.length ? ` · itens ${this.modifierText(itemSum)} (fora do total)` : '';
+    return `${parts.join(' ')} = ${this.modifierText(total)}${outside}`;
+  });
+
+  /** Sinal da tag nesta ação: 1 (soma), −1 (penalidade, só itens) ou 0 (desligada). */
+  signOf(tag: SheetTagOption): number {
+    return this.linkedSigns().get(tag.id) ?? 0;
+  }
+
+  /** Valor da tag na rolagem desta ação (nível com o sinal escolhido; desligada = o nível). */
+  tagValue(tag: SheetTagOption): number {
+    return tag.level * (this.signOf(tag) || 1);
+  }
+
+  /**
+   * Clique na tag: tags dos temas ligam/desligam; etiquetas de itens alternam
+   * desligada → bônus → penalidade → desligada. Ids de tags apagadas da ficha são descartados aqui.
+   */
+  toggleTag(tag: SheetTagOption): void {
     const valid = new Set(this.ownerTags().map((t) => t.id));
-    const current = (this.roll().attributes ?? []).filter((id) => valid.has(id));
-    const attributes = current.includes(tagId) ? current.filter((id) => id !== tagId) : [...current, tagId];
+    const others = (this.roll().attributes ?? []).filter((a) => valid.has(baseTagId(a)) && baseTagId(a) !== tag.id);
+    const sign = this.signOf(tag);
+    let next: string | null = null;
+    if (!sign) next = tag.id;
+    else if (sign > 0 && tag.item) next = NEGATED_TAG_PREFIX + tag.id;
+    const attributes = next ? [...others, next] : others;
     this.patchRoll({ attributes: attributes.length ? attributes : undefined });
   }
 
-  tagClass(flaw: boolean, on: boolean): string {
-    if (!on) return 'bg-white/5 text-slate-400 ring-1 ring-white/10 hover:bg-white/10 hover:text-slate-200';
-    return flaw ? 'bg-red-500/15 text-red-200 ring-1 ring-red-400/50' : 'bg-astral-500/20 text-astral-200 ring-1 ring-astral-400/50';
+  tagClass(tag: SheetTagOption): string {
+    const sign = this.signOf(tag);
+    if (!sign) return 'bg-white/5 text-slate-400 ring-1 ring-white/10 hover:bg-white/10 hover:text-slate-200';
+    if (tag.study) return 'bg-amber-400/15 text-amber-100 ring-1 ring-amber-300/50';
+    if (tag.item && sign > 0) return 'bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-400/50';
+    return tag.flaw || sign < 0 ? 'bg-red-500/15 text-red-200 ring-1 ring-red-400/50' : 'bg-astral-500/20 text-astral-200 ring-1 ring-astral-400/50';
+  }
+
+  /** Dica da tag: tema (ou item equipado) de origem e, nos itens, o que o próximo clique faz. */
+  tagHint(tag: SheetTagOption): string {
+    if (tag.study) return 'Estudo ou treino: sem modificador; a cada uso, 12+ soma 1 SA, sucesso crítico soma 2 e falha crítica tira 1';
+    if (!tag.item) return tag.theme + (tag.flaw ? ' · defeito' : '');
+    const sign = this.signOf(tag);
+    const next = sign > 0 ? 'clique: penalidade' : sign < 0 ? 'clique: tirar' : 'clique: bônus';
+    return `Item equipado · ${tag.theme} (${next})`;
   }
 
   setDice(dice: DiceKind): void {

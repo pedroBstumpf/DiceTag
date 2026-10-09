@@ -12,7 +12,7 @@ import { TokenEditor } from '../token-editor/token-editor';
  * Janela "Token" (duplo clique num token do mapa) — único lugar das opções do token:
  * imagem, tamanho, visão, barras e etiquetas. As alterações respeitam a regra de
  * vínculo (TableSessionService.updateToken): personagem altera a ficha e todos os
- * tokens dele; NPC altera só este token. Imagem e visão valem sempre para a ficha.
+ * tokens dele; NPC altera só este token (inclusive a visão). Imagem e velocidade valem sempre para a ficha.
  */
 @Component({
   selector: 'app-token-window',
@@ -48,7 +48,7 @@ import { TokenEditor } from '../token-editor/token-editor';
         </div>
       </div>
 
-      <app-token-editor [value]="t" (changed)="session.updateToken(t.placement.id, $event)" />
+      <app-token-editor [value]="t" [lockStatusMax]="!session.canEditStatusMax()" (changed)="session.updateToken(t.placement.id, $event)" />
 
       <div class="mt-6 flex flex-wrap gap-2 border-t border-white/5 pt-4">
         <!-- NPC: a ficha própria deste token; personagem: a ficha dele -->

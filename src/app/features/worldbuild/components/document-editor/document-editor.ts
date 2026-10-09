@@ -17,13 +17,15 @@ export class DocumentEditor {
   private readonly service = inject(WorldbuildService);
 
   readonly itemId = input.required<string>();
+  /** Só leitura (jogador na mesa): sem barra de formatação, sem editar texto nem título. */
+  readonly readonly = input(false);
   readonly item = computed(() => this.service.byId().get(this.itemId()));
 
   save(content: string): void {
-    this.service.update(this.itemId(), { content });
+    if (!this.readonly()) this.service.update(this.itemId(), { content });
   }
 
   rename(value: string): void {
-    this.service.rename(this.itemId(), value);
+    if (!this.readonly()) this.service.rename(this.itemId(), value);
   }
 }

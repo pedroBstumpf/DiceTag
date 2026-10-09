@@ -79,6 +79,21 @@ describe('buildFx (todos os efeitos)', () => {
     });
   }
 
+  it('erupção: sem linha ligando os pontos e estacas grandes (até ~1,7 quadrado)', () => {
+    const grid = 70;
+    const d = buildFx('eruption', '#ff7a1a', { x: 0, y: 0 }, { x: 420, y: 0 }, { uid: 'e', scale: 1, grid, random: seededRandom(5) });
+    const parts = flatten(d.parts);
+    expect(parts.some((p) => p.tag === 'polyline' || p.tag === 'line')).toBe(false);
+    // Comprimento de cada estaca: maior distância entre os pontos do polígono
+    const spikes = parts.filter((p) => p.tag === 'polygon').map((p) => {
+      const pts = String(p.attrs['points']).split(' ').map((s) => s.split(',').map(Number));
+      return Math.max(...pts.flatMap((a) => pts.map((b) => Math.hypot(a[0] - b[0], a[1] - b[1]))));
+    });
+    expect(spikes.length).toBeGreaterThanOrEqual(8);
+    expect(Math.max(...spikes)).toBeGreaterThan(grid * 1.3);
+    expect(Math.min(...spikes)).toBeGreaterThan(grid * 0.5);
+  });
+
   it('mesma semente = mesmo desenho', () => {
     const make = () => buildFx('lightning', '#ffe14d', { x: 0, y: 0 }, { x: 200, y: 0 }, { uid: 'a', scale: 1, grid: 70, random: seededRandom(9) });
     expect(make()).toEqual(make());

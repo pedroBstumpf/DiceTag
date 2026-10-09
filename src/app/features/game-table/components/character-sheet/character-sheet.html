@@ -125,15 +125,26 @@
                       (keydown.enter)="nameInput.blur()"
                     />
                   </label>
+                  <!-- Raça e sub-raça: Raças do mundo; escolher aplica características e modificadores -->
                   <div class="grid grid-cols-2 gap-2">
-                    <label class="sheet-label">
-                      Raça
-                      <input #raceInput class="sheet-input" placeholder="Ex.: Humano" [value]="s.race" (input)="update({ race: raceInput.value })" />
-                    </label>
-                    <label class="sheet-label">
-                      Sub-raça
-                      <input #subraceInput class="sheet-input" placeholder="Ex.: Nórdico" [value]="s.subrace" (input)="update({ subrace: subraceInput.value })" />
-                    </label>
+                    @for (slot of raceSlots; track slot.id) {
+                      @let orphan = orphanRaceName(slot.id);
+                      <label class="sheet-label">
+                        {{ slot.label }}
+                        <select
+                          #raceSelect
+                          class="sheet-input"
+                          [value]="raceKeyOf(slot.id)"
+                          (change)="chooseRace(slot.id, raceSelect.value)"
+                          [matTooltip]="raceOptions().length ? '' : 'Crie Raças no Worldbuild deste mundo'"
+                        >
+                          <option value="">{{ orphan || '— Nenhuma —' }}</option>
+                          @for (o of raceOptions(); track o.key) {
+                            <option [value]="o.key" [selected]="o.key === raceKeyOf(slot.id)">{{ o.item.name }}</option>
+                          }
+                        </select>
+                      </label>
+                    }
                   </div>
                   <!-- Jogador dono do personagem -->
                   @if (!isNpc()) {
@@ -207,8 +218,10 @@
                           #maxInput
                           type="number"
                           min="0"
-                          class="h-6 w-9 rounded bg-ink-950 text-center text-xs text-slate-100 outline-none ring-1 ring-white/10 focus:ring-astral-500/60"
+                          class="h-6 w-9 rounded bg-ink-950 text-center text-xs text-slate-100 outline-none ring-1 ring-white/10 focus:ring-astral-500/60 disabled:text-slate-400 disabled:ring-white/5"
                           [attr.aria-label]="bar.label + ': máximo'"
+                          [matTooltip]="canEditMax() ? '' : 'Só o mestre altera o máximo'"
+                          [disabled]="!canEditMax()"
                           [value]="bar.max"
                           (input)="setBarNumber(bar, 'max', maxInput.value)"
                         />
@@ -307,10 +320,144 @@
                   <h4 class="sheet-label mb-1.5 !text-red-300/70">Defeitos</h4>
                   <ng-container *ngTemplateOutlet="themeTags; context: { theme: theme, list: 'flaws' }" />
                 </div>
+
+                <!-- Objetivo do tema (só personagem): texto + avanço em 5 marcadores -->
+                @if (!isNpc()) {
+                  <div class="mt-3 border-t border-star-400/15 pt-2">
+                    <h4 class="sheet-label mb-1.5 !text-star-400/80">Objetivo</h4>
+                    <textarea
+                      #goalInput
+                      rows="2"
+                      class="w-full resize-none rounded-md bg-ink-950 px-2 py-1.5 text-xs leading-relaxed text-slate-200 outline-none ring-1 ring-white/10 placeholder:text-slate-600 focus:ring-astral-500/60"
+                      placeholder="O que o personagem busca neste tema"
+                      [attr.aria-label]="'Objetivo do tema ' + (i + 1)"
+                      [value]="theme.goal"
+                      (input)="updateTheme(theme.id, { goal: goalInput.value })"
+                    ></textarea>
+                    <div class="mt-1 flex items-center justify-between gap-2">
+                      <span class="text-[11px] text-slate-500">Avanço</span>
+                      <app-level-pips
+                        [value]="theme.goalProgress"
+                        [max]="goalSteps"
+                        label="Avanço do objetivo"
+                        (picked)="setGoalProgress(theme, $event)"
+                      />
+                    </div>
+                  </div>
+                }
               </section>
             }
           </div>
           </fieldset>
+
+          <!-- ===== Card de Equipados (personagem e NPC; marcados no Inventário) ===== -->
+          <!-- Fora do fieldset: quem só vê a ficha também abre os itens -->
+          <section class="sheet-card mt-3">
+            <h3 class="sheet-title">
+              <mat-icon class="!size-4 !text-[16px]">shield</mat-icon>
+              Equipados
+              <span class="font-sans text-xs text-slate-500">{{ equipped().length }}</span>
+            </h3>
+            <div class="grid gap-2 @xl:grid-cols-2 @2xl:grid-cols-3">
+              @for (row of equipped(); track row.entry.id) {
+                <!-- Clique abre o cartão numa janela (só na mesa; no Worldbuild o cartão fica no Inventário) -->
+                <button
+                  type="button"
+                  class="flex min-w-0 items-center gap-2.5 rounded-lg bg-white/[0.03] p-1.5 pr-2 text-left ring-1 ring-white/5 transition-colors enabled:hover:bg-white/[0.07] enabled:hover:ring-astral-400/30"
+                  [matTooltip]="session ? 'Ver ' + row.name : ''"
+                  [disabled]="!session"
+                  (click)="openEquipped(row.entry.id)"
+                >
+                  <span class="grid size-10 shrink-0 place-items-center overflow-hidden rounded-md bg-ink-950 ring-1 ring-white/10">
+                    @if (blobs.url(row.blobId); as src) {
+                      <img [src]="src" alt="" class="size-full object-cover" />
+                    } @else {
+                      <mat-icon class="!size-5 !text-[20px] text-amber-300">inventory_2</mat-icon>
+                    }
+                  </span>
+                  <span class="flex min-w-0 flex-1 flex-col gap-1">
+                    <span class="truncate text-sm text-slate-200" [class.italic]="row.missing">{{ row.name }}</span>
+                    @if (row.tags.length) {
+                      <span class="flex max-h-[1.125rem] flex-wrap gap-1 overflow-hidden">
+                        @for (tag of row.tags; track tag.id) {
+                          <span class="whitespace-nowrap rounded-sm px-1 text-[10px] font-semibold leading-[1.125rem] text-ink-950" [style.background]="tag.color">
+                            {{ tag.text }}{{ tag.level ? ' ' + tag.level : '' }}
+                          </span>
+                        }
+                      </span>
+                    }
+                  </span>
+                </button>
+              } @empty {
+                <p class="text-xs text-slate-600">Nenhum item equipado. Marque a caixa ao lado dos itens na aba Inventário.</p>
+              }
+            </div>
+          </section>
+
+          <!-- ===== Estudos e Treinos (só personagem): etiqueta + SA / SN ===== -->
+          @if (!isNpc()) {
+            <section class="sheet-card mt-3">
+              <h3 class="sheet-title">
+                <mat-icon class="!size-4 !text-[16px]">school</mat-icon>
+                Estudos e Treinos
+              </h3>
+              <fieldset class="grid min-w-0 gap-3 @2xl:grid-cols-3" [disabled]="!canEdit()">
+                @for (study of s.studies; track study.id; let i = $index) {
+                  @let done = study.sn > 0 && study.sa >= study.sn;
+                  <div class="rounded-lg p-2 ring-1" [class]="done ? 'bg-amber-400/10 ring-amber-300/40' : 'bg-white/[0.03] ring-white/5'">
+                    <input
+                      #studyText
+                      class="sheet-input w-full"
+                      [placeholder]="'Etiqueta ' + (i + 1)"
+                      [attr.aria-label]="'Etiqueta do estudo ' + (i + 1)"
+                      [value]="study.text"
+                      (input)="updateStudy(study.id, { text: studyText.value })"
+                    />
+                    <div class="mt-2 grid grid-cols-2 gap-2">
+                      <label class="sheet-label" title="Sucessos Acumulados">
+                        SA
+                        <input
+                          #saInput
+                          type="number"
+                          min="0"
+                          class="sheet-input w-full text-center tabular-nums"
+                          [value]="study.sa"
+                          (change)="setStudyNumber(study.id, 'sa', saInput.value)"
+                        />
+                      </label>
+                      <label class="sheet-label" [title]="gmRole() ? 'Sucessos Necessários' : 'Sucessos Necessários (definido pelo mestre)'">
+                        SN
+                        <input
+                          #snInput
+                          type="number"
+                          min="0"
+                          class="sheet-input w-full text-center tabular-nums disabled:opacity-60"
+                          [disabled]="!gmRole()"
+                          [value]="study.sn || ''"
+                          placeholder="—"
+                          (change)="setStudyNumber(study.id, 'sn', snInput.value)"
+                        />
+                      </label>
+                    </div>
+                    <!-- Avanço: SA de SN -->
+                    <div class="mt-2 h-1.5 overflow-hidden rounded-sm bg-white/10">
+                      <div class="h-full bg-amber-300 transition-[width] duration-200" [style.width.%]="studyPercent(study)"></div>
+                    </div>
+                    @if (done) {
+                      <p class="mt-1.5 flex items-center gap-1 text-[11px] font-semibold text-amber-200">
+                        <mat-icon class="!size-3.5 !text-[14px]">star</mat-icon>
+                        Subiu de nível!
+                      </p>
+                    }
+                  </div>
+                }
+              </fieldset>
+              <p class="mt-2 text-[11px] leading-relaxed text-slate-500">
+                Ligue um estudo numa rolagem de 2d12 (botão Rolar ou numa habilidade): sem modificador, 12+ soma 1 SA,
+                sucesso crítico soma 2 e falha crítica tira 1. O mestre define o SN; ao alcançá-lo, a etiqueta sobe de nível.
+              </p>
+            </section>
+          }
         }
       }
 
@@ -361,19 +508,70 @@
       }
 
       <!-- ================================================================= -->
-      <!-- Habilidades: ações do personagem                                  -->
+      <!-- Habilidades: ações do personagem ou do NPC                        -->
       <!-- ================================================================= -->
       @case ('abilities') {
         <div class="mb-3 flex items-center justify-between gap-2">
-          <p class="text-xs leading-relaxed text-slate-400">
-            Ações deste personagem, criadas pelo jogador ou pelo mestre. Também ficam na barra de ações (teclas 1–0).
-            Ao configurar uma habilidade, ligue tags dos temas: o nível delas entra no modificador e acompanha a ficha.
-          </p>
-          <button type="button" class="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs text-astral-300 hover:bg-white/5" (click)="addAbility()">
-            <mat-icon class="!size-4 !text-[16px]">add</mat-icon>
-            Habilidade
-          </button>
+          <p class="text-xs leading-relaxed text-slate-400">{{ abilitiesHint() }}</p>
+          @if (canEdit()) {
+            <button type="button" class="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs text-astral-300 hover:bg-white/5" (click)="addAbility()">
+              <mat-icon class="!size-4 !text-[16px]">add</mat-icon>
+              Habilidade
+            </button>
+          }
         </div>
+        @if (worldAbilities()) {
+          <!-- Bestiário: nome e rolagem editados aqui (ícone, tags e efeito, na mesa) -->
+          <div class="flex flex-col gap-1.5">
+            @for (action of abilities(); track action.id) {
+              @let roll = rollOf(action);
+              <div class="flex h-11 items-center gap-2 rounded-lg bg-white/5 pl-3 pr-1.5 text-sm text-slate-200">
+                <mat-icon class="!size-5 shrink-0 !text-[20px] text-amber-300">{{ action.icon ?? 'bolt' }}</mat-icon>
+                <input
+                  #abilityName
+                  class="sheet-input min-w-0 flex-1"
+                  aria-label="Nome da habilidade"
+                  [value]="action.name"
+                  [disabled]="!canEdit()"
+                  (change)="abilityName.value.trim() && updateWorldAbility(action.id, { name: abilityName.value.trim() })"
+                />
+                <select
+                  #abilityDice
+                  class="sheet-input w-[4.5rem] shrink-0"
+                  aria-label="Dados"
+                  [disabled]="!canEdit()"
+                  (change)="setWorldRoll(action, { dice: abilityDice.value })"
+                >
+                  <option value="2d12" [selected]="roll.dice === '2d12'">2d12</option>
+                  <option value="3d6" [selected]="roll.dice === '3d6'">3d6</option>
+                </select>
+                <input
+                  #abilityMod
+                  type="number"
+                  class="sheet-input w-14 shrink-0 text-center"
+                  aria-label="Modificador"
+                  matTooltip="Modificador fixo"
+                  [value]="roll.modifier"
+                  [disabled]="!canEdit()"
+                  (change)="setWorldRoll(action, { modifier: abilityMod.value })"
+                />
+                @if (canEdit()) {
+                  <button
+                    type="button"
+                    class="grid size-8 shrink-0 place-items-center rounded-md text-slate-500 hover:bg-red-500/15 hover:text-red-300"
+                    [attr.aria-label]="'Excluir ' + action.name"
+                    matTooltip="Excluir"
+                    (click)="removeWorldAbility(action)"
+                  >
+                    <mat-icon class="!text-[18px]">delete</mat-icon>
+                  </button>
+                }
+              </div>
+            } @empty {
+              <p class="py-6 text-center text-sm text-slate-500">Nenhuma habilidade ainda. Ex.: mordida, grito de guerra, magia.</p>
+            }
+          </div>
+        } @else {
         <div class="flex flex-col gap-1.5">
           @for (action of abilities(); track action.id) {
             <div class="flex h-11 items-center gap-2.5 rounded-lg bg-white/5 pl-3 pr-1.5 text-sm text-slate-200 transition-colors hover:bg-white/10">
@@ -399,6 +597,7 @@
             <p class="py-6 text-center text-sm text-slate-500">Nenhuma habilidade ainda. Ex.: ataque, magia, teste de resistência.</p>
           }
         </div>
+        }
       }
     }
   </div>

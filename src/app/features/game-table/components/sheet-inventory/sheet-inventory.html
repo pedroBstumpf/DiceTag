@@ -15,7 +15,7 @@
   </div>
 
   @if (picking() && !readonly()) {
-    <!-- Escolher um item do mundo (Lore geral e Worldbuild) -->
+    <!-- Escolher um item do mundo (Worldbuild) ou da mesa -->
     <div class="mb-3 rounded-lg bg-ink-950/70 p-2 ring-1 ring-astral-400/25 animate-fade-in">
       <label class="flex h-8 items-center gap-2 rounded-md bg-ink-900 px-2 text-sm ring-1 ring-white/10 focus-within:ring-astral-500/60">
         <mat-icon class="!size-4 !text-[16px] text-slate-500">search</mat-icon>
@@ -37,28 +37,34 @@
           >
             <mat-icon class="!size-4 shrink-0 !text-[16px] text-amber-300">inventory_2</mat-icon>
             <span class="min-w-0 flex-1 truncate">{{ option.item.name }}</span>
-            @if (option.global) {
-              <mat-icon class="!size-3.5 shrink-0 !text-[14px] text-star-400/70" matTooltip="Lore geral">auto_stories</mat-icon>
+            @if (option.source === 'table') {
+              <mat-icon class="!size-3.5 shrink-0 !text-[14px] text-emerald-300/70" matTooltip="Item desta mesa">table_restaurant</mat-icon>
             }
           </button>
         } @empty {
           <p class="px-2 py-2 text-xs text-slate-500">{{ query() ? 'Nenhum item com esse nome.' : 'Nenhum item criado ainda.' }}</p>
         }
       </div>
-      <button
-        type="button"
-        class="mt-1.5 flex h-8 w-full items-center gap-2 rounded-md border border-dashed border-white/10 px-2 text-xs text-astral-300 hover:border-astral-400/40 hover:bg-astral-500/10"
-        (click)="createItem()"
-      >
-        <mat-icon class="!size-4 !text-[16px]">add</mat-icon>
-        Criar item {{ query() ? '"' + query() + '"' : 'novo' }} no Worldbuild
-      </button>
+      @if (canCreate()) {
+        <!-- Jogador: o item novo fica só nesta mesa; mestre: vai para o Worldbuild -->
+        <button
+          type="button"
+          class="mt-1.5 flex h-8 w-full items-center gap-2 rounded-md border border-dashed border-white/10 px-2 text-xs text-astral-300 hover:border-astral-400/40 hover:bg-astral-500/10"
+          (click)="createItem()"
+        >
+          <mat-icon class="!size-4 !text-[16px]">add</mat-icon>
+          Criar item {{ query() ? '"' + query() + '"' : 'novo' }} {{ createsInTable() ? 'nesta mesa' : 'no Worldbuild' }}
+        </button>
+      }
     </div>
   }
 
   <!-- Itens da ficha: quantidade e, no NPC, a coluna de preço da loja -->
   @if (rows().length) {
-    <div class="flex items-center gap-2 pb-1 pl-8 text-[10px] font-semibold uppercase tracking-widest text-slate-600" [class]="readonly() ? 'pr-1' : 'pr-9'">
+    <div
+      class="flex items-center gap-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-600"
+      [class]="(readonly() ? 'pr-1 ' : 'pr-9 ') + (canEquip() ? 'pl-14' : 'pl-8')"
+    >
       <span class="flex-1">Item</span>
       <span class="w-12 text-center">Qtd.</span>
       @if (isShop()) {
@@ -73,6 +79,20 @@
         [class]="isSelected(row) ? 'bg-astral-500/15 text-astral-200 ring-1 ring-astral-400/30' : 'text-slate-300 hover:bg-white/5 hover:text-white'"
         (click)="select(row)"
       >
+        @if (canEquip()) {
+          <!-- Equipado (aparece na aba Ficha, abaixo dos temas) -->
+          <input
+            #equipBox
+            type="checkbox"
+            class="size-4 shrink-0 cursor-pointer accent-astral-400 disabled:cursor-default"
+            matTooltip="Equipado"
+            [attr.aria-label]="'Equipar ' + row.name"
+            [checked]="!!row.entry.equipped"
+            [disabled]="readonly()"
+            (click)="$event.stopPropagation()"
+            (change)="setEquipped(row, equipBox.checked)"
+          />
+        }
         <mat-icon class="!size-4 shrink-0 !text-[16px]" [class]="row.missing ? 'text-slate-600' : 'text-amber-300'">inventory_2</mat-icon>
         <span class="min-w-0 flex-1 truncate" [class.italic]="row.missing" [class.text-slate-500]="row.missing">{{ row.name }}</span>
         @if (row.custom) {
@@ -130,7 +150,7 @@
       </div>
     } @empty {
       <p class="px-1 py-4 text-xs leading-relaxed text-slate-500">
-        O inventário está vazio. Adicione itens criados na aba "Itens" do Worldbuild ou da Lore geral.
+        O inventário está vazio. Adicione itens criados na aba "Itens" do Worldbuild.
       </p>
     }
   </div>
@@ -193,14 +213,20 @@
         [name]="row.name"
         [tags]="row.tags"
         [imageUrl]="blobs.url(row.blobId)"
+        [description]="row.description"
         (renamed)="rename(row, $event)"
+        (descriptionChange)="describe(row, $event)"
         (tagsChange)="setTags(row, $event)"
         (imagePicked)="setImage(row, $event)"
       />
       </fieldset>
       @if (!readonly()) {
         <p class="max-w-sm text-center text-[11px] leading-relaxed text-slate-500">
-          Alterações aqui valem só para esta ficha — o item no Worldbuild e nos outros inventários não muda.
+          @if (editsTableItem(row)) {
+            Item criado nesta mesa: as alterações valem para o item, que também aparece na aba Lore.
+          } @else {
+            Alterações aqui valem só para esta ficha — o item original e os outros inventários não mudam.
+          }
         </p>
       }
       @if (!readonly()) {
@@ -236,7 +262,7 @@
         </div>
       }
     } @else {
-      <p class="py-10 text-center text-sm text-slate-500">Este item foi excluído {{ row.entry.global ? 'da Lore geral' : 'do Worldbuild' }}.</p>
+      <p class="py-10 text-center text-sm text-slate-500">Este item foi excluído {{ origin(row) }}.</p>
     }
   } @else {
     <div class="flex flex-1 flex-col items-center justify-center gap-2 py-10 text-center text-slate-600">

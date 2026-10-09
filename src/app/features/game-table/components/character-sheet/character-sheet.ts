@@ -3,12 +3,18 @@ import { Component, computed, inject, input, output, signal } from '@angular/cor
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { Tag } from '../../../../core/models/tag.model';
+import { WorldItem, raceTraitsOf } from '../../../../core/models/world-item.model';
 import {
   CharacterRelation,
   CharacterSheet,
+  CharacterStudy,
   CharacterTheme,
   CURRENCY,
+  DEFAULT_ROLL,
+  GOAL_STEPS,
   NPC_TOKEN_SHEET,
+  RaceRef,
+  RaceSlot,
   SHEET_MAX_LEVEL,
   TableEntry,
   ThemeTag,
@@ -24,7 +30,12 @@ import { BlobUrlService } from '../../services/blob-url.service';
 import { SheetStore } from '../../../../core/services/sheet-store';
 import { TableSessionService } from '../../services/table-session.service';
 import { LevelPips } from '../level-pips/level-pips';
-import { SheetInventory } from '../sheet-inventory/sheet-inventory';
+import { WorldbuildService } from '../../../worldbuild/services/worldbuild.service';
+import { equippedWindowId } from '../equipped-item-window/equipped-item-window';
+import { formatRoll } from '../../utils/dice';
+import { inventoryRow } from '../../utils/inventory';
+import { applyRace, raceKey } from '../../utils/race';
+import { SheetInventory, itemSources } from '../sheet-inventory/sheet-inventory';
 import { SheetNotes } from '../sheet-notes/sheet-notes';
 
 /** Abas da ficha. */
@@ -41,7 +52,8 @@ const TAB_META: Record<SheetTab, { icon: string; label: string }> = {
  * Ficha de personagem jogador ou de NPC, com abas:
  * - Ficha: cards Básico (imagem, nome, raça, sub-raça, rótulos), Status (barras
  *   Corpo/Mente/Espírito e etiquetas — as mesmas do token no mapa), Relações (só
- *   personagem) e três Temas (tags de nível 1 a 6 e defeitos de -1 a -6).
+ *   personagem), três Temas (tags de nível 1 a 6 e defeitos de -1 a -6) e, no
+ *   personagem, os itens Equipados (clique abre o cartão numa janela).
  * - Inventário: itens do mundo que a ficha possui, com o cartão ao lado (SheetInventory).
  * - Anotações (só personagem): caderno de texto rico em páginas (SheetNotes).
  * - Habilidades (só na mesa): as ações (automações) da ficha.
@@ -63,9 +75,12 @@ export class CharacterSheetView {
   readonly session = inject(TableSessionService, { optional: true });
   readonly blobs = inject(BlobUrlService);
   private readonly auth = inject(AuthService);
+  private readonly worldbuild = inject(WorldbuildService);
 
   /** Id da ficha no SheetStore. */
   readonly sheetId = input.required<string>();
+  /** Força só leitura (ex.: jogador abrindo um NPC do bestiário pela aba Lore da mesa). */
+  readonly readonly = input(false);
   /** Pedido para abrir outra ficha/ação/item numa janela. */
   readonly openEntry = output<string>();
   /** Uma habilidade foi usada pela ficha. */
@@ -83,6 +98,7 @@ export class CharacterSheetView {
 
   /** Pode editar (fora da mesa: sempre; na mesa: mestre e, no NPC, o jogador autorizado). */
   readonly canEdit = computed(() => {
+    if (this.readonly()) return false;
     const entry = this.entry();
     return !this.session || !entry || this.session.canEdit(entry);
   });
@@ -92,8 +108,18 @@ export class CharacterSheetView {
   readonly controllerSettings = computed(() => this.isNpc() && this.isGm() && this.data()?.level !== 'npc-token');
   /** Visibilidade para os jogadores é de cada token. */
   readonly publicSettings = computed(() => this.isGm() && this.data()?.level === 'npc-token');
-  /** O que a conta atual pode ver/editar nesta ficha (fora da mesa: tudo). */
-  readonly access = computed(() => this.session?.sheetAccess(this.sheetId()) ?? { edit: true, sheet: true, inventory: true });
+  /**
+   * A ficha mora na mesa? (fichas do bestiário — WorldNpcStore — não, mesmo abertas numa janela da mesa:
+   * as permissões da mesa não as conhecem; quem abre como jogador já recebe `readonly`.)
+   */
+  private readonly tableSheet = computed(() => !!this.session && (this.store as unknown) === this.session);
+
+  /** O que a conta atual pode ver/editar nesta ficha (fora da mesa e no bestiário: tudo, salvo `readonly`). */
+  readonly access = computed(() => {
+    const full = { edit: true, sheet: true, inventory: true };
+    const access = this.tableSheet() ? (this.session?.sheetAccess(this.sheetId()) ?? full) : full;
+    return this.readonly() ? { ...access, edit: false } : access;
+  });
   /** Token desta ficha (só fichas de token de NPC). */
   private readonly placement = computed(() => {
     const id = this.sheetId();
@@ -124,8 +150,8 @@ export class CharacterSheetView {
     const data = this.data();
     if (!data) return [];
     let ids: SheetTab[] = this.isNpc() ? ['sheet', 'inventory', 'abilities'] : ['sheet', 'inventory', 'notes', 'abilities'];
-    // Ações só existem na mesa
-    if (!data.entry || !this.session) ids = ids.filter((id) => id !== 'abilities');
+    // Ações existem na mesa e nos NPCs do bestiário (onde moram as habilidades deles)
+    if ((!data.entry || !this.session) && data.level !== 'world') ids = ids.filter((id) => id !== 'abilities');
     const access = this.access();
     if (!access.edit) ids = ids.filter((id) => (id === 'sheet' && access.sheet) || (id === 'inventory' && access.inventory));
     return ids.map((id) => ({ id, ...TAB_META[id] }));
@@ -208,6 +234,45 @@ export class CharacterSheetView {
     this.update({ labels: (this.sheet()?.labels ?? []).filter((l) => l !== label) });
   }
 
+  // --- Raça e sub-raça (Raças do mundo) ------------------------------------
+
+  readonly raceSlots: { id: RaceSlot; label: string }[] = [
+    { id: 'race', label: 'Raça' },
+    { id: 'subrace', label: 'Sub-raça' },
+  ];
+
+  /** Raças que podem ser escolhidas: as do mundo aberto (na mesa, o mundo dela). */
+  readonly raceOptions = computed(() =>
+    this.worldbuild
+      .worldRaces()
+      .map((item): { key: string; ref: RaceRef; item: WorldItem } => ({ key: raceKey({ id: item.id }), ref: { id: item.id }, item })),
+  );
+
+  /** Chave da raça escolhida no campo (vazia = nenhuma). */
+  raceKeyOf(slot: RaceSlot): string {
+    const sheet = this.sheet();
+    return raceKey(slot === 'race' ? sheet?.raceRef : sheet?.subraceRef);
+  }
+
+  /** Nome salvo no campo que não corresponde a uma raça da lista (texto antigo ou raça excluída). */
+  orphanRaceName(slot: RaceSlot): string {
+    const name = this.sheet()?.[slot] ?? '';
+    const key = this.raceKeyOf(slot);
+    return name && !this.raceOptions().some((o) => o.key === key) ? name : '';
+  }
+
+  /** Escolhe (ou limpa, com chave vazia) a raça do campo: aplica etiquetas e modificadores, desfazendo os da anterior. */
+  chooseRace(slot: RaceSlot, key: string): void {
+    const sheet = this.sheet();
+    const data = this.data();
+    if (!sheet || !data) return;
+    const option = this.raceOptions().find((o) => o.key === key);
+    const choice = option ? { ref: option.ref, name: option.item.name, traits: raceTraitsOf(option.item), statusMods: option.item.statusMods } : null;
+    const result = applyRace(sheet, data.bars, slot, choice);
+    this.update(result.sheet);
+    this.store.updateStatus(this.sheetId(), { bars: result.bars });
+  }
+
   // --- Eiros (moeda do personagem) -----------------------------------------
 
   readonly currency = CURRENCY;
@@ -225,8 +290,12 @@ export class CharacterSheetView {
     this.patchBar(bar.id, { value: Math.min(bar.max, Math.max(0, bar.value + delta)) });
   }
 
+  /** Máximo das barras de status: na mesa, só o mestre edita à mão (fora da mesa, quem edita a ficha). */
+  readonly canEditMax = computed(() => !this.session || this.session.canEditStatusMax());
+
   /** Valor/máximo digitado (ignora texto inválido). */
   setBarNumber(bar: TokenBar, field: 'value' | 'max', raw: string): void {
+    if (field === 'max' && !this.canEditMax()) return;
     const n = Number(raw);
     if (raw !== '' && Number.isFinite(n)) this.patchBar(bar.id, { [field]: Math.max(0, Math.round(n)) });
   }
@@ -285,24 +354,123 @@ export class CharacterSheetView {
     this.updateTheme(theme.id, { [list]: theme[list].filter((t) => t.id !== tagId) });
   }
 
-  // --- Habilidades (ações da ficha, só na mesa) ----------------------------
+  // --- Objetivo dos temas (personagem) -------------------------------------
 
-  /** Ações da entrada dona desta ficha (criadas pelo jogador ou pelo mestre). */
+  readonly goalSteps = GOAL_STEPS;
+
+  /** Clicar no último marcador aceso desmarca ele (permite voltar a 0). */
+  setGoalProgress(theme: CharacterTheme, value: number): void {
+    this.updateTheme(theme.id, { goalProgress: value === theme.goalProgress ? value - 1 : value });
+  }
+
+  // --- Estudos e Treinos (personagem) --------------------------------------
+
+  /** O SN é definido pelo mestre (no papel de mestre, na mesa). */
+  readonly gmRole = computed(() => this.session?.role() === 'gm');
+
+  updateStudy(id: string, patch: Partial<CharacterStudy>): void {
+    this.update({ studies: (this.sheet()?.studies ?? []).map((s) => (s.id === id ? { ...s, ...patch } : s)) });
+  }
+
+  /** SA ou SN digitado (inteiro ≥ 0; texto inválido é ignorado; SN vazio = 0, sem definir). */
+  setStudyNumber(id: string, field: 'sa' | 'sn', raw: string): void {
+    const n = raw.trim() === '' ? 0 : Number(raw);
+    if (Number.isFinite(n)) this.updateStudy(id, { [field]: Math.max(0, Math.round(n)) });
+  }
+
+  /** Avanço do estudo em % (SA de SN; sem SN = 0). */
+  studyPercent(study: CharacterStudy): number {
+    return study.sn > 0 ? Math.min(100, (study.sa / study.sn) * 100) : 0;
+  }
+
+  // --- Equipados (personagem) ----------------------------------------------
+
+  /** Itens marcados como equipados no inventário (com a personalização da ficha). */
+  readonly equipped = computed(() => {
+    const sources = itemSources(this.worldbuild, this.session);
+    return (this.sheet()?.inventory ?? []).filter((i) => i.equipped).map((i) => inventoryRow(i, sources));
+  });
+
+  /** Abre o cartão do item equipado numa janela. */
+  openEquipped(inventoryId: string): void {
+    this.openEntry.emit(equippedWindowId(this.sheetId(), inventoryId));
+  }
+
+  // --- Habilidades ---------------------------------------------------------
+  // Na mesa: as ações da entrada dona da ficha (NPC-referência: as do NPC do mundo).
+  // No bestiário: as habilidades guardadas no próprio NPC do mundo, editadas aqui mesmo.
+
+  /** NPC do bestiário desta ficha (só fichas base abertas pelo Worldbuild/aba Lore). */
+  private readonly worldNpc = computed(() => (this.data()?.level === 'world' ? this.worldbuild.byId().get(this.sheetId()) : undefined));
+  /** Ficha do bestiário: habilidades editadas na própria ficha (sem janela de configuração). */
+  readonly worldAbilities = computed(() => !!this.worldNpc());
+  /** Texto de ajuda da aba conforme onde as habilidades moram. */
+  readonly abilitiesHint = computed(() => {
+    if (this.worldAbilities()) return 'Habilidades deste NPC, válidas em todas as mesas do mundo. Na mesa, elas ficam na barra de ações; lá também dá para escolher ícone, tags e efeito especial.';
+    if (this.data()?.level === 'character') return 'Ações deste personagem, criadas pelo jogador ou pelo mestre. Também ficam na barra de ações (teclas 1–0). Ao configurar uma habilidade, ligue tags dos temas: o nível delas entra no modificador e acompanha a ficha.';
+    if (this.entry()?.worldNpcId) return 'Habilidades deste NPC: ficam no NPC do mundo e valem em todas as mesas dele. Também aparecem na barra de ações (teclas 1–0).';
+    return 'Ações deste NPC. Também ficam na barra de ações (teclas 1–0).';
+  });
+
+  /** Ações desta ficha. */
   readonly abilities = computed(() => {
+    const npc = this.worldNpc();
+    if (npc) return npc.abilities ?? [];
     const entry = this.entry();
     return entry && this.session ? this.session.automationsOf(entry.id) : [];
   });
 
-  /** Cria uma habilidade e a abre para configurar. */
+  /** Cria uma habilidade (na mesa, já abre para configurar). */
   addAbility(): void {
+    const npc = this.worldNpc();
+    if (npc) {
+      const ability: TableEntry = {
+        id: newId(),
+        kind: 'automation',
+        name: `Habilidade ${this.abilities().length + 1}`,
+        icon: 'bolt',
+        roll: { ...DEFAULT_ROLL },
+        createdAt: Date.now(),
+      };
+      this.worldbuild.update(npc.id, { abilities: [...(npc.abilities ?? []), ability] });
+      return;
+    }
     const entry = this.entry();
     if (!entry || !this.session) return;
     const created = this.session.addEntry('automation', { ownerEntryId: entry.id });
     this.openEntry.emit(created.id);
   }
 
+  /** Bestiário: altera nome ou rolagem de uma habilidade do NPC do mundo. */
+  updateWorldAbility(id: string, patch: Partial<Pick<TableEntry, 'name' | 'roll'>>): void {
+    const npc = this.worldNpc();
+    if (npc) this.worldbuild.update(npc.id, { abilities: (npc.abilities ?? []).map((a) => (a.id === id ? { ...a, ...patch } : a)) });
+  }
+
+  /** Rolagem da habilidade (padrão: 2d12 + 0). */
+  rollOf(action: TableEntry) {
+    return action.roll ?? DEFAULT_ROLL;
+  }
+
+  /** Bestiário: rolagem da habilidade com um campo trocado (texto inválido no modificador é ignorado). */
+  setWorldRoll(action: TableEntry, patch: { dice?: string; modifier?: string }): void {
+    const roll = action.roll ?? DEFAULT_ROLL;
+    const modifier = patch.modifier === undefined ? roll.modifier : Number(patch.modifier || 0);
+    if (!Number.isFinite(modifier)) return;
+    const dice = patch.dice === '3d6' ? '3d6' : patch.dice === '2d12' ? '2d12' : roll.dice;
+    this.updateWorldAbility(action.id, { roll: { ...roll, dice, modifier: Math.round(modifier) } });
+  }
+
+  /** Bestiário: exclui a habilidade do NPC do mundo (some de todas as mesas). */
+  removeWorldAbility(action: TableEntry): void {
+    const npc = this.worldNpc();
+    if (!npc || !confirm(`Excluir a habilidade "${action.name}"? Ela some do NPC em todas as mesas do mundo.`)) return;
+    this.worldbuild.update(npc.id, { abilities: (npc.abilities ?? []).filter((a) => a.id !== action.id) });
+  }
+
   /** Fórmula com o nível atual das tags ligadas à habilidade (as desta ficha). */
   formula(action: TableEntry): string {
-    return this.session?.formulaOf(action, this.sheetId()) ?? '';
+    if (this.worldAbilities() || !this.session) return formatRoll(action.roll ?? DEFAULT_ROLL);
+    return this.session.formulaOf(action, this.sheetId());
   }
 }

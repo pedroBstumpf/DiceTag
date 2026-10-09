@@ -2,6 +2,7 @@
 
 Contexto do projeto para o Claude Code. Leia antes de qualquer alteração.
 Idioma de trabalho: **português do Brasil** (respostas, comentários no código e textos da interface).
+Visão da arquitetura (camadas, fluxos de dados, onde fica o estado): [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ---
 
@@ -17,8 +18,8 @@ organizar toda a atmosfera de uma campanha.
 | Área | Status |
 |---|---|
 | Landing page (banner com logo, atalhos, mural de notícias vazio) | Pronto |
-| Barra lateral global (navegação, **Lore geral**, "em breve", conta) | Pronto |
-| **Lore geral** (`/lore`): lore oficial do mundo, global, mesma página/editores do Worldbuild | Pronto |
+| Barra lateral global (navegação, **mundos** do usuário, atalhos para as **mesas** — até 6 + "Ver todas" —, conta) | Pronto |
+| **Mundos**: até 2 Worldbuilds separados por usuário; cada mesa se passa num mundo | Pronto |
 | Contas (login/cadastro locais) + **modo de teste sem conta** | Pronto (provisório) |
 | Minhas mesas (criar, listar, excluir com limpeza dos dados, abrir) | Pronto |
 | Worldbuild (pastas, documentos rich text, **linha do tempo em mapa mental**, mapas/imagens, **itens com cartão**) | Pronto |
@@ -95,12 +96,14 @@ src/
     │   │   │                           # ficha (CharacterSheet, STATUS_BARS, withStatusBars), constantes + spec
     │   │   ├── tag.model.ts            # Tag (etiqueta: texto, cor, nível) e TAG_COLORS
     │   │   ├── world-item.model.ts     # WorldItem (inclui `item`), TimelineEvent, TimelineLink, WORLD_ITEM_META, TIMELINE_COLORS
+    │   │   ├── world.model.ts          # World (mundo), MAX_WORLDS = 2, DEFAULT_WORLD_ID, worldbuildKey
     │   │   └── news.model.ts
     │   ├── services/
     │   │   ├── storage.service.ts      # wrapper chave/valor do IndexedDB (get/set/delete)
     │   │   ├── auth.service.ts         # contas locais + visitante
     │   │   ├── sheet-store.ts          # SheetStore: contrato da fonte de dados da ficha + inventário em comum
     │   │   ├── game-tables.service.ts  # CRUD de mesas (excluir apaga table-state e blobs)
+    │   │   ├── worlds.service.ts       # mundos do usuário (lista, aberto, criar/renomear/excluir) + spec
     │   │   ├── layout.service.ts       # barra lateral (recolhida/mobile)
     │   │   └── news.service.ts         # notícias (vazio por enquanto)
     │   └── utils/id.ts                 # newId() com fallback fora de HTTPS
@@ -123,22 +126,27 @@ src/
         ├── auth/auth-dialog/   # diálogo único Entrar/Criar conta
         ├── tables/             # "Minhas mesas" + create-table-dialog
         ├── worldbuild/
-        │   ├── worldbuild.ts           # página: explorador + área de janelas (também serve a /lore)
-        │   ├── lore.routes.ts          # rota /lore: página do worldbuild com LoreService
-        │   ├── services/worldbuild.service.ts   # inclui a migração de linhas do tempo antigas; keyFor() define a chave
-        │   ├── services/lore.service.ts         # Lore geral: estende WorldbuildService, chave global
+        │   ├── worldbuild.ts           # página: explorador (com seletor de mundo) + área de janelas
+        │   ├── services/worldbuild.service.ts   # itens e mesa de trabalho do mundo aberto; migração de timelines antigas
         │   ├── services/world-npc.store.ts      # SheetStore das fichas base do bestiário (NPCs do Worldbuild)
-        │   ├── directives/lore-scope.directive.ts  # appLoreScope: troca WorldbuildService → LoreService no elemento
         │   ├── directives/world-npc-sheet.directive.ts  # appWorldNpcSheet: a ficha usa o WorldNpcStore
         │   ├── utils/timeline-layout.ts         # layouts, setas e hit test do mapa mental + spec
-        │   └── components/ explorer (abas Arquivos/Itens/NPCs), document-editor, timeline-editor, image-viewer,
+        │   ├── utils/references.ts              # referências dos eventos da linha do tempo a itens do mundo + spec
+        │   └── components/ explorer (abas Arquivos/Itens/NPCs/Raças/Linhas do tempo/Documentos/Mapas), race-card,
+        │                   document-editor, timeline-editor, image-viewer,
         │                   item-card (ItemCard + ItemCardView)
         └── game-table/         # MESA DE JOGO (rota /mesa/:id, tela cheia, fora do Shell)
             ├── game-table.ts           # página: orquestra barras, janelas e atalhos
             ├── services/
-            │   ├── table-session.service.ts  # estado da mesa + regra de vínculo dos tokens
+            │   ├── table-session.service.ts  # FACHADA da mesa: signals, Blobs, sessão; toda mutação via dispatch + spec
             │   ├── sound-mixer.service.ts    # um HTMLAudioElement por som
             │   └── blob-url.service.ts       # object URLs com cache (imagens de token)
+            ├── state/                  # puro + specs: comandos (estado, payload) → estado, permissões, visão
+            │   ├── commands.ts         # TABLE_COMMANDS, TableCommand, applyCommand (catálogo de comandos)
+            │   ├── scenes.ts levels.ts entries.ts tokens.ts fog.ts drawings.ts notes.ts chat.ts lore.ts
+            │   ├── permissions.ts      # canEdit, sheetAccess, canSeeLoreItem… com Viewer { role, userId }
+            │   ├── player-view.ts      # o que o jogador vê sob a névoa (tokens, anotações, portas)
+            │   └── table-state.ts helpers.ts  # EMPTY_STATE, normalizeState, mapScene/mapPlacement…
             ├── utils/                  # funções puras + specs Vitest
             │   ├── geometry.ts         # snap de token/canto, alça de tamanho, distâncias
             │   ├── visibility.ts       # visão por ray casting, paredes/portas → segmentos, ponto-em-polígono, doorSeen
@@ -147,6 +155,8 @@ src/
             │   ├── simplify.ts         # Ramer–Douglas–Peucker (traços)
             │   ├── projection.ts       # matriz 2D/isométrica, tela↔mundo, enquadramento, "em pé" (upright)
             │   ├── inventory.ts        # quantidade e transferência de unidades entre inventários + spec
+            │   ├── selection.ts        # seleção de vários tokens (principal, Shift, caixa, formação) + spec
+            │   ├── race.ts             # raça/sub-raça na ficha: rótulos e modificadores de status (aplicar/desfazer) + spec
             │   ├── dice.ts             # rolagem 2d12/3d6, faixas de resultado, effectiveModifier (fixo + níveis das tags ligadas) + spec
             │   └── effects.ts          # buildFx: os 20 efeitos descritos como dados (partes SVG + animações)
             └── components/
@@ -160,10 +170,13 @@ src/
                 ├── side-panel/         # barra direita: Chat, Fichas, Lore, Sons, Ações
                 ├── chat-panel/         # aba Chat: mensagens e cartões de rolagem
                 ├── sound-list/         # aba Sons: mixer
-                ├── action-bar/         # barra inferior: 10 espaços de ações (teclas 1–0)
+                ├── action-bar/         # barra inferior: 10 espaços de ações (teclas 1–0) + botão "Rolar"
+                ├── quick-roll/         # painel da rolagem básica (dado, modificador, tags e etiquetas, não salvo)
                 ├── entry-window/       # configuração da automação (dono, rolagem, tags, ícone, efeito)
                 ├── character-sheet/    # FICHA de personagem e de NPC (abas; cards Básico, Status, Relações, Temas; Habilidades)
-                ├── sheet-inventory/    # aba Inventário: lista de itens + cartão; no NPC, preços e compra (loja)
+                ├── sheet-inventory/    # aba Inventário: lista de itens + cartão; equipado; no NPC, preços e compra (loja)
+                ├── equipped-item-window/ # janela do cartão de um item equipado (lista "Equipados" da aba Ficha)
+                ├── table-item-window/  # janela do cartão de um item criado na mesa (aba Lore)
                 ├── sheet-notes/        # aba Anotações: caderno com páginas (RichTextEditor)
                 ├── level-pips/         # seletor de nível 1–6 em losangos (relações e tags de tema)
                 ├── token-editor/       # editor de tamanho, visão, barras e etiquetas
@@ -172,8 +185,7 @@ src/
 ```
 
 Rotas (`app.routes.ts`, todas lazy):
-- `''` (Shell) → `''` Home · `mesas` Tables · `worldbuild` Worldbuild (aceita `?novo=<tipo>` e `?abrir=<id>`) ·
-  `lore` Lore geral (`loadChildren` → `LORE_ROUTES`: mesmo componente `Worldbuild` com `LoreService` no lugar do `WorldbuildService`)
+- `''` (Shell) → `''` Home · `mesas` Tables · `worldbuild` Worldbuild do mundo aberto (aceita `?novo=<tipo>` e `?abrir=<id>`).
 - `mesa/:id` → GameTablePage (tela cheia, **fora** do Shell)
 - `**` → redireciona para `''`
 
@@ -198,8 +210,15 @@ Rotas (`app.routes.ts`, todas lazy):
   Evite também spread (`[...]`) e `+`/`-` unários em expressões de template: use um método.
 - **Lógica geométrica pura** (visão, colisão, layouts, simplificação) fica em `utils/`, sem Angular,
   sempre com `*.spec.ts` ao lado.
-- **Dados novos nos modelos são opcionais**, com valor padrão na leitura (`normalizeState` no
-  `TableSessionService`, `migrateTimeline` no `WorldbuildService`): dados salvos antigos sempre abrem.
+- **Dados novos nos modelos são opcionais**, com valor padrão na leitura (`normalizeState` em
+  `game-table/state/table-state.ts`, `migrateTimeline` no `WorldbuildService`): dados salvos antigos sempre abrem.
+- **Mutações da mesa são comandos** (preparação do multiplayer, ver `SPEC.md`): nova alteração do `TableState`
+  = função pura `(estado, payload) → novo estado` no arquivo do assunto em `game-table/state/`, registrada em
+  `TABLE_COMMANDS` e chamada pelo serviço com `this.dispatch('nome', payload)`. O payload é serializável: ids
+  (`newId()`), horários e sorteios são gerados no serviço, nunca no comando. Nada de `state.update` direto.
+  Blobs e o Worldbuild continuam no serviço. Comando sem efeito devolve o mesmo objeto.
+- **Permissões e visibilidade novas** entram em `state/permissions.ts` ou `state/player-view.ts` (puras, com
+  `Viewer`), nunca só no template: o servidor vai reaplicá-las.
 - **Commits:** um por feature/fase, em branch separada da `main`, no formato Conventional Commits em PT-BR
   (`feat(mesa): …`, `fix(mesas): …`), com corpo explicando o que mudou.
 
@@ -272,38 +291,54 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - `isLoggedIn()` = há usuário (real ou visitante). `isGuest()` = é o visitante.
 - Contas reais: e-mail único (normalizado em minúsculas), senha com mínimo de 6 caracteres, hash SHA-256 (`dicetag:` + senha).
   Sessão = id do usuário em `localStorage['dicetag.session']`. **É provisório** — não é segurança real.
-- Todos os dados são separados por usuário (o visitante tem os próprios dados), **exceto a Lore geral** (global).
+- Todos os dados são separados por usuário (o visitante tem os próprios dados).
 
 ### Mesas (`GameTablesService`)
 - Campos: nome (obrigatório, até 60), sistema (texto livre com sugestões `GAME_SYSTEMS`), descrição (até 400),
-  jogadores (1–20), cor de destaque (`TABLE_ACCENTS`), dono (`ownerId`).
+  jogadores (1–20), cor de destaque (`TABLE_ACCENTS`), dono (`ownerId`) e **mundo** (`worldId`, escolhido na criação;
+  ausente = o primeiro mundo, `DEFAULT_WORLD_ID`). Ao abrir a mesa, `GameTablePage` abre o mundo dela
+  (`WorldsService.select`): a aba Lore, o bestiário, os itens do inventário e as raças vêm desse mundo.
 - Lista mostra só as mesas do usuário atual, mais recentes primeiro.
 - Excluir uma mesa apaga também `table-state:<id>` e os Blobs dela (mapas, áudios, imagens de token).
 
 ### Worldbuild (`WorldbuildService`)
 - Tipos: `folder`, `document` (HTML do Tiptap em `content`), `timeline` (`events[]` + `links[]`), `image` (`blobId`),
-  `item` (cartão: `blobId` opcional = imagem, nome e `tags: Tag[]`), `npc` (bestiário: `sheet` + `token` padrão;
-  padrões em `npcSheetOf` / `npcTokenOf`).
+  `item` (cartão: `blobId` opcional = imagem, nome, `description` e `tags: Tag[]`; a descrição também pode ser
+  personalizada no inventário, como nome e etiquetas), `npc` (bestiário: `sheet` + `token` padrão;
+  padrões em `npcSheetOf` / `npcTokenOf`), `race` (Raça: `traits` = características em texto, sem cor nem nível — raças antigas com `tags` valem pelo
+  texto, `raceTraitsOf` —, imagens padrão opcionais `maleBlobId` /
+  `femaleBlobId` — só guardadas por enquanto — e `statusMods` por barra de status; editor `RaceCard`, menu Criar →
+  "Raça"; `setRaceImage` / `clearRaceImage`; excluir apaga as imagens).
 - **Bestiário (NPCs):** aba **NPCs** do explorador (e "NPC" no menu Criar). A ficha base abre com a mesma
-  `CharacterSheetView` + `WorldNpcStore` (diretiva `appWorldNpcSheet`), sem Relações, Anotações nem Habilidades.
+  `CharacterSheetView` + `WorldNpcStore` (diretiva `appWorldNpcSheet`), sem Relações nem Anotações. A aba
+  **Habilidades** edita ali mesmo (nome, dados, modificador; ícone, tags e efeito só na mesa) as `WorldItem.abilities`
+  do NPC, que valem em todas as mesas do mundo (ver "Ações automatizadas").
   Excluir um NPC do Worldbuild apaga a imagem e as imagens personalizadas do inventário dele.
-- **Itens do mundo:** o explorador tem as abas **Arquivos** (árvore) e **Itens** (lista plana de `worldItems()`, com
-  busca e "Novo item"); itens também ficam na árvore. O cartão (`ItemCard`) é editável na janela do item e só
+- **Abas do explorador** (ícones com o nome na dica e contador; `LIST_VIEWS` em `explorer.ts`): **Arquivos** (árvore) e
+  uma lista plana por tipo — Itens, NPCs, Raças, Linhas do tempo, Documentos e Mapas —, com busca e botão "Novo"
+  (em Mapas, envia imagens); a aba Arquivos tem "Nova pasta". Valem no Worldbuild e na janela de explorador da mesa.
+- **Itens do mundo:** aba **Itens** do explorador; itens também ficam na árvore. O cartão (`ItemCard`) é editável na janela do item e só
   leitura no inventário da ficha. Trocar a imagem usa `setImage` (apaga a anterior). Como os demais itens, aparecem
   na aba Lore da mesa e abrem em janela lá.
+- **Mesa de trabalho** (página Worldbuild): as janelas abertas ficam salvas **por mundo** (`WorldbuildService.desk` /
+  `saveDesk`, chave `desk:<usuário>:<mundo>`, debounce de 300ms + `flush`) e voltam iguais ao recarregar
+  (`WindowManagerService.restore`; janelas de itens excluídos são descartadas). **Pastas** também abrem como janela
+  ("Abrir na mesa de trabalho" no menu da pasta, `Explorer.folderWindows`): `FolderView` mostra o conteúdo e cada item
+  clicado abre a janela dele. Na mesa de jogo as janelas não são salvas (e pastas não abrem como janela).
 - Árvore por `parentId` (`null` = raiz). Ordenação: pastas primeiro, depois nome (pt-BR, numérico).
 - Nomes padrão sem repetição na mesma pasta ("Novo documento 2"...).
 - Mover: proibido mover uma pasta para dentro dela mesma ou de um descendente.
 - Excluir pasta exclui todo o conteúdo e apaga os Blobs de imagem.
 - Arquivos soltos no explorador: apenas imagens são aceitas.
 
-### Lore geral (`LoreService`)
-- A lore oficial do mundo (o app é voltado a um mundo/sistema próprios). Mesmas regras do Worldbuild,
-  mas numa chave **global** (`lore:global`), igual para todos os usuários. Ainda sem permissões: quem
-  abre pode editar.
-- `LoreService extends WorldbuildService` e só troca `title` e `keyFor()`. Página e editores são os
-  mesmos: a rota `/lore` fornece `LoreService` como `WorldbuildService`; na mesa, a diretiva
-  `appLoreScope` faz o mesmo no elemento do editor/explorador.
+### Mundos (`WorldsService`, `core/`)
+- Cada usuário tem até **`MAX_WORLDS` = 2** mundos; cada um é um Worldbuild separado (`worldbuild:<usuário>:<mundo>`).
+  O primeiro (`DEFAULT_WORLD_ID`, "Meu mundo") usa a chave antiga `worldbuild:<usuário>`: nada foi migrado.
+  Lista em `worlds:<usuário>` (sem lista salva = só o primeiro); o mundo aberto fica em `localStorage dicetag.world.<usuário>`.
+- `WorldbuildService` carrega sempre o **mundo aberto** (`activeId`): trocar de mundo grava as pendências na chave antiga.
+- Página Worldbuild: seletor no cabeçalho do explorador (`Explorer.worldSwitcher`): trocar, criar (até 2), renomear,
+  excluir. **Excluir** apaga itens e Blobs e só é permitido se **nenhuma mesa** se passa no mundo e se sobrar outro.
+  Na mesa, o explorador não troca de mundo (é o da mesa). Barra lateral: seção "Mundo" lista os mundos (abre o Worldbuild).
 
 ### Linha do tempo (mapa mental)
 - Eventos são cartões livres no quadro (`x`/`y` = canto superior esquerdo; tamanho fixo `TIMELINE_CARD`),
@@ -314,6 +349,11 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   naquela direção, arrastar até outro cartão cria a seta. Shift ao mover alinha à grade (24px).
 - Delete remove o evento (e suas setas) ou a seta selecionada. "Organizar automaticamente" = árvore da
   esquerda para a direita a partir dos eventos sem entrada (`treeLayout`).
+- **Referências** (`TimelineEvent.refs` = ids de itens do mundo): na edição do evento, busca (sem acento) por qualquer
+  item que não seja pasta nem a própria linha do tempo (`referenceCandidates`, `utils/references.ts` + spec) e chips com
+  ×; no cartão, chips clicáveis abrem o item na janela dele (`TimelineEditor.openItem` → `open()` do Worldbuild ou da
+  mesa). Itens excluídos somem das referências (`resolveReferences`). Na mesa, o jogador só abre o que o mestre revelou
+  (`GameTablePage.open` não abre nada sem permissão e avisa).
 
 ### Mesa de jogo (`TableSessionService`, um por mesa aberta)
 - **Cenas:** nome, mapa opcional (`blobId`), `gridSize` (20–300px, padrão 70), `showGrid`, `tokens`, `fog`,
@@ -340,7 +380,10 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   Acima: camadas **com mapa** mostram só o contorno da logo acima (sem tokens, para não confundir) e somem na 2D;
   camadas **sem mapa ("ar")** mostram os tokens voando nelas (na 2D, sobre o mapa). Tokens de camadas acima
   projetam **sombra** no "chão" sólido mais próximo abaixo. Transições só durante a troca (`animating`), para pan/zoom seguirem leves.
-- Névoa, paredes, desenhos e anotações são da cena (desenhados na camada em foco); a visão usa os tokens da camada em foco.
+- Névoa, desenhos e anotações são da cena (desenhados na camada em foco); a visão usa os tokens da camada em foco.
+- **Paredes e portas são de cada camada** (`Wall.level`, ausente = térreo): `session.walls()` traz só as da camada em
+  foco (computed com igualdade por itens), `addWall` grava na camada em foco e só elas bloqueiam a visão. Excluir
+  uma camada apaga as paredes dela e desce as de cima. Delete só remove a parede selecionada se ela for da camada em foco.
 - Atalhos (mestre, isométrica): **PageUp/PageDown** sobem/descem o token selecionado (a vista acompanha) ou, sem
   seleção, a camada em foco.
 - **Régua e visão:** 1 quadrado = **1,5 m** (`METERS_PER_SQUARE`).
@@ -350,44 +393,82 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   token). Ficha, token e avatares cortam a imagem igual: `object-cover object-top` (retratos mostram o rosto).
 - **Janela por tipo:** personagem, NPC e token de NPC (`npc:<id do token>`) abrem a ficha completa
   (`CharacterSheetView`, janela `sheet`, 880×700); NPC do bestiário aberto pelo explorador = janela `npc`
-  (`appWorldNpcSheet`); automação abre a `EntryWindow`. Sem permissão, `content()` → null (não abre).
-- **Lore** não é duplicada: a aba Lore lista os itens (exceto pastas) da **Lore geral** (marcados com
-  `auto_stories`) e do **Worldbuild** do usuário e os abre com os mesmos editores.
-  "Abrir Lore geral" / "Abrir pastas do Worldbuild" abrem o `Explorer` numa janela (`lore:explorer` /
-  `worldbuild:explorer`) **sem sair da mesa**.
-- **Organização da Lore por mesa (`TableState.lore`):** pastas próprias da mesa (um nível, `LoreFolder`) e
-  ajustes por item (`LoreItemOverride { name?, folderId?, hidden? }`). Renomear muda só o nome **nesta mesa**
-  (vazio = volta ao original; o título da janela usa `loreName`); a lixeira **esconde** o item desta mesa
-  ("Restaurar N itens" traz de volta); excluir pasta devolve os itens à raiz. **Nunca** altera nem apaga o
-  original. Itens entram nas pastas arrastando.
-- **Grade:** escondida (G ou menu da cena) = tokens e paredes se movem livres; visível = alinham (Shift = livre).
-- **Papel (`role`)**: alternado manualmente na barra de ações (Mestre/Jogador) — não há permissões reais ainda.
-  As regras de acesso às fichas já usam o papel + a conta (`canEdit`, `canOpen`…; ver "Ficha de NPC").
+  (`appWorldNpcSheet`); automação abre a `EntryWindow`; item equipado (`equip:…`) abre a `EquippedItemWindow`. Sem permissão, `content()` → null (não abre).
+- **Aba Lore = a árvore do mundo da mesa.** É o mesmo `Explorer` do Worldbuild, embutido no painel (não há cópia nem
+  organização própria da mesa): o que o mestre cria, renomeia, move ou exclui ali (com confirmação) **muda o mundo**, e
+  o que muda no Worldbuild aparece na mesa (mesmo `WorldbuildService`). Itens abrem nos mesmos editores.
+- **Lore x jogadores:** cada pasta tem um **olho** que vale **só nesta mesa** (`TableState.lore.revealed` = ids das pastas
+  do mundo, comando `toggleLoreReveal`; fechado por padrão). Revelar uma pasta revela tudo dentro dela, inclusive
+  subpastas (no explorador, o olho delas fica aceso e esmaecido). O jogador vê o explorador em **só leitura**
+  (`Explorer` `readonly` + filtro `visible`; pastas reveladas aparecem na raiz) e só abre o que está em pasta revelada
+  (`canSeeLoreItem`, que sobe pelos `parentId`); abre em só leitura (`readonly` em DocumentEditor/RichTextEditor
+  `editable`, TimelineEditor, ItemCard e na ficha do NPC do bestiário). Mesas antigas tinham pastas e nomes próprios na
+  aba Lore: `normalizeState` os descarta e a mesa abre sem nada revelado.
+- **Itens criados na mesa** (`TableState.items`) ficam na seção "Itens da mesa", abaixo do explorador, **visíveis a
+  todos** (registro dos feitos dos jogadores). Abrem na janela `TableItemWindow` (tipo `table-item`): editável por
+  quem criou e pelo mestre.
+- **Grade:** escondida (menu da cena: "Remover grade") = tokens e paredes se movem livres; visível = alinham (Shift = livre).
+  Não há botão nem atalho de grade na barra de ferramentas.
+- **Papel (`role`)**: alternado manualmente na barra de ações (Mestre/Jogador, `session.setRole`) — não há permissões
+  reais ainda. As regras de acesso às fichas já usam o papel + a conta (`canEdit`, `canOpen`…; ver "Ficha de NPC").
+- **O que o jogador não vê/faz:** ferramenta **Névoa** (`ToolDef.gmOnly`, `toolAllowed`; sem atalhos F/W; trocar para
+  jogador sai dela), **cenas** da barra superior (fica só voltar, título da mesa e os botões de painel, imersivo e tela
+  cheia), abas **Sons** e **Ações** do painel direito, **mover/redimensionar/remover tokens** que não pode editar
+  (`canEdit`: NPC só com controle; `MapStage.canMoveToken`, sem alça) e **criar ações pela barra de baixo** (cria na
+  aba Habilidades da própria ficha).
 - Estado de sessão **não persistido**: ferramenta ativa, papel, visibilidade das barras, janelas abertas,
-  token selecionado, pincel, modo de parede, sons tocando, pilha de desfazer dos desenhos, efeitos na tela.
+  tokens selecionados, pincel, modo de parede, sons tocando, pilha de desfazer dos desenhos, efeitos na tela, tokens copiados (Ctrl+C).
 
 ### Ficha de personagem (`CharacterSheetView`, `TableEntry.sheet`)
 - Personagens jogadores (`character`) e NPCs (ver "Ficha de NPC"). Dados em `CharacterSheet { race, subrace, labels,
-  relations, themes, inventory, notes, eiros }`, lidos sempre por `session.sheetOf(entry)` (preenche padrões: **3 temas** e **1+ página**) e
+  relations, themes, inventory, notes, eiros }`, lidos sempre por `session.sheetOf(entry)` (preenche padrões: **3 temas** e as **páginas fixas** das anotações) e
   gravados por `updateSheet(entryId, patch)`.
 - **Aba Ficha** — cards em grade (container query):
   - **Básico:** imagem (= token), nome, raça, sub-raça, jogador dono ("Vincular à minha conta") e **rótulos** (texto livre, Enter adiciona).
+    **Raça e sub-raça** são listas com as Raças do mundo aberto (na mesa, o mundo dela). Escolher aplica (`applyRace`, puro em `utils/race.ts` + spec):
+    as características da raça viram **rótulos** e os `statusMods` somam ao **máximo** de Corpo/Mente/Espírito (o valor atual
+    acompanha, entre 0 e o máximo; máximo ≥ 1). Raça e sub-raça somam; trocar ou limpar um campo desfaz só o que ele
+    aplicou (`CharacterSheet.appliedRaces`; `raceRef`/`subraceRef` guardam a escolha). Fichas antigas com texto livre
+    mostram o texto até uma raça ser escolhida. Características que já eram rótulos não são duplicadas nem removidas.
   - **Status:** três barras fixas **Corpo** (vermelha), **Mente** (verde), **Espírito** (azul) + **etiquetas** do personagem.
     Barras e etiquetas ficam no **token da ficha** (`TableEntry.token.bars/tags`), então aparecem no mapa.
     `withStatusBars` garante as três barras (ids `status-*`, rótulo e cor fixos) em personagens novos (`defaultToken`),
     antigos (`normalizeState`) e em toda gravação (`updateEntryToken`); a janela "Token" não as renomeia nem remove.
+    Fichas novas (personagem e NPC) começam com as três barras em **24/24** (`DEFAULT_STATUS_MAX`).
+    **Máximo das barras de status:** na mesa, só o mestre edita à mão (`canEditStatusMax` em `state/permissions.ts`;
+    campo desabilitado na ficha e na janela "Token", `TokenEditor.lockStatusMax`). O jogador muda o valor atual, e o
+    máximo dele só muda pela raça. Fora da mesa (bestiário no Worldbuild) quem edita a ficha edita o máximo.
   - **Relações:** nome, nível **1–6** (`LevelPips`) e descrição.
   - **Temas (3):** nome + tags com nível **1–6** e, embaixo, **Defeitos** (`flaws`) com nível **-1 a -6**
-    (`LevelPips` com `negative`). Fichas antigas ganham `flaws: []` em `sheetOf`.
-- **Aba Inventário** (`SheetInventory`): `InventoryEntry { itemId, global? }` referencia um item do mundo (Worldbuild do
-  usuário ou Lore geral); a lista mostra os nomes e, ao lado, o cartão **editável** (`ItemCardView`). Editar ali é
+    (`LevelPips` com `negative`). Fichas antigas ganham `flaws: []` em `sheetOf`. Só personagem: **Objetivo** abaixo dos
+    defeitos (`goal`, texto, + `goalProgress` de 0 a `GOAL_STEPS` = 5 marcadores; clicar no último aceso desmarca).
+  - **Equipados** (personagem e NPC, abaixo dos temas, fora do `fieldset` para quem só lê também abrir): itens com
+    `InventoryEntry.equipped` (caixa à esquerda de cada item na aba Inventário, `canEquip`). Clique (só na mesa) abre a
+    janela `equip:<id da ficha>:<id no inventário>` (`EquippedItemWindow`: o mesmo `ItemCardView` do inventário,
+    editável por quem edita a ficha). A linha do inventário (personalização x original) é montada por `inventoryRow`
+    (`utils/inventory.ts`; as fontes vêm de `itemSources` em `sheet-inventory`). Transferir um item (`addOne`) não leva
+    o "equipado".
+  - **Estudos e Treinos** (só personagem, abaixo dos Equipados): `CharacterSheet.studies`, sempre `SHEET_STUDY_COUNT` = 3
+    (`CharacterStudy { text, sa, sn }`; etiqueta sem cor). SN só o mestre edita. Ligado a uma rolagem (painel "Rolar" ou
+    ação, via `studyTagsOf` em `rollTagsOf`, nível 0 = sem modificador): `studyGain` (só 2d12: 12+ → 1 SA, sucesso crítico → 2, **falha crítica → −1**, SA nunca abaixo de 0) e
+    `trainStudy` (`utils/dice.ts`); `session.trainStudies` grava e, ao alcançar o SN, avisa no chat e devolve os nomes
+    (`levelUps`) para o aviso "⭐ … subiu de nível!" de quem rolou.
+- **Aba Inventário** (`SheetInventory`): `InventoryEntry { itemId, table? }` referencia um item do mundo (Worldbuild do
+  mundo da mesa) ou da mesa (`TableState.items`); a lista mostra os nomes e, ao lado, o cartão **editável** (`ItemCardView`). Editar ali é
   **cópia sob demanda**: só o que mudou vai para a entrada (`name`, `tags`, `blobId`) e vale no lugar do original —
   o item do mundo e os outros inventários não mudam. "Voltar ao item original" limpa a personalização; imagens
-  personalizadas são apagadas ao trocar, voltar, tirar o item ou excluir o personagem. "+ Item" busca itens das duas
-  fontes ou cria um novo no Worldbuild. Original excluído sem personalização aparece como "Item excluído".
+  personalizadas são apagadas ao trocar, voltar, tirar o item ou excluir o personagem. "+ Item" busca itens das
+  fontes (itens do mundo — o jogador só vê os revelados na aba Lore, `canSeeLoreItem` — e itens da mesa) ou cria um novo: o **mestre** cria
+  no Worldbuild; o **jogador** cria só **nesta mesa** (`session.createTableItem`, `InventoryEntry.table`), nunca no
+  Worldbuild. Fichas base do bestiário (`npc-base`/`world`) não usam itens da mesa. Item da mesa (`TableItem`, com
+  `ownerUserId` e imagem própria): quem o criou e o mestre editam **o próprio item** pelo cartão do inventário
+  (`canEditTableItem`, `updateTableItem`, `setTableItemImage`); os demais personalizam a cópia, como sempre. A origem de cada entrada é resolvida
+  por `inventoryRow(entry, itemSources(...))`. Original excluído sem personalização aparece como "Item excluído".
   Etiquetas novas de item começam **verdes** (`ITEM_TAG_COLOR`).
-- **Aba Anotações** (`SheetNotes`): caderno de texto rico em páginas (`NotePage { title, content }`); a última página
-  não é excluída. O `RichTextEditor` lê o conteúdo só ao ser criado: a página aberta é renderizada num `@for` com
+- **Aba Anotações** (`SheetNotes`): caderno de texto rico em páginas (`NotePage { title, content }`). As páginas fixas
+  **Background** e **Jornal** (`FIXED_NOTE_PAGES`, ids `background`/`journal`) ficam sempre no topo, sem excluir, mover
+  nem renomear — garantidas por `withFixedNotePages` em `normalizeSheet` (a antiga "Página 1" vazia some). As demais
+  são reordenadas arrastando (CDK `cdkDropList`, estilos globais `.cdk-drag-*` em `styles.scss`). O `RichTextEditor` lê o conteúdo só ao ser criado: a página aberta é renderizada num `@for` com
   `track` pelo id para recriar o editor ao trocar de página.
 - **Aba Habilidades:** as automações do personagem (`automationsOf`), criadas por ele ou pelo mestre; "Usar" rola
   como a barra de ações (`onActionUsed`).
@@ -395,13 +476,27 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   (`RollConfig.attributes` = ids das tags). O **nível atual** é lido na hora (`tagLevelsOf` → `effectiveModifier`),
   então subir a tag na ficha atualiza todas as ações que a usam. Fórmulas exibidas usam `session.formulaOf(action)`.
   Tag apagada vale 0; trocar o dono da ação limpa as tags ligadas.
+- **Etiquetas de itens equipados na rolagem** (ações e botão "Rolar"): `session.itemTagsOf` (id `itemTagId` =
+  `item:<linha do inventário>:<etiqueta>`, valor = nível, sem nível 1); `rollTagsOf` = temas + itens, usado por
+  `tagLevelsOf`. Ao mudar o inventário de uma ficha de entrada (`updateSheet` com `inventory`), `pruneItemTags` tira das
+  ações dela as etiquetas de itens que não estão mais equipados (`keepValidItemTags`, puro + spec).
+  Na ação, a etiqueta de item alterna desligada → bônus → **penalidade** (id com o prefixo `-`, `NEGATED_TAG_PREFIX`;
+  `effectiveModifier` subtrai). Regras de sinal e de prefixo em `utils/dice.ts` (`baseTagId`, `attributeSign`).
+  **Itens não somam ao total por padrão:** continuam selecionáveis e aparecem no cartão do chat, mas só entram no total
+  (e no resultado) com a chave "Somar itens ao total" ligada — na ação `RollConfig.addItems` (`EntryWindow`), no "Rolar"
+  um sinal do `QuickRoll` (não salvo, começa desligado). `effectiveModifier` só soma etiquetas de itens com `addItems`.
+- **Cartão de rolagem no chat:** resultado (Sucesso, Falha…) grande no topo, dados e total no centro e, embaixo, o
+  modificador do **personagem** (ícone `person`: fixo + temas + status) e o dos **itens** (ícone `shield`; fora do total,
+  só o escudo fica apagado — o número nunca é riscado, para continuar legível). `RollResult.itemModifier` guarda o valor dos itens e `RollResult.itemsAdded` se ele
+  entrou no total; rolagens antigas (sem `itemsAdded`) somaram os itens. `characterModifier` (puro) separa a parte do
+  personagem nos dois casos.
 
 ### Ficha de NPC (mesma `CharacterSheetView`, `isNpc`)
 - Igual à do personagem, **sem a aba Anotações e sem o card Relações** (abas Ficha, Inventário, Habilidades).
   NPCs também têm as barras de status (`hasSheet`). Ações de NPC também usam as tags dos temas.
 - **Três níveis** (`SheetData.level`), todos pela mesma tela e pelo `SheetStore`:
-  1. **Bestiário** (`world`): a ficha base no Worldbuild/Lore geral.
-  2. **NPC da mesa** (`npc-base`): `TableEntry.worldNpcId` (+ `worldNpcGlobal`) é **só uma referência** — ficha,
+  1. **Bestiário** (`world`): a ficha base no Worldbuild do mundo.
+  2. **NPC da mesa** (`npc-base`): `TableEntry.worldNpcId` é **só uma referência** — ficha,
      imagem e token padrão vêm da base (`worldNpcOf`, `tokenOf`, `sheetOf`, `updateSheet`, `updateEntryToken` gravam
      lá); o nome acompanha o original (`entries` substitui pelo nome atual). Ações, controle e visibilidade são da
      mesa. "+" de NPCs no painel = bestiário (`session.bestiary`) ou "Novo NPC no Worldbuild". Tirar da mesa não apaga
@@ -421,7 +516,7 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   (barra de status em 0) mostra o inventário aos jogadores sempre — só aquele token. O NPC do painel (ficha base) só
   abre para quem o edita: o jogador não o vê no painel; vê NPCs pelos tokens (duplo clique), só as abas liberadas,
   em **somente leitura**. Sem nada liberado, o duplo clique não abre nada.
-- **Regras (único lugar, `TableSessionService`):** `canEdit` (mestre; NPC → só `controlsNpc`; personagens seguem livres),
+- **Regras (único lugar: `game-table/state/permissions.ts`, puras; o `TableSessionService` só repassa o `Viewer`):** `canEdit` (mestre; NPC → só `controlsNpc`; personagens seguem livres),
   `sheetAccess(sheetId)` → `{ edit, sheet, inventory }`, `canOpenSheet`, `myNpcs`; o `actor` do jogador inclui o NPC
   que ele controla.
 - **Somente leitura** = `<fieldset [disabled]>` em volta do conteúdo editável (desabilita inputs/botões nativos;
@@ -444,18 +539,31 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - **Dono** (`TableEntry.ownerEntryId`): personagem = ação do jogador dele; NPC = ação do mestre para aquele NPC
   (vale para cada token dele); ausente = ação geral do mestre. O papel **deriva do dono** (`role` é legado:
   automações antigas sem dono aparecem como gerais do mestre). Excluir a ficha exclui as ações dela.
+- **Habilidades de NPC do bestiário moram no NPC do mundo** (`WorldItem.abilities`, ações sem dono). Na mesa, cada
+  NPC-referência ganha as dele como ações (`npcAbilitiesOf` em `state/npc-abilities.ts` + spec; `entries` as inclui com
+  `ownerEntryId` = a referência; o mesmo NPC duas vezes na mesa: ficam com a primeira). `addEntry`/`updateEntry`/
+  `removeEntry` gravam no NPC do mundo (`abilityHome`); trocar o dono move a ação entre mesa e mundo **com o mesmo id**.
+  Tirar o NPC da mesa não apaga as habilidades. Ações antigas de NPC-referência gravadas na mesa são movidas para o NPC
+  do mundo ao abrir a mesa (effect no `TableSessionService`, só com o NPC do mundo carregado).
 - **Personagem x conta:** `ownerUserId` = conta que criou (ausente = de qualquer um); "Vincular à minha conta" na ficha.
 - **Quem age** (`session.actor`, único lugar da regra): mestre = o que ele escolhe no menu "Agindo" da barra
   (`gmActing`): uma ficha **fixa** (não muda ao clicar em tokens), "Ações gerais" (null) ou "Token selecionado"
   (`ACT_SELECTION`, o padrão: segue a seleção); jogador = personagem dele ou NPC que controla, se selecionado, ou o
   primeiro personagem dele. `actorSheetId` = a ficha cujas tags valem (com o token do NPC que age selecionado, a cópia
   dele); "Usar" numa ficha rola com as tags daquela ficha (`useAction(action, sheetId)`), em nome dela no chat.
-  A barra de baixo (`hotbar`, até 10; teclas 1–9 e 0) mostra as ações de quem age; espaço vazio cria uma ação
-  já com esse dono.
+  A barra de baixo (`hotbar`, até 10; teclas 1–9 e 0) mostra as ações de quem age; espaço vazio (só mestre) cria
+  uma ação já com esse dono; o jogador cria as dele na aba Habilidades da ficha.
+- **Rolagem básica** ("Rolar", à direita da barra de baixo, mestre e jogador; `QuickRoll` num overlay do CDK): 2d12 ou
+  3d6 + modificador escolhido na hora, **não salvo**. No 2d12 (o 3d6 usa só o modificador fixo) soma tags/defeitos dos temas, etiquetas dos itens equipados (só com "Somar itens ao total") e etiquetas de status da ficha de
+  quem age (`actorSheetId`); cada etiqueta (de status ou de item) vira bônus ou penalidade (clique: + → − → fora; sem nível vale 1), regra
+  pura em `quickModifier` (`utils/dice.ts`). `session.quickRoll` grava no chat ("Rolagem", ícone `casino`).
 - **Rolagem** (`RollConfig { dice: '2d12' | '3d6', modifier, attributes? }`, puro em `utils/dice.ts`):
-  2d12 → total < 0 falha crítica · < 12 falha · < 17 sucesso parcial · < 24 sucesso · **24+ sucesso crítico**;
+  2d12 → total < 0 falha crítica · < 12 falha · 12–17 sucesso parcial · 18–23 sucesso · **24+ sucesso crítico**;
   3d6 → até 9 azar · 10–12 neutro · 13+ sorte. O modificador passa sempre por `effectiveModifier(roll, levels)`:
   valor fixo + nível atual das tags dos temas ligadas em `roll.attributes` (defeitos subtraem).
+  **3d6 não usa etiquetas** (`rollUsesTags`): nem temas, itens, status ou estudos; vale só o modificador fixo. As tags
+  ligadas a uma ação que passou para 3d6 continuam salvas (valem de novo se ela voltar a 2d12), mas são ignoradas, e a
+  `EntryWindow` e o `QuickRoll` escondem as etiquetas no 3d6.
 - **Usar** (`useAction`): rola, grava no chat em nome de quem agiu, mostra um aviso e, se a ação tiver
   `effect`, arma o efeito (`armedFx`): ferramenta Efeitos ativa até o próximo arraste; depois volta à
   ferramenta anterior. Esc ou trocar de ferramenta desarma.
@@ -492,23 +600,41 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   `volume`, `loop` (padrão `true`) e o mestre são persistidos; tocando/pausado não.
 - Envio de vários arquivos `audio/*` (ou extensão de áudio) pelo botão ou arrastando para a aba Sons.
 
-### Tokens — regra de vínculo (único lugar: `resolveToken` / `updateToken`)
-- `TableEntry.token` (ficha): `blobId`, `size` (0.5–4 quadrados), `vision { enabled, range (m) }`, `speed?`, `bars`, `tags`
+### Tokens — regra de vínculo (único lugar: `resolveToken` / `splitTokenPatch` em `state/tokens.ts`)
+- `TableEntry.token` (ficha): `blobId`, `size` (0.5–6 quadrados; `TOKEN_SIZES` vai até 6 para criaturas enormes), `vision { enabled, range (m) }`, `speed?`, `bars`, `tags`
   (`TokenTag.level` opcional, ex.: Exaustão 2). Cores de barras/etiquetas: paleta `TOKEN_COLORS` ou cor livre.
-  Padrão (`defaultToken`): tamanho 1, visão 18 m (ligada para personagem, desligada para NPC).
-- `Scene.tokens: TokenPlacement { id, entryId, x, y (centro), size?, bars?, tags? }`.
-- **Personagem:** vinculado — tamanho, barras e etiquetas vêm da ficha; alterar qualquer token altera a ficha e todos.
-- **NPC:** ao ser colocado, copia tamanho, barras, etiquetas **e a ficha** para a própria colocação (cada goblin tem
-  seu PV, seus temas e seu inventário — ver "Ficha de NPC").
-- Imagem e visão vêm **sempre da ficha** (inclusive para NPC).
+  Padrão (`defaultToken`): tamanho 3 (`DEFAULT_TOKEN_SIZE`; fichas que já existiam mantêm o seu), visão 18 m (ligada para personagem, desligada para NPC).
+- `Scene.tokens: TokenPlacement { id, entryId, x, y (centro), size?, vision?, bars?, tags? }`.
+- **Personagem:** vinculado — tamanho, visão, barras e etiquetas vêm da ficha; alterar qualquer token altera a ficha e todos.
+- **NPC:** ao ser colocado, copia tamanho, **visão**, barras, etiquetas **e a ficha** para a própria colocação (cada goblin
+  tem seu PV, sua visão, seus temas e seu inventário — ver "Ficha de NPC"). Ligar a visão de um goblin não liga a dos
+  outros. Tokens antigos sem `vision` usam a do NPC até a primeira alteração. "Usar como padrão do NPC" grava a visão também.
+- Imagem e velocidade vêm **sempre da ficha** (inclusive para NPC).
 - **Ficha x token:** clicar na ficha no painel abre só a ficha. Colocar no mapa **só arrastando** a ficha
   do painel. Duplo clique: personagem → janela "Token" (imagem, tamanho, visão, barras, etiquetas); NPC → ficha do
   token, com o botão "Opções do token" (na janela "Token", "Usar como padrão do NPC" → `saveTokenAsDefault` grava no
   token padrão — no bestiário, se for referência).
 - Selecionar: clique seleciona, arrastar move com snap (Shift livre), alça redimensiona em passos de 0,5,
   Delete remove do mapa. **WASD/setas** com token selecionado: desliza na velocidade da ficha
-  (`TokenSettings.speed`, padrão 2 quadrados/s, 0,5–12, editada na janela "Token"; como a visão, vem sempre da ficha; Shift ×2,5);
+  (`TokenSettings.speed`, padrão 2 quadrados/s, 0,5–12, editada na janela "Token"; vem sempre da ficha, inclusive no NPC; Shift ×2,5);
   ao soltar, alinha à grade se ela estiver visível. Movimento não colide com paredes.
+- **Seleção de vários tokens** (regras puras em `utils/selection.ts`; na sessão, `selectedTokenIds` + o **principal**
+  `selectedTokenId`, alterados só por `selectToken` / `toggleTokenSelection` / `selectTokens`):
+  - arrastar no **fundo** com Selecionar desenha a **caixa de seleção** (pega os tokens da camada em foco que a conta pode
+    mover, pelo centro na tela — vale na isométrica); Shift + caixa soma; clique no fundo limpa. Por isso o fundo **não
+    move mais o mapa** em Selecionar: use o botão do meio ou a ferramenta Mover (M);
+  - **Shift + clique** põe/tira um token da seleção; clique simples num token do grupo seleciona só ele;
+  - arrastar um token selecionado move o **grupo** na mesma formação (o arrastado alinha à grade, os outros seguem o
+    mesmo deslocamento; comando `moveTokens`); **WASD** move o grupo na velocidade do principal e alinha ao soltar;
+    **Delete** remove todos; Esc limpa. O principal é o que tem a alça e o que janela, ficha, "quem age" e PageUp/PageDown usam.
+  - `movableSelection` = selecionados da camada em foco que a conta pode mover (`canEdit`), o principal primeiro.
+- **Copiar e colar** (`Ctrl+C` / `Ctrl+V`, só tokens que a conta edita — `canEdit`): `copyTokens` guarda na sessão cópias
+  dos `TokenPlacement` selecionados como estavam (o principal primeiro); `MapStage.pasteTokens` cola o principal sob o mouse
+  (fora do mapa: centro da área livre), alinhado à grade se visível, e os demais **na mesma formação**, na camada em foco e
+  em qualquer cena da mesa; o grupo colado fica selecionado. A cópia é exata e independente (`copyPlacement` em
+  `state/tokens.ts`: tamanho, visão, barras, etiquetas, nome, ficha do NPC, liberações), com id novo; as imagens do
+  inventário do NPC são duplicadas. Personagem colado continua vinculado à ficha. Texto selecionado na página tem
+  prioridade no Ctrl+C.
 
 ### Névoa de guerra e paredes
 - `Scene.fog { enabled, memory? }` por cena; `Scene.walls`: `LineWall` (polilinha), `CircleWall` (vira 24 lados
@@ -536,9 +662,10 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 
 ### Atalhos da mesa (ignorados ao digitar)
 `V` selecionar · `M` mover mapa · `R` régua · `P` ping · `D` desenhar · `F` névoa · `W` parede (névoa em modo linha) ·
-`N` anotação · `E` efeitos especiais · `G` grade · `+`/`-` zoom · `1`–`0` ações · `\` modo imersivo · `Delete` remove o token (ou a parede,
-no modo editar) selecionado · `Esc` cancela parede/fecha anotação/desarma efeito de ação/limpa seleção · `Enter` finaliza parede ·
-`Ctrl+Z` desfaz desenho · **`WASD`/setas** movem o token selecionado (nesse caso W/D não trocam de ferramenta) ·
+`N` anotação · `E` efeitos especiais · `+`/`-` zoom · `1`–`0` ações · `\` modo imersivo · `Delete` remove os tokens selecionados (ou a parede
+selecionada, no modo editar) · `Esc` cancela parede/fecha anotação/desarma efeito de ação/limpa seleção · `Enter` finaliza parede ·
+`Ctrl+Z` desfaz desenho · **`Ctrl+C`/`Ctrl+V`** copia os tokens selecionados / cola sob o mouse · **`WASD`/setas** movem os tokens selecionados (nesse caso W/D não trocam de ferramenta) ·
+**Shift + clique** soma/tira um token da seleção · arrastar no fundo (Selecionar) = caixa de seleção ·
 **`PageUp`/`PageDown`** (mestre, isométrica) sobem/descem o token selecionado ou a camada em foco.
 Botão do meio do mouse sempre move o mapa; roda do mouse = zoom no cursor.
 
@@ -548,7 +675,7 @@ Botão do meio do mouse sempre move o mapa; roda do mouse = zoom no cursor.
 
 ### `FloatingWindow` (`shared/components/floating-window`)
 Janela reutilizável usada no Worldbuild e na Mesa. Recursos: arrastar pela barra de título, redimensionar
-(bordas direita, inferior e canto), **minimizar** (só a barra fica; o conteúdo é escondido, não destruído),
+(bordas direita, inferior e canto), **minimizar** (só a barra fica, estreita — largura do título + botões, até 22rem; o conteúdo é escondido, não destruído),
 **maximizar** (duplo clique na barra), **fixar** (trava posição/tamanho), foco/z-index.
 Usa `model()` para `geometry`, `maximized`, `minimized`, `pinned`. Limita-se ao elemento pai (`position: relative`).
 No mobile (<768px), aberta ocupa a área inteira.
@@ -572,9 +699,11 @@ O `MapStage` recebe `insets` para enquadrar o mapa só na área livre entre as b
   (`tokenDown`, `noteDown`).
 - Ordem no "mundo", de baixo para cima: **1** mapa · **2** grade · **3** desenhos · **4** notas · **5** névoa ·
   **6** tokens visíveis · **7** portas e paredes · **8** efeitos, régua e ping · **9** interface (popover, avisos — fora do mundo).
-- Na ferramenta Selecionar, token ou anotação sob o cursor tem prioridade; o fundo move o mapa.
+- Na ferramenta Selecionar, token ou anotação sob o cursor tem prioridade; o fundo desenha a caixa de seleção
+  (o mapa se move com o botão do meio ou a ferramenta Mover).
 - Mutações de cena passam pelo `TableSessionService` (`moveToken`, `updateToken`, `addWall`, `removeWall`,
-  `addStroke`, `eraseStrokes`, `undoDrawing`, `addNote`…), sempre com o debounce de persistência.
+  `addStroke`, `eraseStrokes`, `undoDrawing`, `addNote`…), que as aplica como comandos de `state/` (`dispatch`),
+  sempre com o debounce de persistência.
 - Teclas que dependem da ferramenta/seleção (Enter, Esc, Delete, WASD/setas) chegam via `MapStage.handleKey`;
   soltar tecla e perder o foco via `handleKeyUp` / `stopKeyMove`.
 
@@ -586,21 +715,33 @@ O `MapStage` recebe `insets` para enquadrar o mapa só na área livre entre as b
 |---|---|
 | `users` | `StoredUser[]` |
 | `tables` | `GameTable[]` (todas; filtradas por `ownerId`) |
-| `worldbuild:<userId>` | `WorldItem[]` (inclui os itens do mundo com cartão e os NPCs do bestiário) |
-| `lore:global` | `WorldItem[]` da Lore geral (igual para todos) |
-| `table-state:<tableId>` | `TableState` (cenas com tokens/névoa/memória/paredes/portas/desenhos/anotações/camadas/vista, pastas de cenas, cena ativa, arquivos — com a ficha do personagem em `sheet` e os NPCs como referência ao bestiário —, tokens de NPC com ficha própria, volume mestre, chat, organização da Lore) |
+| `worlds:<userId>` | `World[]` (mundos do usuário; ausente = só o primeiro) |
+| `worldbuild:<userId>` | `WorldItem[]` do primeiro mundo (`DEFAULT_WORLD_ID`; itens, NPCs do bestiário, raças…) |
+| `worldbuild:<userId>:<worldId>` | `WorldItem[]` dos outros mundos |
+| `table-state:<tableId>` | `TableState` (cenas com tokens/névoa/memória/paredes/portas/desenhos/anotações/camadas/vista, pastas de cenas, cena ativa, arquivos — com a ficha do personagem em `sheet` e os NPCs como referência ao bestiário —, tokens de NPC com ficha própria, volume mestre, chat, organização da Lore, itens criados na mesa por jogadores) |
 | `blob:<id>` | `Blob` de imagem/mapa/áudio/imagem de token |
+| `desk:<userId>:<worldId>` | `OpenWindow[]`: janelas da mesa de trabalho do Worldbuild daquele mundo (posição, tamanho, estado) |
 | `localStorage: dicetag.session` | id do usuário logado |
+| `localStorage: dicetag.world.<userId>` | último mundo aberto pelo usuário |
 | `localStorage: dicetag.sidebarCollapsed` | preferência da barra lateral |
 
 O banco e as chaves do `localStorage` mantêm o prefixo `dicetag` (nome antigo do projeto) — assim como o prefixo
 do hash das senhas — para não perder dados, sessões e contas já salvos. **Não renomear.**
 
-Para conectar um backend no futuro: trocar `StorageService` e `AuthService` mantendo as interfaces públicas.
+**Armazenamento persistente:** `StorageService.requestPersistence()` chama `navigator.storage.persist()` (uma vez por
+sessão) ao criar uma mesa ou um item do Worldbuild/Lore, para o navegador não apagar o IndexedDB quando falta espaço.
+Não protege contra o usuário limpar os dados do site.
+
+Para conectar um backend: o `StorageService` chave/valor e o `AuthService` local **não** são a interface de uma
+API; serão trocados por repositórios por domínio fornecidos por injeção de dependência. Plano em `SPEC.md` §2.
 
 ---
 
 ## 10. Pendências e próximos passos sugeridos
+
+As decisões para o back-end e o multiplayer estão no **`SPEC.md`**: sincronização por comandos e conflitos,
+repositórios por domínio, servidor autoritativo (névoa, rolagens, permissões) e outras pendências
+(exportar/importar, arquivos esquecidos ao excluir mesa, ciclo entre features, OnPush).
 
 - Inventário sem peso; "Dar para" e compra passam uma unidade por vez; relações por nome livre (sem vínculo com
   fichas da mesa).
@@ -613,9 +754,10 @@ Para conectar um backend no futuro: trocar `StorageService` e `AuthService` mant
 - Movimento de tokens (arrastar ou WASD) não colide com paredes.
 - Ctrl+Z cobre só desenhos (não tokens, paredes ou anotações).
 - Backend + multiplayer em tempo real; permissões reais de mestre/jogador; convite de jogadores.
-- Lore geral: hoje qualquer usuário edita; com backend, só o dono do mundo deve editar (os demais só leem).
+- Mundos: limite fixo de 2 por usuário; trocar o mundo de uma mesa já criada ainda não é possível.
 - Mural de notícias alimentado por API/CMS (`NewsService.posts`).
-- Testes de componentes (hoje só as funções puras de `utils/`, as regras da ficha no modelo e a `FxLayer` têm testes).
+- Testes de componentes (hoje têm testes as funções puras de `utils/` e `state/`, as regras da ficha no modelo, a
+  `FxLayer` e a fachada `TableSessionService`, num teste de integração).
 
 ---
 

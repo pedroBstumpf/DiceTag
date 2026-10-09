@@ -44,6 +44,7 @@ export class GameTablesService {
     const table: GameTable = { ...data, id: newId(), ownerId: user.id, createdAt: Date.now() };
     this.all.update((list) => [...list, table]);
     await this.persist();
+    this.storage.requestPersistence();
     return table;
   }
 
@@ -78,6 +79,7 @@ export class GameTablesService {
       const blobIds = [
         ...state.scenes.map((s) => s.blobId),
         ...state.entries.flatMap((e) => [e.blobId, e.token?.blobId]),
+        ...(state.items ?? []).map((i) => i.blobId),
       ].filter((b): b is string => !!b);
       await Promise.all(blobIds.map((b) => this.storage.delete(`blob:${b}`)));
     }

@@ -37,10 +37,6 @@ export function maskFits(mask: ExploredMask, width: number, height: number): boo
   return fresh.cell === mask.cell && fresh.cols === mask.cols && fresh.rows === mask.rows;
 }
 
-export function cloneMask(mask: ExploredMask): ExploredMask {
-  return { ...mask, bits: mask.bits.slice() };
-}
-
 /** Célula (c, r) explorada? */
 export function isCellExplored(mask: ExploredMask, c: number, r: number): boolean {
   if (c < 0 || r < 0 || c >= mask.cols || r >= mask.rows) return false;

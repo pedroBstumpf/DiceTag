@@ -1,29 +1,37 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { defaultSheet, defaultToken } from '../../../core/models/table-session.model';
-import { User } from '../../../core/models/user.model';
-import { WORLD_ITEM_META, WorldItem, WorldItemType } from '../../../core/models/world-item.model';
+import { WORLD_ITEM_META, WorldItem, WorldItemType, worldItemBlobIds } from '../../../core/models/world-item.model';
+import { worldbuildKey } from '../../../core/models/world.model';
 import { AuthService } from '../../../core/services/auth.service';
 import { StorageService } from '../../../core/services/storage.service';
+import { WorldsService } from '../../../core/services/worlds.service';
 import { newId } from '../../../core/utils/id';
+import { OpenWindow } from '../../../shared/services/window-manager.service';
 import { columnLayout } from '../utils/timeline-layout';
 
+/** Ordem da árvore: pastas primeiro, depois nome (pt-BR, numérico). */
+export function byTreeOrder(a: WorldItem, b: WorldItem): number {
+  if (a.type === 'folder' && b.type !== 'folder') return -1;
+  if (b.type === 'folder' && a.type !== 'folder') return 1;
+  return a.name.localeCompare(b.name, 'pt-BR', { numeric: true });
+}
+
 /**
- * Fonte única de dados do worldbuild do usuário logado.
+ * Fonte única de dados do Worldbuild do mundo aberto (`WorldsService.activeId`) do usuário.
  *
  * Os itens formam uma árvore (parentId). A lista de itens é salva como um
- * único registro por usuário; imagens são salvas como Blobs separados
- * (chave "blob:<id>") para não pesar a lista.
- *
- * Também é a base do LoreService (Lore geral): a subclasse só troca o título
- * e a chave de armazenamento, e todos os editores funcionam com as duas.
+ * único registro por mundo; imagens são salvas como Blobs separados
+ * (chave "blob:<id>") para não pesar a lista. Trocar de mundo ou de usuário
+ * grava as pendências na chave antiga antes de carregar a nova.
  */
 @Injectable({ providedIn: 'root' })
 export class WorldbuildService {
   private readonly storage = inject(StorageService);
   private readonly auth = inject(AuthService);
+  private readonly worlds = inject(WorldsService);
 
-  /** Nome exibido no cabeçalho do explorador. */
-  readonly title: string = 'Worldbuild';
+  /** Nome exibido no cabeçalho do explorador: o do mundo aberto. */
+  readonly title = computed(() => this.worlds.active()?.name ?? 'Worldbuild');
 
   // --- Estado --------------------------------------------------------------
   private readonly _items = signal<WorldItem[]>([]);
@@ -37,32 +45,43 @@ export class WorldbuildService {
   readonly worldItems = computed(() => this.ofType('item'));
   /** NPCs do bestiário (fichas base), em ordem alfabética. */
   readonly worldNpcs = computed(() => this.ofType('npc'));
+  /** Raças, em ordem alfabética. */
+  readonly worldRaces = computed(() => this.ofType('race'));
+
+  /**
+   * Mesa de trabalho do mundo aberto (página Worldbuild): janelas abertas com posição, tamanho
+   * e estado, salvas por mundo para voltarem iguais depois de recarregar a página.
+   */
+  readonly desk = signal<OpenWindow[]>([]);
 
   /** Chave do usuário cujos dados estão (ou estão sendo) carregados. */
   private storageKey: string | null = null;
   private saveTimer?: ReturnType<typeof setTimeout>;
+  /** Chave da mesa de trabalho do mundo aberto e a gravação pendente dela. */
+  private deskKey: string | null = null;
+  private pendingDesk: OpenWindow[] | null = null;
+  private deskTimer?: ReturnType<typeof setTimeout>;
 
   constructor() {
     // Garante que nada se perca ao fechar ou recarregar a aba
     window.addEventListener('pagehide', () => this.flush());
 
-    // Recarrega o worldbuild quando o usuário muda
+    // Recarrega os itens quando o usuário ou o mundo aberto mudam (depois de a lista de mundos carregar)
     effect(() => {
       const user = this.auth.user();
+      const ready = this.worlds.loaded();
+      const worldId = this.worlds.activeId();
       untracked(() => {
-        // Grava as pendências do usuário anterior antes de trocar a chave
+        // Grava as pendências do mundo/usuário anterior antes de trocar a chave
         this.flush();
         this.loaded.set(false);
         this._items.set([]);
-        this.storageKey = this.keyFor(user);
-        if (this.storageKey) this.load(this.storageKey);
+        this.desk.set([]);
+        this.storageKey = user && ready ? worldbuildKey(user.id, worldId) : null;
+        this.deskKey = user && ready ? `desk:${user.id}:${worldId}` : null;
+        if (this.storageKey) void this.load(this.storageKey);
       });
     });
-  }
-
-  /** Chave do IndexedDB onde ficam os itens (por usuário; null = ninguém logado). */
-  protected keyFor(user: User | null): string | null {
-    return user ? `worldbuild:${user.id}` : null;
   }
 
   // --- Consultas -----------------------------------------------------------
@@ -71,11 +90,7 @@ export class WorldbuildService {
   childrenOf(parentId: string | null): WorldItem[] {
     return this._items()
       .filter((i) => i.parentId === parentId)
-      .sort((a, b) =>
-        a.type === 'folder' && b.type !== 'folder' ? -1
-        : b.type === 'folder' && a.type !== 'folder' ? 1
-        : a.name.localeCompare(b.name, 'pt-BR', { numeric: true }),
-      );
+      .sort(byTreeOrder);
   }
 
   /** true se `id` está dentro (em qualquer nível) da pasta `ancestorId`. */
@@ -108,10 +123,12 @@ export class WorldbuildService {
       ...(type === 'document' && { content: '' }),
       ...(type === 'timeline' && { events: [], links: [] }),
       ...(type === 'item' && { tags: [] }),
+      ...(type === 'race' && { traits: [], statusMods: {} }),
       ...(type === 'npc' && { sheet: defaultSheet(), token: defaultToken('npc') }),
     };
     this._items.update((list) => [...list, item]);
     this.persist();
+    this.storage.requestPersistence();
     return item;
   }
 
@@ -132,6 +149,22 @@ export class WorldbuildService {
     await this.storage.set(`blob:${blobId}`, file);
     this.update(id, { blobId });
     if (old) this.storage.delete(`blob:${old}`);
+  }
+
+  /** Troca (ou define) a imagem padrão masculina/feminina de uma Raça e apaga a anterior. */
+  async setRaceImage(id: string, field: 'maleBlobId' | 'femaleBlobId', file: File): Promise<void> {
+    const old = this.byId().get(id)?.[field];
+    const blobId = await this.storeBlob(file);
+    this.update(id, { [field]: blobId });
+    if (old) this.deleteBlob(old);
+  }
+
+  /** Tira a imagem padrão masculina/feminina de uma Raça (e apaga o arquivo). */
+  clearRaceImage(id: string, field: 'maleBlobId' | 'femaleBlobId'): void {
+    const old = this.byId().get(id)?.[field];
+    if (!old) return;
+    this.update(id, { [field]: undefined });
+    this.deleteBlob(old);
   }
 
   // --- Edição --------------------------------------------------------------
@@ -166,10 +199,9 @@ export class WorldbuildService {
     this._items.update((list) => list.filter((i) => !ids.has(i.id)));
     this.persist();
 
-    // Limpa os arquivos de imagem associados (inclui imagem e inventário dos NPCs)
+    // Limpa os arquivos de imagem associados (inclui imagem e inventário dos NPCs e imagens das raças)
     for (const item of removed) {
-      const blobIds = [item.blobId, item.token?.blobId, ...(item.sheet?.inventory ?? []).map((i) => i.blobId)];
-      for (const blobId of blobIds) if (blobId) this.storage.delete(`blob:${blobId}`);
+      for (const blobId of worldItemBlobIds(item)) this.storage.delete(`blob:${blobId}`);
     }
     return [...ids];
   }
@@ -218,6 +250,7 @@ export class WorldbuildService {
       image: WORLD_ITEM_META.image.label,
       item: 'Novo item',
       npc: 'Novo NPC',
+      race: 'Nova raça',
     }[type];
     const siblings = new Set(this.childrenOf(parentId).map((i) => i.name));
     let name = base;
@@ -225,12 +258,30 @@ export class WorldbuildService {
     return name;
   }
 
+  /** Carrega os itens e a mesa de trabalho do mundo. */
   private async load(key: string): Promise<void> {
-    const items = (await this.storage.get<WorldItem[]>(key)) ?? [];
-    // O usuário mudou durante o carregamento: descarta o resultado antigo
+    const deskKey = this.deskKey;
+    const items = ((await this.storage.get<WorldItem[]>(key)) ?? []).map(migrateTimeline);
+    const desk = deskKey ? ((await this.storage.get<OpenWindow[]>(deskKey)) ?? []) : [];
+    // O usuário ou o mundo mudou durante o carregamento: descarta o resultado antigo
     if (key !== this.storageKey) return;
-    this._items.set(items.map(migrateTimeline));
+    this._items.set(items);
+    this.desk.set(desk);
     this.loaded.set(true);
+  }
+
+  /** Guarda as janelas abertas na mesa de trabalho do mundo (gravação agrupada, como os itens). */
+  saveDesk(windows: OpenWindow[]): void {
+    if (!this.loaded() || !this.deskKey) return;
+    this.pendingDesk = windows;
+    clearTimeout(this.deskTimer);
+    this.deskTimer = setTimeout(() => this.flushDesk(), 300);
+  }
+
+  private flushDesk(): void {
+    clearTimeout(this.deskTimer);
+    if (this.pendingDesk && this.deskKey) this.storage.set(this.deskKey, this.pendingDesk);
+    this.pendingDesk = null;
   }
 
   /**
@@ -242,10 +293,11 @@ export class WorldbuildService {
     this.saveTimer = setTimeout(() => this.flush(), 300);
   }
 
-  /** Grava imediatamente o que estiver pendente. */
+  /** Grava imediatamente o que estiver pendente (itens e mesa de trabalho). */
   private flush(): void {
     clearTimeout(this.saveTimer);
     if (this.loaded() && this.storageKey) this.storage.set(this.storageKey, this._items());
+    this.flushDesk();
   }
 }
 

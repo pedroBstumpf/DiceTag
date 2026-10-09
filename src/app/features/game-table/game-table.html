@@ -33,7 +33,7 @@
           <mat-icon class="!text-[18px]">right_panel_close</mat-icon>
         </button>
       </header>
-      <app-side-panel class="min-h-0 flex-1" (opened)="open($event)" (removed)="windows.close($event)" />
+      <app-side-panel class="min-h-0 flex-1" (opened)="open($event)" (removed)="windows.closeMany($event)" />
     </aside>
   }
 
@@ -79,52 +79,34 @@
             @case ('token') {
               <app-token-window [placementId]="placementOf(win.id)" (openEntry)="open($event)" />
             }
-          }
-          <!-- Lore: mesmos componentes do worldbuild; itens da Lore geral usam o LoreService (appLoreScope) -->
-          @if (c.global) {
-            @switch (c.type) {
-              @case ('explorer') {
-                <app-explorer appLoreScope [hideable]="false" (opened)="open($event)" (removed)="windows.closeMany($event)" />
-              }
-              @case ('document') {
-                <app-document-editor appLoreScope [itemId]="win.id" />
-              }
-              @case ('timeline') {
-                <app-timeline-editor appLoreScope [itemId]="win.id" />
-              }
-              @case ('image') {
-                <app-image-viewer appLoreScope [itemId]="win.id" />
-              }
-              @case ('item') {
-                <app-item-card appLoreScope [itemId]="win.id" />
-              }
-              @case ('npc') {
-                <!-- Ficha base do bestiário da Lore geral -->
-                <app-character-sheet appLoreScope appWorldNpcSheet [sheetId]="win.id" (openEntry)="open($event)" />
-              }
+            @case ('equipped') {
+              @let eq = equippedOf(win.id);
+              <app-equipped-item-window [sheetId]="eq.sheetId" [inventoryId]="eq.inventoryId" />
             }
-          } @else {
-            @switch (c.type) {
-              @case ('explorer') {
-                <!-- Pastas do worldbuild dentro da mesa: os itens abrem em janelas aqui mesmo -->
-                <app-explorer [hideable]="false" (opened)="open($event)" (removed)="windows.closeMany($event)" />
-              }
-              @case ('document') {
-                <app-document-editor [itemId]="win.id" />
-              }
-              @case ('timeline') {
-                <app-timeline-editor [itemId]="win.id" />
-              }
-              @case ('image') {
-                <app-image-viewer [itemId]="win.id" />
-              }
-              @case ('item') {
-                <app-item-card [itemId]="win.id" />
-              }
-              @case ('npc') {
-                <!-- Ficha base do bestiário do Worldbuild -->
-                <app-character-sheet appWorldNpcSheet [sheetId]="win.id" (openEntry)="open($event)" />
-              }
+            @case ('table-item') {
+              <app-table-item-window [itemId]="win.id" />
+            }
+          }
+          <!-- Lore: itens do mundo da mesa, com os mesmos componentes do Worldbuild. Jogador: só leitura -->
+          @switch (c.type) {
+            @case ('document') {
+              <app-document-editor [itemId]="win.id" [readonly]="!isGm()" />
+            }
+            @case ('timeline') {
+              <app-timeline-editor [itemId]="win.id" [readonly]="!isGm()" (openItem)="open($event)" />
+            }
+            @case ('image') {
+              <app-image-viewer [itemId]="win.id" />
+            }
+            @case ('item') {
+              <app-item-card [itemId]="win.id" [readonly]="!isGm()" />
+            }
+            @case ('race') {
+              <app-race-card [itemId]="win.id" [readonly]="!isGm()" />
+            }
+            @case ('npc') {
+              <!-- Ficha base do bestiário do mundo -->
+              <app-character-sheet appWorldNpcSheet [sheetId]="win.id" [readonly]="!isGm()" (openEntry)="open($event)" />
             }
           }
         </app-floating-window>

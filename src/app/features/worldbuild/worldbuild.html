@@ -17,6 +17,8 @@
         class="z-20 w-72 shrink-0 border-r border-white/5 bg-ink-900/95 backdrop-blur-xl animate-fade-in max-lg:absolute max-lg:inset-y-0 max-lg:left-0 max-lg:shadow-2xl"
       >
         <app-explorer
+          [worldSwitcher]="true"
+          [folderWindows]="true"
           (opened)="open($event)"
           (removed)="windows.closeMany($event)"
           (hide)="explorerOpen.set(false)"
@@ -63,17 +65,23 @@
             (closed)="windows.close(win.id)"
           >
             @switch (item.type) {
+              @case ('folder') {
+                <app-folder-view [itemId]="item.id" (opened)="open($event)" />
+              }
               @case ('document') {
                 <app-document-editor [itemId]="item.id" />
               }
               @case ('timeline') {
-                <app-timeline-editor [itemId]="item.id" />
+                <app-timeline-editor [itemId]="item.id" (openItem)="open($event)" />
               }
               @case ('image') {
                 <app-image-viewer [itemId]="item.id" />
               }
               @case ('item') {
                 <app-item-card [itemId]="item.id" />
+              }
+              @case ('race') {
+                <app-race-card [itemId]="item.id" />
               }
               @case ('npc') {
                 <!-- Ficha base do bestiário (as mesas usam referências a ela) -->
@@ -105,6 +113,10 @@
           <button mat-stroked-button (click)="createAndOpen('npc')">
             <mat-icon [class]="meta.npc.color">{{ meta.npc.icon }}</mat-icon>
             NPC
+          </button>
+          <button mat-stroked-button (click)="createAndOpen('race')">
+            <mat-icon [class]="meta.race.color">{{ meta.race.icon }}</mat-icon>
+            Raça
           </button>
         </app-empty-state>
       }

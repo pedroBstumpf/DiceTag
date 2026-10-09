@@ -108,16 +108,21 @@ export interface ExploredData {
 
 // --- Paredes -----------------------------------------------------------------
 
-/** Parede em linha (polilinha, ponto a ponto). */
-export interface LineWall {
+/** Campos comuns das paredes. */
+interface WallBase {
   id: string;
+  /** Camada do mapa a que a parede pertence (0 = térreo). Padrão: 0. */
+  level?: number;
+}
+
+/** Parede em linha (polilinha, ponto a ponto). */
+export interface LineWall extends WallBase {
   kind: 'line';
   points: Point[];
 }
 
 /** Parede circular (pilar, árvore…), centro e raio em px do mapa. */
-export interface CircleWall {
-  id: string;
+export interface CircleWall extends WallBase {
   kind: 'circle';
   cx: number;
   cy: number;
@@ -125,8 +130,7 @@ export interface CircleWall {
 }
 
 /** Porta: segmento entre dois batentes. Fechada bloqueia a visão; aberta deixa passar. */
-export interface DoorWall {
-  id: string;
+export interface DoorWall extends WallBase {
   kind: 'door';
   /** Os dois batentes [a, b]. */
   points: Point[];
@@ -172,8 +176,6 @@ export interface TableEntry {
    * na própria entrada (criado antes do bestiário).
    */
   worldNpcId?: string;
-  /** npc: a ficha base está na Lore geral (senão, no Worldbuild de quem criou a mesa). */
-  worldNpcGlobal?: boolean;
   /** npc: conta do jogador autorizado pelo mestre a ver, editar e controlar o NPC (ausente = só o mestre). */
   controllerUserId?: string;
   /** character/npc: configuração do token. Padrão: defaultToken(kind). */
@@ -212,14 +214,38 @@ export interface CharacterTheme {
   tags: ThemeTag[];
   /** Defeitos (nível -1 a -6). Fichas antigas ganham [] em `sheetOf`. */
   flaws: ThemeTag[];
+  /** Personagem: objetivo do tema (texto livre). Padrão: ''. */
+  goal: string;
+  /** Personagem: avanço do objetivo, de 0 a GOAL_STEPS marcadores. Padrão: 0. */
+  goalProgress: number;
 }
+
+/** Marcadores de avanço do objetivo de cada tema. */
+export const GOAL_STEPS = 5;
+
+/**
+ * Estudo ou treino do personagem: uma etiqueta (sem cor) que ele desenvolve rolando.
+ * Ligada a uma rolagem de 2d12 (sem modificador), soma 1 SA com 12+ e 2 com sucesso crítico,
+ * e tira 1 SA na falha crítica (nunca abaixo de 0); ao chegar no SN (definido pelo mestre), sobe de nível.
+ */
+export interface CharacterStudy {
+  id: string;
+  text: string;
+  /** Sucessos Acumulados. */
+  sa: number;
+  /** Sucessos Necessários (0 = ainda não definido pelo mestre). */
+  sn: number;
+}
+
+/** Quantidade fixa de cards de "Estudos e Treinos". */
+export const SHEET_STUDY_COUNT = 3;
 
 /** Lista de tags de um tema: positivas ou defeitos. */
 export type ThemeTagList = 'tags' | 'flaws';
 
 /**
  * Item no inventário do personagem: referência a um item do mundo (tipo `item` do
- * worldbuild do usuário ou da Lore geral) + personalização própria.
+ * Worldbuild do mundo da mesa) ou da mesa + personalização própria.
  *
  * Cópia sob demanda: `name`, `tags` e `blobId` só existem depois que o jogador edita
  * o cartão no inventário e, quando presentes, valem no lugar dos do original — sem
@@ -228,18 +254,22 @@ export type ThemeTagList = 'tags' | 'flaws';
 export interface InventoryEntry {
   id: string;
   itemId: string;
-  /** O item vem da Lore geral (senão, do worldbuild do usuário). */
-  global?: boolean;
+  /** O item foi criado nesta mesa (`TableState.items`), fora do Worldbuild. */
+  table?: boolean;
   /** Nome personalizado (ausente = nome do original). */
   name?: string;
   /** Etiquetas personalizadas (ausente = as do original). */
   tags?: Tag[];
+  /** Descrição personalizada (ausente = a do original). */
+  description?: string;
   /** Imagem personalizada no IndexedDB (ausente = a do original). Apagada ao tirar o item. */
   blobId?: string;
   /** Inventário de NPC (loja): preço em Eiros (ausente = não está à venda). */
   price?: number;
   /** Quantidade (ausente = 1). Na loja de NPC pode ficar em 0 (esgotado). */
   quantity?: number;
+  /** Personagem: o item está equipado (aparece na aba Ficha, abaixo dos temas). Padrão: false. */
+  equipped?: boolean;
 }
 
 /** Nome da moeda do mundo. */
@@ -252,13 +282,41 @@ export interface NotePage {
   content: string;
 }
 
+/** Páginas fixas das anotações, sempre as primeiras: não são excluídas, movidas nem renomeadas. */
+export const FIXED_NOTE_PAGES: readonly Omit<NotePage, 'content'>[] = [
+  { id: 'background', title: 'Background' },
+  { id: 'journal', title: 'Jornal' },
+];
+
+export function isFixedNotePage(page: NotePage): boolean {
+  return FIXED_NOTE_PAGES.some((f) => f.id === page.id);
+}
+
+/**
+ * Páginas fixas no início (criadas se faltarem, com o título fixo) + as do jogador, na ordem salva.
+ * A antiga página padrão ("Página 1", id `page-1`) some se estiver vazia.
+ */
+export function withFixedNotePages(notes: NotePage[]): NotePage[] {
+  const fixed = FIXED_NOTE_PAGES.map((f) => ({ content: '', ...notes.find((p) => p.id === f.id), ...f }));
+  const others = notes.filter((p) => !isFixedNotePage(p) && !(p.id === 'page-1' && !p.content.replace(/<[^>]*>/g, '').trim()));
+  return [...fixed, ...others];
+}
+
 /**
  * Ficha do personagem jogador. As etiquetas e as barras de status (Corpo, Mente,
  * Espírito) ficam no token da ficha (`TableEntry.token`), assim aparecem também no mapa.
  */
 export interface CharacterSheet {
+  /** Nome da raça (o da Raça escolhida em `raceRef`; fichas antigas: texto livre). */
   race: string;
+  /** Nome da sub-raça (o da Raça escolhida em `subraceRef`; fichas antigas: texto livre). */
   subrace: string;
+  /** Raça escolhida da lista (Raças do mundo). Ausente = nenhuma (ou texto antigo). */
+  raceRef?: RaceRef;
+  /** Sub-raça escolhida da lista (também uma Raça cadastrada). */
+  subraceRef?: RaceRef;
+  /** O que a raça e a sub-raça aplicaram (rótulos e modificadores), para desfazer ao trocar. */
+  appliedRaces?: Partial<Record<RaceSlot, AppliedRace>>;
   /** Rótulos de personagem (texto livre: "Nobre", "Exilado"…). */
   labels: string[];
   relations: CharacterRelation[];
@@ -266,10 +324,26 @@ export interface CharacterSheet {
   themes: CharacterTheme[];
   /** Itens que o personagem possui. */
   inventory: InventoryEntry[];
-  /** Anotações do jogador, em páginas (sempre pelo menos uma). */
+  /** Anotações do jogador, em páginas (sempre começa com as fixas: Background e Jornal). */
   notes: NotePage[];
   /** Personagem: Eiros (moeda) que possui, gastos ao comprar itens de NPCs. */
   eiros: number;
+  /** Personagem: sempre SHEET_STUDY_COUNT cards de "Estudos e Treinos". */
+  studies: CharacterStudy[];
+}
+
+/** Campo da ficha que recebe uma Raça. */
+export type RaceSlot = 'race' | 'subrace';
+
+/** Referência a uma Raça do mundo. */
+export interface RaceRef {
+  id: string;
+}
+
+/** O que uma Raça aplicou na ficha: rótulos que ela acrescentou e modificadores somados ao máximo. */
+export interface AppliedRace {
+  labels: string[];
+  mods: StatusMods;
 }
 
 /** Ficha vazia de um personagem. */
@@ -279,22 +353,35 @@ export function defaultSheet(): CharacterSheet {
     subrace: '',
     labels: [],
     relations: [],
-    themes: Array.from({ length: SHEET_THEME_COUNT }, (_, i) => ({ id: `theme-${i + 1}`, name: '', tags: [], flaws: [] })),
+    themes: Array.from({ length: SHEET_THEME_COUNT }, (_, i) => ({
+      id: `theme-${i + 1}`,
+      name: '',
+      tags: [],
+      flaws: [],
+      goal: '',
+      goalProgress: 0,
+    })),
     inventory: [],
-    notes: [{ id: 'page-1', title: 'Página 1', content: '' }],
+    notes: withFixedNotePages([]),
     eiros: 0,
+    studies: Array.from({ length: SHEET_STUDY_COUNT }, (_, i) => ({ id: `study-${i + 1}`, text: '', sa: 0, sn: 0 })),
   };
 }
 
 /**
  * Ficha salva com os valores padrão dos campos ausentes: sempre SHEET_THEME_COUNT temas
- * (com `flaws`) e pelo menos uma página de anotações. Fichas antigas sempre abrem.
+ * (com `flaws` e objetivo), SHEET_STUDY_COUNT estudos e as páginas fixas das anotações
+ * no início. Fichas antigas sempre abrem.
  */
 export function normalizeSheet(raw: Partial<CharacterSheet> | undefined): CharacterSheet {
   const empty = defaultSheet();
   const sheet = { ...empty, ...raw };
-  const themes = empty.themes.map((theme, i) => ({ ...theme, ...sheet.themes[i], flaws: sheet.themes[i]?.flaws ?? [] }));
-  return { ...sheet, themes, notes: sheet.notes.length ? sheet.notes : empty.notes };
+  const themes = empty.themes.map((theme, i) => {
+    const saved = sheet.themes[i];
+    return { ...theme, ...saved, flaws: saved?.flaws ?? [], goal: saved?.goal ?? '', goalProgress: saved?.goalProgress ?? 0 };
+  });
+  const studies = empty.studies.map((study, i) => ({ ...study, ...sheet.studies?.[i] }));
+  return { ...sheet, themes, studies, notes: withFixedNotePages(sheet.notes) };
 }
 
 /** Barras de status fixas do personagem, na ordem da ficha (também exibidas sobre o token). */
@@ -304,8 +391,14 @@ export const STATUS_BARS = [
   { id: 'status-spirit', label: 'Espírito', color: '#4f86f7' },
 ] as const;
 
+/** Id de uma barra de status fixa (Corpo, Mente, Espírito). */
+export type StatusBarId = (typeof STATUS_BARS)[number]['id'];
+
+/** Modificadores do máximo das barras de status (ex.: de uma Raça). Ausente = 0. */
+export type StatusMods = Partial<Record<StatusBarId, number>>;
+
 /** Valor máximo inicial das barras de status. */
-export const DEFAULT_STATUS_MAX = 10;
+export const DEFAULT_STATUS_MAX = 24;
 
 /** A barra é uma das barras de status fixas (não pode ser renomeada nem removida)? */
 export function isStatusBar(bar: TokenBar): boolean {
@@ -341,10 +434,16 @@ export interface RollConfig {
   /** Modificador fixo somado ao total. */
   modifier: number;
   /**
-   * Ids das tags dos temas (tags e defeitos) do personagem dono da ação: o nível
-   * atual de cada uma é somado ao modificador (ver `effectiveModifier` em utils/dice.ts).
+   * Ids das tags dos temas (tags e defeitos) e das etiquetas dos itens equipados do dono
+   * da ação: o nível atual de cada uma é somado ao modificador; com o prefixo "-" (só
+   * etiquetas de itens), é subtraído (ver `effectiveModifier` em utils/dice.ts).
    */
   attributes?: string[];
+  /**
+   * Somar as etiquetas de itens ligadas ao total dos dados. Padrão: false — elas aparecem
+   * na rolagem (cartão do chat), mas não entram no total nem no resultado.
+   */
+  addItems?: boolean;
 }
 
 export const DEFAULT_ROLL: RollConfig = { dice: '2d12', modifier: 0 };
@@ -374,7 +473,15 @@ export interface RollResult {
   dice: DiceKind;
   /** Valor de cada dado. */
   rolls: number[];
+  /** Modificador somado ao total (fixo + etiquetas do personagem + itens, se `itemsAdded`). */
   modifier: number;
+  /** Valor das etiquetas dos itens equipados ligadas à rolagem (exibido à parte no chat). Padrão: 0. */
+  itemModifier?: number;
+  /**
+   * `itemModifier` entrou no total? Rolagens novas gravam sempre; ausente (rolagens antigas) =
+   * sim, como era antes de os itens deixarem de somar por padrão.
+   */
+  itemsAdded?: boolean;
   total: number;
   outcome: RollOutcome;
 }
@@ -483,41 +590,48 @@ export interface TableState {
   entries: TableEntry[];
   /** Volume mestre dos sons da mesa (0–1). Padrão: 1. */
   soundMaster?: number;
-  /** Organização da aba Lore nesta mesa. Padrão: sem pastas nem ajustes. */
+  /** Pastas do mundo reveladas aos jogadores nesta mesa. Padrão: nenhuma. */
   lore?: TableLore;
   /** Chat da mesa (mensagens e rolagens). Padrão: []. */
   chat?: ChatMessage[];
   /** Pastas da barra de cenas. Padrão: []. */
   sceneFolders?: SceneFolder[];
+  /** Itens criados na mesa (ex.: por um jogador no inventário), fora do Worldbuild. Padrão: []. */
+  items?: TableItem[];
+}
+
+/**
+ * Item que existe só nesta mesa: criado por um jogador no inventário do personagem.
+ * Não vai para o Worldbuild; os inventários o referenciam com `InventoryEntry.table`
+ * e ele aparece na aba Lore da mesa, visível aos jogadores (registro dos feitos deles).
+ * Quem criou (e o mestre) edita o próprio item; os demais só personalizam a cópia.
+ */
+export interface TableItem {
+  id: string;
+  name: string;
+  /** Etiquetas do cartão. Padrão: []. */
+  tags?: Tag[];
+  /** Descrição do cartão. Padrão: ''. */
+  description?: string;
+  /** Imagem do cartão no IndexedDB (apagada ao excluir a mesa). */
+  blobId?: string;
+  /** Conta de quem criou o item. */
+  ownerUserId?: string;
+  createdAt: number;
 }
 
 // --- Lore da mesa ------------------------------------------------------------
 
 /**
- * Organização própria da aba Lore de uma mesa. Os itens continuam vindo do
- * worldbuild e da Lore geral; aqui ficam só ajustes locais (pastas, nomes,
- * itens removidos), que não alteram nem apagam os originais.
+ * O que é desta mesa na aba Lore. A aba mostra a árvore do mundo da mesa (os mesmos itens
+ * e pastas do Worldbuild); aqui fica só o que o mestre revelou aos jogadores NESTA mesa.
  */
 export interface TableLore {
-  folders: LoreFolder[];
-  /** Ajustes por item (chave = id do item do worldbuild ou da Lore geral). */
-  items: Record<string, LoreItemOverride>;
-}
-
-/** Pasta da aba Lore (existe só nesta mesa). */
-export interface LoreFolder {
-  id: string;
-  name: string;
-}
-
-/** Ajustes locais de um item da lore nesta mesa. */
-export interface LoreItemOverride {
-  /** Nome usado só nesta mesa (ausente = nome original). */
-  name?: string;
-  /** Pasta da mesa onde o item fica (ausente = raiz). */
-  folderId?: string;
-  /** Removido desta mesa (o original continua existindo). */
-  hidden?: boolean;
+  /**
+   * Ids das pastas do mundo reveladas aos jogadores (o "olho"). Revelar uma pasta revela
+   * tudo dentro dela, inclusive subpastas. Padrão: [] — a lore é segredo do mestre.
+   */
+  revealed: string[];
 }
 
 // --- Tokens ------------------------------------------------------------------
@@ -545,7 +659,7 @@ export interface TokenVision {
 export interface TokenSettings {
   /** Imagem do token no IndexedDB. Sem imagem: inicial do nome num círculo. */
   blobId?: string;
-  /** Tamanho em quadrados da grade (0.5, 1, 2, 3, 4; a alça usa passos de 0.5). */
+  /** Tamanho em quadrados da grade (0.5 a 6; a alça usa passos de 0.5). */
   size: number;
   vision: TokenVision;
   /** Velocidade do movimento por WASD/setas, em quadrados por segundo. Padrão: DEFAULT_TOKEN_SPEED. */
@@ -570,6 +684,11 @@ export interface TokenPlacement {
   bars?: TokenBar[];
   tags?: TokenTag[];
   /**
+   * NPC: visão própria deste token (copiada da visão padrão do NPC ao colocar). Ausente
+   * (tokens antigos) = usa a do NPC até a primeira alteração. Personagem: sempre a da ficha.
+   */
+  vision?: TokenVision;
+  /**
    * NPC: ficha própria deste token (temas, inventário…), copiada da ficha do NPC ao colocar.
    * Alterar aqui não mexe no NPC do painel nem no bestiário. Ausente (tokens antigos) =
    * usa a ficha do NPC até a primeira alteração.
@@ -590,9 +709,10 @@ export interface TokenPlacement {
 export const NPC_TOKEN_SHEET = 'npc:';
 
 /** Tamanhos oferecidos na configuração do token (em quadrados). */
-export const TOKEN_SIZES = [0.5, 1, 2, 3, 4] as const;
+export const TOKEN_SIZES = [0.5, 1, 2, 3, 4, 5, 6] as const;
 export const MIN_TOKEN_SIZE = 0.5;
-export const MAX_TOKEN_SIZE = 4;
+/** Maior tamanho (criaturas enormes): 6 quadrados. */
+export const MAX_TOKEN_SIZE = 6;
 
 /** Metros por quadrado da grade (padrão da maioria dos sistemas). */
 export const METERS_PER_SQUARE = 1.5;
@@ -608,13 +728,16 @@ export const MAX_TOKEN_SPEED = 12;
 /** Paleta para barras e etiquetas de tokens (a mesma das etiquetas em geral). */
 export const TOKEN_COLORS = TAG_COLORS;
 
+/** Tamanho (em quadrados) dos tokens de fichas novas. */
+export const DEFAULT_TOKEN_SIZE = 3;
+
 /**
  * Token padrão de uma ficha: personagens e NPCs têm as barras de status
  * (Corpo, Mente, Espírito); só personagens começam enxergando.
  */
 export function defaultToken(kind: TableEntryKind): TokenSettings {
   return {
-    size: 1,
+    size: DEFAULT_TOKEN_SIZE,
     vision: { enabled: kind === 'character', range: DEFAULT_VISION_RANGE },
     bars: hasSheet(kind) ? withStatusBars([]) : [],
     tags: [],

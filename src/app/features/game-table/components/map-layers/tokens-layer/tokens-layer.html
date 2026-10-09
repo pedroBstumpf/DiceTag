@@ -1,6 +1,6 @@
 @for (t of tokens(); track t.placement.id) {
   @let px = t.size * gridSize();
-  @let selected = selectedId() === t.placement.id;
+  @let selected = selectedIds().has(t.placement.id);
   <div
     class="absolute"
     [class]="interactive() ? 'pointer-events-auto cursor-grab active:cursor-grabbing' : 'pointer-events-none'"
@@ -89,8 +89,8 @@
       </div>
     }
 
-    <!-- Alça de redimensionar -->
-    @if (selected && interactive()) {
+    <!-- Alça de redimensionar (só no token principal da seleção) -->
+    @if (selectedId() === t.placement.id && interactive() && movable()(t)) {
       <span
         class="absolute cursor-nwse-resize rounded-sm border-white bg-astral-500"
         [style.width.px]="ui(12)"

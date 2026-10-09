@@ -116,8 +116,10 @@
       <input
         #maxInput
         type="number"
-        class="h-8 w-14 min-w-0 rounded-md bg-ink-950 px-1.5 text-right text-sm text-slate-100 outline-none ring-1 ring-white/10 focus:ring-astral-500/60"
+        class="h-8 w-14 min-w-0 rounded-md bg-ink-950 px-1.5 text-right text-sm text-slate-100 outline-none ring-1 ring-white/10 focus:ring-astral-500/60 disabled:text-slate-400 disabled:ring-white/5"
         aria-label="Máximo"
+        [disabled]="maxLocked(bar)"
+        [matTooltip]="maxLocked(bar) ? 'Só o mestre altera o máximo' : ''"
         [value]="bar.max"
         (input)="setBarNumber(bar, 'max', maxInput.value)"
       />

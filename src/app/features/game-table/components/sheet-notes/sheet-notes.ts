@@ -1,19 +1,24 @@
+import { CdkDrag, CdkDragPlaceholder, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
+import { NgTemplateOutlet } from '@angular/common';
 import { Component, computed, inject, input, signal } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { NotePage } from '../../../../core/models/table-session.model';
+import { NotePage, isFixedNotePage } from '../../../../core/models/table-session.model';
 import { newId } from '../../../../core/utils/id';
 import { RichTextEditor } from '../../../../shared/components/rich-text-editor/rich-text-editor';
 import { TableSessionService } from '../../services/table-session.service';
 
 /**
  * Aba Anotações da ficha: um caderno com páginas. À esquerda, a lista de
- * páginas (criar, renomear, excluir); ao lado, o texto rico da página aberta
- * (mesmo editor dos documentos do worldbuild). Anterior/próxima no rodapé.
+ * páginas (criar, renomear, excluir, arrastar para reorganizar); ao lado, o texto
+ * rico da página aberta (mesmo editor dos documentos do worldbuild). Anterior/próxima no rodapé.
+ *
+ * As páginas fixas (Background e Jornal) ficam sempre no topo: não são excluídas,
+ * movidas nem renomeadas. As criadas na ficha vêm depois e podem ser arrastadas.
  */
 @Component({
   selector: 'app-sheet-notes',
-  imports: [MatIconModule, MatTooltipModule, RichTextEditor],
+  imports: [NgTemplateOutlet, CdkDropList, CdkDrag, CdkDragPlaceholder, MatIconModule, MatTooltipModule, RichTextEditor],
   templateUrl: './sheet-notes.html',
   host: { class: 'flex h-full min-h-[420px] flex-col gap-3 @xl:flex-row' },
 })
@@ -22,10 +27,14 @@ export class SheetNotes {
 
   readonly entryId = input.required<string>();
 
+  /** Todas as páginas, na ordem do caderno (fixas primeiro — garantido por `sheetOf`). */
   readonly pages = computed(() => {
     const entry = this.session.entryById().get(this.entryId());
     return entry ? this.session.sheetOf(entry).notes : [];
   });
+  readonly fixedPages = computed(() => this.pages().filter(isFixedNotePage));
+  /** Páginas criadas na ficha (as que podem ser movidas e excluídas). */
+  readonly userPages = computed(() => this.pages().filter((p) => !isFixedNotePage(p)));
 
   /** Página aberta (padrão: a primeira). */
   private readonly currentId = signal<string | null>(null);
@@ -40,6 +49,10 @@ export class SheetNotes {
     return page ? [page] : [];
   });
 
+  isFixed(page: NotePage): boolean {
+    return isFixedNotePage(page);
+  }
+
   open(page: NotePage): void {
     this.currentId.set(page.id);
   }
@@ -51,18 +64,26 @@ export class SheetNotes {
   }
 
   addPage(): void {
-    const page: NotePage = { id: newId(), title: `Página ${this.pages().length + 1}`, content: '' };
+    const page: NotePage = { id: newId(), title: `Página ${this.userPages().length + 1}`, content: '' };
     this.save([...this.pages(), page]);
     this.open(page);
   }
 
   rename(page: NotePage, title: string): void {
-    if (title.trim() && title.trim() !== page.title) this.patch(page.id, { title: title.trim() });
+    if (!this.isFixed(page) && title.trim() && title.trim() !== page.title) this.patch(page.id, { title: title.trim() });
   }
 
-  /** Exclui a página (a última nunca é excluída). */
+  /** Arrastar na lista: reordena só as páginas criadas na ficha (as fixas ficam no topo). */
+  reorder(from: number, to: number): void {
+    if (from === to) return;
+    const pages = [...this.userPages()];
+    moveItemInArray(pages, from, to);
+    this.save([...this.fixedPages(), ...pages]);
+  }
+
+  /** Exclui a página (as fixas nunca são excluídas). */
   remove(page: NotePage): void {
-    if (this.pages().length <= 1) return;
+    if (this.isFixed(page)) return;
     const hasText = page.content.replace(/<[^>]*>/g, '').trim();
     if (hasText && !confirm(`Excluir a página "${page.title}"?`)) return;
     const index = this.pages().indexOf(page);

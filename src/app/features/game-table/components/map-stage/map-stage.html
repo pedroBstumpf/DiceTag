@@ -6,6 +6,7 @@
   (wheel)="onWheel($event)"
   (pointerdown)="onPointerDown($event)"
   (pointermove)="onPointerMove($event)"
+  (pointerleave)="pointerAt = null"
   (pointerup)="onPointerUp()"
   (pointercancel)="onPointerUp()"
   (auxclick)="$event.preventDefault()"
@@ -119,7 +120,9 @@
           [scale]="scale()"
           [gridSize]="gridSize()"
           [selectedId]="session.selectedTokenId()"
+          [selectedIds]="session.selectedTokenIds()"
           [interactive]="selecting()"
+          [movable]="canMoveToken"
           [upright]="upright()"
           (tokenDown)="onTokenDown($event)"
         />
@@ -189,6 +192,17 @@
         <app-tokens-layer [tokens]="plane.tokens" [scale]="scale()" [gridSize]="gridSize()" [upright]="upright()" />
       }
     </div>
+  }
+
+  <!-- 9. Interface: caixa de seleção (Selecionar, arrastar no fundo) -->
+  @if (marquee(); as m) {
+    <div
+      class="pointer-events-none absolute rounded-sm border border-astral-300/80 bg-astral-400/10"
+      [style.left.px]="m.x"
+      [style.top.px]="m.y"
+      [style.width.px]="m.width"
+      [style.height.px]="m.height"
+    ></div>
   }
 
   <!-- 9. Interface: rótulo da régua (fora do mundo: sempre reto, na tela) -->

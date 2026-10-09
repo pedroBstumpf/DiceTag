@@ -1,15 +1,19 @@
 <!-- ===== Barra superior ===== -->
 <div class="flex h-12 shrink-0 items-center gap-1 border-b border-white/5 bg-ink-900/60 px-3">
-  <button mat-flat-button class="!h-8 !text-sm" (click)="addAtCenter()">
-    <mat-icon>add</mat-icon>
-    Evento
-  </button>
+  @if (!readonly()) {
+    <button mat-flat-button class="!h-8 !text-sm" (click)="addAtCenter()">
+      <mat-icon>add</mat-icon>
+      Evento
+    </button>
+  }
   <button mat-icon-button class="!size-8 !p-1" matTooltip="Enquadrar tudo" (click)="fitAll()">
     <mat-icon class="!text-[20px]">fit_screen</mat-icon>
   </button>
-  <button mat-icon-button class="!size-8 !p-1" matTooltip="Organizar automaticamente" [disabled]="!events().length" (click)="autoLayout()">
-    <mat-icon class="!text-[20px]">account_tree</mat-icon>
-  </button>
+  @if (!readonly()) {
+    <button mat-icon-button class="!size-8 !p-1" matTooltip="Organizar automaticamente" [disabled]="!events().length" (click)="autoLayout()">
+      <mat-icon class="!text-[20px]">account_tree</mat-icon>
+    </button>
+  }
   <span class="ml-auto text-xs text-slate-500">{{ events().length }} evento(s)</span>
 </div>
 
@@ -58,7 +62,7 @@
 
     <!-- Rótulos das setas (campo de edição quando a seta está selecionada) -->
     @for (shape of linkShapes(); track shape.link.id) {
-      @if (selectedLinkId() === shape.link.id) {
+      @if (selectedLinkId() === shape.link.id && !readonly()) {
         <div
           class="absolute z-30 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-md bg-ink-850 p-1 shadow-lg ring-1 ring-astral-400/50"
           [style.left.px]="shape.mid.x"
@@ -112,7 +116,7 @@
         [style.top.px]="ev.y"
         [style.width.px]="card.width"
         [style.min-height.px]="card.height"
-        [style.height.px]="editing ? null : card.height"
+        [style.height.px]="editing || (readonly() && selected) ? null : card.height"
         (pointerdown)="onCardDown($event, ev)"
       >
         <span class="absolute inset-x-0 top-0 h-1 rounded-t-lg" [style.background]="ev.color"></span>
@@ -140,6 +144,42 @@
               [value]="ev.description"
               (input)="change(ev.id, { description: $any($event.target).value })"
             ></textarea>
+            <!-- Referências a itens do mundo -->
+            <div class="flex flex-col gap-1">
+              @if (refsOf(ev).length) {
+                <div class="flex flex-wrap gap-1">
+                  @for (ref of refsOf(ev); track ref.id) {
+                    <span class="flex h-6 max-w-full items-center gap-1 rounded bg-white/5 pl-1.5 pr-0.5 text-[11px] text-slate-200 ring-1 ring-white/10">
+                      <mat-icon class="!size-3.5 shrink-0 !text-[14px]" [class]="metaOf(ref).color">{{ metaOf(ref).icon }}</mat-icon>
+                      <span class="truncate">{{ ref.name }}</span>
+                      <button type="button" class="grid size-4 shrink-0 place-items-center rounded text-slate-500 hover:text-white" [attr.aria-label]="'Remover referência ' + ref.name" (click)="removeRef(ev, ref.id)">
+                        <mat-icon class="!size-3 !text-[12px]">close</mat-icon>
+                      </button>
+                    </span>
+                  }
+                </div>
+              }
+              <input
+                #refInput
+                class="h-7 rounded-md bg-ink-950 px-2 text-xs text-slate-100 outline-none ring-1 ring-white/10 placeholder:text-slate-600 focus:ring-astral-500/60"
+                placeholder="+ Referência (mapa, documento, raça…)"
+                aria-label="Buscar item para referenciar"
+                [value]="refQuery()"
+                (input)="refQuery.set(refInput.value)"
+              />
+              @if (refQuery()) {
+                <div class="flex max-h-36 flex-col overflow-y-auto rounded-md bg-ink-950/80 p-0.5 ring-1 ring-white/10">
+                  @for (option of refCandidates(ev); track option.id) {
+                    <button type="button" class="flex h-7 items-center gap-1.5 rounded px-1.5 text-left text-xs text-slate-300 hover:bg-white/5 hover:text-white" (click)="addRef(ev, option.id)">
+                      <mat-icon class="!size-3.5 shrink-0 !text-[14px]" [class]="metaOf(option).color">{{ metaOf(option).icon }}</mat-icon>
+                      <span class="truncate">{{ option.name }}</span>
+                    </button>
+                  } @empty {
+                    <p class="px-1.5 py-1 text-[11px] text-slate-500">Nada encontrado.</p>
+                  }
+                </div>
+              }
+            </div>
             <div class="flex items-center gap-1.5">
               @for (color of colors; track color) {
                 <button
@@ -168,8 +208,31 @@
               {{ ev.date || 'Sem data' }}
             </span>
             <span class="truncate text-sm font-medium text-slate-100">{{ ev.title || 'Evento sem título' }}</span>
-            <p class="line-clamp-2 whitespace-pre-line text-xs leading-snug text-slate-400">{{ ev.description }}</p>
+            @let refs = refsOf(ev);
+            <!-- Só leitura: o cartão selecionado mostra a descrição inteira (com referências, 1 linha no cartão fechado) -->
+            <p
+              class="whitespace-pre-line text-xs leading-snug text-slate-400"
+              [class.line-clamp-2]="!(readonly() && selected) && !refs.length"
+              [class.line-clamp-1]="!(readonly() && selected) && !!refs.length"
+            >{{ ev.description }}</p>
+            <!-- Referências: clique abre o item na janela dele -->
+            @if (refs.length) {
+              <div class="mt-auto flex gap-1 overflow-hidden pt-0.5" [class.flex-wrap]="readonly() && selected">
+                @for (ref of refs; track ref.id) {
+                  <button
+                    type="button"
+                    class="flex h-5 max-w-28 shrink-0 items-center gap-1 rounded bg-white/5 px-1.5 text-[10px] text-slate-300 ring-1 ring-white/10 hover:bg-astral-500/20 hover:text-white"
+                    [matTooltip]="'Abrir ' + ref.name"
+                    (click)="openItem.emit(ref.id)"
+                  >
+                    <mat-icon class="!size-3 shrink-0 !text-[12px]" [class]="metaOf(ref).color">{{ metaOf(ref).icon }}</mat-icon>
+                    <span class="truncate">{{ ref.name }}</span>
+                  </button>
+                }
+              </div>
+            }
           </div>
+          @if (!readonly()) {
           <button
             type="button"
             class="absolute right-1 top-1.5 grid size-6 place-items-center rounded text-slate-500 transition-opacity hover:bg-white/10 hover:text-slate-200"
@@ -179,9 +242,10 @@
           >
             <mat-icon class="!text-[16px]">edit</mat-icon>
           </button>
+          }
 
           <!-- Alças: clique cria evento conectado, arraste conecta a outro cartão -->
-          @if (selected) {
+          @if (selected && !readonly()) {
             @for (side of sides; track side) {
               <button
                 type="button"
@@ -206,16 +270,18 @@
       <div class="flex flex-col items-center gap-3">
         <mat-icon class="!size-10 !text-[40px] text-slate-600">account_tree</mat-icon>
         <p class="max-w-xs text-sm text-slate-400">Registre eras, guerras e reviravoltas. Ligue eventos para mostrar causas e caminhos paralelos.</p>
-        <button mat-stroked-button class="pointer-events-auto" (click)="addAtCenter()" (pointerdown)="$event.stopPropagation()">
-          <mat-icon>add</mat-icon>
-          Primeiro evento
-        </button>
+        @if (!readonly()) {
+          <button mat-stroked-button class="pointer-events-auto" (click)="addAtCenter()" (pointerdown)="$event.stopPropagation()">
+            <mat-icon>add</mat-icon>
+            Primeiro evento
+          </button>
+        }
       </div>
     </div>
   }
 
   <!-- Dicas e zoom -->
   <div class="pointer-events-none absolute bottom-2 left-3 text-[11px] text-slate-500">
-    Duplo clique: novo evento · Shift: alinhar à grade · {{ (view().scale * 100).toFixed(0) }}%
+    {{ readonly() ? 'Somente leitura · clique num evento para ler tudo' : 'Duplo clique: novo evento · Shift: alinhar à grade' }} · {{ (view().scale * 100).toFixed(0) }}%
   </div>
 </div>

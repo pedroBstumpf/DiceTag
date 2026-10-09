@@ -7,7 +7,7 @@ import { TagEditor } from '../../../../shared/components/tag-editor/tag-editor';
 export const ITEM_TAG_COLOR = '#22c55e';
 
 /**
- * Cartão de item só de apresentação: imagem, nome e etiquetas.
+ * Cartão de item só de apresentação: imagem, nome, descrição e etiquetas.
  * Não sabe de onde vêm os dados — emite as alterações e quem usa grava:
  * o item do worldbuild (ItemCard) ou a cópia do item no inventário da ficha.
  */
@@ -52,6 +52,17 @@ export const ITEM_TAG_COLOR = '#22c55e';
           (keydown.enter)="nameInput.blur()"
         />
 
+        <!-- Descrição (grava ao sair do campo) -->
+        <textarea
+          #descInput
+          rows="3"
+          class="w-full resize-y rounded-md bg-ink-950/70 px-2.5 py-2 text-sm leading-relaxed text-slate-200 outline-none ring-1 ring-white/10 placeholder:text-slate-600 focus:ring-astral-500/60"
+          placeholder="Descrição do item"
+          aria-label="Descrição do item"
+          [value]="description()"
+          (blur)="describe(descInput.value)"
+        ></textarea>
+
         <!-- Etiquetas (novas começam verdes) -->
         <div>
           <div class="mb-2 flex items-center justify-between">
@@ -79,9 +90,13 @@ export class ItemCardView {
   readonly tags = input.required<Tag[]>();
   /** URL da imagem (null = sem imagem ou carregando). */
   readonly imageUrl = input<string | null>(null);
+  /** Descrição do item (texto livre). */
+  readonly description = input('');
 
   /** Nome novo (já sem espaços nas pontas; vazio é ignorado). */
   readonly renamed = output<string>();
+  /** Descrição nova (emitida ao sair do campo, só se mudou). */
+  readonly descriptionChange = output<string>();
   readonly tagsChange = output<Tag[]>();
   readonly imagePicked = output<File>();
 
@@ -90,6 +105,10 @@ export class ItemCardView {
   rename(value: string): void {
     const trimmed = value.trim();
     if (trimmed && trimmed !== this.name()) this.renamed.emit(trimmed);
+  }
+
+  describe(value: string): void {
+    if (value !== this.description()) this.descriptionChange.emit(value);
   }
 
   onImagePicked(input: HTMLInputElement): void {

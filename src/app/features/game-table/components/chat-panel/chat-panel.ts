@@ -4,11 +4,13 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ROLL_OUTCOMES, RollResult } from '../../../../core/models/table-session.model';
 import { TableSessionService } from '../../services/table-session.service';
-import { formatModifier } from '../../utils/dice';
+import { characterModifier, formatModifier } from '../../utils/dice';
 
 /**
  * Aba Chat do painel da mesa: mensagens digitadas e resultados das rolagens,
  * em ordem, como num chat comum (guardados com a mesa, até MAX_CHAT_MESSAGES).
+ * Cartão de rolagem: resultado grande no topo, dados e total no centro e, embaixo,
+ * o modificador do personagem e o dos itens equipados, separados por ícones.
  * Enter envia; Shift+Enter quebra a linha.
  */
 @Component({
@@ -20,28 +22,45 @@ import { formatModifier } from '../../utils/dice';
     <div #list class="min-h-0 flex-1 overflow-y-auto p-3">
       @for (m of session.chat(); track m.id) {
         @if (m.roll; as roll) {
-          <!-- Rolagem -->
+          <!-- Rolagem: resultado no topo, dados no centro, modificadores (personagem x itens) embaixo -->
           @let o = outcome(roll);
-          <article class="mb-2 rounded-lg p-2.5 ring-1" [class]="o.ring">
-            <header class="mb-1.5 flex items-center gap-1.5 text-xs">
-              <mat-icon class="!size-4 !text-[16px] text-amber-300">{{ roll.icon }}</mat-icon>
-              <span class="min-w-0 flex-1 truncate text-slate-300">
+          <article class="mb-2 flex flex-col items-center gap-2 rounded-lg px-2.5 pb-2 pt-3 text-center ring-1" [class]="o.ring">
+            <p class="font-display text-xl leading-tight tracking-wide" [class]="o.text">{{ o.label }}</p>
+
+            <!-- Dados rolados e total -->
+            <div class="flex items-center justify-center gap-1.5">
+              @for (d of roll.rolls; track $index) {
+                <span class="grid size-9 place-items-center rounded-md bg-ink-950/70 text-base font-semibold tabular-nums text-slate-100 ring-1 ring-white/10">{{ d }}</span>
+              }
+              <span class="px-0.5 text-slate-500">=</span>
+              <span class="font-display text-3xl tabular-nums text-star-300">{{ roll.total }}</span>
+            </div>
+
+            <!-- Modificadores: etiquetas do personagem (com o fixo) e etiquetas dos itens equipados -->
+            <div class="flex items-center justify-center gap-3 text-xs tabular-nums">
+              <span class="flex items-center gap-1 text-astral-200" matTooltip="Modificador do personagem (fixo + tags, defeitos e etiquetas)">
+                <mat-icon class="!size-4 !text-[16px] text-astral-300">person</mat-icon>
+                {{ characterModifier(roll) }}
+              </span>
+              @let added = roll.itemsAdded !== false;
+              <span
+                class="flex items-center gap-1"
+                [class]="added ? 'text-emerald-200' : 'text-slate-300'"
+                [matTooltip]="added ? 'Etiquetas dos itens equipados (somadas ao total)' : 'Etiquetas dos itens equipados (fora do total)'"
+              >
+                <mat-icon class="!size-4 !text-[16px]" [class]="added ? 'text-emerald-300' : 'text-slate-500'">shield</mat-icon>
+                {{ itemModifier(roll) }}
+              </span>
+            </div>
+
+            <footer class="flex w-full items-center gap-1.5 border-t border-white/5 pt-1.5 text-[11px]">
+              <mat-icon class="!size-3.5 !text-[14px] text-amber-300">{{ roll.icon }}</mat-icon>
+              <span class="min-w-0 flex-1 truncate text-left text-slate-400">
                 <strong class="text-star-300">{{ m.author }}</strong> · {{ roll.action }}
               </span>
-              <time class="text-[10px] text-slate-500">{{ m.at | date: 'HH:mm' }}</time>
-            </header>
-            <div class="flex items-center gap-1.5">
-              @for (d of roll.rolls; track $index) {
-                <span class="grid size-7 place-items-center rounded-md bg-ink-950/70 text-sm font-semibold tabular-nums text-slate-100 ring-1 ring-white/10">{{ d }}</span>
-              }
-              @if (roll.modifier) {
-                <span class="text-sm tabular-nums text-slate-400">{{ modifier(roll) }}</span>
-              }
-              <span class="text-slate-500">=</span>
-              <span class="font-display text-2xl tabular-nums text-star-300">{{ roll.total }}</span>
-              <span class="ml-auto text-[10px] font-semibold uppercase tracking-wider text-slate-500">{{ roll.dice }}</span>
-            </div>
-            <p class="mt-1 font-display text-sm tracking-wide" [class]="o.text">{{ o.label }}</p>
+              <span class="font-semibold uppercase tracking-wider text-slate-500">{{ roll.dice }}</span>
+              <time class="text-slate-500">{{ m.at | date: 'HH:mm' }}</time>
+            </footer>
           </article>
         } @else {
           <!-- Texto -->
@@ -115,8 +134,14 @@ export class ChatPanel {
     return ROLL_OUTCOMES[roll.outcome];
   }
 
-  modifier(roll: RollResult): string {
-    return formatModifier(roll.modifier);
+  /** Modificador do personagem: tudo menos os itens (fixo + tags dos temas + etiquetas de status). */
+  characterModifier(roll: RollResult): string {
+    return formatModifier(characterModifier(roll)) || '±0';
+  }
+
+  /** Modificador das etiquetas dos itens equipados (rolagens antigas: ±0). */
+  itemModifier(roll: RollResult): string {
+    return formatModifier(roll.itemModifier ?? 0) || '±0';
   }
 
   private scrollToEnd(): void {

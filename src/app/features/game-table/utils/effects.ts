@@ -779,33 +779,61 @@ function meteor(b: FxBuilder, R: number): Built {
   return { duration: last + fall + 600, parts };
 }
 
+/**
+ * Erupção: uma fileira de explosões de estacas ao longo do arraste (sem linha ligando os pontos).
+ * Cada ponto: cratera escura no chão, brilho, anel de impacto, 4–5 estacas saindo do centro
+ * (~1 a 1,7 quadrado) e destroços.
+ */
 function eruption(b: FxBuilder, L: number): Built {
   const grid = b.ctx.grid;
-  const n = Math.min(16, Math.max(3, Math.round(L / (grid * 0.55))));
-  const shardFill = b.gradient('linear', [{ offset: 0, color: WHITE, opacity: 0.95 }, { offset: 0.4, color: b.light }, { offset: 1, color: b.color }], true);
-  const crack = displaceLine({ x: 0, y: 0 }, { x: L, y: 0 }, grid * 0.15, 4, b.ctx.random);
-  const parts: FxPart[] = [
-    { tag: 'polyline', attrs: { points: toPointsAttr(crack), fill: 'none', stroke: b.dark, 'stroke-width': r2(Math.max(grid * 0.05, b.ui(1.5))), 'stroke-linejoin': 'round', pathLength: 1, 'stroke-dasharray': 1 }, anim: { name: 'fx-draw', duration: n * 55 + 900, easing: 'linear' } },
-  ];
+  const step = 80;
+  const n = Math.min(10, Math.max(2, Math.round(L / (grid * 1.7))));
+  const spikeFill = b.gradient('linear', [{ offset: 0, color: b.color }, { offset: 0.55, color: b.light }, { offset: 1, color: WHITE }]);
+  const crater = b.gradient('radial', [
+    { offset: 0, color: b.dark, opacity: 0.85 },
+    { offset: 0.7, color: b.dark, opacity: 0.45 },
+    { offset: 1, color: b.dark, opacity: 0 },
+  ]);
+  const glow = b.hotGradient();
+  const parts: FxPart[] = [];
   for (let i = 0; i < n; i++) {
     const x = (L * (i + 0.5)) / n;
-    const y = b.rnd(-1, 1) * grid * 0.15;
-    const s = grid * b.rnd(0.3, 0.45);
-    const k = Math.floor(b.rnd(5, 7));
+    const y = b.rnd(-1, 1) * grid * 0.3;
+    const s = grid * b.rnd(0.95, 1.25);
+    const delay = i * step;
+    const k = Math.floor(b.rnd(4, 6));
     const rot = b.rnd(0, Math.PI * 2);
-    const pts = Array.from({ length: k }, (_, j) => {
-      const a = rot + (j / k) * Math.PI * 2 + b.rnd(-0.25, 0.25);
-      const r = s * b.rnd(0.45, 1);
-      return { x: x + Math.cos(a) * r, y: y + Math.sin(a) * r };
+    const spikes = Array.from({ length: k }, (_, j): FxPart => {
+      const a = rot + (j / k) * Math.PI * 2 + b.rnd(-0.35, 0.35);
+      // Estacas longas e curtas alternadas, largas como lascas de rocha
+      const len = s * (j % 2 ? b.rnd(0.6, 0.85) : b.rnd(1, 1.35));
+      const w = s * b.rnd(0.38, 0.5);
+      // Cristal: base no centro, lados que se alargam até ~40% e afinam até a ponta
+      const dir = { x: Math.cos(a), y: Math.sin(a) };
+      const perp = { x: -dir.y, y: dir.x };
+      const at = (along: number, side: number) => ({ x: x + dir.x * along + perp.x * side, y: y + dir.y * along + perp.y * side });
+      const pts = [at(0, -w * 0.3), at(len * 0.4, -w / 2), at(len, 0), at(len * 0.4, w / 2), at(0, w * 0.3)];
+      return { tag: 'polygon', attrs: { points: toPointsAttr(pts), fill: spikeFill, stroke: b.dark, 'stroke-width': r2(b.ui(1)), 'stroke-linejoin': 'round' } };
     });
-    const delay = i * 55;
     parts.push(
-      { tag: 'circle', attrs: { cx: r2(x), cy: r2(y), r: r2(s * 1.25), fill: 'none', stroke: b.dark, 'stroke-width': r2(b.ui(1.5)) }, css: CENTER + '--s0:0.3;', anim: { name: 'fx-grow', duration: 500, delay } },
-      { tag: 'polygon', attrs: { points: toPointsAttr(pts), fill: shardFill, stroke: b.light, 'stroke-width': r2(b.ui(1)), 'stroke-linejoin': 'round', filter: FX_GLOW }, css: CENTER, anim: { name: 'fx-pop', duration: 900, delay } },
-      ...b.particles({ x, y, count: 3, dist: [s * 0.6, s * 1.4], size: [b.ui(1), b.ui(2)], colors: [b.dark, b.light], duration: [300, 450], delay: [delay, delay + 30] }),
+      // Cratera no chão (fica até o fim)
+      { tag: 'circle', attrs: { cx: r2(x), cy: r2(y), r: r2(s * 1.1), fill: crater }, anim: { name: 'fx-hold', duration: 1300, delay } },
+      // Brilho e anel de impacto
+      { tag: 'circle', attrs: { cx: r2(x), cy: r2(y), r: r2(s * 0.9), fill: glow, filter: FX_GLOW }, css: CENTER + '--s0:0.3;', anim: { name: 'fx-flash', duration: 450, delay } },
+      { tag: 'circle', attrs: { cx: r2(x), cy: r2(y), r: r2(s * 1.7), fill: 'none', stroke: b.light, 'stroke-width': r2(b.thick(s, 0.06, 1.5)) }, css: CENTER + '--s0:0.3;', anim: { name: 'fx-grow', duration: 550, delay } },
+      // Estacas: o grupo tem um círculo invisível centrado no ponto para "estourar" a partir do centro
+      {
+        tag: 'g',
+        attrs: { filter: FX_GLOW },
+        css: CENTER,
+        anim: { name: 'fx-pop', duration: 1100, delay: delay + 40 },
+        children: [{ tag: 'circle', attrs: { cx: r2(x), cy: r2(y), r: r2(s * 1.6), fill: 'none' } }, ...spikes],
+      },
+      // Destroços
+      ...b.particles({ x, y, count: 7, dist: [s * 0.9, s * 2], size: [b.thick(s, 0.05, 1.5), b.thick(s, 0.11, 3)], colors: [b.dark, b.light, b.color], duration: [450, 700], delay: [delay, delay + 60] }),
     );
   }
-  return { duration: n * 55 + 950, parts };
+  return { duration: (n - 1) * step + 1400, parts };
 }
 
 function vortex(b: FxBuilder, R: number): Built {

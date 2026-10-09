@@ -28,7 +28,7 @@ describe('geometry', () => {
 
     it('respeita os limites de tamanho', () => {
       expect(sizeFromHandle({ x: 0, y: 0 }, { x: 1, y: 1 }, 70)).toBe(0.5);
-      expect(sizeFromHandle({ x: 0, y: 0 }, { x: 5000, y: 0 }, 70)).toBe(4);
+      expect(sizeFromHandle({ x: 0, y: 0 }, { x: 5000, y: 0 }, 70)).toBe(6);
     });
   });
 

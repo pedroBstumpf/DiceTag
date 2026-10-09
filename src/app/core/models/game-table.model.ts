@@ -8,11 +8,13 @@ export interface GameTable {
   maxPlayers: number;
   /** Cor de destaque usada no cartão da mesa. */
   accent: string;
+  /** Mundo onde a mesa se passa (a aba Lore mostra os itens dele). Ausente = o primeiro mundo. */
+  worldId?: string;
   createdAt: number;
 }
 
 /** Dados necessários para criar uma mesa. */
-export type NewGameTable = Pick<GameTable, 'name' | 'system' | 'description' | 'maxPlayers' | 'accent'>;
+export type NewGameTable = Pick<GameTable, 'name' | 'system' | 'description' | 'maxPlayers' | 'accent' | 'worldId'>;
 
 /** Sistemas sugeridos no formulário de criação. */
 export const GAME_SYSTEMS = [

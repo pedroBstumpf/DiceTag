@@ -15,7 +15,8 @@ export interface TokenPointerDown {
 }
 
 /** Cor do círculo de tokens sem imagem, por tipo de ficha. */
-const INITIAL_BG = { character: '#3462d6', npc: '#7c4dcc' } as Record<string, string>;
+const NO_IDS: ReadonlySet<string> = new Set();
+const INITIAL_BG ={ character: '#3462d6', npc: '#7c4dcc' } as Record<string, string>;
 
 /**
  * Camada de tokens do mapa (dentro do "mundo" transformado).
@@ -36,9 +37,14 @@ export class TokensLayer {
   readonly tokens = input.required<ResolvedToken[]>();
   readonly scale = input.required<number>();
   readonly gridSize = input.required<number>();
+  /** Token principal da seleção (só ele tem a alça de redimensionar). */
   readonly selectedId = input<string | null>(null);
+  /** Todos os tokens selecionados (anel azul em cada um). */
+  readonly selectedIds = input<ReadonlySet<string>>(NO_IDS);
   /** Tokens recebem o ponteiro (ferramenta Selecionar). */
   readonly interactive = input(false);
+  /** A conta pode mover/redimensionar o token? (jogador x NPC que não controla: não; sem alça) */
+  readonly movable = input<(token: ResolvedToken) => boolean>(() => true);
   /** Vista isométrica: transformação CSS que deixa o token "em pé" (vazio na 2D). */
   readonly upright = input('');
 

@@ -1,4 +1,4 @@
-import { Component, DestroyRef, ElementRef, afterNextRender, inject, input, output, signal, untracked, viewChild } from '@angular/core';
+import { Component, DestroyRef, ElementRef, afterNextRender, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { Editor } from '@tiptap/core';
@@ -33,6 +33,8 @@ export class RichTextEditor {
   /** HTML inicial. */
   readonly content = input('');
   readonly placeholder = input('Comece a escrever…');
+  /** false = só leitura: sem barra de formatação e sem edição. */
+  readonly editable = input(true);
   /** HTML a cada alteração. */
   readonly contentChange = output<string>();
 
@@ -79,6 +81,11 @@ export class RichTextEditor {
     // O editor precisa do elemento já renderizado no DOM
     afterNextRender(() => this.initEditor());
     inject(DestroyRef).onDestroy(() => this.editor?.destroy());
+    // Troca de modo com o editor aberto (ex.: mestre virou jogador na mesa)
+    effect(() => {
+      const editable = this.editable();
+      this.editor?.setEditable(editable);
+    });
   }
 
   /** Executa um botão da barra. */
@@ -98,6 +105,7 @@ export class RichTextEditor {
     this.editor = new Editor({
       element: this.host().nativeElement,
       content: untracked(this.content),
+      editable: untracked(this.editable),
       extensions: [
         StarterKit,
         TextAlign.configure({ types: ['heading', 'paragraph'] }),

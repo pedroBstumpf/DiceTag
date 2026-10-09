@@ -88,4 +88,11 @@ export class WindowManagerService {
   patch(id: string, changes: Partial<Omit<OpenWindow, 'id'>>): void {
     this._windows.update((list) => list.map((w) => (w.id === id ? { ...w, ...changes } : w)));
   }
+
+  /** Substitui todas as janelas (restaura uma área de trabalho salva). A de maior z-index fica em foco. */
+  restore(list: OpenWindow[]): void {
+    this._windows.set(list);
+    this.topZ = Math.max(1, ...list.map((w) => w.z));
+    this.activeId.set([...list].sort((a, b) => b.z - a.z)[0]?.id ?? null);
+  }
 }

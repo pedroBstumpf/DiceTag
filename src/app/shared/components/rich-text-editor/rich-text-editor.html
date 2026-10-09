@@ -1,5 +1,5 @@
-<!-- ===== Barra de formatação ===== -->
-<div class="flex shrink-0 items-center gap-0.5 overflow-x-auto border-b border-white/5 bg-ink-900/60 px-2 py-1.5">
+<!-- ===== Barra de formatação (some no modo só leitura) ===== -->
+<div class="flex shrink-0 items-center gap-0.5 overflow-x-auto border-b border-white/5 bg-ink-900/60 px-2 py-1.5" [class.hidden]="!editable()">
   @for (group of toolbar; track $index; let last = $last) {
     @for (btn of group; track btn.icon) {
       <button

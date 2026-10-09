@@ -10,27 +10,31 @@ import { GameTablesService } from '../../core/services/game-tables.service';
 import { FloatingWindow } from '../../shared/components/floating-window/floating-window';
 import { WindowManagerService } from '../../shared/services/window-manager.service';
 import { DocumentEditor } from '../worldbuild/components/document-editor/document-editor';
-import { Explorer } from '../worldbuild/components/explorer/explorer';
 import { ImageViewer } from '../worldbuild/components/image-viewer/image-viewer';
 import { ItemCard } from '../worldbuild/components/item-card/item-card';
+import { RaceCard } from '../worldbuild/components/race-card/race-card';
 import { TimelineEditor } from '../worldbuild/components/timeline-editor/timeline-editor';
-import { LoreScope } from '../worldbuild/directives/lore-scope.directive';
 import { WorldNpcSheet } from '../worldbuild/directives/world-npc-sheet.directive';
-import { LoreService } from '../worldbuild/services/lore.service';
 import { WorldbuildService } from '../worldbuild/services/worldbuild.service';
+import { DEFAULT_WORLD_ID } from '../../core/models/world.model';
+import { WorldsService } from '../../core/services/worlds.service';
 import { ActionBar } from './components/action-bar/action-bar';
 import { CharacterSheetView } from './components/character-sheet/character-sheet';
 import { EntryWindow } from './components/entry-window/entry-window';
+import { EquippedItemWindow, parseEquippedWindow } from './components/equipped-item-window/equipped-item-window';
+import { itemSources } from './components/sheet-inventory/sheet-inventory';
+import { inventoryRow } from './utils/inventory';
+import { TableItemWindow } from './components/table-item-window/table-item-window';
 import { MapStage } from './components/map-stage/map-stage';
 import { SceneBar } from './components/scene-bar/scene-bar';
-import { LORE_WINDOW, SidePanel, WORLDBUILD_WINDOW } from './components/side-panel/side-panel';
-import { TABLE_TOOLS, ToolBar } from './components/tool-bar/tool-bar';
+import { SidePanel } from './components/side-panel/side-panel';
+import { TABLE_TOOLS, ToolBar, toolAllowed } from './components/tool-bar/tool-bar';
 import { TokenWindow } from './components/token-window/token-window';
 import { BlobUrlService } from './services/blob-url.service';
 import { SheetStore } from '../../core/services/sheet-store';
 import { SoundMixerService } from './services/sound-mixer.service';
 import { TableSessionService, tokenSheetPlacement } from './services/table-session.service';
-import { formatModifier } from './utils/dice';
+import { formatModifier, levelUpText } from './utils/dice';
 
 /** O que uma janela da mesa está exibindo. */
 interface WindowContent {
@@ -38,9 +42,7 @@ interface WindowContent {
   icon: string;
   color: string;
   /** Tipo de conteúdo, usado para escolher o componente. */
-  type: 'entry' | 'sheet' | 'token' | 'explorer' | 'document' | 'timeline' | 'image' | 'item' | 'npc';
-  /** O conteúdo vem da Lore geral (os editores usam o LoreService). */
-  global?: boolean;
+  type: 'entry' | 'sheet' | 'token' | 'equipped' | 'table-item' | 'document' | 'timeline' | 'image' | 'item' | 'npc' | 'race';
 }
 
 /** Prefixo do id das janelas "Token" (token:<id do token colocado>). */
@@ -51,12 +53,14 @@ const WINDOW_SIZES: Record<WindowContent['type'], { width: number; height: numbe
   entry: { width: 520, height: 480 },
   sheet: { width: 880, height: 700 },
   token: { width: 460, height: 560 },
-  explorer: { width: 340, height: 540 },
+  equipped: { width: 420, height: 600 },
+  'table-item': { width: 420, height: 600 },
   document: { width: 720, height: 600 },
   timeline: { width: 620, height: 560 },
   image: { width: 720, height: 520 },
   item: { width: 420, height: 600 },
   npc: { width: 880, height: 700 },
+  race: { width: 460, height: 680 },
 };
 
 /** Espaço ocupado por cada barra (para enquadrar o mapa na área livre). */
@@ -89,13 +93,14 @@ const PANEL_SPACE = { top: 60, left: 76, right: 344, bottom: 100 };
     EntryWindow,
     CharacterSheetView,
     TokenWindow,
-    LoreScope,
+    EquippedItemWindow,
+    TableItemWindow,
     WorldNpcSheet,
-    Explorer,
     DocumentEditor,
     TimelineEditor,
     ImageViewer,
     ItemCard,
+    RaceCard,
   ],
   providers: [
     TableSessionService,
@@ -120,13 +125,15 @@ export class GameTablePage {
   readonly windows = inject(WindowManagerService);
   private readonly tables = inject(GameTablesService);
   private readonly worldbuild = inject(WorldbuildService);
-  private readonly loreGeneral = inject(LoreService);
+  private readonly worlds = inject(WorldsService);
   private readonly snackBar = inject(MatSnackBar);
 
   /** Id da mesa (parâmetro da rota /mesa/:id). */
   readonly id = input.required<string>();
 
   readonly table = computed(() => this.tables.getById(this.id()));
+  /** Mestre: único que edita a lore na mesa (o jogador só lê o que foi revelado). */
+  readonly isGm = computed(() => this.session.role() === 'gm');
   readonly tablesLoaded = this.tables.loaded;
 
   protected readonly map = viewChild(MapStage);
@@ -151,6 +158,13 @@ export class GameTablePage {
     });
     inject(DestroyRef).onDestroy(() => this.session.flush());
 
+    // Abre o mundo da mesa: a aba Lore, o bestiário, os itens e as raças vêm dele
+    effect(() => {
+      const table = this.table();
+      if (!table || !this.worlds.loaded()) return;
+      untracked(() => this.worlds.select(table.worldId ?? DEFAULT_WORLD_ID));
+    });
+
     // Fecha janelas "Token" e fichas de token de tokens removidos do mapa
     effect(() => {
       const stale = this.windows.windows().filter((w) => {
@@ -163,17 +177,19 @@ export class GameTablePage {
 
   // --- Janelas -------------------------------------------------------------
 
-  /** Descobre o que mostrar numa janela (arquivo/token da mesa ou item do worldbuild / Lore geral). */
+  /** Descobre o que mostrar numa janela (arquivo/token da mesa ou item do mundo da mesa). */
   content(id: string): WindowContent | null {
-    if (id === WORLDBUILD_WINDOW) {
-      return { title: 'Worldbuild', icon: 'public', color: 'text-sky-300', type: 'explorer' };
-    }
-    if (id === LORE_WINDOW) {
-      return { title: 'Lore geral', icon: 'auto_stories', color: 'text-star-400', type: 'explorer', global: true };
-    }
     if (id.startsWith(TOKEN_WINDOW)) {
       const token = this.session.resolvedTokenById(id.slice(TOKEN_WINDOW.length));
       return token ? { title: `Token: ${token.name}`, icon: 'token', color: TABLE_ENTRY_META[token.entry.kind].color, type: 'token' } : null;
+    }
+    // Item do inventário de uma ficha (lista "Equipados" da aba Ficha)
+    const equipped = parseEquippedWindow(id);
+    if (equipped) {
+      const item = this.session.inventoryOf(equipped.sheetId).find((i) => i.id === equipped.inventoryId);
+      if (!item || !this.session.canOpenSheet(equipped.sheetId)) return null;
+      const name = inventoryRow(item, itemSources(this.worldbuild, this.session)).name;
+      return { title: name, icon: 'inventory_2', color: 'text-amber-300', type: 'equipped' };
     }
     // Ficha própria de um token de NPC (cópia individual)
     const placementId = tokenSheetPlacement(id);
@@ -191,18 +207,29 @@ export class GameTablePage {
       const type = hasSheet(entry.kind) ? 'sheet' : 'entry';
       return { title: entry.name, icon: entry.icon ?? meta.icon, color: meta.color, type };
     }
-    // Itens da lore: o título usa o nome desta mesa (pode ter sido renomeado só aqui)
-    const globalItem = this.loreGeneral.byId().get(id);
-    const item = globalItem ?? this.worldbuild.byId().get(id);
-    if (item && item.type !== 'folder') {
+    // Item criado na mesa por um jogador (aba Lore; visível aos jogadores)
+    const tableItem = this.session.tableItemById().get(id);
+    if (tableItem) {
+      if (!this.session.canSeeLoreItem(id)) return null;
+      return { title: tableItem.name, icon: 'inventory_2', color: 'text-amber-300', type: 'table-item' };
+    }
+    // Itens do mundo da mesa: o jogador só abre os que estão em pastas reveladas nesta mesa
+    const item = this.worldbuild.byId().get(id);
+    if (item && item.type !== 'folder' && this.session.canSeeLoreItem(item.id)) {
       const meta = WORLD_ITEM_META[item.type];
-      return { title: this.session.loreName(item), icon: meta.icon, color: meta.color, type: item.type, global: !!globalItem };
+      return { title: item.name, icon: meta.icon, color: meta.color, type: item.type };
     }
     return null;
   }
 
   open(id: string): void {
-    const type = this.content(id)?.type ?? 'entry';
+    const content = this.content(id);
+    // Sem permissão (ex.: jogador clicando numa referência a um item que o mestre não revelou): não abre
+    if (!content) {
+      if (this.worldbuild.byId().has(id)) this.snackBar.open('Este item não foi revelado para os jogadores.');
+      return;
+    }
+    const type = content.type;
     const el = this.windowLayer()?.nativeElement;
     this.windows.open(id, { width: el?.clientWidth ?? 1200, height: el?.clientHeight ?? 800 }, WINDOW_SIZES[type]);
   }
@@ -221,6 +248,11 @@ export class GameTablePage {
     this.open(TOKEN_WINDOW + placementId);
   }
 
+  /** Ficha e item da janela de item equipado (o tipo 'equipped' garante que o id é válido). */
+  equippedOf(windowId: string): { sheetId: string; inventoryId: string } {
+    return parseEquippedWindow(windowId) ?? { sheetId: '', inventoryId: '' };
+  }
+
   /** Id do token colocado a partir do id da janela "Token". */
   placementOf(windowId: string): string {
     return windowId.slice(TOKEN_WINDOW.length);
@@ -233,10 +265,12 @@ export class GameTablePage {
    * o deixa no mouse. O aviso resume o resultado (o detalhe fica no chat).
    */
   onActionUsed(entry: TableEntry, sheetId?: string): void {
-    const { author, roll, armed } = this.session.useAction(entry, sheetId);
+    const { author, roll, armed, levelUps } = this.session.useAction(entry, sheetId);
     const formula = roll.dice + formatModifier(roll.modifier);
     const text = `${author} · ${roll.action}: ${formula} = ${roll.total} — ${ROLL_OUTCOMES[roll.outcome].label}`;
     this.snackBar.open(armed ? `${text} · arraste no mapa para lançar o efeito` : text, undefined, { duration: 3500 });
+    // Estudo que alcançou o SN: notificação em destaque (também vai para o chat)
+    if (levelUps.length) this.snackBar.open(levelUpText(levelUps), 'OK', { duration: 8000 });
   }
 
   /** Atalhos de teclado da mesa (ignorados enquanto se digita). */
@@ -249,6 +283,11 @@ export class GameTablePage {
       if (this.session.undoDrawing()) event.preventDefault();
       return;
     }
+    // Ctrl+C / Ctrl+V: copia o token selecionado / cola uma cópia sob o mouse (inclusive em outra cena)
+    if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && this.copyPasteToken(event.key.toLowerCase())) {
+      event.preventDefault();
+      return;
+    }
     if (event.ctrlKey || event.metaKey || event.altKey) return;
 
     // Teclas que dependem da seleção/ferramenta do mapa (Delete, Esc…)
@@ -258,12 +297,12 @@ export class GameTablePage {
     }
 
     const key = event.key.toLowerCase();
-    const tool = TABLE_TOOLS.find((t) => t.key.toLowerCase() === key && !t.soon);
+    // Ferramentas do mestre (Névoa, paredes) não têm atalho no papel de jogador
+    const tool = TABLE_TOOLS.find((t) => t.key.toLowerCase() === key && toolAllowed(t, this.session.role()));
 
     if (tool) this.session.tool.set(tool.id);
-    else if (key === 'w') this.startWalls();
+    else if (key === 'w' && this.isGm()) this.startWalls();
     else if (key === '\\') this.session.toggleImmersive();
-    else if (key === 'g') this.toggleGrid();
     else if (key === '=' || key === '+') this.map()?.zoomBy(1.2);
     else if (key === '-') this.map()?.zoomBy(1 / 1.2);
     else if (/^[0-9]$/.test(key)) this.useSlot(key === '0' ? 9 : Number(key) - 1);
@@ -272,15 +311,29 @@ export class GameTablePage {
     event.preventDefault();
   }
 
+  /**
+   * Ctrl+C copia os tokens selecionados (o principal é a referência ao colar); Ctrl+V cola o grupo.
+   * Texto selecionado na página tem prioridade (o Ctrl+C copia o texto, como sempre).
+   * Retorna true se tratou a tecla.
+   */
+  private copyPasteToken(key: string): boolean {
+    if (key === 'c') {
+      const primary = this.session.selectedTokenId();
+      if (!primary || window.getSelection()?.toString()) return false;
+      const ids = [primary, ...[...this.session.selectedTokenIds()].filter((id) => id !== primary)];
+      const count = this.session.copyTokens(ids);
+      if (!count) return false;
+      const what = count === 1 ? 'Token copiado' : `${count} tokens copiados`;
+      this.snackBar.open(`${what}: Ctrl+V cola sob o mouse.`, undefined, { duration: 2000 });
+      return true;
+    }
+    return key === 'v' && !!this.map()?.pasteTokens();
+  }
+
   /** Atalho W: ferramenta Névoa já no modo "Parede — linha". */
   private startWalls(): void {
     this.session.tool.set('fog');
     this.session.wallMode.set('line');
-  }
-
-  private toggleGrid(): void {
-    const scene = this.session.activeScene();
-    if (scene) this.session.updateScene(scene.id, { showGrid: !scene.showGrid });
   }
 
   private useSlot(index: number): void {
