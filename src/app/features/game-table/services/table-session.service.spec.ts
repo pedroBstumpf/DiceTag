@@ -59,6 +59,23 @@ describe('TableSessionService (fachada)', () => {
     expect(session.tokens()[0].size).toBeUndefined();
   });
 
+  it('visão de NPC é de cada token: ligar num token não muda os outros nem o NPC', async () => {
+    await session.addScene();
+    const npc = session.addEntry('npc');
+    const a = session.placeToken(npc.id, { x: 0, y: 0 })!;
+    const b = session.placeToken(npc.id, { x: 70, y: 0 })!;
+    session.updateToken(a.id, { vision: { enabled: true, range: 30 } });
+    expect(session.resolvedTokenById(a.id)?.vision).toEqual({ enabled: true, range: 30 });
+    expect(session.resolvedTokenById(b.id)?.vision.enabled).toBe(false);
+    expect(session.tokenOf(session.entryById().get(npc.id)!).vision.enabled).toBe(false);
+
+    // "Usar como padrão do NPC" leva a visão; os próximos tokens copiam
+    session.saveTokenAsDefault(a.id);
+    const c = session.placeToken(npc.id, { x: 140, y: 0 })!;
+    expect(session.resolvedTokenById(c.id)?.vision).toEqual({ enabled: true, range: 30 });
+    expect(session.resolvedTokenById(b.id)?.vision.enabled).toBe(false);
+  });
+
   it('flush grava o estado na chave da mesa', async () => {
     await session.addScene();
     session.sendChat('olá');

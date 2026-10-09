@@ -32,20 +32,30 @@ describe('regra de vínculo dos tokens', () => {
     expect(t.size).toBe(1);
   });
 
-  it('NPC usa os valores do próprio token; imagem, visão e velocidade vêm da ficha', () => {
-    const t = resolveToken({ id: 't', entryId: 'n', x: 0, y: 0, size: 4, name: 'Goblin 2' }, entry('n', 'npc'), settings);
+  it('NPC usa os valores do próprio token; imagem e velocidade vêm da ficha', () => {
+    const vision = { enabled: true, range: 30 };
+    const t = resolveToken({ id: 't', entryId: 'n', x: 0, y: 0, size: 4, name: 'Goblin 2', vision }, entry('n', 'npc'), settings);
     expect(t.linked).toBe(false);
     expect(t.size).toBe(4);
     expect(t.name).toBe('Goblin 2');
+    expect(t.vision).toEqual(vision);
     expect(t.blobId).toBe('img');
     expect(t.speed).toBe(3);
   });
 
-  it('splitTokenPatch: personagem grava tudo na ficha; NPC só visão e velocidade', () => {
+  it('token de NPC sem visão própria (antigo) usa a do NPC; personagem ignora a do token', () => {
+    const own = { enabled: true, range: 30 };
+    expect(resolveToken({ id: 't', entryId: 'n', x: 0, y: 0 }, entry('n', 'npc'), settings).vision).toEqual(settings.vision);
+    expect(resolveToken({ id: 't', entryId: 'pc', x: 0, y: 0, vision: own }, entry('pc', 'character'), settings).vision).toEqual(
+      settings.vision,
+    );
+  });
+
+  it('splitTokenPatch: personagem grava tudo na ficha; NPC só a velocidade (a visão fica no token)', () => {
     const vision = { enabled: true, range: 9 };
     expect(splitTokenPatch('character', { size: 2, vision })).toEqual({ settings: { size: 2, vision }, placement: null });
-    expect(splitTokenPatch('npc', { size: 2, vision })).toEqual({ settings: { vision }, placement: { size: 2 } });
-    expect(splitTokenPatch('npc', { size: 2 })).toEqual({ settings: null, placement: { size: 2 } });
+    expect(splitTokenPatch('npc', { size: 2, vision })).toEqual({ settings: null, placement: { size: 2, vision } });
+    expect(splitTokenPatch('npc', { vision })).toEqual({ settings: null, placement: { vision } });
     expect(splitTokenPatch('npc', { speed: 0 })).toEqual({ settings: { speed: 0 }, placement: null });
   });
 });

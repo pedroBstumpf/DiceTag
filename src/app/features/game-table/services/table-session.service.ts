@@ -1267,7 +1267,7 @@ export class TableSessionService extends SheetStore {
   /**
    * Altera um token colocado respeitando a regra de vínculo:
    * personagem grava na ficha (vale para todos os tokens dele);
-   * NPC grava só neste token. Visão e velocidade são sempre da ficha.
+   * NPC grava só neste token (inclusive a visão). A velocidade é sempre da ficha.
    */
   updateToken(placementId: string, patch: TokenPatch): void {
     const placement = this.findPlacement(placementId);
@@ -1279,12 +1279,13 @@ export class TableSessionService extends SheetStore {
     if (split.placement) this.dispatch('updatePlacement', { placementId, patch: split.placement });
   }
 
-  /** NPC: grava tamanho, barras e etiquetas deste token como padrão da ficha (próximos tokens copiam). */
+  /** NPC: grava tamanho, visão, barras e etiquetas deste token como padrão da ficha (próximos tokens copiam). */
   saveTokenAsDefault(placementId: string): void {
     const token = this.resolvedTokenById(placementId);
     if (!token) return;
     this.updateEntryToken(token.entry.id, {
       size: token.size,
+      vision: { ...token.vision },
       bars: token.bars.map((b) => ({ ...b })),
       tags: token.tags.map((t) => ({ ...t })),
     });
@@ -1334,6 +1335,7 @@ export class TableSessionService extends SheetStore {
       // NPC: cada token colocado é independente (cópia do token padrão e da ficha)
       ...(entry.kind === 'npc' && {
         size: sheet.size,
+        vision: { ...sheet.vision },
         bars: sheet.bars.map((b) => ({ ...b })),
         tags: sheet.tags.map((t) => ({ ...t })),
         sheet: structuredClone(this.sheetOf(entry)),

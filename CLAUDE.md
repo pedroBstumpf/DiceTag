@@ -569,18 +569,19 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - `TableEntry.token` (ficha): `blobId`, `size` (0.5–6 quadrados; `TOKEN_SIZES` vai até 6 para criaturas enormes), `vision { enabled, range (m) }`, `speed?`, `bars`, `tags`
   (`TokenTag.level` opcional, ex.: Exaustão 2). Cores de barras/etiquetas: paleta `TOKEN_COLORS` ou cor livre.
   Padrão (`defaultToken`): tamanho 1, visão 18 m (ligada para personagem, desligada para NPC).
-- `Scene.tokens: TokenPlacement { id, entryId, x, y (centro), size?, bars?, tags? }`.
-- **Personagem:** vinculado — tamanho, barras e etiquetas vêm da ficha; alterar qualquer token altera a ficha e todos.
-- **NPC:** ao ser colocado, copia tamanho, barras, etiquetas **e a ficha** para a própria colocação (cada goblin tem
-  seu PV, seus temas e seu inventário — ver "Ficha de NPC").
-- Imagem e visão vêm **sempre da ficha** (inclusive para NPC).
+- `Scene.tokens: TokenPlacement { id, entryId, x, y (centro), size?, vision?, bars?, tags? }`.
+- **Personagem:** vinculado — tamanho, visão, barras e etiquetas vêm da ficha; alterar qualquer token altera a ficha e todos.
+- **NPC:** ao ser colocado, copia tamanho, **visão**, barras, etiquetas **e a ficha** para a própria colocação (cada goblin
+  tem seu PV, sua visão, seus temas e seu inventário — ver "Ficha de NPC"). Ligar a visão de um goblin não liga a dos
+  outros. Tokens antigos sem `vision` usam a do NPC até a primeira alteração. "Usar como padrão do NPC" grava a visão também.
+- Imagem e velocidade vêm **sempre da ficha** (inclusive para NPC).
 - **Ficha x token:** clicar na ficha no painel abre só a ficha. Colocar no mapa **só arrastando** a ficha
   do painel. Duplo clique: personagem → janela "Token" (imagem, tamanho, visão, barras, etiquetas); NPC → ficha do
   token, com o botão "Opções do token" (na janela "Token", "Usar como padrão do NPC" → `saveTokenAsDefault` grava no
   token padrão — no bestiário, se for referência).
 - Selecionar: clique seleciona, arrastar move com snap (Shift livre), alça redimensiona em passos de 0,5,
   Delete remove do mapa. **WASD/setas** com token selecionado: desliza na velocidade da ficha
-  (`TokenSettings.speed`, padrão 2 quadrados/s, 0,5–12, editada na janela "Token"; como a visão, vem sempre da ficha; Shift ×2,5);
+  (`TokenSettings.speed`, padrão 2 quadrados/s, 0,5–12, editada na janela "Token"; vem sempre da ficha, inclusive no NPC; Shift ×2,5);
   ao soltar, alinha à grade se ela estiver visível. Movimento não colide com paredes.
 
 ### Névoa de guerra e paredes

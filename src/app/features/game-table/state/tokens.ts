@@ -46,9 +46,9 @@ export type PlacementPatch = Partial<Omit<TokenPlacement, 'id' | 'entryId'>>;
 
 /**
  * Configurações efetivas de um token colocado — único lugar da regra de vínculo:
- * - Personagem: tamanho, barras e etiquetas vêm sempre da ficha (`settings`).
- * - NPC: usa os valores próprios da colocação (copiados ao colocar).
- * Imagem, visão e velocidade vêm sempre da ficha.
+ * - Personagem: tamanho, visão, barras e etiquetas vêm sempre da ficha (`settings`).
+ * - NPC: usa os valores próprios da colocação (copiados ao colocar); sem eles, os da ficha.
+ * Imagem e velocidade vêm sempre da ficha.
  */
 export function resolveToken(placement: TokenPlacement, entry: TableEntry, settings: TokenSettings): ResolvedToken {
   const linked = entry.kind === 'character';
@@ -58,7 +58,7 @@ export function resolveToken(placement: TokenPlacement, entry: TableEntry, setti
     name: placement.name ?? entry.name,
     linked,
     blobId: settings.blobId,
-    vision: settings.vision,
+    vision: linked ? settings.vision : (placement.vision ?? settings.vision),
     speed: settings.speed ?? DEFAULT_TOKEN_SPEED,
     size: linked ? settings.size : (placement.size ?? settings.size),
     bars: linked ? settings.bars : (placement.bars ?? settings.bars),
@@ -68,17 +68,16 @@ export function resolveToken(placement: TokenPlacement, entry: TableEntry, setti
 
 /**
  * Para onde vai cada campo alterado num token: personagem grava tudo na ficha (vale para
- * todos os tokens dele); NPC grava visão e velocidade na ficha e o resto só neste token.
+ * todos os tokens dele); NPC grava a velocidade na ficha e o resto (inclusive a visão) só neste token.
  */
 export function splitTokenPatch(
   kind: TableEntryKind,
   patch: TokenPatch,
 ): { settings: Partial<TokenSettings> | null; placement: PlacementPatch | null } {
   if (kind === 'character') return { settings: patch, placement: null };
-  const { vision, speed, ...own } = patch;
-  const settings = { ...(vision && { vision }), ...(speed !== undefined && { speed }) };
+  const { speed, ...own } = patch;
   return {
-    settings: Object.keys(settings).length ? settings : null,
+    settings: speed !== undefined ? { speed } : null,
     placement: Object.keys(own).length ? own : null,
   };
 }

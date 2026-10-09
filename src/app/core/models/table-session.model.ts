@@ -667,6 +667,11 @@ export interface TokenPlacement {
   bars?: TokenBar[];
   tags?: TokenTag[];
   /**
+   * NPC: visão própria deste token (copiada da visão padrão do NPC ao colocar). Ausente
+   * (tokens antigos) = usa a do NPC até a primeira alteração. Personagem: sempre a da ficha.
+   */
+  vision?: TokenVision;
+  /**
    * NPC: ficha própria deste token (temas, inventário…), copiada da ficha do NPC ao colocar.
    * Alterar aqui não mexe no NPC do painel nem no bestiário. Ausente (tokens antigos) =
    * usa a ficha do NPC até a primeira alteração.
