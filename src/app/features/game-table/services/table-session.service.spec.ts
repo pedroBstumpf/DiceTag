@@ -1,0 +1,90 @@
+import { TestBed } from '@angular/core/testing';
+import { TableState } from '../../../core/models/table-session.model';
+import { StorageService } from '../../../core/services/storage.service';
+import { TableSessionService } from './table-session.service';
+
+/** IndexedDB em memória (o jsdom não tem IndexedDB). */
+class MemoryStorage {
+  readonly data = new Map<string, unknown>();
+  async get<T>(key: string): Promise<T | undefined> {
+    return this.data.get(key) as T | undefined;
+  }
+  async set<T>(key: string, value: T): Promise<void> {
+    this.data.set(key, value);
+  }
+  async delete(key: string): Promise<void> {
+    this.data.delete(key);
+  }
+  async requestPersistence(): Promise<boolean> {
+    return false;
+  }
+}
+
+/**
+ * Fachada da mesa: os métodos públicos continuam funcionando como antes, agora passando
+ * pelos comandos puros de state/. Testa a ligação serviço → comando → gravação.
+ */
+describe('TableSessionService (fachada)', () => {
+  let storage: MemoryStorage;
+  let session: TableSessionService;
+
+  beforeEach(async () => {
+    storage = new MemoryStorage();
+    TestBed.configureTestingModule({ providers: [TableSessionService, { provide: StorageService, useValue: storage }] });
+    session = TestBed.inject(TableSessionService);
+    await session.load('mesa');
+  });
+
+  it('cria cena, coloca, move e remove um token', async () => {
+    const scene = await session.addScene();
+    expect(session.activeScene()?.id).toBe(scene.id);
+    const pc = session.addEntry('character');
+    const placement = session.placeToken(pc.id, { x: 10, y: 20 });
+    expect(session.selectedTokenId()).toBe(placement?.id);
+
+    session.moveToken(placement!.id, { x: 70, y: 70 });
+    expect(session.resolvedTokenById(placement!.id)?.placement).toMatchObject({ x: 70, y: 70 });
+
+    session.removeToken(placement!.id);
+    expect(session.tokens()).toEqual([]);
+    expect(session.selectedTokenId()).toBeNull();
+  });
+
+  it('regra de vínculo: alterar o token do personagem altera a ficha', async () => {
+    await session.addScene();
+    const pc = session.addEntry('character');
+    const placement = session.placeToken(pc.id, { x: 0, y: 0 })!;
+    session.updateToken(placement.id, { size: 3 });
+    expect(session.entryById().get(pc.id)?.token?.size).toBe(3);
+    expect(session.tokens()[0].size).toBeUndefined();
+  });
+
+  it('flush grava o estado na chave da mesa', async () => {
+    await session.addScene();
+    session.sendChat('olá');
+    session.flush();
+    const saved = storage.data.get('table-state:mesa') as TableState;
+    expect(saved.scenes.length).toBe(1);
+    expect(saved.chat?.[0].text).toBe('olá');
+  });
+
+  it('desenho: Ctrl+Z desfaz o traço e depois a borracha', async () => {
+    await session.addScene();
+    session.addStroke({ points: [], color: '#fff', width: 4, opacity: 1 });
+    session.addStroke({ points: [], color: '#000', width: 4, opacity: 1 });
+    session.eraseStrokes([session.drawings()[0].id]);
+    expect(session.drawings().map((d) => d.color)).toEqual(['#000']);
+    expect(session.undoDrawing()).toBe(true);
+    expect(session.drawings().map((d) => d.color)).toEqual(['#fff', '#000']);
+    expect(session.undoDrawing()).toBe(true);
+    expect(session.drawings().map((d) => d.color)).toEqual(['#fff']);
+  });
+
+  it('permissões seguem o papel: o jogador não edita NPC que não controla', () => {
+    const npc = session.addEntry('npc');
+    expect(session.canEdit(npc)).toBe(true);
+    session.setRole('player');
+    expect(session.canEdit(npc)).toBe(false);
+    expect(session.canOpenSheet(npc.id)).toBe(false);
+  });
+});

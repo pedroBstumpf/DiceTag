@@ -11,16 +11,13 @@ import {
   DEFAULT_ROLL,
   DiceKind,
   DEFAULT_SOUND_VOLUME,
-  DEFAULT_TOKEN_SPEED,
   DoorWall,
   FxStyle,
-  MAX_CHAT_MESSAGES,
   MAX_MAP_LEVELS,
   MapLevel,
   SceneFolder,
   RollResult,
   LoreFolder,
-  LoreItemOverride,
   METERS_PER_SQUARE,
   MapNote,
   NOTE_COLORS,
@@ -31,14 +28,12 @@ import {
   TableEntryKind,
   TableRole,
   TableItem,
-  TableLore,
   TableState,
   TableTool,
   TokenBar,
   TokenPlacement,
   TokenSettings,
   TokenTag,
-  TokenVision,
   Wall,
   CharacterSheet,
   InventoryEntry,
@@ -55,8 +50,21 @@ import { TagLevels, baseTagId, formatRoll, keepValidItemTags, levelUpText, rollD
 import { addOne, inventoryRow, itemTagId, itemTagLevel, quantityOf, takeOne } from '../utils/inventory';
 import { SheetData, SheetStore } from '../../../core/services/sheet-store';
 import { FxDrawing, buildFx, seededRandom } from '../utils/effects';
-import { createMask, decodeMask, encodeMask, isExploredAt, markPolygons, maskFits } from '../utils/fog-memory';
-import { computeVisibilityPolygon, doorSeen, pointInPolygon, wallsToSegments } from '../utils/visibility';
+import { createMask, decodeMask, encodeMask, markPolygons, maskFits } from '../utils/fog-memory';
+import { computeVisibilityPolygon, doorSeen, wallsToSegments } from '../utils/visibility';
+import { FogView, visibleDoorsFor, visibleNotesFor, visibleTokensFor } from '../state/player-view';
+import { TableCommandPayload, TableCommandType, applyCommand } from '../state/commands';
+import { RemovedStroke, strokesToErase } from '../state/drawings';
+import { findPlacement, levelOf, tokenSheetPlacement, uniqueName } from '../state/helpers';
+import { clampLevelIn, levelCountOf } from '../state/levels';
+import * as rules from '../state/permissions';
+import { SheetAccess, Viewer } from '../state/permissions';
+import { EMPTY_LORE, EMPTY_STATE, normalizeState } from '../state/table-state';
+import { ResolvedToken, TokenPatch, resolveToken, splitTokenPatch } from '../state/tokens';
+
+// Tipos e auxiliares que os componentes já importam daqui (moram em state/)
+export type { ResolvedToken, SheetAccess, TokenPatch };
+export { levelOf, tokenSheetPlacement };
 
 /** Barras da mesa que podem ser escondidas. */
 export interface TablePanels {
@@ -65,29 +73,6 @@ export interface TablePanels {
   side: boolean;
   actions: boolean;
 }
-
-/**
- * Token com as configurações efetivas (regra de vínculo já aplicada).
- * É o que o mapa e a janela "Token" exibem.
- */
-export interface ResolvedToken {
-  placement: TokenPlacement;
-  entry: TableEntry;
-  /** Nome exibido (NPC: o nome próprio do token, se houver). */
-  name: string;
-  /** Personagem: alterações valem para a ficha e todos os tokens dela. */
-  linked: boolean;
-  blobId?: string;
-  size: number;
-  vision: TokenVision;
-  /** Quadrados por segundo com WASD/setas (sempre da ficha). */
-  speed: number;
-  bars: TokenBar[];
-  tags: TokenTag[];
-}
-
-/** Campos do token editáveis pela ficha ou pela janela "Token". */
-export type TokenPatch = Partial<Pick<TokenSettings, 'size' | 'vision' | 'speed' | 'bars' | 'tags'>>;
 
 /** Efeito especial em exibição no mapa (transitório, não é salvo). */
 export interface FxInstance {
@@ -110,23 +95,6 @@ export interface ActionUse {
   armed: boolean;
   /** Estudos e Treinos que subiram de nível nesta rolagem (nomes das etiquetas). */
   levelUps: string[];
-}
-
-
-/** O que a conta atual pode fazer com uma ficha (sheetAccess). */
-export interface SheetAccess {
-  edit: boolean;
-  /** Ver a aba Ficha. */
-  sheet: boolean;
-  /** Ver o inventário (e comprar/lootear, se for token de NPC). */
-  inventory: boolean;
-}
-const FULL_ACCESS: SheetAccess = { edit: true, sheet: true, inventory: true };
-const NO_ACCESS: SheetAccess = { edit: false, sheet: false, inventory: false };
-
-/** Id do token se `sheetId` for a ficha de um token de NPC ("npc:<id>"); senão null. */
-export function tokenSheetPlacement(sheetId: string): string | null {
-  return sheetId.startsWith(NPC_TOKEN_SHEET) ? sheetId.slice(NPC_TOKEN_SHEET.length) : null;
 }
 
 /** Mestre agindo como "o token selecionado" (muda a cada seleção). */
@@ -161,13 +129,11 @@ export interface Brush {
 }
 
 /** Ação de desenho que pode ser desfeita (Ctrl+Z). */
-type DrawAction = { kind: 'add'; strokeId: string } | { kind: 'erase'; removed: { stroke: Stroke; index: number }[] };
+type DrawAction = { kind: 'add'; strokeId: string } | { kind: 'erase'; removed: RemovedStroke[] };
 
 /** Omit que preserva cada membro de uma união (ex.: Wall sem o id). */
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
-const EMPTY_STATE: TableState = { scenes: [], activeSceneId: null, entries: [] };
-const EMPTY_LORE: TableLore = { folders: [], items: {} };
 const NO_TOKENS: TokenPlacement[] = [];
 const NO_WALLS: Wall[] = [];
 const NO_TABLE_ITEMS: TableItem[] = [];
@@ -185,11 +151,6 @@ export interface LevelView {
   blobId?: string;
 }
 
-/** Camada de um token ou parede (dados antigos ficam no térreo). */
-export function levelOf(item: { level?: number }): number {
-  return item.level ?? 0;
-}
-
 /** Mesmos itens, na mesma ordem (igualdade de listas filtradas: evita recálculos). */
 function sameItems<T>(a: readonly T[], b: readonly T[]): boolean {
   return a.length === b.length && a.every((item, i) => item === b[i]);
@@ -200,8 +161,13 @@ function sameItems<T>(a: readonly T[], b: readonly T[]): boolean {
  * tokens, ferramenta ativa e papel do usuário (mestre ou jogador).
  *
  * Fornecido no componente da mesa — cada mesa aberta tem sua instância.
- * Salva no IndexedDB com a chave "table-state:<id>". Toda mutação passa
- * por patchState (gravação agrupada com debounce de 300ms).
+ * Salva no IndexedDB com a chave "table-state:<id>".
+ *
+ * É uma FACHADA: os componentes chamam os métodos daqui, e toda alteração do estado
+ * salvo vira um comando puro de `state/` aplicado por `dispatch` (gravação agrupada
+ * com debounce de 300ms). Aqui ficam só o que não é puro: ids e horários novos,
+ * arquivos (Blobs), o Worldbuild (NPCs do bestiário) e o estado da sessão.
+ * As regras de permissão moram em `state/permissions.ts`.
  */
 @Injectable()
 export class TableSessionService extends SheetStore {
@@ -244,7 +210,7 @@ export class TableSessionService extends SheetStore {
       ...(scene.levels ?? []).map((l, i) => ({ id: l.id, index: i + 1, name: l.name, blobId: l.blobId })),
     ];
   });
-  readonly levelCount = computed(() => Math.max(1, this.mapLevels().length));
+  readonly levelCount = computed(() => levelCountOf(this.activeScene()));
   /** Camada que os jogadores veem. */
   readonly playerLevel = computed(() => this.clampLevel(this.activeScene()?.playerLevel ?? 0));
   /** Camada que o mestre está olhando (só nesta sessão; começa na dos jogadores). */
@@ -262,6 +228,8 @@ export class TableSessionService extends SheetStore {
     const byId = this.entryById();
     return this.tokens().flatMap((p) => this.resolveToken(p, byId) ?? []);
   });
+  /** Quem está olhando a mesa (papel + conta), para as regras de `state/permissions.ts`. */
+  private readonly viewer = computed<Viewer>(() => ({ role: this.role(), userId: this.auth.user()?.id }));
 
   /** Desenhos da cena ativa. */
   readonly drawings = computed(() => this.activeScene()?.drawings ?? NO_STROKES);
@@ -272,14 +240,7 @@ export class TableSessionService extends SheetStore {
    * Anotações exibidas: na visão de jogador somem as "só mestre" e, com névoa,
    * as que estão fora da área visível.
    */
-  readonly visibleNotes = computed(() => {
-    const notes = this.notes();
-    if (this.role() !== 'player') return notes;
-    const polys = this.visionPolygons();
-    const explored = this.explored();
-    // Anotações em áreas já exploradas continuam visíveis (o jogador lembra o que viu)
-    return notes.filter((n) => !n.gmOnly && (this.isVisible(n, polys) || (explored && isExploredAt(explored, n))));
-  });
+  readonly visibleNotes = computed(() => visibleNotesFor(this.notes(), this.role(), this.fogView()));
 
   // --- Névoa de guerra e paredes (cena ativa) ------------------------------
 
@@ -341,12 +302,16 @@ export class TableSessionService extends SheetStore {
 
   /** Portas exibidas: o jogador, com névoa, só vê as portas que algum token já enxerga. */
   readonly visibleDoors = computed(() => {
-    const doors = this.doors();
-    if (!this.playerFog()) return doors;
-    const polys = this.visionPolygons();
-    const explored = this.explored();
-    return doors.filter((d) => doorSeen(d.points, polys) || (explored && isExploredAt(explored, midpoint(d.points))));
+    const fog = this.fogView();
+    return visibleDoorsFor(this.doors(), this.role(), fog, (d) => doorSeen(d.points, fog.polygons));
   });
+
+  /** Névoa da cena ativa como as regras de `state/player-view.ts` a recebem. */
+  private readonly fogView = computed<FogView>(() => ({
+    enabled: this.fogEnabled(),
+    polygons: this.visionPolygons(),
+    explored: this.explored(),
+  }));
 
   /** Visão de jogador com névoa: a área fora da visão fica escondida. */
   readonly playerFog = computed(() => this.fogEnabled() && this.role() === 'player');
@@ -356,11 +321,7 @@ export class TableSessionService extends SheetStore {
    * (personagens sempre aparecem).
    */
   readonly tokensByLevel = computed(() => {
-    let tokens = this.resolvedTokens();
-    if (this.playerFog()) {
-      const polys = this.visionPolygons();
-      tokens = tokens.filter((t) => t.entry.kind === 'character' || this.isVisible(t.placement, polys));
-    }
+    const tokens = visibleTokensFor(this.resolvedTokens(), this.role(), this.fogView());
     const byLevel = new Map<number, ResolvedToken[]>();
     for (const t of tokens) {
       const level = this.clampLevel(levelOf(t.placement));
@@ -448,33 +409,22 @@ export class TableSessionService extends SheetStore {
   });
 
   // --- Permissões das fichas (provisórias: o papel ainda é escolhido na mesa) --
+  // As regras moram em state/permissions.ts (puras, reaproveitáveis pelo servidor).
 
   /** O NPC foi liberado pelo mestre para a conta atual. */
   controlsNpc(entry: TableEntry): boolean {
-    return !!entry.controllerUserId && entry.controllerUserId === this.auth.user()?.id;
+    return rules.controlsNpc(entry, this.viewer());
   }
 
   /** Pode editar a ficha: o mestre sempre; NPC só o jogador autorizado; personagens seguem livres. */
   canEdit(entry: TableEntry): boolean {
-    if (this.role() === 'gm') return true;
-    return entry.kind === 'npc' ? this.controlsNpc(entry) : true;
+    return rules.canEdit(entry, this.viewer());
   }
 
-  /**
-   * O que a conta atual pode fazer com a ficha `sheetId`:
-   * - quem edita (mestre; NPC: o jogador autorizado) vê e edita tudo;
-   * - token de NPC: os jogadores veem a ficha e/ou o inventário que o mestre deixou
-   *   públicos naquele token — e o inventário de um token derrotado sempre;
-   * - NPC do painel (ficha base): só quem edita.
-   */
+  /** O que a conta atual pode fazer com a ficha `sheetId` (regra em `rules.sheetAccess`). */
   sheetAccess(sheetId: string): SheetAccess {
-    const data = this.sheetData(sheetId);
-    if (!data) return NO_ACCESS;
-    if (!data.entry || this.canEdit(data.entry)) return FULL_ACCESS;
     const placementId = tokenSheetPlacement(sheetId);
-    const placement = placementId ? this.findPlacement(placementId) : undefined;
-    if (!placement) return NO_ACCESS;
-    return { edit: false, sheet: !!placement.sheetPublic, inventory: !!placement.inventoryPublic || isDown(data.bars) };
+    return rules.sheetAccess(this.viewer(), this.sheetData(sheetId), placementId ? this.findPlacement(placementId) : undefined);
   }
 
   /** Pode abrir a ficha (ao menos uma parte visível). */
@@ -485,10 +435,7 @@ export class TableSessionService extends SheetStore {
 
   /** Mestre: deixa a ficha ou o inventário de um token de NPC visível (só leitura) para os jogadores, ou não. */
   toggleTokenPublic(placementId: string, part: 'sheet' | 'inventory'): void {
-    const placement = this.findPlacement(placementId);
-    if (!placement) return;
-    if (part === 'sheet') this.patchPlacement(placementId, { sheetPublic: !placement.sheetPublic || undefined });
-    else this.patchPlacement(placementId, { inventoryPublic: !placement.inventoryPublic || undefined });
+    this.dispatch('toggleTokenPublic', { placementId, part });
   }
 
   /** Token colocado (em qualquer cena), sem resolver a ficha. */
@@ -522,7 +469,7 @@ export class TableSessionService extends SheetStore {
 
   /** O personagem é da conta atual? (personagem sem dono vale para qualquer um) */
   ownsCharacter(entry: TableEntry): boolean {
-    return !entry.ownerUserId || entry.ownerUserId === this.auth.user()?.id;
+    return rules.ownsCharacter(entry, this.viewer());
   }
 
   /**
@@ -594,12 +541,12 @@ export class TableSessionService extends SheetStore {
   }
 
   clearChat(): void {
-    this.patchState((s) => ({ ...s, chat: [] }));
+    this.dispatch('clearChat', {});
   }
 
   private pushChat(message: Pick<ChatMessage, 'author' | 'text' | 'roll'>): void {
     const full: ChatMessage = { id: newId(), at: Date.now(), userId: this.auth.user()?.id ?? '', role: this.role(), ...message };
-    this.patchState((s) => ({ ...s, chat: [...(s.chat ?? []), full].slice(-MAX_CHAT_MESSAGES) }));
+    this.dispatch('addChatMessage', { message: full });
   }
 
   private userName(): string {
@@ -696,7 +643,7 @@ export class TableSessionService extends SheetStore {
       drawings: [],
       notes: [],
     };
-    this.patchState((s) => ({ ...s, scenes: [...s.scenes, scene], activeSceneId: scene.id }));
+    this.dispatch('addScene', { scene });
     this.selectedTokenId.set(null);
     return scene;
   }
@@ -711,22 +658,18 @@ export class TableSessionService extends SheetStore {
   }
 
   updateScene(id: string, patch: Partial<Omit<Scene, 'id'>>): void {
-    this.patchState((s) => ({ ...s, scenes: s.scenes.map((sc) => (sc.id === id ? { ...sc, ...patch } : sc)) }));
+    this.dispatch('updateScene', { sceneId: id, patch });
   }
 
   setActiveScene(id: string): void {
-    this.patchState((s) => ({ ...s, activeSceneId: id }));
+    this.dispatch('setActiveScene', { sceneId: id });
     this.selectedTokenId.set(null);
   }
 
   /** Exclui a cena e apaga os arquivos dos mapas dela (térreo e camadas). */
   removeScene(id: string): void {
     const scene = this.scenes().find((s) => s.id === id);
-    this.patchState((s) => {
-      const scenes = s.scenes.filter((sc) => sc.id !== id);
-      const activeSceneId = s.activeSceneId === id ? (scenes[0]?.id ?? null) : s.activeSceneId;
-      return { ...s, scenes, activeSceneId };
-    });
+    this.dispatch('removeScene', { sceneId: id });
     for (const blobId of [scene?.blobId, ...(scene?.levels ?? []).map((l) => l.blobId)]) {
       if (blobId) this.storage.delete(`blob:${blobId}`);
     }
@@ -748,32 +691,23 @@ export class TableSessionService extends SheetStore {
 
   /** Cria uma pasta de cenas ("Nova pasta", "Nova pasta 2"…). */
   addSceneFolder(): SceneFolder {
-    const names = new Set(this.sceneFolders().map((f) => f.name));
-    let name = 'Nova pasta';
-    for (let n = 2; names.has(name); n++) name = `Nova pasta ${n}`;
-    const folder: SceneFolder = { id: newId(), name };
-    this.patchState((s) => ({ ...s, sceneFolders: [...(s.sceneFolders ?? []), folder] }));
+    const folder: SceneFolder = { id: newId(), name: uniqueName('Nova pasta', this.sceneFolders().map((f) => f.name)) };
+    this.dispatch('addSceneFolder', { folder });
     return folder;
   }
 
   renameSceneFolder(id: string, name: string): void {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    this.patchState((s) => ({ ...s, sceneFolders: (s.sceneFolders ?? []).map((f) => (f.id === id ? { ...f, name: trimmed } : f)) }));
+    this.dispatch('renameSceneFolder', { folderId: id, name });
   }
 
   /** Exclui a pasta; as cenas dela continuam, fora de pastas. */
   removeSceneFolder(id: string): void {
-    this.patchState((s) => ({
-      ...s,
-      sceneFolders: (s.sceneFolders ?? []).filter((f) => f.id !== id),
-      scenes: s.scenes.map((sc) => (sc.folderId === id ? { ...sc, folderId: undefined } : sc)),
-    }));
+    this.dispatch('removeSceneFolder', { folderId: id });
   }
 
   /** Move a cena para uma pasta (null = fora de pastas). */
   moveSceneToFolder(sceneId: string, folderId: string | null): void {
-    this.updateScene(sceneId, { folderId: folderId ?? undefined });
+    this.dispatch('moveSceneToFolder', { sceneId, folderId });
   }
 
   // --- Camadas do mapa -----------------------------------------------------
@@ -792,15 +726,13 @@ export class TableSessionService extends SheetStore {
     const scene = this.activeScene();
     if (!scene || this.levelCount() >= MAX_MAP_LEVELS) return;
     const level: MapLevel = { id: newId(), name: `Camada ${this.levelCount() + 1}` };
-    this.updateScene(scene.id, { levels: [...(scene.levels ?? []), level] });
+    this.dispatch('addLevel', { sceneId: scene.id, level });
     this.viewLevel(this.levelCount() - 1);
   }
 
   renameLevel(index: number, name: string): void {
     const scene = this.activeScene();
-    const trimmed = name.trim();
-    if (!scene || index < 1 || !trimmed) return;
-    this.updateScene(scene.id, { levels: (scene.levels ?? []).map((l, i) => (i === index - 1 ? { ...l, name: trimmed } : l)) });
+    if (scene) this.dispatch('renameLevel', { sceneId: scene.id, index, name });
   }
 
   /** Envia (ou troca) a imagem de uma camada. O térreo usa o mapa da cena. */
@@ -811,7 +743,7 @@ export class TableSessionService extends SheetStore {
     const old = scene.levels?.[index - 1]?.blobId;
     const blobId = newId();
     await this.storage.set(`blob:${blobId}`, file);
-    this.patchLevel(scene.id, index, { blobId });
+    this.dispatch('setLevelImage', { sceneId: scene.id, index, blobId });
     if (old) this.storage.delete(`blob:${old}`);
   }
 
@@ -820,7 +752,7 @@ export class TableSessionService extends SheetStore {
     const scene = this.activeScene();
     const old = scene?.levels?.[index - 1]?.blobId;
     if (!scene || index < 1 || !old) return;
-    this.patchLevel(scene.id, index, { blobId: undefined });
+    this.dispatch('setLevelImage', { sceneId: scene.id, index });
     this.storage.delete(`blob:${old}`);
   }
 
@@ -829,23 +761,15 @@ export class TableSessionService extends SheetStore {
     const scene = this.activeScene();
     const level = scene?.levels?.[index - 1];
     if (!scene || index < 1 || !level) return;
-    const shift = (n: number) => (n >= index ? n - 1 : n);
-    this.updateScene(scene.id, {
-      levels: (scene.levels ?? []).filter((l) => l.id !== level.id),
-      tokens: (scene.tokens ?? []).map((t) => (levelOf(t) >= index ? { ...t, level: levelOf(t) - 1 } : t)),
-      walls: (scene.walls ?? [])
-        .filter((w) => levelOf(w) !== index)
-        .map((w) => (levelOf(w) > index ? { ...w, level: levelOf(w) - 1 } : w)),
-      playerLevel: shift(scene.playerLevel ?? 0),
-    });
-    this.gmLevel.update(shift);
+    this.dispatch('removeLevel', { sceneId: scene.id, index });
+    this.gmLevel.update((n) => (n >= index ? n - 1 : n));
     if (level.blobId) this.storage.delete(`blob:${level.blobId}`);
   }
 
   /** Libera uma camada para os jogadores (é a que eles passam a ver). */
   showLevelToPlayers(index: number): void {
     const scene = this.activeScene();
-    if (scene) this.updateScene(scene.id, { playerLevel: this.clampLevel(index) });
+    if (scene) this.dispatch('setPlayerLevel', { sceneId: scene.id, level: index });
   }
 
   /** Sobe/desce um token de camada; se for o selecionado, a vista do mestre o acompanha. */
@@ -854,17 +778,12 @@ export class TableSessionService extends SheetStore {
     if (!placement) return;
     const target = this.clampLevel(levelOf(placement) + delta);
     if (target === levelOf(placement)) return;
-    this.patchPlacement(placementId, { level: target });
+    this.dispatch('updatePlacement', { placementId, patch: { level: target } });
     if (this.selectedTokenId() === placementId && this.role() === 'gm') this.gmLevel.set(target);
   }
 
-  private patchLevel(sceneId: string, index: number, patch: Partial<MapLevel>): void {
-    const scene = this.scenes().find((s) => s.id === sceneId);
-    if (scene) this.updateScene(sceneId, { levels: (scene.levels ?? []).map((l, i) => (i === index - 1 ? { ...l, ...patch } : l)) });
-  }
-
   private clampLevel(level: number): number {
-    return Math.min(Math.max(0, Math.round(level)), this.levelCount() - 1);
+    return clampLevelIn(this.activeScene(), level);
   }
 
   // --- Arquivos da mesa ----------------------------------------------------
@@ -882,7 +801,7 @@ export class TableSessionService extends SheetStore {
       ...(kind === 'character' && { ownerUserId: this.auth.user()?.id }),
       ...extra,
     };
-    this.patchState((s) => ({ ...s, entries: [...s.entries, entry] }));
+    this.dispatch('addEntry', { entry });
     return entry;
   }
 
@@ -900,11 +819,11 @@ export class TableSessionService extends SheetStore {
 
   /** Define o volume mestre dos sons da mesa (0–1). */
   setSoundMaster(volume: number): void {
-    this.patchState((s) => ({ ...s, soundMaster: clamp01(volume) }));
+    this.dispatch('setSoundMaster', { volume });
   }
 
   updateEntry(id: string, patch: Partial<Omit<TableEntry, 'id' | 'kind'>>): void {
-    this.patchState((s) => ({ ...s, entries: s.entries.map((e) => (e.id === id ? { ...e, ...patch } : e)) }));
+    this.dispatch('updateEntry', { entryId: id, patch });
   }
 
   /** Exclui o arquivo, as ações dele, os tokens dele em todas as cenas e os arquivos (áudio/imagem). */
@@ -914,13 +833,7 @@ export class TableSessionService extends SheetStore {
     for (const sc of this.scenes()) {
       for (const token of sc.tokens ?? []) if (token.entryId === id) this.deleteInventoryBlobs(token.sheet?.inventory);
     }
-    this.patchState((s) => ({
-      ...s,
-      entries: s.entries.filter((e) => e.id !== id && e.ownerEntryId !== id),
-      scenes: s.scenes.map((sc) =>
-        sc.tokens?.some((t) => t.entryId === id) ? { ...sc, tokens: sc.tokens.filter((t) => t.entryId !== id) } : sc,
-      ),
-    }));
+    this.dispatch('removeEntry', { entryId: id });
     if (entry?.blobId) this.storage.delete(`blob:${entry.blobId}`);
     if (entry?.token?.blobId) this.storage.delete(`blob:${entry.token.blobId}`);
     // Imagens personalizadas dos itens do inventário
@@ -1008,7 +921,7 @@ export class TableSessionService extends SheetStore {
     const placementId = tokenSheetPlacement(id);
     if (placementId) {
       // Nome próprio do token (vazio = volta ao nome do NPC)
-      this.patchPlacement(placementId, { name: trimmed || undefined });
+      this.dispatch('updatePlacement', { placementId, patch: { name: trimmed || undefined } });
       return;
     }
     const entry = this.entryById().get(id);
@@ -1030,7 +943,7 @@ export class TableSessionService extends SheetStore {
     const placementId = tokenSheetPlacement(id);
     if (placementId) {
       const current = this.sheetData(id)?.sheet;
-      if (current) this.patchPlacement(placementId, { sheet: { ...current, ...patch } });
+      if (current) this.dispatch('updatePlacement', { placementId, patch: { sheet: { ...current, ...patch } } });
       return;
     }
     const entry = this.entryById().get(id);
@@ -1046,7 +959,7 @@ export class TableSessionService extends SheetStore {
     const placementId = tokenSheetPlacement(id);
     if (!placementId) return this.updateEntryToken(id, patch);
     // Token de NPC: barras e etiquetas são só dele
-    this.patchPlacement(placementId, { ...patch, ...(patch.bars && { bars: withStatusBars(patch.bars) }) });
+    this.dispatch('updatePlacement', { placementId, patch: { ...patch, ...(patch.bars && { bars: withStatusBars(patch.bars) }) } });
   }
 
   /** Ficha de um token de NPC: a cópia própria (ou, em tokens antigos, a do NPC até a primeira alteração). */
@@ -1250,79 +1163,48 @@ export class TableSessionService extends SheetStore {
 
   /** Cria uma pasta na aba Lore ("Nova pasta", "Nova pasta 2"…). */
   addLoreFolder(): LoreFolder {
-    const names = new Set(this.lore().folders.map((f) => f.name));
-    let name = 'Nova pasta';
-    for (let n = 2; names.has(name); n++) name = `Nova pasta ${n}`;
-    const folder: LoreFolder = { id: newId(), name };
-    this.patchLore((l) => ({ ...l, folders: [...l.folders, folder] }));
+    const folder: LoreFolder = { id: newId(), name: uniqueName('Nova pasta', this.lore().folders.map((f) => f.name)) };
+    this.dispatch('addLoreFolder', { folder });
     return folder;
   }
 
   renameLoreFolder(id: string, name: string): void {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    this.patchLore((l) => ({ ...l, folders: l.folders.map((f) => (f.id === id ? { ...f, name: trimmed } : f)) }));
+    this.dispatch('renameLoreFolder', { folderId: id, name });
   }
 
   /** Mestre: revela ou esconde dos jogadores tudo o que está na pasta. */
   toggleLoreFolderPublic(id: string): void {
-    this.patchLore((l) => ({ ...l, folders: l.folders.map((f) => (f.id === id ? { ...f, public: !f.public || undefined } : f)) }));
+    this.dispatch('toggleLoreFolderPublic', { folderId: id });
   }
 
-  /**
-   * O jogador pode ver este item da lore? Só se estiver numa pasta da mesa que o mestre
-   * revelou (e não removido desta mesa). O mestre vê tudo.
-   */
+  /** O jogador pode ver este item da lore? (regra em `rules.canSeeLoreItem`; o mestre vê tudo) */
   canSeeLoreItem(itemId: string): boolean {
-    if (this.role() === 'gm') return true;
-    const override = this.lore().items[itemId];
-    if (override?.hidden) return false;
-    const folder = override?.folderId ? this.lore().folders.find((f) => f.id === override.folderId) : undefined;
-    // Itens criados na mesa pelos jogadores ficam à vista (na raiz ou em pasta revelada)
-    if (this.tableItemById().has(itemId)) return !folder || !!folder.public;
-    return !!folder?.public;
+    return rules.canSeeLoreItem(this.lore(), itemId, this.tableItemById().has(itemId), this.viewer());
   }
 
   /** Exclui a pasta da mesa; os itens dela voltam para a raiz da aba Lore. */
   removeLoreFolder(id: string): void {
-    this.patchLore((l) => ({
-      folders: l.folders.filter((f) => f.id !== id),
-      items: Object.fromEntries(
-        Object.entries(l.items).map(([itemId, o]) => [itemId, o.folderId === id ? { ...o, folderId: undefined } : o]),
-      ),
-    }));
+    this.dispatch('removeLoreFolder', { folderId: id });
   }
 
   /** Renomeia o item só nesta mesa (nome vazio ou igual ao original volta ao original). */
   renameLoreItem(item: { id: string; name: string }, name: string): void {
-    const trimmed = name.trim();
-    this.patchLoreItem(item.id, { name: trimmed && trimmed !== item.name ? trimmed : undefined });
+    this.dispatch('renameLoreItem', { itemId: item.id, originalName: item.name, name });
   }
 
   /** Move o item para uma pasta da mesa (null = raiz). */
   moveLoreItem(itemId: string, folderId: string | null): void {
-    this.patchLoreItem(itemId, { folderId: folderId ?? undefined });
+    this.dispatch('moveLoreItem', { itemId, folderId });
   }
 
   /** Remove o item desta mesa (o original continua no worldbuild / Lore geral). */
   hideLoreItem(itemId: string): void {
-    this.patchLoreItem(itemId, { hidden: true });
+    this.dispatch('hideLoreItem', { itemId });
   }
 
   /** Traz de volta todos os itens removidos desta mesa. */
   restoreLoreItems(): void {
-    this.patchLore((l) => ({
-      ...l,
-      items: Object.fromEntries(Object.entries(l.items).map(([id, o]) => [id, { ...o, hidden: undefined }])),
-    }));
-  }
-
-  private patchLoreItem(itemId: string, patch: LoreItemOverride): void {
-    this.patchLore((l) => ({ ...l, items: { ...l.items, [itemId]: { ...l.items[itemId], ...patch } } }));
-  }
-
-  private patchLore(fn: (l: TableLore) => TableLore): void {
-    this.patchState((s) => ({ ...s, lore: fn(s.lore ?? EMPTY_LORE) }));
+    this.dispatch('restoreLoreItems', {});
   }
 
   // --- Itens da mesa (criados por jogadores, fora do Worldbuild) -----------
@@ -1339,18 +1221,17 @@ export class TableSessionService extends SheetStore {
       ownerUserId: this.auth.user()?.id,
       createdAt: Date.now(),
     };
-    this.patchState((s) => ({ ...s, items: [...(s.items ?? []), item] }));
+    this.dispatch('addTableItem', { item });
     return item;
   }
 
   /** Quem criou o item da mesa (e o mestre) edita o original; os demais só a cópia do inventário. */
   canEditTableItem(itemId: string): boolean {
-    const item = this.tableItemById().get(itemId);
-    return !!item && (this.role() === 'gm' || item.ownerUserId === this.auth.user()?.id);
+    return rules.canEditTableItem(this.tableItemById().get(itemId), this.viewer());
   }
 
   updateTableItem(itemId: string, patch: Partial<Pick<TableItem, 'name' | 'tags' | 'description'>>): void {
-    this.patchState((s) => ({ ...s, items: (s.items ?? []).map((i) => (i.id === itemId ? { ...i, ...patch } : i)) }));
+    this.dispatch('updateTableItem', { itemId, patch });
   }
 
   /** Troca a imagem do item da mesa (apaga a anterior). */
@@ -1358,7 +1239,7 @@ export class TableSessionService extends SheetStore {
     const old = this.tableItemById().get(itemId)?.blobId;
     const blobId = newId();
     await this.storage.set(`blob:${blobId}`, file);
-    this.patchState((s) => ({ ...s, items: (s.items ?? []).map((i) => (i.id === itemId ? { ...i, blobId } : i)) }));
+    this.dispatch('updateTableItem', { itemId, patch: { blobId } });
     if (old) this.storage.delete(`blob:${old}`);
   }
 
@@ -1371,29 +1252,10 @@ export class TableSessionService extends SheetStore {
     return entry.token ?? defaultToken(entry.kind);
   }
 
-  /**
-   * Configurações efetivas de um token colocado — único lugar da regra de vínculo:
-   * - Personagem: tamanho, barras e etiquetas vêm sempre da ficha.
-   * - NPC: usa os valores próprios da colocação (copiados ao colocar).
-   * Imagem e visão vêm sempre da ficha.
-   */
+  /** Configurações efetivas de um token colocado (regra de vínculo em `state/tokens.ts`). */
   resolveToken(placement: TokenPlacement, byId = this.entryById()): ResolvedToken | null {
     const entry = byId.get(placement.entryId);
-    if (!entry) return null;
-    const sheet = this.tokenOf(entry);
-    const linked = entry.kind === 'character';
-    return {
-      placement,
-      entry,
-      name: placement.name ?? entry.name,
-      linked,
-      blobId: sheet.blobId,
-      vision: sheet.vision,
-      speed: sheet.speed ?? DEFAULT_TOKEN_SPEED,
-      size: linked ? sheet.size : (placement.size ?? sheet.size),
-      bars: linked ? sheet.bars : (placement.bars ?? sheet.bars),
-      tags: linked ? sheet.tags : (placement.tags ?? sheet.tags),
-    };
+    return entry ? resolveToken(placement, entry, this.tokenOf(entry)) : null;
   }
 
   /** Token colocado (em qualquer cena) com as configurações efetivas. */
@@ -1412,15 +1274,9 @@ export class TableSessionService extends SheetStore {
     const entry = placement && this.entryById().get(placement.entryId);
     if (!placement || !entry) return;
 
-    const { vision, speed, ...own } = patch;
-    if (entry.kind === 'character') {
-      this.updateEntryToken(entry.id, patch);
-      return;
-    }
-    if (vision || speed !== undefined) {
-      this.updateEntryToken(entry.id, { ...(vision && { vision }), ...(speed !== undefined && { speed }) });
-    }
-    if (Object.keys(own).length) this.patchPlacement(placementId, own);
+    const split = splitTokenPatch(entry.kind, patch);
+    if (split.settings) this.updateEntryToken(entry.id, split.settings);
+    if (split.placement) this.dispatch('updatePlacement', { placementId, patch: split.placement });
   }
 
   /** NPC: grava tamanho, barras e etiquetas deste token como padrão da ficha (próximos tokens copiam). */
@@ -1483,7 +1339,7 @@ export class TableSessionService extends SheetStore {
         sheet: structuredClone(this.sheetOf(entry)),
       }),
     };
-    this.updateScene(scene.id, { tokens: [...(scene.tokens ?? []), placement] });
+    this.dispatch('placeToken', { sceneId: scene.id, placement });
     this.selectedTokenId.set(placement.id);
     // As imagens personalizadas do inventário copiado ganham cópias próprias
     if (placement.sheet?.inventory.some((i) => i.blobId)) void this.cloneTokenInventoryBlobs(placement.id);
@@ -1499,24 +1355,20 @@ export class TableSessionService extends SheetStore {
     // Se o token sumiu no meio, apaga as cópias; senão, troca só as imagens (ids iguais)
     if (!sheet) return this.deleteInventoryBlobs(cloned.filter((c, i) => c.blobId !== inventory[i].blobId));
     const byId = new Map(cloned.map((c) => [c.id, c.blobId]));
-    this.patchPlacement(placementId, {
-      sheet: { ...sheet, inventory: sheet.inventory.map((i) => (byId.has(i.id) ? { ...i, blobId: byId.get(i.id) } : i)) },
+    this.dispatch('updatePlacement', {
+      placementId,
+      patch: { sheet: { ...sheet, inventory: sheet.inventory.map((i) => (byId.has(i.id) ? { ...i, blobId: byId.get(i.id) } : i)) } },
     });
   }
 
   moveToken(placementId: string, p: Point): void {
-    this.patchPlacement(placementId, { x: p.x, y: p.y });
+    this.dispatch('moveToken', { placementId, x: p.x, y: p.y });
   }
 
   /** Remove o token do mapa (a ficha continua; a cópia do NPC, com o inventário dela, some). */
   removeToken(placementId: string): void {
     this.deleteInventoryBlobs(this.findPlacement(placementId)?.sheet?.inventory);
-    this.patchState((s) => ({
-      ...s,
-      scenes: s.scenes.map((sc) =>
-        sc.tokens?.some((t) => t.id === placementId) ? { ...sc, tokens: sc.tokens.filter((t) => t.id !== placementId) } : sc,
-      ),
-    }));
+    this.dispatch('removeToken', { placementId });
     if (this.selectedTokenId() === placementId) this.selectedTokenId.set(null);
   }
 
@@ -1524,34 +1376,34 @@ export class TableSessionService extends SheetStore {
 
   /** Liga/desliga a névoa de guerra na cena ativa. */
   setFog(enabled: boolean): void {
-    const scene = this.activeScene();
-    if (scene) this.updateScene(scene.id, { fog: { ...scene.fog, enabled } });
+    const sceneId = this.activeSceneId();
+    if (sceneId) this.dispatch('setFog', { sceneId, enabled });
   }
 
   /** Adiciona uma parede à cena ativa, na camada em foco. */
   addWall(wall: DistributiveOmit<Wall, 'id'>): void {
-    const scene = this.activeScene();
+    const sceneId = this.activeSceneId();
     const level = this.currentLevel();
     const created = { ...wall, id: newId(), ...(level > 0 && { level }) } as Wall;
-    if (scene) this.updateScene(scene.id, { walls: [...(scene.walls ?? []), created] });
+    if (sceneId) this.dispatch('addWall', { sceneId, wall: created });
   }
 
   /** Substitui uma parede da cena ativa (mover parede ou ponto). */
   updateWall(wall: Wall): void {
-    const scene = this.activeScene();
-    if (scene) this.updateScene(scene.id, { walls: (scene.walls ?? []).map((w) => (w.id === wall.id ? wall : w)) });
+    const sceneId = this.activeSceneId();
+    if (sceneId) this.dispatch('updateWall', { sceneId, wall });
   }
 
   /** Liga/desliga a memória da névoa (lembrar áreas exploradas) na cena ativa. */
   setFogMemory(memory: boolean): void {
-    const scene = this.activeScene();
-    if (scene) this.updateScene(scene.id, { fog: { enabled: scene.fog?.enabled ?? false, memory } });
+    const sceneId = this.activeSceneId();
+    if (sceneId) this.dispatch('setFogMemory', { sceneId, memory });
   }
 
   /** Esquece as áreas exploradas da cena ativa. */
   clearExplored(): void {
-    const scene = this.activeScene();
-    if (scene) this.updateScene(scene.id, { explored: undefined });
+    const sceneId = this.activeSceneId();
+    if (sceneId) this.dispatch('setExplored', { sceneId });
   }
 
   /** Soma as áreas visíveis à memória da cena (só grava se algo novo foi visto). */
@@ -1561,18 +1413,18 @@ export class TableSessionService extends SheetStore {
     const current = scene.explored ? decodeMask(scene.explored) : null;
     // Mapa trocado (outro tamanho): a memória recomeça
     const mask = current && maskFits(current, size.w, size.h) ? current : createMask(size.w, size.h);
-    if (markPolygons(mask, polygons) || mask !== current) this.updateScene(scene.id, { explored: encodeMask(mask) });
+    if (markPolygons(mask, polygons) || mask !== current) this.dispatch('setExplored', { sceneId: scene.id, explored: encodeMask(mask) });
   }
 
   /** Abre ou fecha uma porta (a visão é recalculada automaticamente). */
   toggleDoor(doorId: string): void {
-    const door = this.doors().find((d) => d.id === doorId);
-    if (door) this.updateWall({ ...door, open: !door.open });
+    const sceneId = this.activeSceneId();
+    if (sceneId && this.doors().some((d) => d.id === doorId)) this.dispatch('toggleDoor', { sceneId, doorId });
   }
 
   removeWall(wallId: string): void {
-    const scene = this.activeScene();
-    if (scene) this.updateScene(scene.id, { walls: (scene.walls ?? []).filter((w) => w.id !== wallId) });
+    const sceneId = this.activeSceneId();
+    if (sceneId) this.dispatch('removeWall', { sceneId, wallId });
     if (this.selectedWallId() === wallId) this.selectedWallId.set(null);
   }
 
@@ -1580,21 +1432,19 @@ export class TableSessionService extends SheetStore {
 
   /** Adiciona um traço à cena ativa. */
   addStroke(stroke: Omit<Stroke, 'id'>): void {
-    const scene = this.activeScene();
-    if (!scene) return;
+    const sceneId = this.activeSceneId();
+    if (!sceneId) return;
     const created: Stroke = { ...stroke, id: newId() };
-    this.updateScene(scene.id, { drawings: [...(scene.drawings ?? []), created] });
-    this.pushDrawAction(scene.id, { kind: 'add', strokeId: created.id });
+    this.dispatch('addStroke', { sceneId, stroke: created });
+    this.pushDrawAction(sceneId, { kind: 'add', strokeId: created.id });
   }
 
   /** Remove traços da cena ativa (borracha ou limpar tudo) — pode ser desfeito. */
   eraseStrokes(ids: string[]): void {
     const scene = this.activeScene();
-    const drawings = scene?.drawings ?? [];
-    const remove = new Set(ids);
-    const removed = drawings.flatMap((stroke, index) => (remove.has(stroke.id) ? [{ stroke, index }] : []));
+    const removed = strokesToErase(scene?.drawings ?? [], ids);
     if (!scene || !removed.length) return;
-    this.updateScene(scene.id, { drawings: drawings.filter((s) => !remove.has(s.id)) });
+    this.dispatch('eraseStrokes', { sceneId: scene.id, strokeIds: ids });
     this.pushDrawAction(scene.id, { kind: 'erase', removed });
   }
 
@@ -1608,14 +1458,9 @@ export class TableSessionService extends SheetStore {
     const action = scene && this.drawHistory.get(scene.id)?.pop();
     if (!scene || !action) return false;
 
-    const drawings = [...(scene.drawings ?? [])];
-    if (action.kind === 'add') {
-      this.updateScene(scene.id, { drawings: drawings.filter((s) => s.id !== action.strokeId) });
-    } else {
-      // Recoloca os traços apagados nas posições originais (mantém a ordem de sobreposição)
-      for (const { stroke, index } of action.removed) drawings.splice(Math.min(index, drawings.length), 0, stroke);
-      this.updateScene(scene.id, { drawings });
-    }
+    if (action.kind === 'add') this.dispatch('eraseStrokes', { sceneId: scene.id, strokeIds: [action.strokeId] });
+    // Recoloca os traços apagados nas posições originais (mantém a ordem de sobreposição)
+    else this.dispatch('restoreStrokes', { sceneId: scene.id, removed: action.removed });
     return true;
   }
 
@@ -1631,16 +1476,16 @@ export class TableSessionService extends SheetStore {
 
   /** Cria uma anotação vazia na cena ativa. */
   addNote(p: Point): MapNote | null {
-    const scene = this.activeScene();
-    if (!scene) return null;
+    const sceneId = this.activeSceneId();
+    if (!sceneId) return null;
     const note: MapNote = { id: newId(), x: p.x, y: p.y, title: '', text: '', color: NOTE_COLORS[0], gmOnly: false };
-    this.updateScene(scene.id, { notes: [...(scene.notes ?? []), note] });
+    this.dispatch('addNote', { sceneId, note });
     return note;
   }
 
   updateNote(noteId: string, patch: Partial<Omit<MapNote, 'id'>>): void {
-    const scene = this.activeScene();
-    if (scene) this.updateScene(scene.id, { notes: (scene.notes ?? []).map((n) => (n.id === noteId ? { ...n, ...patch } : n)) });
+    const sceneId = this.activeSceneId();
+    if (sceneId) this.dispatch('updateNote', { sceneId, noteId, patch });
   }
 
   moveNote(noteId: string, p: Point): void {
@@ -1648,45 +1493,29 @@ export class TableSessionService extends SheetStore {
   }
 
   removeNote(noteId: string): void {
-    const scene = this.activeScene();
-    if (scene) this.updateScene(scene.id, { notes: (scene.notes ?? []).filter((n) => n.id !== noteId) });
-  }
-
-  /** O ponto está em alguma área visível? (sem névoa, tudo é visível) */
-  isVisible(p: Point, polys = this.visionPolygons()): boolean {
-    if (!this.fogEnabled()) return true;
-    return polys.some((poly) => pointInPolygon(p, poly));
+    const sceneId = this.activeSceneId();
+    if (sceneId) this.dispatch('removeNote', { sceneId, noteId });
   }
 
   private findPlacement(placementId: string): TokenPlacement | undefined {
-    for (const scene of this.scenes()) {
-      const found = scene.tokens?.find((t) => t.id === placementId);
-      if (found) return found;
-    }
-    return undefined;
+    return findPlacement(this.scenes(), placementId);
   }
 
-  /** Altera um token colocado (só a cena que o contém muda de referência). */
-  private patchPlacement(placementId: string, patch: Partial<Omit<TokenPlacement, 'id' | 'entryId'>>): void {
-    this.patchState((s) => ({
-      ...s,
-      scenes: s.scenes.map((sc) =>
-        sc.tokens?.some((t) => t.id === placementId)
-          ? { ...sc, tokens: sc.tokens.map((t) => (t.id === placementId ? { ...t, ...patch } : t)) }
-          : sc,
-      ),
-    }));
-  }
-
-  // --- Persistência --------------------------------------------------------
+  // --- Comandos e persistência ---------------------------------------------
 
   private key(): string {
     return `table-state:${this.tableId}`;
   }
 
-  /** Atualiza o estado e agenda a gravação (alterações seguidas viram uma só). */
-  private patchState(fn: (s: TableState) => TableState): void {
-    this.state.update(fn);
+  /**
+   * Único ponto de alteração do estado salvo: aplica o comando puro (state/commands.ts)
+   * e agenda a gravação (alterações seguidas viram uma só). No multiplayer, é aqui que
+   * o comando também será enviado ao servidor.
+   */
+  private dispatch<K extends TableCommandType>(type: K, payload: TableCommandPayload<K>): void {
+    const next = applyCommand(this.state(), { type, payload } as Parameters<typeof applyCommand>[1]);
+    if (next === this.state()) return;
+    this.state.set(next);
     clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => this.flush(), 300);
   }
@@ -1696,42 +1525,4 @@ export class TableSessionService extends SheetStore {
     clearTimeout(this.saveTimer);
     if (this.loaded() && this.tableId) this.storage.set(this.key(), this.state());
   }
-}
-
-// --- Leitura de dados salvos ------------------------------------------------
-
-/**
- * Completa um estado salvo com os valores padrão dos campos novos.
- * Mesas criadas em versões antigas continuam abrindo sem erro.
- */
-function normalizeState(raw: TableState | undefined): TableState {
-  if (!raw) return EMPTY_STATE;
-  return {
-    ...raw,
-    scenes: raw.scenes.map((sc) => ({
-      ...sc,
-      tokens: sc.tokens ?? [],
-      fog: sc.fog ?? { enabled: false },
-      walls: sc.walls ?? [],
-      drawings: sc.drawings ?? [],
-      notes: sc.notes ?? [],
-    })),
-    entries: raw.entries.map((e) => {
-      if (e.kind === 'sound') return { ...e, volume: e.volume ?? DEFAULT_SOUND_VOLUME, loop: e.loop ?? true };
-      // Personagens e NPCs sempre têm as barras de status (Corpo, Mente, Espírito) no token
-      if (hasSheet(e.kind)) {
-        const token = e.token ?? defaultToken(e.kind);
-        return { ...e, token: { ...token, bars: withStatusBars(token.bars) } };
-      }
-      return e;
-    }),
-  };
-}
-
-function midpoint([a, b]: Point[]): Point {
-  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-}
-
-function clamp01(value: number): number {
-  return Math.min(1, Math.max(0, value));
 }
