@@ -6,8 +6,12 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
+import { GameTablesService } from '../../core/services/game-tables.service';
 import { LayoutService } from '../../core/services/layout.service';
 import { QuickActionsService } from '../../shared/services/quick-actions.service';
+
+/** Quantas mesas aparecem na barra (as demais ficam em "Ver todas"). */
+const MAX_SIDEBAR_TABLES = 6;
 
 /** Item de navegação (página). */
 interface NavLink {
@@ -18,7 +22,7 @@ interface NavLink {
 
 /**
  * Barra lateral principal: navegação entre páginas, Lore geral do mundo,
- * recursos futuros e área da conta. Recolhível no desktop e gaveta no mobile.
+ * atalhos para as mesas do usuário e área da conta. Recolhível no desktop e gaveta no mobile.
  */
 @Component({
   selector: 'app-sidebar',
@@ -30,6 +34,7 @@ export class Sidebar {
   readonly layout = inject(LayoutService);
   readonly auth = inject(AuthService);
   private readonly actions = inject(QuickActionsService);
+  private readonly tables = inject(GameTablesService);
   private readonly router = inject(Router);
   private readonly snackBar = inject(MatSnackBar);
 
@@ -40,8 +45,16 @@ export class Sidebar {
     { label: 'Worldbuild', icon: 'public', route: '/worldbuild' },
   ];
 
-  // --- Recursos planejados (exibidos como "em breve") ----------------------
-  readonly upcoming = [{ label: 'Rolador de dados', icon: 'casino' }];
+  // --- Mesas do usuário (atalhos) ------------------------------------------
+  /** Mesas exibidas na barra: as mais recentes primeiro. */
+  readonly recentTables = computed(() => this.tables.tables().slice(0, MAX_SIDEBAR_TABLES));
+  /** Mesas que não couberam (link "Ver todas"). */
+  readonly hiddenTables = computed(() => Math.max(0, this.tables.tables().length - MAX_SIDEBAR_TABLES));
+
+  createTable(): void {
+    this.layout.closeMobile();
+    this.actions.createTable();
+  }
 
   /** Rótulos visíveis? (expandida no desktop ou gaveta aberta no mobile) */
   readonly expanded = computed(() => this.layout.isMobile() || !this.layout.collapsed());

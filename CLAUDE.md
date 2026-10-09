@@ -18,7 +18,7 @@ organizar toda a atmosfera de uma campanha.
 | Área | Status |
 |---|---|
 | Landing page (banner com logo, atalhos, mural de notícias vazio) | Pronto |
-| Barra lateral global (navegação, **Lore geral**, "em breve", conta) | Pronto |
+| Barra lateral global (navegação, **Lore geral**, atalhos para as **mesas** do usuário — até 6 + "Ver todas" —, conta) | Pronto |
 | **Lore geral** (`/lore`): lore oficial do mundo, global, mesma página/editores do Worldbuild | Pronto |
 | Contas (login/cadastro locais) + **modo de teste sem conta** | Pronto (provisório) |
 | Minhas mesas (criar, listar, excluir com limpeza dos dados, abrir) | Pronto |

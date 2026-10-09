@@ -62,28 +62,52 @@
       </a>
     </section>
 
-    <!-- ===== Em breve ===== -->
-    <section>
-      @if (expanded()) {
-        <h4 class="mb-2 px-3 text-[11px] font-semibold uppercase tracking-widest text-slate-500">Em breve</h4>
-      } @else {
-        <hr class="mx-3 mb-3 border-white/5" />
-      }
-      <ul class="flex flex-col gap-1">
-        @for (item of upcoming; track item.label) {
-          <li
-            class="flex h-10 cursor-default items-center gap-3 rounded-xl px-3 text-sm text-slate-500"
-            [matTooltip]="expanded() ? 'Em desenvolvimento' : item.label + ' (em breve)'"
-            matTooltipPosition="right"
-          >
-            <mat-icon class="shrink-0">{{ item.icon }}</mat-icon>
-            @if (expanded()) {
-              <span class="truncate">{{ item.label }}</span>
-            }
-          </li>
+    <!-- ===== Mesas do usuário (atalhos para abrir) ===== -->
+    @if (auth.isLoggedIn()) {
+      <section>
+        @if (expanded()) {
+          <h4 class="mb-2 px-3 text-[11px] font-semibold uppercase tracking-widest text-slate-500">Mesas</h4>
+        } @else {
+          <hr class="mx-3 mb-3 border-white/5" />
         }
-      </ul>
-    </section>
+        <ul class="flex flex-col gap-1">
+          @for (table of recentTables(); track table.id) {
+            <li>
+              <a
+                [routerLink]="['/mesa', table.id]"
+                [matTooltip]="expanded() ? '' : table.name"
+                matTooltipPosition="right"
+                class="flex h-10 items-center gap-3 rounded-xl px-3 text-sm text-slate-300 transition-colors hover:bg-white/5 hover:text-white"
+                (click)="layout.closeMobile()"
+              >
+                <span class="grid size-6 shrink-0 place-items-center">
+                  <span class="size-2.5 rounded-full" [style.background]="table.accent"></span>
+                </span>
+                @if (expanded()) {
+                  <span class="truncate">{{ table.name }}</span>
+                }
+              </a>
+            </li>
+          } @empty {
+            @if (expanded()) {
+              <li>
+                <button type="button" class="flex h-10 w-full items-center gap-3 rounded-xl px-3 text-sm text-astral-300 hover:bg-white/5" (click)="createTable()">
+                  <mat-icon class="shrink-0">add</mat-icon>
+                  <span class="truncate">Criar mesa</span>
+                </button>
+              </li>
+            }
+          }
+          @if (expanded() && hiddenTables() > 0) {
+            <li>
+              <a routerLink="/mesas" class="flex h-8 items-center px-3 text-xs text-slate-500 hover:text-slate-300" (click)="layout.closeMobile()">
+                Ver todas (+{{ hiddenTables() }})
+              </a>
+            </li>
+          }
+        </ul>
+      </section>
+    }
   </nav>
 
   <!-- ===== Conta ===== -->
