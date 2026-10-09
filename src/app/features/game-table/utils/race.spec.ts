@@ -1,14 +1,14 @@
 import { CharacterSheet, TokenBar, withStatusBars } from '../../../core/models/table-session.model';
+import { raceTraitsOf } from '../../../core/models/world-item.model';
 import { RaceChoice, applyRace, raceKey } from './race';
 
-const tag = (text: string) => ({ id: text, text, color: '#fff' });
 const elfo: RaceChoice = {
   ref: { id: 'elfo', global: true },
   name: 'Elfo',
-  tags: [tag('Longevo'), tag('Visão no escuro'), tag(' ')],
+  traits: ['Longevo', 'Visão no escuro', ' '],
   statusMods: { 'status-mind': 2, 'status-body': -1 },
 };
-const anao: RaceChoice = { ref: { id: 'anao' }, name: 'Anão', tags: [tag('Teimoso')], statusMods: { 'status-body': 3 } };
+const anao: RaceChoice = { ref: { id: 'anao' }, name: 'Anão', traits: ['Teimoso'], statusMods: { 'status-body': 3 } };
 
 /** Barras de status cheias (24/24) + uma barra comum. */
 function bars(): TokenBar[] {
@@ -17,7 +17,7 @@ function bars(): TokenBar[] {
 const byId = (list: TokenBar[], id: string) => list.find((b) => b.id === id)!;
 
 describe('raça na ficha', () => {
-  it('aplica etiquetas como rótulos (sem vazios nem repetidos) e soma os modificadores ao máximo', () => {
+  it('aplica as características como rótulos (sem vazios nem repetidos) e soma os modificadores ao máximo', () => {
     const r = applyRace({ labels: ['Nobre', 'Longevo'] }, bars(), 'race', elfo);
     expect(r.sheet).toMatchObject({ race: 'Elfo', raceRef: { id: 'elfo', global: true } });
     expect(r.sheet.labels).toEqual(['Nobre', 'Longevo', 'Visão no escuro']);
@@ -61,6 +61,15 @@ describe('raça na ficha', () => {
     const hurt = bars().map((b) => (b.id === 'status-body' ? { ...b, value: 2 } : b));
     const r = applyRace({ labels: [] }, hurt, 'race', { ...anao, statusMods: { 'status-body': -30 } });
     expect(byId(r.bars, 'status-body')).toMatchObject({ max: 1, value: 0 });
+  });
+
+  it('características: raças antigas com etiquetas (cor e nível) valem só pelo texto', () => {
+    const base = { id: 'r', type: 'race' as const, name: 'R', parentId: null, createdAt: 0, updatedAt: 0 };
+    expect(raceTraitsOf({ ...base, traits: ['Longevo'] })).toEqual(['Longevo']);
+    expect(raceTraitsOf({ ...base, tags: [{ id: 't', text: ' Aprendiz ', color: '#f80', level: 3 }, { id: 'v', text: ' ', color: '#fff' }] })).toEqual([
+      'Aprendiz',
+    ]);
+    expect(raceTraitsOf(base)).toEqual([]);
   });
 
   it('raceKey separa Lore geral e Worldbuild', () => {

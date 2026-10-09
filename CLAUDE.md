@@ -304,7 +304,8 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - Tipos: `folder`, `document` (HTML do Tiptap em `content`), `timeline` (`events[]` + `links[]`), `image` (`blobId`),
   `item` (cartão: `blobId` opcional = imagem, nome, `description` e `tags: Tag[]`; a descrição também pode ser
   personalizada no inventário, como nome e etiquetas), `npc` (bestiário: `sheet` + `token` padrão;
-  padrões em `npcSheetOf` / `npcTokenOf`), `race` (Raça: `tags`, imagens padrão opcionais `maleBlobId` /
+  padrões em `npcSheetOf` / `npcTokenOf`), `race` (Raça: `traits` = características em texto, sem cor nem nível — raças antigas com `tags` valem pelo
+  texto, `raceTraitsOf` —, imagens padrão opcionais `maleBlobId` /
   `femaleBlobId` — só guardadas por enquanto — e `statusMods` por barra de status; editor `RaceCard`, menu Criar →
   "Raça"; `setRaceImage` / `clearRaceImage`; excluir apaga as imagens).
 - **Bestiário (NPCs):** aba **NPCs** do explorador (e "NPC" no menu Criar). A ficha base abre com a mesma
@@ -417,10 +418,10 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   - **Básico:** imagem (= token), nome, raça, sub-raça, jogador dono ("Vincular à minha conta") e **rótulos** (texto livre, Enter adiciona).
     **Raça e sub-raça** são listas com as Raças da Lore geral e do Worldbuild (na mesa, menos as removidas da aba Lore
     desta mesa; com `appLoreScope`, só as da Lore geral). Escolher aplica (`applyRace`, puro em `utils/race.ts` + spec):
-    as etiquetas da raça viram **rótulos** e os `statusMods` somam ao **máximo** de Corpo/Mente/Espírito (o valor atual
+    as características da raça viram **rótulos** e os `statusMods` somam ao **máximo** de Corpo/Mente/Espírito (o valor atual
     acompanha, entre 0 e o máximo; máximo ≥ 1). Raça e sub-raça somam; trocar ou limpar um campo desfaz só o que ele
     aplicou (`CharacterSheet.appliedRaces`; `raceRef`/`subraceRef` guardam a escolha). Fichas antigas com texto livre
-    mostram o texto até uma raça ser escolhida. Etiquetas que já eram rótulos não são duplicadas nem removidas.
+    mostram o texto até uma raça ser escolhida. Características que já eram rótulos não são duplicadas nem removidas.
   - **Status:** três barras fixas **Corpo** (vermelha), **Mente** (verde), **Espírito** (azul) + **etiquetas** do personagem.
     Barras e etiquetas ficam no **token da ficha** (`TableEntry.token.bars/tags`), então aparecem no mapa.
     `withStatusBars` garante as três barras (ids `status-*`, rótulo e cor fixos) em personagens novos (`defaultToken`),

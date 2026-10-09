@@ -54,8 +54,10 @@ export interface WorldItem {
   links?: TimelineLink[];
   /** image / item: id da imagem salva no IndexedDB (no item, é opcional). */
   blobId?: string;
-  /** item / race: etiquetas. Padrão: []. */
+  /** item: etiquetas do cartão (raças antigas também usavam este campo). Padrão: []. */
   tags?: Tag[];
+  /** race: características fixas (texto, sem cor nem nível), aplicadas aos rótulos do personagem. Padrão: []. */
+  traits?: string[];
   /** race: imagens padrão opcionais (masculina e feminina), salvas no IndexedDB. */
   maleBlobId?: string;
   femaleBlobId?: string;
@@ -78,6 +80,14 @@ export function npcSheetOf(item: WorldItem): CharacterSheet {
 export function npcTokenOf(item: WorldItem): TokenSettings {
   const token = { ...defaultToken('npc'), ...item.token };
   return { ...token, bars: withStatusBars(token.bars) };
+}
+
+/**
+ * Características de uma Raça (texto). Raças criadas antes guardavam etiquetas com cor e nível
+ * em `tags`: vale só o texto delas.
+ */
+export function raceTraitsOf(item: WorldItem): string[] {
+  return item.traits ?? (item.tags ?? []).map((t) => t.text.trim()).filter(Boolean);
 }
 
 /** Metadados visuais de cada tipo (ícone e rótulo). */

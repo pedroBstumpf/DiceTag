@@ -110,7 +110,7 @@ export class WorldbuildService {
       ...(type === 'document' && { content: '' }),
       ...(type === 'timeline' && { events: [], links: [] }),
       ...(type === 'item' && { tags: [] }),
-      ...(type === 'race' && { tags: [], statusMods: {} }),
+      ...(type === 'race' && { traits: [], statusMods: {} }),
       ...(type === 'npc' && { sheet: defaultSheet(), token: defaultToken('npc') }),
     };
     this._items.update((list) => [...list, item]);

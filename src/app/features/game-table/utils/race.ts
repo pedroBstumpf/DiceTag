@@ -7,22 +7,21 @@ import {
   StatusMods,
   TokenBar,
 } from '../../../core/models/table-session.model';
-import { Tag } from '../../../core/models/tag.model';
 
 /**
  * Raça na ficha — funções puras, sem Angular.
  *
- * Escolher uma Raça (na raça ou na sub-raça) soma as etiquetas dela aos rótulos do personagem
+ * Escolher uma Raça (na raça ou na sub-raça) soma as características dela aos rótulos do personagem
  * e os modificadores ao máximo das barras de status. A ficha guarda o que cada campo aplicou
  * (`appliedRaces`) para, ao trocar ou limpar, desfazer só aquilo: rótulos digitados à mão e o
  * que o outro campo aplicou ficam.
  */
 
-/** Raça escolhida, com o que ela aplica. */
+/** Raça escolhida, com o que ela aplica (características = texto, viram rótulos). */
 export interface RaceChoice {
   ref: RaceRef;
   name: string;
-  tags: readonly Tag[];
+  traits: readonly string[];
   statusMods?: StatusMods;
 }
 
@@ -50,7 +49,7 @@ export function applyRace(
 
   // Rótulos: tira os que a raça anterior acrescentou e soma os novos (sem repetir)
   const kept = sheet.labels.filter((l) => !previous?.labels.includes(l));
-  const added = [...new Set((choice?.tags ?? []).map((t) => t.text.trim()).filter((t) => t && !kept.includes(t)))];
+  const added = [...new Set((choice?.traits ?? []).map((t) => t.trim()).filter((t) => t && !kept.includes(t)))];
 
   // Modificadores: desconta os anteriores e soma os novos
   const mods: StatusMods = { ...choice?.statusMods };

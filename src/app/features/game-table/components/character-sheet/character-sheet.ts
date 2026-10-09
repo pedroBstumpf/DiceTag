@@ -3,7 +3,7 @@ import { Component, computed, inject, input, output, signal } from '@angular/cor
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { Tag } from '../../../../core/models/tag.model';
-import { WorldItem } from '../../../../core/models/world-item.model';
+import { WorldItem, raceTraitsOf } from '../../../../core/models/world-item.model';
 import {
   CharacterRelation,
   CharacterSheet,
@@ -266,7 +266,7 @@ export class CharacterSheetView {
     const data = this.data();
     if (!sheet || !data) return;
     const option = this.raceOptions().find((o) => o.key === key);
-    const choice = option ? { ref: option.ref, name: option.item.name, tags: option.item.tags ?? [], statusMods: option.item.statusMods } : null;
+    const choice = option ? { ref: option.ref, name: option.item.name, traits: raceTraitsOf(option.item), statusMods: option.item.statusMods } : null;
     const result = applyRace(sheet, data.bars, slot, choice);
     this.update(result.sheet);
     this.store.updateStatus(this.sheetId(), { bars: result.bars });

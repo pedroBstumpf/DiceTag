@@ -2,8 +2,7 @@ import { Component, computed, effect, inject, input, output, signal } from '@ang
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { STATUS_BARS, StatusBarId, StatusMods } from '../../../../core/models/table-session.model';
-import { Tag } from '../../../../core/models/tag.model';
-import { TagEditor } from '../../../../shared/components/tag-editor/tag-editor';
+import { raceTraitsOf } from '../../../../core/models/world-item.model';
 import { WorldbuildService } from '../../services/worldbuild.service';
 
 type RaceImageField = 'maleBlobId' | 'femaleBlobId';
@@ -89,14 +88,14 @@ export class RaceImage {
 }
 
 /**
- * Cartão de uma Raça (janela no Worldbuild, na Lore geral e na mesa): nome, etiquetas,
+ * Cartão de uma Raça (janela no Worldbuild, na Lore geral e na mesa): nome, características (texto),
  * imagens padrão masculina e feminina (opcionais) e modificadores de status (Corpo, Mente,
  * Espírito). Escolhida na ficha, a raça soma as etiquetas aos rótulos e os modificadores
  * ao máximo das barras. Funciona com o WorldbuildService ou com a Lore geral (appLoreScope).
  */
 @Component({
   selector: 'app-race-card',
-  imports: [MatIconModule, TagEditor, RaceImage],
+  imports: [MatIconModule, RaceImage],
   host: { class: 'block h-full overflow-y-auto p-5' },
   template: `
     @if (race(); as r) {
@@ -151,22 +150,28 @@ export class RaceImage {
           <p class="mt-2 text-[11px] leading-relaxed text-slate-500">Somados ao valor máximo das barras do personagem quando a raça é escolhida na ficha.</p>
         </section>
 
-        <!-- Etiquetas: viram rótulos do personagem ao escolher a raça -->
+        <!-- Características: texto fixo da raça (sem cor nem nível), viram rótulos do personagem -->
         <section class="sheet-card">
-          <div class="mb-2 flex items-center justify-between">
-            <h4 class="sheet-title !mb-0">Etiquetas</h4>
-            <button type="button" class="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-astral-300 hover:bg-white/5" (click)="tagEditor.add()">
-              <mat-icon class="!size-4 !text-[16px]">add</mat-icon>
-              Etiqueta
-            </button>
+          <h4 class="sheet-title">Características</h4>
+          <div class="flex flex-wrap items-center gap-1.5">
+            @for (trait of traits(); track trait) {
+              <span class="flex h-7 items-center gap-1 rounded-md bg-astral-500/15 pl-2.5 pr-1 text-xs font-medium text-astral-200 ring-1 ring-astral-400/30">
+                {{ trait }}
+                <button type="button" class="grid size-5 place-items-center rounded text-astral-300/70 hover:bg-white/10 hover:text-white" [attr.aria-label]="'Remover ' + trait" (click)="removeTrait(r.id, trait)">
+                  <mat-icon class="!size-3.5 !text-[14px]">close</mat-icon>
+                </button>
+              </span>
+            }
+            <input
+              #traitInput
+              class="h-7 w-44 rounded-md bg-ink-950 px-2 text-xs text-slate-100 outline-none ring-1 ring-white/10 placeholder:text-slate-600 focus:ring-astral-500/60"
+              placeholder="+ Característica (Enter)"
+              aria-label="Nova característica"
+              (keydown.enter)="addTrait(r.id, traitInput)"
+              (blur)="addTrait(r.id, traitInput)"
+            />
           </div>
-          <app-tag-editor
-            #tagEditor
-            [tags]="tags()"
-            placeholder="Ex.: Visão no escuro"
-            emptyText="Ex.: Longevo, Visão no escuro. Viram rótulos do personagem."
-            (changed)="service.update(r.id, { tags: $event })"
-          />
+          <p class="mt-2 text-[11px] leading-relaxed text-slate-500">Ex.: Longevo, Visão no escuro. Viram rótulos do personagem quando a raça é escolhida na ficha.</p>
         </section>
       </fieldset>
     } @else {
@@ -185,9 +190,28 @@ export class RaceCard {
     const item = this.service.byId().get(this.itemId());
     return item?.type === 'race' ? item : undefined;
   });
-  readonly tags = computed<Tag[]>(() => this.race()?.tags ?? []);
+  readonly traits = computed(() => {
+    const race = this.race();
+    return race ? raceTraitsOf(race) : [];
+  });
   private readonly mods = computed<StatusMods>(() => this.race()?.statusMods ?? {});
   readonly statusBars = STATUS_BARS;
+
+  /** Adiciona a característica digitada (ignora vazio e repetida) e limpa o campo. */
+  addTrait(id: string, input: HTMLInputElement): void {
+    const trait = input.value.trim();
+    input.value = '';
+    if (trait && !this.traits().includes(trait)) this.setTraits(id, [...this.traits(), trait]);
+  }
+
+  removeTrait(id: string, trait: string): void {
+    this.setTraits(id, this.traits().filter((t) => t !== trait));
+  }
+
+  /** Grava as características (e descarta as etiquetas antigas, com cor e nível, se houver). */
+  private setTraits(id: string, traits: string[]): void {
+    this.service.update(id, { traits, tags: undefined });
+  }
 
   modOf(bar: StatusBarId): number {
     return this.mods()[bar] ?? 0;
