@@ -619,6 +619,19 @@
             [value]="tag.text"
             (input)="updateThemeTag(theme, list, tag.id, { text: tagText.value })"
           />
+          @if (!flaw) {
+            <!-- Tag mágica: na rolagem vale o Poder escolhido e gasta essa Mana (Espírito) -->
+            <button
+              type="button"
+              class="grid size-6 shrink-0 place-items-center rounded-md transition-colors"
+              [class]="tag.magic ? 'bg-violet-500/20 text-violet-300 ring-1 ring-violet-400/40' : 'text-slate-600 hover:bg-white/10 hover:text-violet-300'"
+              [attr.aria-pressed]="!!tag.magic"
+              [matTooltip]="tag.magic ? 'Mágica: na rolagem, escolha o Poder (até o nível); gasta essa quantidade de Espírito. Clique para tornar comum.' : 'Tornar mágica'"
+              (click)="updateThemeTag(theme, list, tag.id, { magic: !tag.magic || undefined })"
+            >
+              <mat-icon class="!text-[14px]" [class.icon-filled]="tag.magic">auto_awesome</mat-icon>
+            </button>
+          }
           <button type="button" class="grid size-6 shrink-0 place-items-center rounded-md text-slate-500 hover:bg-red-500/15 hover:text-red-300" aria-label="Remover" (click)="removeThemeTag(theme, list, tag.id)">
             <mat-icon class="!text-[14px]">close</mat-icon>
           </button>

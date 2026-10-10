@@ -458,7 +458,7 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
     campo desabilitado na ficha e na janela "Token", `TokenEditor.lockStatusMax`). O jogador muda o valor atual, e o
     máximo dele só muda pela raça. Fora da mesa (bestiário no Worldbuild) quem edita a ficha edita o máximo.
   - **Relações:** nome, nível **1–6** (`LevelPips`) e descrição.
-  - **Temas (3):** nome + tags com nível **1–6** e, embaixo, **Defeitos** (`flaws`) com nível **-1 a -6**
+  - **Temas (3):** nome + tags com nível **1–6** (cada tag pode ser **mágica**, ver "Tags mágicas") e, embaixo, **Defeitos** (`flaws`) com nível **-1 a -6**
     (`LevelPips` com `negative`). Fichas antigas ganham `flaws: []` em `sheetOf`. Só personagem: **Objetivo** abaixo dos
     defeitos (`goal`, texto, + `goalProgress` de 0 a `GOAL_STEPS` = 5 marcadores; clicar no último aceso desmarca).
   - **Equipados** (personagem e NPC, abaixo dos temas, fora do `fieldset` para quem só lê também abrir): itens com
@@ -495,6 +495,16 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   (`RollConfig.attributes` = ids das tags). O **nível atual** é lido na hora (`tagLevelsOf` → `effectiveModifier`),
   então subir a tag na ficha atualiza todas as ações que a usam. Fórmulas exibidas usam `session.formulaOf(action)`.
   Tag apagada vale 0; trocar o dono da ação limpa as tags ligadas.
+- **Tags mágicas** (`ThemeTag.magic`, só tags, não defeitos; botão `auto_awesome` em cada tag do tema na ficha): numa
+  rolagem de 2d12 valem o **Poder** escolhido (1 até o nível atual, `powerOf`) no lugar do nível e gastam essa Mana da
+  barra **Espírito** (`MANA_BAR` = `status-spirit`). Na ação, o Poder fica salvo em `RollConfig.powers` (id → Poder;
+  ausente = o nível; se a tag descer, é limitado ao nível) e é editado na `EntryWindow`; no "Rolar", é escolhido na hora.
+  Regras puras em `utils/dice.ts` (`withPowers` troca nível por Poder; `manaCost` soma o Poder das mágicas ligadas; 3d6
+  não gasta) + spec. Na sessão: `actionLevels` (usado por `useAction` e `formulaOf`), `manaCostOf`, `manaOf`,
+  `manaShortfall` e `spendMana` (via `updateStatus`; nunca abaixo de 0). **Sem Espírito suficiente, não rola**:
+  `useAction` devolve `RollRefused { refused }` (a página mostra o aviso) e o `QuickRoll` não chama `quickRoll`.
+  `RollResult.mana` guarda o gasto (cartão do chat: ícone `auto_awesome`, "−N"). Ação de NPC usada sem o token dele
+  selecionado gasta do Espírito da ficha do NPC (no bestiário, se for referência).
 - **Etiquetas de itens equipados na rolagem** (ações e botão "Rolar"): `session.itemTagsOf` (id `itemTagId` =
   `item:<linha do inventário>:<etiqueta>`, valor = nível, sem nível 1); `rollTagsOf` = temas + itens, usado por
   `tagLevelsOf`. Ao mudar o inventário de uma ficha de entrada (`updateSheet` com `inventory`), `pruneItemTags` tira das

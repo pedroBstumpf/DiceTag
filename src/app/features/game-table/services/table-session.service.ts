@@ -14,7 +14,9 @@ import {
   DroppedItem,
   FxStyle,
   ItemDragData,
+  MANA_BAR,
   MAX_MAP_LEVELS,
+  RollConfig,
   MapLevel,
   SceneFolder,
   RollResult,
@@ -46,7 +48,19 @@ import {
 } from '../../../core/models/table-session.model';
 import { AuthService } from '../../../core/services/auth.service';
 import { newId } from '../../../core/utils/id';
-import { TagLevels, baseTagId, formatRoll, keepValidItemTags, levelUpText, rollDice, studyGain, trainStudy } from '../utils/dice';
+import {
+  TagLevels,
+  baseTagId,
+  formatRoll,
+  keepValidItemTags,
+  levelUpText,
+  manaCost,
+  rollDice,
+  rollUsesTags,
+  studyGain,
+  trainStudy,
+  withPowers,
+} from '../utils/dice';
 import { addOne, inventoryRow, itemTagId, itemTagLevel, quantityOf, takeOne, unitOf } from '../utils/inventory';
 import { SheetData, SheetStore } from '../../../core/services/sheet-store';
 import { FxDrawing, buildFx, seededRandom } from '../utils/effects';
@@ -100,6 +114,11 @@ export interface ActionUse {
   levelUps: string[];
 }
 
+/** Rolagem recusada antes de rolar (ex.: falta Mana para as tags mágicas). */
+export interface RollRefused {
+  refused: string;
+}
+
 /** Mestre agindo como "o token selecionado" (muda a cada seleção). */
 export const ACT_SELECTION = 'selection';
 
@@ -117,6 +136,8 @@ export interface SheetTagOption {
   item?: boolean;
   /** Estudo ou treino: não muda o modificador (nível 0); só acumula SA ao rolar. */
   study?: boolean;
+  /** Tag mágica: vale o Poder escolhido (1 até o nível) e gasta essa Mana (Espírito). */
+  magic?: boolean;
 }
 
 /** Modo da ferramenta Névoa. */
@@ -570,14 +591,24 @@ export class TableSessionService extends SheetStore {
    * `sheetId`: ficha que agiu (ex.: "Usar" na ficha de um token); padrão = quem age na barra,
    * se for o dono da ação, ou o próprio dono.
    */
-  useAction(entry: TableEntry, sheetId?: string): ActionUse {
+  useAction(entry: TableEntry, sheetId?: string): ActionUse | RollRefused {
     const config = entry.roll ?? DEFAULT_ROLL;
     const actorSheet = this.actor()?.id === entry.ownerEntryId ? this.actorSheetId() : null;
     const sheet = sheetId ?? actorSheet ?? entry.ownerEntryId;
-    // O nível atual das tags da ficha que agiu entra no modificador
-    const levels = this.tagLevelsOf(sheet);
-    const roll: RollResult = { action: entry.name, icon: entry.icon ?? 'bolt', dice: config.dice, ...rollDice(config, Math.random, levels) };
+    // O nível atual das tags da ficha que agiu entra no modificador (tags mágicas: o Poder da ação)
+    const levels = this.actionLevels(config, sheet);
+    const mana = manaCost(config, levels, this.magicTagIds(sheet));
+    const shortfall = this.manaShortfall(sheet, mana);
+    if (shortfall) return { refused: shortfall };
+    const roll: RollResult = {
+      action: entry.name,
+      icon: entry.icon ?? 'bolt',
+      dice: config.dice,
+      ...rollDice(config, Math.random, levels),
+      ...(mana > 0 && { mana }),
+    };
     const author = (sheet && this.sheetData(sheet)?.name) ?? this.actor()?.name ?? this.userName();
+    this.spendMana(sheet, mana);
     this.pushChat({ author, roll });
     // Estudos ligados à ação acumulam SA conforme o resultado
     const levelUps = this.trainStudies(sheet, (config.attributes ?? []).map(baseTagId), roll);
@@ -596,6 +627,8 @@ export class TableSessionService extends SheetStore {
    * nome da ficha `sheetId` (ou do mestre/conta, sem ficha). `studies`: estudos ligados a esta
    * rolagem (sem modificador; acumulam SA conforme o resultado). `itemModifier`: valor das
    * etiquetas de itens escolhidas (exibido à parte no chat); `itemsAdded`: ele já está em `modifier`.
+   * `mana`: Poder somado das tags mágicas escolhidas, gasto do Espírito (quem chama confere antes
+   * com `manaShortfall`; aqui o gasto nunca deixa a barra abaixo de 0).
    */
   quickRoll(
     dice: DiceKind,
@@ -604,9 +637,20 @@ export class TableSessionService extends SheetStore {
     itemModifier = 0,
     studies: readonly string[] = [],
     itemsAdded = false,
+    mana = 0,
   ): { author: string; roll: RollResult; levelUps: string[] } {
-    const roll: RollResult = { action: 'Rolagem', icon: 'casino', dice, ...rollDice({ dice, modifier }), itemModifier, itemsAdded };
+    const spent = rollUsesTags(dice) ? mana : 0;
+    const roll: RollResult = {
+      action: 'Rolagem',
+      icon: 'casino',
+      dice,
+      ...rollDice({ dice, modifier }),
+      itemModifier,
+      itemsAdded,
+      ...(spent > 0 && { mana: spent }),
+    };
     const author = (sheetId && this.sheetData(sheetId)?.name) || this.userName();
+    this.spendMana(sheetId, spent);
     this.pushChat({ author, roll });
     return { author, roll, levelUps: this.trainStudies(sheetId, studies, roll) };
   }
@@ -1118,7 +1162,14 @@ export class TableSessionService extends SheetStore {
     return data.sheet.themes.flatMap((theme, i) => {
       const themeName = theme.name.trim() || `Tema ${i + 1}`;
       return [
-        ...theme.tags.map((t) => ({ id: t.id, text: t.text.trim() || 'Tag sem nome', level: t.level, theme: themeName, flaw: false })),
+        ...theme.tags.map((t) => ({
+          id: t.id,
+          text: t.text.trim() || 'Tag sem nome',
+          level: t.level,
+          theme: themeName,
+          flaw: false,
+          ...(t.magic && { magic: true }),
+        })),
         ...theme.flaws.map((t) => ({ id: t.id, text: t.text.trim() || 'Defeito sem nome', level: t.level, theme: themeName, flaw: true })),
       ];
     });
@@ -1207,7 +1258,49 @@ export class TableSessionService extends SheetStore {
    * `sheetId`: ficha cujas tags valem (padrão: a do dono da ação).
    */
   formulaOf(action: TableEntry, sheetId = action.ownerEntryId): string {
-    return formatRoll(action.roll ?? DEFAULT_ROLL, this.tagLevelsOf(sheetId));
+    const roll = action.roll ?? DEFAULT_ROLL;
+    return formatRoll(roll, this.actionLevels(roll, sheetId));
+  }
+
+  // --- Tags mágicas: Poder e Mana (barra Espírito) -------------------------
+
+  /** Ids das tags mágicas da ficha. */
+  magicTagIds(sheetId: string | null | undefined): ReadonlySet<string> {
+    return new Set(this.themeTagsOf(sheetId ?? undefined).filter((t) => t.magic).map((t) => t.id));
+  }
+
+  /** Níveis das tags da ficha para uma ação: as mágicas valem o Poder salvo nela (até o nível atual). */
+  private actionLevels(roll: RollConfig, sheetId: string | null | undefined): TagLevels {
+    return withPowers(roll, this.tagLevelsOf(sheetId ?? undefined), this.magicTagIds(sheetId));
+  }
+
+  /** Mana (Espírito) gasta ao usar a ação, com o Poder salvo nela. */
+  manaCostOf(action: TableEntry, sheetId = action.ownerEntryId): number {
+    const roll = action.roll ?? DEFAULT_ROLL;
+    return manaCost(roll, this.actionLevels(roll, sheetId), this.magicTagIds(sheetId));
+  }
+
+  /** Mana disponível (valor atual do Espírito) da ficha; null = sem ficha. */
+  manaOf(sheetId: string | null | undefined): number | null {
+    const data = sheetId ? this.sheetData(sheetId) : null;
+    return data ? (data.bars.find((b) => b.id === MANA_BAR)?.value ?? 0) : null;
+  }
+
+  /** Motivo para não rolar: a ficha não tem Espírito suficiente para o Poder das tags mágicas (null = pode). */
+  manaShortfall(sheetId: string | null | undefined, cost: number): string | null {
+    if (cost <= 0) return null;
+    const mana = this.manaOf(sheetId);
+    if (mana === null || mana >= cost) return null;
+    const name = this.sheetData(sheetId!)?.name ?? 'O personagem';
+    return `${name} não tem Espírito suficiente: precisa de ${cost}, tem ${mana}.`;
+  }
+
+  /** Gasta Mana do Espírito da ficha (nunca abaixo de 0). */
+  private spendMana(sheetId: string | null | undefined, cost: number): void {
+    const data = cost > 0 && sheetId ? this.sheetData(sheetId) : null;
+    if (!data || !sheetId) return;
+    const bars = data.bars.map((b) => (b.id === MANA_BAR ? { ...b, value: Math.max(0, b.value - cost) } : b));
+    this.updateStatus(sheetId, { bars });
   }
 
   // --- Lojas (inventário de NPC com preços em Eiros) -----------------------

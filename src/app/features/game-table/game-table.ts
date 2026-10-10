@@ -292,9 +292,16 @@ export class GameTablePage {
    * o deixa no mouse. O aviso resume o resultado (o detalhe fica no chat).
    */
   onActionUsed(entry: TableEntry, sheetId?: string): void {
-    const { author, roll, armed, levelUps } = this.session.useAction(entry, sheetId);
+    const use = this.session.useAction(entry, sheetId);
+    // Recusada antes de rolar (ex.: falta Espírito para o Poder das tags mágicas)
+    if ('refused' in use) {
+      this.snackBar.open(use.refused, undefined, { duration: 4000 });
+      return;
+    }
+    const { author, roll, armed, levelUps } = use;
     const formula = roll.dice + formatModifier(roll.modifier);
-    const text = `${author} · ${roll.action}: ${formula} = ${roll.total} — ${ROLL_OUTCOMES[roll.outcome].label}`;
+    const mana = roll.mana ? ` · −${roll.mana} Espírito` : '';
+    const text = `${author} · ${roll.action}: ${formula} = ${roll.total} — ${ROLL_OUTCOMES[roll.outcome].label}${mana}`;
     this.snackBar.open(armed ? `${text} · arraste no mapa para lançar o efeito` : text, undefined, { duration: 3500 });
     // Estudo que alcançou o SN: notificação em destaque (também vai para o chat)
     if (levelUps.length) this.snackBar.open(levelUpText(levelUps), 'OK', { duration: 8000 });

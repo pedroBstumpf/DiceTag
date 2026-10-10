@@ -67,21 +67,53 @@
                         on
                           ? tag.flaw
                             ? 'bg-red-500/20 text-red-200 ring-red-400/50'
-                            : 'bg-astral-500/25 text-astral-100 ring-astral-400/50'
+                            : tag.magic
+                              ? 'bg-violet-500/25 text-violet-100 ring-violet-400/50'
+                              : 'bg-astral-500/25 text-astral-100 ring-astral-400/50'
                           : 'bg-white/[0.03] text-slate-400 ring-white/10 hover:text-slate-200'
                       "
                       [attr.aria-pressed]="on"
-                      [matTooltip]="tag.flaw ? 'Defeito' : 'Tag'"
+                      [matTooltip]="tag.flaw ? 'Defeito' : tag.magic ? 'Tag mágica: escolha o Poder abaixo; gasta essa quantidade de Espírito' : 'Tag'"
                       (click)="toggleTheme(tag)"
                     >
+                      @if (tag.magic) {
+                        <mat-icon class="icon-filled !size-3.5 !text-[14px] text-violet-300">auto_awesome</mat-icon>
+                      }
                       {{ tag.text }}
-                      <span class="font-semibold tabular-nums" [class]="tag.flaw ? 'text-red-300' : 'text-astral-300'">{{ formatLevel(tag.level) }}</span>
+                      <span class="font-semibold tabular-nums" [class]="tag.flaw ? 'text-red-300' : tag.magic ? 'text-violet-300' : 'text-astral-300'">
+                        {{ tag.magic && on ? formatLevel(power(tag)) : formatLevel(tag.level) }}
+                      </span>
                     </button>
                   }
                 </div>
               </div>
             }
           </div>
+        </section>
+      }
+
+      <!-- ===== Poder das tags mágicas escolhidas (gasta essa Mana do Espírito) ===== -->
+      @if (pickedMagic().length) {
+        <section class="flex flex-col gap-1.5 rounded-lg bg-violet-500/[0.07] p-2 ring-1 ring-violet-400/20">
+          <h4 class="text-[10px] font-semibold uppercase tracking-widest text-violet-300/80">Poder das tags mágicas</h4>
+          @for (tag of pickedMagic(); track tag.id) {
+            <div class="flex items-center gap-2 text-xs text-violet-100">
+              <span class="min-w-0 flex-1 truncate">{{ tag.text }}</span>
+              <div class="flex items-center rounded-md bg-ink-950 ring-1 ring-white/10">
+                <button type="button" class="grid size-6 place-items-center rounded-l-md text-slate-400 hover:bg-white/10 disabled:opacity-30" aria-label="Diminuir Poder" [disabled]="power(tag) <= 1" (click)="stepPower(tag, -1)">
+                  <mat-icon class="!text-[14px]">remove</mat-icon>
+                </button>
+                <span class="w-10 text-center font-semibold tabular-nums">{{ power(tag) }}/{{ tag.level }}</span>
+                <button type="button" class="grid size-6 place-items-center rounded-r-md text-slate-400 hover:bg-white/10 disabled:opacity-30" aria-label="Aumentar Poder" [disabled]="power(tag) >= tag.level" (click)="stepPower(tag, 1)">
+                  <mat-icon class="!text-[14px]">add</mat-icon>
+                </button>
+              </div>
+            </div>
+          }
+          @let short = manaShort();
+          <p class="text-[11px]" [class]="short ? 'font-semibold text-red-300' : 'text-violet-200/80'">
+            Gasta {{ manaCost() }} de Espírito{{ mana() !== null ? ' (tem ' + mana() + ')' : '' }}{{ short ? ' — insuficiente' : '' }}
+          </p>
         </section>
       }
 

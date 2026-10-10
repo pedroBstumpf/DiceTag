@@ -51,6 +51,12 @@ import { characterModifier, formatModifier } from '../../utils/dice';
                 <mat-icon class="!size-4 !text-[16px]" [class]="added ? 'text-emerald-300' : 'text-slate-500'">shield</mat-icon>
                 {{ itemModifier(roll) }}
               </span>
+              @if (roll.mana) {
+                <span class="flex items-center gap-1 text-violet-200" matTooltip="Espírito (Mana) gasto pelas tags mágicas">
+                  <mat-icon class="icon-filled !size-4 !text-[16px] text-violet-300">auto_awesome</mat-icon>
+                  −{{ roll.mana }}
+                </span>
+              }
             </div>
 
             <footer class="flex w-full items-center gap-1.5 border-t border-white/5 pt-1.5 text-[11px]">

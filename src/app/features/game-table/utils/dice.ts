@@ -83,6 +83,39 @@ export function characterModifier(roll: Pick<RollResult, 'modifier' | 'itemModif
   return roll.itemsAdded === false ? roll.modifier : roll.modifier - (roll.itemModifier ?? 0);
 }
 
+// --- Tags mágicas: Poder e Mana ------------------------------------------------
+
+/** Poder de uma tag mágica: o escolhido, entre 1 e o nível atual (sem escolha = o nível). */
+export function powerOf(level: number, chosen?: number): number {
+  if (level < 1) return 0;
+  return Math.min(level, Math.max(1, Math.round(chosen ?? level)));
+}
+
+/**
+ * Níveis das tags com o Poder no lugar do nível nas tags mágicas (`magic` = ids delas),
+ * conforme `roll.powers`. É o que a rolagem e a fórmula da ação usam.
+ */
+export function withPowers(roll: RollConfig, levels: TagLevels, magic: ReadonlySet<string>): TagLevels {
+  if (!magic.size) return levels;
+  const next = new Map(levels);
+  for (const id of magic) {
+    const level = levels.get(id);
+    if (level !== undefined) next.set(id, powerOf(level, roll.powers?.[id]));
+  }
+  return next;
+}
+
+/**
+ * Mana gasta pela rolagem: a soma do Poder das tags mágicas ligadas (`levels` já com o Poder,
+ * de `withPowers`). 3d6 não usa tags, então não gasta.
+ */
+export function manaCost(roll: RollConfig, levels: TagLevels, magic: ReadonlySet<string>): number {
+  if (!rollUsesTags(roll.dice)) return 0;
+  return (roll.attributes ?? [])
+    .filter((a) => attributeSign(a) > 0 && magic.has(baseTagId(a)))
+    .reduce((sum, a) => sum + Math.max(0, levels.get(baseTagId(a)) ?? 0), 0);
+}
+
 /** Etiqueta de status ligada na rolagem básica: soma (+1) ou subtrai (−1) o nível dela. */
 export interface StatusPick {
   /** Nível da etiqueta (ausente ou 0 = sem nível: vale 1). */

@@ -100,6 +100,9 @@ Clicar num personagem no painel abre a ficha, com quatro abas:
   abre o cartão do item numa janela) e os **Estudos e Treinos**: três etiquetas com SA (Sucessos Acumulados) e SN
   (Sucessos Necessários, definido pelo mestre). Ligado a uma rolagem, sem modificador, o estudo ganha 1 SA com 12+ e 2
   com sucesso crítico; ao alcançar o SN, mestre e jogador são avisados de que ele subiu de nível.
+- **Tags mágicas:** qualquer tag de tema pode ser marcada como mágica (✦). Numa rolagem de 2d12, ela vale o **Poder**
+  escolhido (de 1 até o nível dela) e gasta essa quantidade de **Espírito** (a Mana do personagem). Nas ações, o Poder
+  fica salvo na configuração; no botão "Rolar", é escolhido na hora. Sem Espírito suficiente, a rolagem não acontece.
 - **Inventário:** lista dos itens do personagem e, ao lado, o cartão do item selecionado (imagem, nome, descrição e etiquetas).
   Editar o cartão aqui vale só para aquele personagem (o item do Worldbuild não muda). A caixa à esquerda de cada
   item marca se ele está **equipado**. Itens que um jogador cria no inventário ficam só naquela mesa (não vão para o

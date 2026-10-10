@@ -244,7 +244,15 @@ export interface ThemeTag {
   id: string;
   text: string;
   level: number;
+  /**
+   * Tag mágica (só tags, não defeitos): numa rolagem vale o Poder escolhido (1 até o nível) e
+   * gasta essa mesma quantidade de Mana (a barra Espírito). Padrão: false.
+   */
+  magic?: boolean;
 }
+
+/** Barra de status que serve de Mana para as tags mágicas. */
+export const MANA_BAR = 'status-spirit';
 
 /** Card de tema: nome + tags e defeitos com nível. */
 export interface CharacterTheme {
@@ -484,6 +492,11 @@ export interface RollConfig {
    * na rolagem (cartão do chat), mas não entram no total nem no resultado.
    */
   addItems?: boolean;
+  /**
+   * Poder de cada tag mágica ligada (id da tag → Poder). Vale no lugar do nível e é a Mana
+   * gasta ao usar a ação; limitado ao nível atual da tag. Ausente = o nível atual.
+   */
+  powers?: Record<string, number>;
 }
 
 export const DEFAULT_ROLL: RollConfig = { dice: '2d12', modifier: 0 };
@@ -522,6 +535,8 @@ export interface RollResult {
    * sim, como era antes de os itens deixarem de somar por padrão.
    */
   itemsAdded?: boolean;
+  /** Mana (Espírito) gasta pelas tags mágicas desta rolagem. Padrão: 0. */
+  mana?: number;
   total: number;
   outcome: RollOutcome;
 }

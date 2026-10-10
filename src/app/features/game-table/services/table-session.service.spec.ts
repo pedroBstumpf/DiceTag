@@ -93,6 +93,26 @@ describe('TableSessionService (fachada)', () => {
     expect(session.pickUpDrop(drop.id, `npc:${token.id}`)).toBeNull();
   });
 
+  it('tags mágicas: a ação vale o Poder salvo, gasta Espírito e é recusada sem Espírito', async () => {
+    const pc = session.addEntry('character');
+    const theme = session.sheetOf(pc).themes[0];
+    session.updateSheet(pc.id, { themes: [{ ...theme, tags: [{ id: 'fogo', text: 'Fogo', level: 5, magic: true }] }, ...session.sheetOf(pc).themes.slice(1)] });
+    const action = session.addEntry('automation', { ownerEntryId: pc.id, roll: { dice: '2d12', modifier: 0, attributes: ['fogo'], powers: { fogo: 3 } } });
+
+    expect(session.formulaOf(action)).toBe('2d12+3');
+    expect(session.manaCostOf(action)).toBe(3);
+    const use = session.useAction(action, pc.id);
+    expect('refused' in use).toBe(false);
+    expect(session.manaOf(pc.id)).toBe(24 - 3);
+
+    // Espírito em 2: não rola nem gasta
+    const bars = session.sheetData(pc.id)!.bars.map((b) => (b.id === 'status-spirit' ? { ...b, value: 2 } : b));
+    session.updateStatus(pc.id, { bars });
+    const refused = session.useAction(action, pc.id);
+    expect('refused' in refused).toBe(true);
+    expect(session.manaOf(pc.id)).toBe(2);
+  });
+
   it('regra de vínculo: alterar o token do personagem altera a ficha', async () => {
     await session.addScene();
     const pc = session.addEntry('character');

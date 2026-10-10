@@ -16,7 +16,7 @@ import {
   hasSheet,
 } from '../../../../core/models/table-session.model';
 import { SheetTagOption, TableSessionService } from '../../services/table-session.service';
-import { NEGATED_TAG_PREFIX, attributeSign, baseTagId, formatModifier, rollUsesTags } from '../../utils/dice';
+import { NEGATED_TAG_PREFIX, attributeSign, baseTagId, formatModifier, powerOf, rollUsesTags } from '../../utils/dice';
 import { FxPicker } from '../fx-picker/fx-picker';
 
 /** Faixas de resultado de cada dado (legenda da configuração da rolagem). */
@@ -113,9 +113,29 @@ export class EntryWindow {
     return this.linkedSigns().get(tag.id) ?? 0;
   }
 
-  /** Valor da tag na rolagem desta ação (nível com o sinal escolhido; desligada = o nível). */
+  /** Valor da tag na rolagem desta ação (nível com o sinal escolhido; desligada = o nível; mágica = o Poder). */
   tagValue(tag: SheetTagOption): number {
+    if (tag.magic) return this.power(tag);
     return tag.level * (this.signOf(tag) || 1);
+  }
+
+  // --- Tags mágicas: Poder (salvo na ação) e Mana --------------------------
+
+  /** Tags mágicas ligadas a esta ação (cada uma com o seu Poder). */
+  readonly linkedMagic = computed(() => this.linkedTags().filter((t) => t.magic));
+  /** Mana (Espírito) gasta ao usar a ação. */
+  readonly manaCost = computed(() => {
+    const entry = this.entry();
+    return entry && this.usesTags() ? this.session.manaCostOf(entry) : 0;
+  });
+
+  /** Poder da tag mágica nesta ação (1 até o nível atual; sem escolha = o nível). */
+  power(tag: SheetTagOption): number {
+    return powerOf(tag.level, this.roll().powers?.[tag.id]);
+  }
+
+  stepPower(tag: SheetTagOption, delta: number): void {
+    this.patchRoll({ powers: { ...this.roll().powers, [tag.id]: powerOf(tag.level, this.power(tag) + delta) } });
   }
 
   /**
@@ -130,13 +150,17 @@ export class EntryWindow {
     if (!sign) next = tag.id;
     else if (sign > 0 && tag.item) next = NEGATED_TAG_PREFIX + tag.id;
     const attributes = next ? [...others, next] : others;
-    this.patchRoll({ attributes: attributes.length ? attributes : undefined });
+    // Desligar uma tag mágica descarta o Poder salvo dela
+    const { [tag.id]: _dropped, ...kept } = this.roll().powers ?? {};
+    const powers = next ? this.roll().powers : Object.keys(kept).length ? kept : undefined;
+    this.patchRoll({ attributes: attributes.length ? attributes : undefined, powers });
   }
 
   tagClass(tag: SheetTagOption): string {
     const sign = this.signOf(tag);
     if (!sign) return 'bg-white/5 text-slate-400 ring-1 ring-white/10 hover:bg-white/10 hover:text-slate-200';
     if (tag.study) return 'bg-amber-400/15 text-amber-100 ring-1 ring-amber-300/50';
+    if (tag.magic) return 'bg-violet-500/20 text-violet-100 ring-1 ring-violet-400/50';
     if (tag.item && sign > 0) return 'bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-400/50';
     return tag.flaw || sign < 0 ? 'bg-red-500/15 text-red-200 ring-1 ring-red-400/50' : 'bg-astral-500/20 text-astral-200 ring-1 ring-astral-400/50';
   }
@@ -144,6 +168,7 @@ export class EntryWindow {
   /** Dica da tag: tema (ou item equipado) de origem e, nos itens, o que o próximo clique faz. */
   tagHint(tag: SheetTagOption): string {
     if (tag.study) return 'Estudo ou treino: sem modificador; a cada uso, 12+ soma 1 SA, sucesso crítico soma 2 e falha crítica tira 1';
+    if (tag.magic) return `${tag.theme} · mágica: vale o Poder escolhido e gasta essa quantidade de Espírito`;
     if (!tag.item) return tag.theme + (tag.flaw ? ' · defeito' : '');
     const sign = this.signOf(tag);
     const next = sign > 0 ? 'clique: penalidade' : sign < 0 ? 'clique: tirar' : 'clique: bônus';
