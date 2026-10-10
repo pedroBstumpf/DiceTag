@@ -2,7 +2,8 @@ import { Component, computed, inject, input, output } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { NPC_TOKEN_SHEET } from '../../../../core/models/table-session.model';
+import { DROP_COLOR, NPC_TOKEN_SHEET, TOKEN_COLORS } from '../../../../core/models/table-session.model';
+import { ColorPicker } from '../../../../shared/components/color-picker/color-picker';
 import { ItemCardView } from '../../../worldbuild/components/item-card/item-card-view';
 import { WorldbuildService } from '../../../worldbuild/services/worldbuild.service';
 import { BlobUrlService } from '../../services/blob-url.service';
@@ -17,11 +18,12 @@ export const DROP_WINDOW = 'drop:';
  * Janela de um item largado no mapa (clique no item): o cartão completo, só leitura
  * (com a personalização de quem largou), e quem pode pegá-lo — personagens e tokens de
  * NPC, quem age primeiro e depois os mais próximos. Pegar leva a pilha inteira para o
- * inventário. O mestre também muda a quantidade e tira o item do mapa.
+ * inventário. O mestre também muda a quantidade, a cor da borda e tira o item do mapa
+ * (no mapa: alça de tamanho e Delete no item selecionado).
  */
 @Component({
   selector: 'app-drop-window',
-  imports: [MatIconModule, MatTooltipModule, ItemCardView],
+  imports: [MatIconModule, MatTooltipModule, ItemCardView, ColorPicker],
   host: { class: 'block h-full overflow-y-auto p-4' },
   template: `
     @if (drop(); as d) {
@@ -52,6 +54,13 @@ export const DROP_WINDOW = 'drop:';
             </label>
           } @else if (r.quantity > 1) {
             <span class="tabular-nums text-slate-300">×{{ r.quantity }}</span>
+          }
+          @if (session.canManageDrops()) {
+            <!-- Cor da borda do losango no mapa -->
+            <span class="ml-2 flex items-center gap-1.5">
+              Borda
+              <app-color-picker [value]="d.color ?? defaultColor" [palette]="palette" label="Cor da borda no mapa" (picked)="setColor($event)" />
+            </span>
           }
         </div>
 
@@ -147,6 +156,14 @@ export class DropWindow {
   setQuantity(raw: string): void {
     const n = Number(raw);
     if (raw.trim() !== '' && Number.isFinite(n)) this.session.setDropQuantity(this.dropId(), n);
+  }
+
+  readonly defaultColor = DROP_COLOR;
+  /** Paleta da borda: a cor padrão do item + as dos tokens. */
+  readonly palette = [DROP_COLOR, ...TOKEN_COLORS];
+
+  setColor(color: string): void {
+    this.session.updateDrop(this.dropId(), { color });
   }
 
   remove(): void {

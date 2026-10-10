@@ -1,4 +1,4 @@
-import { DroppedItem, Scene, TableState } from '../../../core/models/table-session.model';
+import { DroppedItem, MAX_TOKEN_SIZE, MIN_TOKEN_SIZE, Scene, TableState } from '../../../core/models/table-session.model';
 import { mapScene } from './helpers';
 
 /**
@@ -38,6 +38,13 @@ export function setDropQuantity(state: TableState, p: { dropId: string; quantity
     const { quantity: _old, ...item } = d.item;
     return { ...d, item: quantity === 1 ? item : { ...item, quantity } };
   });
+}
+
+/** Mestre: tamanho (em quadrados, dentro dos limites dos tokens) e cor da borda do item no mapa. */
+export function updateDrop(state: TableState, p: { dropId: string; patch: Partial<Pick<DroppedItem, 'size' | 'color'>> }): TableState {
+  const patch = { ...p.patch };
+  if (patch.size !== undefined) patch.size = Math.min(MAX_TOKEN_SIZE, Math.max(MIN_TOKEN_SIZE, patch.size));
+  return mapDrop(state, p.dropId, (d) => ({ ...d, ...patch }));
 }
 
 /** Tira o item do mapa (pego por alguém ou removido pelo mestre). */

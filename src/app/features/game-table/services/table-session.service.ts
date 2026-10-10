@@ -386,19 +386,31 @@ export class TableSessionService extends SheetStore {
   /** Todos os tokens selecionados (o grupo se move, é removido e copiado junto). */
   readonly selectedTokenIds = computed(() => this.selection().ids);
 
-  /** Seleciona só este token (null = nenhum). */
+  /** Seleciona só este token (null = nenhum; também tira a seleção do item no chão). */
   selectToken(id: string | null): void {
     this.selection.set(selectOne(id));
+    this.selectedDropId.set(null);
   }
 
   /** Shift+clique: põe ou tira o token da seleção. */
   toggleTokenSelection(id: string): void {
     this.selection.update((sel) => toggleInSelection(sel, id));
+    this.selectedDropId.set(null);
   }
 
   /** Caixa de seleção: estes tokens (`additive` = somados aos já selecionados). */
   selectTokens(ids: readonly string[], additive: boolean): void {
     this.selection.update((sel) => selectMany(sel, ids, additive));
+    if (ids.length) this.selectedDropId.set(null);
+  }
+
+  /** Item no chão selecionado (alça de tamanho; Delete o tira do mapa). Exclusivo com os tokens. */
+  readonly selectedDropId = signal<string | null>(null);
+
+  /** Seleciona um item no chão (tira a seleção dos tokens). */
+  selectDrop(id: string | null): void {
+    this.selection.set(NO_SELECTION);
+    this.selectedDropId.set(id);
   }
 
   /** Tokens selecionados da camada em foco que a conta pode mover (o principal primeiro). */
@@ -1348,10 +1360,16 @@ export class TableSessionService extends SheetStore {
     if (this.canManageDrops()) this.dispatch('setDropQuantity', { dropId, quantity });
   }
 
+  /** Mestre: tamanho (quadrados) e cor da borda do item no mapa. */
+  updateDrop(dropId: string, patch: Partial<Pick<DroppedItem, 'size' | 'color'>>): void {
+    if (this.canManageDrops()) this.dispatch('updateDrop', { dropId, patch });
+  }
+
   /** Mestre: tira o item do mapa (sem ir para inventário nenhum; a imagem personalizada é apagada). */
   removeDrop(dropId: string): void {
     const drop = this.dropById(dropId)?.drop;
     if (!drop || !this.canManageDrops()) return;
+    if (this.selectedDropId() === dropId) this.selectedDropId.set(null);
     this.dispatch('removeDrop', { dropId });
     this.deleteInventoryBlobs([drop.item]);
   }

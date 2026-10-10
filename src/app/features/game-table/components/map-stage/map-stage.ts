@@ -65,8 +65,10 @@ type Gesture =
   | { kind: 'erase' }
   | { kind: 'fx' }
   | { kind: 'note'; id: string; sx: number; sy: number; nx: number; ny: number; moved: boolean }
-  /** Item no chão: o mestre arrasta para mover; clique simples (qualquer um) abre o cartão. */
-  | { kind: 'drop'; id: string; sx: number; sy: number; nx: number; ny: number; moved: boolean };
+  /** Item no chão: o mestre arrasta para mover (`size` = lado em quadrados, para o alinhamento). */
+  | { kind: 'drop'; id: string; size: number; sx: number; sy: number; nx: number; ny: number; moved: boolean }
+  /** Alça do item no chão selecionado (mestre): muda o tamanho. */
+  | { kind: 'dropResize'; id: string; cx: number; cy: number };
 
 /** Largura do popover de anotação (para mantê-lo dentro da tela). */
 const POPOVER_WIDTH = 288;
@@ -453,10 +455,23 @@ export class MapStage {
 
   // --- Ponteiro: itens no chão ---------------------------------------------
 
-  /** Item pressionado: o mestre arrasta para mover; clique simples abre o cartão. */
-  onDropDown({ event, drop }: DropPointerDown): void {
+  /**
+   * Item pressionado: clique seleciona (Delete o tira do mapa), duplo clique abre o cartão.
+   * O mestre arrasta para mover e usa a alça para mudar o tamanho.
+   */
+  onDropDown({ event, drop, mode }: DropPointerDown): void {
     this.openNoteId.set(null);
-    this.gesture = { kind: 'drop', id: drop.id, sx: event.clientX, sy: event.clientY, nx: drop.x, ny: drop.y, moved: false };
+    this.session.selectDrop(drop.id);
+    if (mode === 'resize') {
+      this.gesture = { kind: 'dropResize', id: drop.id, cx: drop.x, cy: drop.y };
+    } else {
+      if (this.isDoubleTap(`drop:${drop.id}`, event)) {
+        this.dropOpened.emit(drop.id);
+        return;
+      }
+      const size = drop.size ?? DROP_SIZE;
+      this.gesture = { kind: 'drop', id: drop.id, size, sx: event.clientX, sy: event.clientY, nx: drop.x, ny: drop.y, moved: false };
+    }
     this.capture(event);
   }
 
@@ -723,7 +738,10 @@ export class MapStage {
       const d = this.screenDelta(event.clientX - g.sx, event.clientY - g.sy);
       const p = { x: g.nx + d.x, y: g.ny + d.y };
       // Alinha ao centro do quadrado como os tokens (Shift ou grade escondida: livre)
-      this.session.moveDrop(g.id, this.snapOn(event) ? snapTokenCenter(p, DROP_SIZE, this.gridSize()) : p);
+      this.session.moveDrop(g.id, this.snapOn(event) ? snapTokenCenter(p, g.size, this.gridSize()) : p);
+    } else if (g.kind === 'dropResize') {
+      const size = sizeFromHandle({ x: g.cx, y: g.cy }, this.toWorld(event), this.gridSize());
+      if (this.session.dropById(g.id)?.drop.size !== size) this.session.updateDrop(g.id, { size });
     }
   }
 
@@ -734,7 +752,6 @@ export class MapStage {
     this.ruler.set(null);
 
     if (g?.kind === 'note' && !g.moved) this.openNoteId.set(g.id);
-    if (g?.kind === 'drop' && !g.moved) this.dropOpened.emit(g.id);
     if (g?.kind === 'token' && !g.moved) {
       if (g.onClick === 'only') this.session.selectToken(g.id);
       if (g.onClick === 'deselect') this.session.toggleTokenSelection(g.id);
@@ -830,6 +847,19 @@ export class MapStage {
     if (wallId && event.key === 'Escape') {
       this.session.selectedWallId.set(null);
       return true;
+    }
+
+    // Item no chão selecionado: Delete o tira do mapa (mestre), Esc desmarca
+    const dropId = this.session.selectedDropId();
+    if (dropId && this.session.visibleDrops().some((d) => d.id === dropId)) {
+      if ((event.key === 'Delete' || event.key === 'Backspace') && this.session.canManageDrops()) {
+        this.session.removeDrop(dropId);
+        return true;
+      }
+      if (event.key === 'Escape') {
+        this.session.selectDrop(null);
+        return true;
+      }
     }
 
     // Tokens selecionados que a conta pode mexer (jogador: não move nem remove NPC que não controla)
@@ -943,6 +973,7 @@ export class MapStage {
       return;
     }
     this.session.tool.set('select');
+    this.session.selectDrop(drop.id);
   }
 
   // --- Colar token (Ctrl+V) ------------------------------------------------

@@ -109,6 +109,8 @@
           [scale]="scale()"
           [gridSize]="gridSize()"
           [interactive]="selecting()"
+          [editable]="session.canManageDrops()"
+          [selectedId]="session.selectedDropId()"
           [upright]="upright()"
           (dropDown)="onDropDown($event)"
         />

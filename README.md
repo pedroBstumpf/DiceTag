@@ -171,9 +171,10 @@ texto, cor e opção "só o mestre vê".
 ### Itens no mapa
 Itens podem ser **largados no chão**: o mestre arrasta um item da aba Lore (ou de "Itens da mesa") até o mapa, e
 quem edita uma ficha arrasta um item do inventário (larga uma unidade, com a personalização). No mapa, o item é um
-losango com a imagem e a quantidade; um clique abre o cartão completo e a lista de quem pode **pegá-lo** —
-personagens e tokens de NPC, quem age primeiro e depois os mais próximos. A pilha inteira vai para o inventário.
-O mestre move, muda a quantidade e tira itens do mapa. Com névoa, o jogador só vê os itens que algum token enxerga.
+losango com a imagem e a quantidade. Um clique seleciona o item; o duplo clique abre o cartão completo e a lista de
+quem pode **pegá-lo** — personagens e tokens de NPC, quem age primeiro e depois os mais próximos. A pilha inteira vai
+para o inventário. O mestre move, redimensiona pela alça, escolhe a cor da borda, muda a quantidade e tira itens do
+mapa (Delete no item selecionado). Com névoa, o jogador só vê os itens que algum token enxerga.
 
 ### Sons
 Várias faixas tocando juntas, cada uma com volume e repetição, mais volume mestre e "Parar tudo".

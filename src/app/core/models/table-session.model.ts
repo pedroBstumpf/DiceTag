@@ -57,12 +57,18 @@ export interface DroppedItem {
   y: number;
   /** Camada do mapa (0 = térreo). Padrão: 0. */
   level?: number;
+  /** Tamanho no mapa, em quadrados (MIN_TOKEN_SIZE a MAX_TOKEN_SIZE). Padrão: DROP_SIZE. */
+  size?: number;
+  /** Cor da borda do losango. Padrão: DROP_COLOR. */
+  color?: string;
   /** O item: referência ao original + personalização + quantidade (sem preço nem "equipado"). */
   item: InventoryEntry;
 }
 
-/** Tamanho do item no mapa, em quadrados da grade. */
+/** Tamanho inicial do item no mapa, em quadrados da grade. */
 export const DROP_SIZE = 0.8;
+/** Cor inicial da borda do item no mapa (âmbar: destaca do mapa e dos tokens). */
+export const DROP_COLOR = '#fcd34d';
 
 /** Tipo de dado arrastado até o mapa para largar um item (JSON de `ItemDragData`). */
 export const ITEM_DRAG_TYPE = 'application/x-dicetag-item';

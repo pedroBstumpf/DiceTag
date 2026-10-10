@@ -37,6 +37,14 @@ describe('itens largados no mapa', () => {
     expect(findDrop(s.scenes, 'd')?.drop.item.quantity).toBeUndefined();
   });
 
+  it('tamanho (dentro dos limites dos tokens) e cor da borda', () => {
+    let s = state(scene('a', [drop('d', 10)]));
+    s = applyCommand(s, { type: 'updateDrop', payload: { dropId: 'd', patch: { size: 2, color: '#ef4444' } } });
+    expect(findDrop(s.scenes, 'd')?.drop).toMatchObject({ size: 2, color: '#ef4444' });
+    s = applyCommand(s, { type: 'updateDrop', payload: { dropId: 'd', patch: { size: 99 } } });
+    expect(findDrop(s.scenes, 'd')?.drop.size).toBe(6);
+  });
+
   it('excluir uma camada desce os itens dela e os de cima', () => {
     const s = state({ ...scene('a', [drop('chao', 0), drop('meio', 0, 1), drop('alto', 0, 2)]), levels: [{ id: 'l1', name: '1' }, { id: 'l2', name: '2' }] });
     const drops = removeLevel(s, { sceneId: 'a', index: 1 }).scenes[0].drops ?? [];

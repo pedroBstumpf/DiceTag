@@ -409,14 +409,18 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - **Itens criados na mesa** (`TableState.items`) ficam na seção "Itens da mesa", abaixo do explorador, **visíveis a
   todos** (registro dos feitos dos jogadores). Abrem na janela `TableItemWindow` (tipo `table-item`): editável por
   quem criou e pelo mestre.
-- **Itens no mapa ("drops", `Scene.drops: DroppedItem { x, y, level?, item: InventoryEntry }`):** pilha de um item com a
+- **Itens no mapa ("drops", `Scene.drops: DroppedItem { x, y, level?, size?, color?, item: InventoryEntry }`):** pilha de um item com a
   personalização de quem largou (sem preço nem "equipado"; `unitOf` em `utils/inventory.ts`). Comandos em `state/drops.ts`
-  (`addDrop`, `moveDrop`, `setDropQuantity`, `removeDrop`) + spec. **Largar** = arrastar até o mapa (`ITEM_DRAG_TYPE`, JSON
+  (`addDrop`, `moveDrop`, `setDropQuantity`, `updateDrop` — tamanho e cor —, `removeDrop`) + spec. **Largar** = arrastar até o mapa (`ITEM_DRAG_TYPE`, JSON
   `ItemDragData`): do explorador da aba Lore (itens do tipo `item`) e de "Itens da mesa" só o **mestre**; do inventário,
   quem edita a ficha (fichas da mesa, não a base do bestiário), **uma unidade** por arraste (`session.takeUnit`, o mesmo de
   `transferItem`: imagem duplicada enquanto sobra unidade). Alinha ao centro do quadrado com a grade visível; vai para a
-  camada em foco. Camada `drops-layer` (losango com imagem e "×N"; Selecionar). **Clique** abre a janela `DropWindow`
-  (`drop:<id>`, fecha sozinha quando o item sai do mapa): cartão só leitura e **"Pegar com"** (`pickupCandidates`:
+  camada em foco. Camada `drops-layer` (losango com imagem e "×N", borda na cor `color` — padrão `DROP_COLOR` —, lado
+  `size` em quadrados — padrão `DROP_SIZE` = 0,8; Selecionar). **Clique** seleciona (`session.selectedDropId`,
+  exclusivo com a seleção de tokens: `selectDrop` limpa os tokens e `selectToken` limpa o item); o mestre arrasta,
+  usa a **alça** (passos de 0,5, como os tokens) e **Delete** tira do mapa; Esc desmarca. **Duplo clique** abre a
+  janela `DropWindow` (`drop:<id>`, fecha sozinha quando o item sai do mapa): cartão só leitura, cor da borda
+  (`ColorPicker`, mestre) e **"Pegar com"** (`pickupCandidates`:
   personagens — mestre: todos; jogador: os dele — e tokens de NPC que a conta edita, na cena ativa; quem age primeiro,
   depois os mais próximos). `pickUpDrop` leva a **pilha inteira** (`addOne` com `count`) e a imagem; exige editar a ficha
   e ver o item. Mestre (`canManageDrops`): arrasta, muda a quantidade e "Tirar do mapa" (apaga a imagem). Jogador com
@@ -677,8 +681,8 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 
 ### Atalhos da mesa (ignorados ao digitar)
 `V` selecionar · `M` mover mapa · `R` régua · `P` ping · `D` desenhar · `F` névoa · `W` parede (névoa em modo linha) ·
-`N` anotação · `E` efeitos especiais · `+`/`-` zoom · `1`–`0` ações · `\` modo imersivo · `Delete` remove os tokens selecionados (ou a parede
-selecionada, no modo editar) · `Esc` cancela parede/fecha anotação/desarma efeito de ação/limpa seleção · `Enter` finaliza parede ·
+`N` anotação · `E` efeitos especiais · `+`/`-` zoom · `1`–`0` ações · `\` modo imersivo · `Delete` remove os tokens selecionados (ou o
+item no chão selecionado, ou a parede selecionada, no modo editar) · `Esc` cancela parede/fecha anotação/desarma efeito de ação/limpa seleção · `Enter` finaliza parede ·
 `Ctrl+Z` desfaz desenho · **`Ctrl+C`/`Ctrl+V`** copia os tokens selecionados / cola sob o mouse · **`WASD`/setas** movem os tokens selecionados (nesse caso W/D não trocam de ferramenta) ·
 **Shift + clique** soma/tira um token da seleção · arrastar no fundo (Selecionar) = caixa de seleção ·
 **`PageUp`/`PageDown`** (mestre, isométrica) sobem/descem o token selecionado ou a camada em foco.
