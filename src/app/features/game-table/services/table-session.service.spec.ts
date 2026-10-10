@@ -59,6 +59,40 @@ describe('TableSessionService (fachada)', () => {
     expect(session.selectedTokenId()).toBeNull();
   });
 
+  it('itens no mapa: largar uma unidade do inventário e outro personagem pegar a pilha', async () => {
+    await session.addScene();
+    const a = session.addEntry('character');
+    const b = session.addEntry('character');
+    session.updateSheet(a.id, { inventory: [{ id: 'linha', itemId: 'espada', name: 'Espada velha', quantity: 2, equipped: true }] });
+
+    const drop = await session.dropItem({ source: 'inventory', sheetId: a.id, inventoryId: 'linha' }, { x: 35, y: 35 });
+    expect(drop?.item).toMatchObject({ itemId: 'espada', name: 'Espada velha' });
+    expect(drop?.item.equipped).toBeUndefined();
+    expect(session.inventoryOf(a.id)[0].quantity).toBe(1);
+    expect(session.visibleDrops()).toHaveLength(1);
+
+    session.setDropQuantity(drop!.id, 3);
+    expect(session.pickUpDrop(drop!.id, b.id)).toBe('Espada velha');
+    expect(session.inventoryOf(b.id)).toEqual([expect.objectContaining({ itemId: 'espada', name: 'Espada velha', quantity: 3 })]);
+    expect(session.visibleDrops()).toEqual([]);
+  });
+
+  it('itens no mapa: só o mestre larga itens do mundo; o jogador não pega com NPC que não controla', async () => {
+    await session.addScene();
+    session.createTableItem('Tocha');
+    const itemId = session.tableItems()[0].id;
+    session.setRole('player');
+    expect(await session.dropItem({ source: 'table', itemId }, { x: 0, y: 0 })).toBeNull();
+
+    session.setRole('gm');
+    const drop = (await session.dropItem({ source: 'table', itemId }, { x: 0, y: 0 }))!;
+    const npc = session.addEntry('npc');
+    const token = session.placeToken(npc.id, { x: 70, y: 0 })!;
+    session.setRole('player');
+    expect(session.pickupCandidates(drop).some((c) => c.sheetId === `npc:${token.id}`)).toBe(false);
+    expect(session.pickUpDrop(drop.id, `npc:${token.id}`)).toBeNull();
+  });
+
   it('regra de vínculo: alterar o token do personagem altera a ficha', async () => {
     await session.addScene();
     const pc = session.addEntry('character');

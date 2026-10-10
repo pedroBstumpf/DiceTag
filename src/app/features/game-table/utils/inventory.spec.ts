@@ -1,6 +1,6 @@
 import { InventoryEntry } from '../../../core/models/table-session.model';
 import { keepValidItemTags } from './dice';
-import { addOne, itemTagId, itemTagLevel, quantityOf, takeOne } from './inventory';
+import { addOne, itemTagId, itemTagLevel, quantityOf, takeOne, unitOf } from './inventory';
 
 let n = 0;
 const id = () => `novo-${++n}`;
@@ -41,6 +41,18 @@ describe('inventário: quantidades', () => {
   it('addOne não leva o "equipado" de quem deu', () => {
     const given = addOne([], { id: 'a', itemId: 'x', equipped: true }, id);
     expect(given[0].equipped).toBeUndefined();
+  });
+
+  it('addOne com várias unidades (pegar uma pilha do chão) empilha ou cria a linha com a quantidade', () => {
+    const base: InventoryEntry[] = [{ id: 'a', itemId: 'x', quantity: 2 }];
+    expect(addOne(base, { id: 'chao', itemId: 'x', quantity: 5 }, id, 5)[0].quantity).toBe(7);
+    const fresh = addOne([], { id: 'chao', itemId: 'y' }, id, 3);
+    expect(fresh[0]).toMatchObject({ itemId: 'y', quantity: 3 });
+    expect(addOne([], { id: 'chao', itemId: 'y' }, id, 1)[0].quantity).toBeUndefined();
+  });
+
+  it('unitOf tira o que é só da linha de origem', () => {
+    expect(unitOf({ id: 'a', itemId: 'x', name: 'Poção', price: 3, quantity: 2, equipped: true })).toEqual({ itemId: 'x', name: 'Poção' });
   });
 
   it('addOne cria linha nova se a personalização ou a imagem diferem', () => {

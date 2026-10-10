@@ -97,15 +97,24 @@ export function takeOne(list: InventoryEntry[], inventoryId: string, keepEmpty: 
 }
 
 /**
- * Põe uma unidade de `unit` no inventário: soma à pilha de um item idêntico (mesmo item
- * do mundo e mesma personalização, sem imagem própria) ou cria uma linha nova.
- * O preço (de loja) e o "equipado" nunca vão junto.
+ * O item sem o que é só da linha de origem: id, quantidade, preço (de loja) e "equipado".
+ * É o que passa de um lugar para outro (inventário, chão do mapa).
  */
-export function addOne(list: InventoryEntry[], unit: InventoryEntry, newId: () => string): InventoryEntry[] {
-  const { price: _price, quantity: _quantity, id: _id, equipped: _equipped, ...item } = unit;
+export function unitOf(entry: InventoryEntry): Omit<InventoryEntry, 'id'> {
+  const { price: _price, quantity: _quantity, id: _id, equipped: _equipped, ...item } = entry;
+  return item;
+}
+
+/**
+ * Põe `count` unidades de `unit` no inventário (padrão: uma): soma à pilha de um item
+ * idêntico (mesmo item do mundo e mesma personalização, sem imagem própria) ou cria uma
+ * linha nova. O preço (de loja) e o "equipado" nunca vão junto.
+ */
+export function addOne(list: InventoryEntry[], unit: InventoryEntry, newId: () => string, count = 1): InventoryEntry[] {
+  const item = unitOf(unit);
   const stack = item.blobId ? undefined : list.find((i) => sameStack(i, item));
-  if (stack) return list.map((i) => (i === stack ? { ...i, quantity: quantityOf(i) + 1 } : i));
-  return [...list, { ...item, id: newId() }];
+  if (stack) return list.map((i) => (i === stack ? { ...i, quantity: quantityOf(i) + count } : i));
+  return [...list, { ...item, id: newId(), ...(count !== 1 && { quantity: count }) }];
 }
 
 /** Mesmo item do mundo e mesma personalização (nome e etiquetas), sem imagem própria. */

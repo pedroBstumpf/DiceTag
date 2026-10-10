@@ -39,7 +39,41 @@ export interface Scene {
   levels?: MapLevel[];
   /** Camada que os jogadores veem (0 = térreo). Padrão: 0. */
   playerLevel?: number;
+  /** Itens largados no chão do mapa. Padrão: []. */
+  drops?: DroppedItem[];
 }
+
+// --- Itens no mapa -----------------------------------------------------------
+
+/**
+ * Item largado no mapa ("drop"): uma pilha de um item do mundo ou da mesa, com a
+ * personalização de quem largou (como uma linha de inventário). Qualquer personagem ou
+ * NPC pode pegá-lo: a pilha inteira vai para o inventário e o item sai do mapa.
+ */
+export interface DroppedItem {
+  id: string;
+  /** Centro, em coordenadas do mapa. */
+  x: number;
+  y: number;
+  /** Camada do mapa (0 = térreo). Padrão: 0. */
+  level?: number;
+  /** O item: referência ao original + personalização + quantidade (sem preço nem "equipado"). */
+  item: InventoryEntry;
+}
+
+/** Tamanho do item no mapa, em quadrados da grade. */
+export const DROP_SIZE = 0.8;
+
+/** Tipo de dado arrastado até o mapa para largar um item (JSON de `ItemDragData`). */
+export const ITEM_DRAG_TYPE = 'application/x-dicetag-item';
+
+/**
+ * De onde vem o item arrastado até o mapa: um item do mundo (aba Lore), um item da mesa
+ * ou uma linha do inventário de uma ficha (larga uma unidade).
+ */
+export type ItemDragData =
+  | { source: 'world' | 'table'; itemId: string }
+  | { source: 'inventory'; sheetId: string; inventoryId: string };
 
 /** Camada do mapa acima do térreo. Sem imagem = "ar": mostra a camada de baixo (tokens voando). */
 export interface MapLevel {

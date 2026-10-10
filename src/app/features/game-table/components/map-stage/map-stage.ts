@@ -2,7 +2,7 @@ import { Component, DestroyRef, ElementRef, computed, effect, inject, input, out
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { Point, Rect } from '../../../../core/models/geometry.model';
-import { METERS_PER_SQUARE, Wall } from '../../../../core/models/table-session.model';
+import { DROP_SIZE, ITEM_DRAG_TYPE, ItemDragData, METERS_PER_SQUARE, Wall } from '../../../../core/models/table-session.model';
 import { newId } from '../../../../core/utils/id';
 import { Viewport, fitRect, zoomAt } from '../../../../shared/utils/viewport';
 import { BlobUrlService } from '../../services/blob-url.service';
@@ -14,6 +14,7 @@ import { pointInRect, rectFromCorners, shiftGroup } from '../../utils/selection'
 import { simplifyPath } from '../../utils/simplify';
 import { distanceToWall, handleAt, moveWallHandle, translateWall } from '../../utils/walls';
 import { DoorsLayer } from '../map-layers/doors-layer/doors-layer';
+import { DropPointerDown, DropsLayer } from '../map-layers/drops-layer/drops-layer';
 import { DrawingsLayer, StrokeDraft } from '../map-layers/drawings-layer/drawings-layer';
 import { FogLayer } from '../map-layers/fog-layer/fog-layer';
 import { FxDraft, FxLayer } from '../map-layers/fx-layer/fx-layer';
@@ -63,7 +64,9 @@ type Gesture =
   | { kind: 'draw' }
   | { kind: 'erase' }
   | { kind: 'fx' }
-  | { kind: 'note'; id: string; sx: number; sy: number; nx: number; ny: number; moved: boolean };
+  | { kind: 'note'; id: string; sx: number; sy: number; nx: number; ny: number; moved: boolean }
+  /** Item no chão: o mestre arrasta para mover; clique simples (qualquer um) abre o cartão. */
+  | { kind: 'drop'; id: string; sx: number; sy: number; nx: number; ny: number; moved: boolean };
 
 /** Largura do popover de anotação (para mantê-lo dentro da tela). */
 const POPOVER_WIDTH = 288;
@@ -114,12 +117,12 @@ interface Plane {
  * TableSessionService.
  *
  * Ordem das camadas no "mundo", de baixo para cima:
- *   mapa → grade → desenhos → notas → névoa → tokens visíveis → portas → paredes → efeitos, régua e ping
+ *   mapa → grade → desenhos → notas → itens no chão → névoa → tokens visíveis → portas → paredes → efeitos, régua e ping
  * Acima do mundo fica a interface (popover de anotação, avisos).
  */
 @Component({
   selector: 'app-map-stage',
-  imports: [MatIconModule, MatTooltipModule, DrawingsLayer, NotesLayer, FogLayer, TokensLayer, DoorsLayer, WallsLayer, FxLayer, NotePopover],
+  imports: [MatIconModule, MatTooltipModule, DrawingsLayer, NotesLayer, DropsLayer, FogLayer, TokensLayer, DoorsLayer, WallsLayer, FxLayer, NotePopover],
   templateUrl: './map-stage.html',
   host: { class: 'block' },
 })
@@ -131,6 +134,10 @@ export class MapStage {
   readonly insets = input({ top: 0, right: 0, bottom: 0, left: 0 });
   /** Duplo clique num token: abrir a janela "Token". */
   readonly tokenOpened = output<string>();
+  /** Clique num item no chão: abrir o cartão dele (id do item largado). */
+  readonly dropOpened = output<string>();
+  /** Aviso ao largar um item (sucesso ou motivo de não ter largado). */
+  readonly dropNotice = output<string>();
 
   private readonly stage = viewChild.required<ElementRef<HTMLElement>>('stage');
 
@@ -444,6 +451,15 @@ export class MapStage {
     this.openNoteId.set(null);
   }
 
+  // --- Ponteiro: itens no chão ---------------------------------------------
+
+  /** Item pressionado: o mestre arrasta para mover; clique simples abre o cartão. */
+  onDropDown({ event, drop }: DropPointerDown): void {
+    this.openNoteId.set(null);
+    this.gesture = { kind: 'drop', id: drop.id, sx: event.clientX, sy: event.clientY, nx: drop.x, ny: drop.y, moved: false };
+    this.capture(event);
+  }
+
   // --- Ferramenta Desenhar -------------------------------------------------
 
   private onDrawDown(event: PointerEvent, p: Point): void {
@@ -701,6 +717,13 @@ export class MapStage {
         const d = this.screenDelta(dx, dy);
         this.session.moveNote(g.id, { x: g.nx + d.x, y: g.ny + d.y });
       }
+    } else if (g.kind === 'drop' && this.session.canManageDrops()) {
+      if (!g.moved && Math.hypot(event.clientX - g.sx, event.clientY - g.sy) < 3) return;
+      g.moved = true;
+      const d = this.screenDelta(event.clientX - g.sx, event.clientY - g.sy);
+      const p = { x: g.nx + d.x, y: g.ny + d.y };
+      // Alinha ao centro do quadrado como os tokens (Shift ou grade escondida: livre)
+      this.session.moveDrop(g.id, this.snapOn(event) ? snapTokenCenter(p, DROP_SIZE, this.gridSize()) : p);
     }
   }
 
@@ -711,6 +734,7 @@ export class MapStage {
     this.ruler.set(null);
 
     if (g?.kind === 'note' && !g.moved) this.openNoteId.set(g.id);
+    if (g?.kind === 'drop' && !g.moved) this.dropOpened.emit(g.id);
     if (g?.kind === 'token' && !g.moved) {
       if (g.onClick === 'only') this.session.selectToken(g.id);
       if (g.onClick === 'deselect') this.session.toggleTokenSelection(g.id);
@@ -888,19 +912,37 @@ export class MapStage {
     this.keyFrame = requestAnimationFrame((t) => this.glide(t, now));
   }
 
-  // --- Arrastar fichas do painel para o mapa -------------------------------
+  // --- Arrastar fichas e itens do painel/inventário para o mapa ------------
 
   onDragOver(event: DragEvent): void {
-    if (!event.dataTransfer?.types.includes(TOKEN_DRAG_TYPE)) return;
+    const types = event.dataTransfer?.types ?? [];
+    if (!types.includes(TOKEN_DRAG_TYPE) && !types.includes(ITEM_DRAG_TYPE)) return;
     event.preventDefault();
-    event.dataTransfer.dropEffect = 'copy';
+    event.dataTransfer!.dropEffect = types.includes(ITEM_DRAG_TYPE) ? 'move' : 'copy';
   }
 
   onDrop(event: DragEvent): void {
     const entryId = event.dataTransfer?.getData(TOKEN_DRAG_TYPE);
-    if (!entryId) return;
+    const item = event.dataTransfer?.getData(ITEM_DRAG_TYPE);
+    if (!entryId && !item) return;
     event.preventDefault();
-    this.placeToken(entryId, this.toWorld(event));
+    if (entryId) this.placeToken(entryId, this.toWorld(event));
+    else if (item) void this.dropItem(JSON.parse(item) as ItemDragData, this.toWorld(event));
+  }
+
+  /** Larga um item no mapa (alinhado ao centro do quadrado, se a grade estiver visível). */
+  private async dropItem(data: ItemDragData, p: Point): Promise<void> {
+    if (!this.scene()) {
+      this.dropNotice.emit('Crie uma cena antes de largar itens no mapa.');
+      return;
+    }
+    const center = this.snapping() ? snapTokenCenter(p, DROP_SIZE, this.gridSize()) : p;
+    const drop = await this.session.dropItem(data, center);
+    if (!drop) {
+      this.dropNotice.emit('Não foi possível largar este item aqui.');
+      return;
+    }
+    this.session.tool.set('select');
   }
 
   // --- Colar token (Ctrl+V) ------------------------------------------------

@@ -22,6 +22,7 @@ import { ActionBar } from './components/action-bar/action-bar';
 import { CharacterSheetView } from './components/character-sheet/character-sheet';
 import { EntryWindow } from './components/entry-window/entry-window';
 import { EquippedItemWindow, parseEquippedWindow } from './components/equipped-item-window/equipped-item-window';
+import { DROP_WINDOW, DropWindow } from './components/drop-window/drop-window';
 import { itemSources } from './components/sheet-inventory/sheet-inventory';
 import { inventoryRow } from './utils/inventory';
 import { TableItemWindow } from './components/table-item-window/table-item-window';
@@ -42,7 +43,7 @@ interface WindowContent {
   icon: string;
   color: string;
   /** Tipo de conteúdo, usado para escolher o componente. */
-  type: 'entry' | 'sheet' | 'token' | 'equipped' | 'table-item' | 'document' | 'timeline' | 'image' | 'item' | 'npc' | 'race';
+  type: 'entry' | 'sheet' | 'token' | 'equipped' | 'table-item' | 'drop' | 'document' | 'timeline' | 'image' | 'item' | 'npc' | 'race';
 }
 
 /** Prefixo do id das janelas "Token" (token:<id do token colocado>). */
@@ -55,6 +56,7 @@ const WINDOW_SIZES: Record<WindowContent['type'], { width: number; height: numbe
   token: { width: 460, height: 560 },
   equipped: { width: 420, height: 600 },
   'table-item': { width: 420, height: 600 },
+  drop: { width: 420, height: 680 },
   document: { width: 720, height: 600 },
   timeline: { width: 620, height: 560 },
   image: { width: 720, height: 520 },
@@ -95,6 +97,7 @@ const PANEL_SPACE = { top: 60, left: 76, right: 344, bottom: 100 };
     TokenWindow,
     EquippedItemWindow,
     TableItemWindow,
+    DropWindow,
     WorldNpcSheet,
     DocumentEditor,
     TimelineEditor,
@@ -165,9 +168,10 @@ export class GameTablePage {
       untracked(() => this.worlds.select(table.worldId ?? DEFAULT_WORLD_ID));
     });
 
-    // Fecha janelas "Token" e fichas de token de tokens removidos do mapa
+    // Fecha janelas "Token" e fichas de token de tokens removidos do mapa, e as de itens que saíram do chão
     effect(() => {
       const stale = this.windows.windows().filter((w) => {
+        if (w.id.startsWith(DROP_WINDOW)) return !this.session.dropById(w.id.slice(DROP_WINDOW.length));
         const placementId = w.id.startsWith(TOKEN_WINDOW) ? w.id.slice(TOKEN_WINDOW.length) : tokenSheetPlacement(w.id);
         return placementId !== null && !this.session.resolvedTokenById(placementId);
       });
@@ -182,6 +186,14 @@ export class GameTablePage {
     if (id.startsWith(TOKEN_WINDOW)) {
       const token = this.session.resolvedTokenById(id.slice(TOKEN_WINDOW.length));
       return token ? { title: `Token: ${token.name}`, icon: 'token', color: TABLE_ENTRY_META[token.entry.kind].color, type: 'token' } : null;
+    }
+    // Item largado no mapa (o jogador só abre os que vê)
+    if (id.startsWith(DROP_WINDOW)) {
+      const dropId = id.slice(DROP_WINDOW.length);
+      const drop = this.session.dropById(dropId)?.drop;
+      if (!drop || !this.session.canSeeDrop(dropId)) return null;
+      const name = inventoryRow(drop.item, itemSources(this.worldbuild, this.session)).name;
+      return { title: name, icon: 'inventory_2', color: 'text-amber-300', type: 'drop' };
     }
     // Item do inventário de uma ficha (lista "Equipados" da aba Ficha)
     const equipped = parseEquippedWindow(id);
@@ -246,6 +258,21 @@ export class GameTablePage {
       return;
     }
     this.open(TOKEN_WINDOW + placementId);
+  }
+
+  /** Clique num item no chão: abre o cartão dele (com "Pegar"). */
+  openDrop(dropId: string): void {
+    this.open(DROP_WINDOW + dropId);
+  }
+
+  /** Aviso vindo do mapa (ex.: item que não pôde ser largado). */
+  notify(message: string): void {
+    this.snackBar.open(message, undefined, { duration: 3000 });
+  }
+
+  /** Id do item largado a partir do id da janela. */
+  dropOf(windowId: string): string {
+    return windowId.slice(DROP_WINDOW.length);
   }
 
   /** Ficha e item da janela de item equipado (o tipo 'equipped' garante que o id é válido). */

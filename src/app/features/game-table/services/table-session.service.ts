@@ -11,7 +11,9 @@ import {
   DiceKind,
   DEFAULT_SOUND_VOLUME,
   DoorWall,
+  DroppedItem,
   FxStyle,
+  ItemDragData,
   MAX_MAP_LEVELS,
   MapLevel,
   SceneFolder,
@@ -45,12 +47,13 @@ import {
 import { AuthService } from '../../../core/services/auth.service';
 import { newId } from '../../../core/utils/id';
 import { TagLevels, baseTagId, formatRoll, keepValidItemTags, levelUpText, rollDice, studyGain, trainStudy } from '../utils/dice';
-import { addOne, inventoryRow, itemTagId, itemTagLevel, quantityOf, takeOne } from '../utils/inventory';
+import { addOne, inventoryRow, itemTagId, itemTagLevel, quantityOf, takeOne, unitOf } from '../utils/inventory';
 import { SheetData, SheetStore } from '../../../core/services/sheet-store';
 import { FxDrawing, buildFx, seededRandom } from '../utils/effects';
 import { createMask, decodeMask, encodeMask, markPolygons, maskFits } from '../utils/fog-memory';
 import { computeVisibilityPolygon, doorSeen, wallsToSegments } from '../utils/visibility';
-import { FogView, visibleDoorsFor, visibleNotesFor, visibleTokensFor } from '../state/player-view';
+import { FogView, visibleDoorsFor, visibleDropsFor, visibleNotesFor, visibleTokensFor } from '../state/player-view';
+import { findDrop } from '../state/drops';
 import { NO_SELECTION, TokenSelection, keepOnly, selectMany, selectOne, toggleInSelection, without } from '../utils/selection';
 import { TableCommandPayload, TableCommandType, applyCommand } from '../state/commands';
 import { RemovedStroke, strokesToErase } from '../state/drawings';
@@ -142,6 +145,17 @@ const NO_NOTES: MapNote[] = [];
 const NO_MESSAGES: ChatMessage[] = [];
 const NO_RESOLVED: ResolvedToken[] = [];
 const NO_FOLDERS: SceneFolder[] = [];
+const NO_DROPS: DroppedItem[] = [];
+
+/** Personagem ou token de NPC que pode pegar um item do chão. */
+export interface PickupCandidate {
+  /** Id da ficha que recebe o item (personagem: id da entrada; token de NPC: "npc:<id do token>"). */
+  sheetId: string;
+  name: string;
+  blobId?: string;
+  /** Distância do token até o item, em quadrados (ausente = sem token na cena/camada). */
+  distance?: number;
+}
 
 /** Camada do mapa como a interface a exibe (0 = térreo, com o mapa da cena). */
 export interface LevelView {
@@ -343,6 +357,17 @@ export class TableSessionService extends SheetStore {
 
   /** Tokens exibidos na camada em foco (interativos). */
   readonly visibleTokens = computed(() => this.tokensByLevel().get(this.currentLevel()) ?? NO_RESOLVED);
+
+  /** Itens no chão da camada em foco (mesma referência enquanto não mudam). */
+  private readonly drops = computed(
+    () => {
+      const level = this.currentLevel();
+      return (this.activeScene()?.drops ?? NO_DROPS).filter((d) => levelOf(d) === level);
+    },
+    { equal: sameItems },
+  );
+  /** Itens no chão exibidos: na visão de jogador com névoa, só os que algum token enxerga. */
+  readonly visibleDrops = computed(() => visibleDropsFor(this.drops(), this.role(), this.fogView()));
 
   // --- Estado da sessão (não persistido) -----------------------------------
   readonly tool = signal<TableTool>('select');
@@ -731,8 +756,9 @@ export class TableSessionService extends SheetStore {
     for (const blobId of [scene?.blobId, ...(scene?.levels ?? []).map((l) => l.blobId)]) {
       if (blobId) this.storage.delete(`blob:${blobId}`);
     }
-    // Imagens personalizadas dos inventários dos tokens de NPC da cena
+    // Imagens personalizadas dos inventários dos tokens de NPC da cena e dos itens no chão
     for (const token of scene?.tokens ?? []) this.deleteInventoryBlobs(token.sheet?.inventory);
+    this.deleteInventoryBlobs(scene?.drops?.map((d) => d.item));
   }
 
   /** Liga/desliga a vista isométrica da cena ativa. */
@@ -1217,11 +1243,30 @@ export class TableSessionService extends SheetStore {
    *   enquanto sobrar unidade, a imagem é duplicada para cada inventário cuidar da sua.
    */
   async transferItem(fromId: string, inventoryId: string, toId: string, cost = 0): Promise<boolean> {
+    const to = this.sheetData(toId);
+    if (!to || fromId === toId) return false;
+    if (cost > 0 && to.sheet.eiros < cost) return false;
+
+    const unit = await this.takeUnit(fromId, inventoryId);
+    if (!unit) return false;
+    const receiver = this.sheetData(toId);
+    this.updateSheet(toId, {
+      inventory: addOne(this.inventoryOf(toId), unit, newId),
+      ...(cost > 0 && receiver && { eiros: receiver.sheet.eiros - cost }),
+    });
+    return true;
+  }
+
+  /**
+   * Tira uma unidade de um item do inventário e a devolve (com a personalização), para ir a
+   * outro inventário ou ao chão do mapa. NPC (loja): a linha fica, mesmo em 0. Personagem: a
+   * linha some ao zerar e a imagem personalizada vai junto; enquanto sobrar unidade, a imagem
+   * é duplicada para cada lugar cuidar da sua. null = não há o que tirar.
+   */
+  private async takeUnit(fromId: string, inventoryId: string): Promise<InventoryEntry | null> {
     const from = this.sheetData(fromId);
     const item = this.inventoryOf(fromId).find((i) => i.id === inventoryId);
-    const to = this.sheetData(toId);
-    if (!from || !to || !item || fromId === toId || quantityOf(item) < 1) return false;
-    if (cost > 0 && to.sheet.eiros < cost) return false;
+    if (!from || !item || quantityOf(item) < 1) return null;
 
     const keepEmpty = from.kind === 'npc';
     const leavesList = !keepEmpty && quantityOf(item) === 1;
@@ -1232,17 +1277,107 @@ export class TableSessionService extends SheetStore {
       if (blob && blobId) await this.storage.set(`blob:${blobId}`, blob);
     }
 
-    // Relê os inventários depois do await (podem ter mudado no meio)
-    const taken = takeOne(this.inventoryOf(fromId), inventoryId, keepEmpty);
+    // Relê o inventário depois do await (pode ter mudado no meio)
+    this.updateSheet(fromId, { inventory: takeOne(this.inventoryOf(fromId), inventoryId, keepEmpty).list });
     const unit: InventoryEntry = { ...item, blobId };
     if (!blobId) delete unit.blobId;
-    this.updateSheet(fromId, { inventory: taken.list });
-    const receiver = this.sheetData(toId);
-    this.updateSheet(toId, {
-      inventory: addOne(this.inventoryOf(toId), unit, newId),
-      ...(cost > 0 && receiver && { eiros: receiver.sheet.eiros - cost }),
+    return unit;
+  }
+
+  // --- Itens no mapa (largar e pegar) --------------------------------------
+
+  /** Mestre: larga itens do mundo/da mesa, move, muda a quantidade e tira itens do mapa. */
+  readonly canManageDrops = computed(() => rules.canManageDrops(this.viewer()));
+
+  /** Item no chão (em qualquer cena), com a cena dele. */
+  dropById(dropId: string): { scene: Scene; drop: DroppedItem } | undefined {
+    return findDrop(this.scenes(), dropId);
+  }
+
+  /** A conta vê este item? (jogador com névoa: só os que algum token enxerga agora) */
+  canSeeDrop(dropId: string): boolean {
+    return this.role() === 'gm' || this.visibleDrops().some((d) => d.id === dropId);
+  }
+
+  /**
+   * Larga um item no mapa, na cena ativa e na camada em foco (centro em `p`):
+   * - do mundo (aba Lore) ou da mesa: só o mestre — um item novo, sem personalização;
+   * - do inventário: quem edita a ficha — uma unidade sai dela (com nome, etiquetas e imagem próprios).
+   */
+  async dropItem(data: ItemDragData, p: Point): Promise<DroppedItem | null> {
+    const sceneId = this.activeSceneId();
+    if (!sceneId) return null;
+    let unit: InventoryEntry | null;
+    if (data.source === 'inventory') {
+      if (!this.sheetAccess(data.sheetId).edit) return null;
+      unit = await this.takeUnit(data.sheetId, data.inventoryId);
+    } else {
+      const exists = data.source === 'table' ? this.tableItemById().has(data.itemId) : this.worldbuild.byId().get(data.itemId)?.type === 'item';
+      if (!this.canManageDrops() || !exists) return null;
+      unit = { id: '', itemId: data.itemId, ...(data.source === 'table' && { table: true }) };
+    }
+    if (!unit) return null;
+    const level = this.currentLevel();
+    const drop: DroppedItem = { id: newId(), x: p.x, y: p.y, ...(level > 0 && { level }), item: { ...unitOf(unit), id: newId() } };
+    // A cena pode ter mudado durante o await: o item vai para a cena de onde foi largado
+    this.dispatch('addDrop', { sceneId, drop });
+    return drop;
+  }
+
+  /**
+   * Pega o item do chão com a ficha `sheetId` (personagem ou token de NPC): a pilha inteira vai
+   * para o inventário (empilha num item idêntico) e o item sai do mapa. A imagem personalizada
+   * vai junto. Precisa editar a ficha e ver o item. Retorna o nome do item (null = não pegou).
+   */
+  pickUpDrop(dropId: string, sheetId: string): string | null {
+    const drop = this.dropById(dropId)?.drop;
+    if (!drop || !this.canSeeDrop(dropId) || !this.sheetAccess(sheetId).edit || !this.sheetData(sheetId)) return null;
+    const name = inventoryRow(drop.item, { own: this.worldbuild.byId(), table: this.tableItemById() }).name;
+    this.updateSheet(sheetId, { inventory: addOne(this.inventoryOf(sheetId), drop.item, newId, quantityOf(drop.item)) });
+    this.dispatch('removeDrop', { dropId });
+    return name;
+  }
+
+  /** Mestre: move o item no mapa. */
+  moveDrop(dropId: string, p: Point): void {
+    if (this.canManageDrops()) this.dispatch('moveDrop', { dropId, x: p.x, y: p.y });
+  }
+
+  /** Mestre: quantidade da pilha no chão. */
+  setDropQuantity(dropId: string, quantity: number): void {
+    if (this.canManageDrops()) this.dispatch('setDropQuantity', { dropId, quantity });
+  }
+
+  /** Mestre: tira o item do mapa (sem ir para inventário nenhum; a imagem personalizada é apagada). */
+  removeDrop(dropId: string): void {
+    const drop = this.dropById(dropId)?.drop;
+    if (!drop || !this.canManageDrops()) return;
+    this.dispatch('removeDrop', { dropId });
+    this.deleteInventoryBlobs([drop.item]);
+  }
+
+  /**
+   * Quem pode pegar um item: personagens (mestre: todos; jogador: os dele) e tokens de NPC que a
+   * conta controla, na cena ativa. Ordem: quem age primeiro, depois os mais próximos do item.
+   */
+  pickupCandidates(drop: DroppedItem): PickupCandidate[] {
+    const grid = this.activeScene()?.gridSize ?? 70;
+    const level = levelOf(drop);
+    const near = (t: ResolvedToken) =>
+      levelOf(t.placement) === level ? Math.hypot(t.placement.x - drop.x, t.placement.y - drop.y) / grid : undefined;
+    const tokens = this.resolvedTokens();
+    const characters = (this.role() === 'gm' ? this.entries().filter((e) => e.kind === 'character') : this.myCharacters()).map((e) => {
+      const distances = tokens.filter((t) => t.entry.id === e.id).flatMap((t) => near(t) ?? []);
+      return { sheetId: e.id, name: e.name, blobId: this.tokenOf(e).blobId, distance: distances.length ? Math.min(...distances) : undefined };
     });
-    return true;
+    const npcTokens = tokens
+      .filter((t) => t.entry.kind === 'npc' && this.canEdit(t.entry))
+      .map((t) => ({ sheetId: NPC_TOKEN_SHEET + t.placement.id, name: t.name, blobId: t.blobId, distance: near(t) }));
+    const actor = this.actorSheetId();
+    const far = Number.POSITIVE_INFINITY;
+    return [...characters, ...npcTokens].sort(
+      (a, b) => Number(b.sheetId === actor) - Number(a.sheetId === actor) || (a.distance ?? far) - (b.distance ?? far),
+    );
   }
 
   // --- Lore da mesa (pastas do mundo reveladas) ----------------------------

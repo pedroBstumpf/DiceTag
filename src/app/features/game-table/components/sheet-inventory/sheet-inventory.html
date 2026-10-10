@@ -77,6 +77,8 @@
       <div
         class="group flex h-9 cursor-pointer items-center gap-2 rounded-lg pl-2 pr-1 text-sm transition-colors"
         [class]="isSelected(row) ? 'bg-astral-500/15 text-astral-200 ring-1 ring-astral-400/30' : 'text-slate-300 hover:bg-white/5 hover:text-white'"
+        [attr.draggable]="canDrop() && !row.missing && row.quantity > 0 ? 'true' : null"
+        (dragstart)="onDragStart($event, row)"
         (click)="select(row)"
       >
         @if (canEquip()) {
@@ -154,6 +156,9 @@
       </p>
     }
   </div>
+  @if (canDrop() && rows().length) {
+    <p class="mt-2 px-1 text-[11px] leading-relaxed text-slate-500">Arraste um item até o mapa para largá-lo no chão (uma unidade).</p>
+  }
 </section>
 
 <!-- ===== Cartão do item selecionado ===== -->

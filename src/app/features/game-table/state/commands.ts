@@ -3,6 +3,7 @@ import { addChatMessage, clearChat } from './chat';
 import { addEntry, removeEntry, setSoundMaster, updateEntry } from './entries';
 import { addWall, removeWall, setExplored, setFog, setFogMemory, toggleDoor, updateWall } from './fog';
 import { addStroke, eraseStrokes, restoreStrokes } from './drawings';
+import { addDrop, moveDrop, removeDrop, setDropQuantity } from './drops';
 import { addLevel, removeLevel, renameLevel, setLevelImage, setPlayerLevel } from './levels';
 import { addTableItem, toggleLoreReveal, updateTableItem } from './lore';
 import { addNote, removeNote, updateNote } from './notes';
@@ -55,6 +56,11 @@ export const TABLE_COMMANDS = {
   moveTokens,
   removeToken,
   toggleTokenPublic,
+  // Itens largados no mapa
+  addDrop,
+  moveDrop,
+  setDropQuantity,
+  removeDrop,
   // Névoa e paredes
   setFog,
   setFogMemory,

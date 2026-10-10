@@ -1,5 +1,5 @@
 import { Point } from '../../../core/models/geometry.model';
-import { DoorWall, MapNote, TableRole } from '../../../core/models/table-session.model';
+import { DoorWall, DroppedItem, MapNote, TableRole } from '../../../core/models/table-session.model';
 import { ExploredMask, isExploredAt } from '../utils/fog-memory';
 import { pointInPolygon } from '../utils/visibility';
 import { ResolvedToken } from './tokens';
@@ -37,6 +37,12 @@ function seenOrExplored(p: Point, fog: FogView): boolean {
 export function visibleTokensFor(tokens: ResolvedToken[], role: TableRole, fog: FogView): ResolvedToken[] {
   if (role !== 'player' || !fog.enabled) return tokens;
   return tokens.filter((t) => t.entry.kind === 'character' || isPointVisible(t.placement, fog));
+}
+
+/** Itens no chão que o papel vê: o jogador, com névoa, só os que algum token enxerga agora. */
+export function visibleDropsFor(drops: DroppedItem[], role: TableRole, fog: FogView): DroppedItem[] {
+  if (role !== 'player' || !fog.enabled) return drops;
+  return drops.filter((d) => isPointVisible(d, fog));
 }
 
 /** Anotações que o papel vê: o jogador não vê as "só mestre" nem as fora da visão e da memória. */

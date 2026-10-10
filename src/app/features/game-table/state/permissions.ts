@@ -90,6 +90,15 @@ export function canEditStatusMax(viewer: Viewer): boolean {
   return viewer.role === 'gm';
 }
 
+/**
+ * Itens no mapa: largar itens do mundo/da mesa (aba Lore), mover, mudar a quantidade e tirar
+ * do mapa é do mestre. Largar do próprio inventário e pegar um item dependem de editar a ficha
+ * (`sheetAccess(...).edit`) e, para pegar, de ver o item (`visibleDropsFor`).
+ */
+export function canManageDrops(viewer: Viewer): boolean {
+  return viewer.role === 'gm';
+}
+
 /** Quem criou o item da mesa (e o mestre) edita o original; os demais só a cópia do inventário. */
 export function canEditTableItem(item: TableItem | undefined, viewer: Viewer): boolean {
   return !!item && (viewer.role === 'gm' || item.ownerUserId === viewer.userId);

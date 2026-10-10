@@ -29,6 +29,7 @@ organizar toda a atmosfera de uma campanha.
 | **Tokens** (imagem, tamanho, visão, barras e etiquetas com cor/nível; vínculo personagem/NPC; WASD com velocidade configurável) | Pronto |
 | **Névoa de guerra + paredes + portas** (visão por ray casting, por papel, memória de áreas exploradas) | Pronto |
 | **Pincel** (desenho livre, borracha, Ctrl+Z) e **anotações** no mapa | Pronto |
+| **Itens no mapa** (largar da Lore ou do inventário; abrir o cartão; pegar com personagem ou NPC) | Pronto |
 | **Ficha de personagem** (abas Ficha, Inventário, Anotações, Habilidades; cards Básico, Status, Relações, 3 Temas) | Pronto |
 | **Ficha de NPC** (igual à de personagem, sem Anotações nem Relações; controle por jogador; ficha/inventário públicos; **loja em Eiros**) | Pronto |
 | **Automações** (dono personagem/NPC/geral, ícone, rolagem 2d12/3d6 + modificador, efeito especial) | Pronto |
@@ -72,7 +73,7 @@ npx ng test --watch=false    # testes Vitest (*.spec.ts), uma execução
 Configuração relevante do `angular.json` (produção):
 - `optimization.fonts: false` → não tenta embutir Google Fonts no build (evita travar em redes restritas).
 - Budgets: inicial 800kB aviso / 1.5MB erro; estilo por componente 6kB / 12kB.
-  O aviso subiu para **850kB** porque o CSS global do Tailwind cresce com cada tela nova (inicial hoje ~801kB,
+  O aviso subiu para **850kB** porque o CSS global do Tailwind cresce com cada tela nova (inicial hoje ~841kB,
   dos quais ~88kB de CSS). Evite importar coisas pesadas fora das rotas lazy.
 
 ---
@@ -143,7 +144,7 @@ src/
             │   └── blob-url.service.ts       # object URLs com cache (imagens de token)
             ├── state/                  # puro + specs: comandos (estado, payload) → estado, permissões, visão
             │   ├── commands.ts         # TABLE_COMMANDS, TableCommand, applyCommand (catálogo de comandos)
-            │   ├── scenes.ts levels.ts entries.ts tokens.ts fog.ts drawings.ts notes.ts chat.ts lore.ts
+            │   ├── scenes.ts levels.ts entries.ts tokens.ts drops.ts fog.ts drawings.ts notes.ts chat.ts lore.ts
             │   ├── permissions.ts      # canEdit, sheetAccess, canSeeLoreItem… com Viewer { role, userId }
             │   ├── player-view.ts      # o que o jogador vê sob a névoa (tokens, anotações, portas)
             │   └── table-state.ts helpers.ts  # EMPTY_STATE, normalizeState, mapScene/mapPlacement…
@@ -161,7 +162,7 @@ src/
             │   └── effects.ts          # buildFx: os 20 efeitos descritos como dados (partes SVG + animações)
             └── components/
                 ├── map-stage/          # ORQUESTRADOR do mapa: zoom, pan, tela↔mundo, roteamento por ferramenta, WASD
-                ├── map-layers/         # camadas dentro do "mundo": drawings, notes, fog, tokens, doors, walls, fx
+                ├── map-layers/         # camadas dentro do "mundo": drawings, notes, drops, fog, tokens, doors, walls, fx
                 ├── scene-bar/          # barra superior: pastas e abas de cenas, vista isométrica (mestre)
                 ├── levels-menu/        # painel de camadas do mapa (mestre, isométrica)
                 ├── tool-bar/           # barra esquerda: ferramentas (TABLE_TOOLS) + submenus
@@ -177,6 +178,7 @@ src/
                 ├── sheet-inventory/    # aba Inventário: lista de itens + cartão; equipado; no NPC, preços e compra (loja)
                 ├── equipped-item-window/ # janela do cartão de um item equipado (lista "Equipados" da aba Ficha)
                 ├── table-item-window/  # janela do cartão de um item criado na mesa (aba Lore)
+                ├── drop-window/        # janela de um item largado no mapa: cartão + "Pegar com"
                 ├── sheet-notes/        # aba Anotações: caderno com páginas (RichTextEditor)
                 ├── level-pips/         # seletor de nível 1–6 em losangos (relações e tags de tema)
                 ├── token-editor/       # editor de tamanho, visão, barras e etiquetas
@@ -407,6 +409,19 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - **Itens criados na mesa** (`TableState.items`) ficam na seção "Itens da mesa", abaixo do explorador, **visíveis a
   todos** (registro dos feitos dos jogadores). Abrem na janela `TableItemWindow` (tipo `table-item`): editável por
   quem criou e pelo mestre.
+- **Itens no mapa ("drops", `Scene.drops: DroppedItem { x, y, level?, item: InventoryEntry }`):** pilha de um item com a
+  personalização de quem largou (sem preço nem "equipado"; `unitOf` em `utils/inventory.ts`). Comandos em `state/drops.ts`
+  (`addDrop`, `moveDrop`, `setDropQuantity`, `removeDrop`) + spec. **Largar** = arrastar até o mapa (`ITEM_DRAG_TYPE`, JSON
+  `ItemDragData`): do explorador da aba Lore (itens do tipo `item`) e de "Itens da mesa" só o **mestre**; do inventário,
+  quem edita a ficha (fichas da mesa, não a base do bestiário), **uma unidade** por arraste (`session.takeUnit`, o mesmo de
+  `transferItem`: imagem duplicada enquanto sobra unidade). Alinha ao centro do quadrado com a grade visível; vai para a
+  camada em foco. Camada `drops-layer` (losango com imagem e "×N"; Selecionar). **Clique** abre a janela `DropWindow`
+  (`drop:<id>`, fecha sozinha quando o item sai do mapa): cartão só leitura e **"Pegar com"** (`pickupCandidates`:
+  personagens — mestre: todos; jogador: os dele — e tokens de NPC que a conta edita, na cena ativa; quem age primeiro,
+  depois os mais próximos). `pickUpDrop` leva a **pilha inteira** (`addOne` com `count`) e a imagem; exige editar a ficha
+  e ver o item. Mestre (`canManageDrops`): arrasta, muda a quantidade e "Tirar do mapa" (apaga a imagem). Jogador com
+  névoa só vê os que algum token enxerga agora (`visibleDropsFor`). Excluir cena/mesa apaga as imagens; excluir camada
+  desce os itens dela.
 - **Grade:** escondida (menu da cena: "Remover grade") = tokens e paredes se movem livres; visível = alinham (Shift = livre).
   Não há botão nem atalho de grade na barra de ferramentas.
 - **Papel (`role`)**: alternado manualmente na barra de ações (Mestre/Jogador, `session.setRole`) — não há permissões
@@ -696,8 +711,8 @@ O `MapStage` recebe `insets` para enquadrar o mapa só na área livre entre as b
 ### Mapa (`map-stage` + `map-layers/`)
 - `map-stage` é o **orquestrador**: vista (`Viewport` + matriz 2D/isométrica), zoom/pan, conversão tela↔mundo,
   pilha de camadas do mapa e roteamento do ponteiro conforme a ferramenta. Camadas só desenham e emitem eventos
-  (`tokenDown`, `noteDown`).
-- Ordem no "mundo", de baixo para cima: **1** mapa · **2** grade · **3** desenhos · **4** notas · **5** névoa ·
+  (`tokenDown`, `noteDown`, `dropDown`).
+- Ordem no "mundo", de baixo para cima: **1** mapa · **2** grade · **3** desenhos · **4** notas · **4b** itens no chão · **5** névoa ·
   **6** tokens visíveis · **7** portas e paredes · **8** efeitos, régua e ping · **9** interface (popover, avisos — fora do mundo).
 - Na ferramenta Selecionar, token ou anotação sob o cursor tem prioridade; o fundo desenha a caixa de seleção
   (o mapa se move com o botão do meio ou a ferramenta Mover).
@@ -718,7 +733,7 @@ O `MapStage` recebe `insets` para enquadrar o mapa só na área livre entre as b
 | `worlds:<userId>` | `World[]` (mundos do usuário; ausente = só o primeiro) |
 | `worldbuild:<userId>` | `WorldItem[]` do primeiro mundo (`DEFAULT_WORLD_ID`; itens, NPCs do bestiário, raças…) |
 | `worldbuild:<userId>:<worldId>` | `WorldItem[]` dos outros mundos |
-| `table-state:<tableId>` | `TableState` (cenas com tokens/névoa/memória/paredes/portas/desenhos/anotações/camadas/vista, pastas de cenas, cena ativa, arquivos — com a ficha do personagem em `sheet` e os NPCs como referência ao bestiário —, tokens de NPC com ficha própria, volume mestre, chat, organização da Lore, itens criados na mesa por jogadores) |
+| `table-state:<tableId>` | `TableState` (cenas com tokens/névoa/memória/paredes/portas/desenhos/anotações/itens no chão/camadas/vista, pastas de cenas, cena ativa, arquivos — com a ficha do personagem em `sheet` e os NPCs como referência ao bestiário —, tokens de NPC com ficha própria, volume mestre, chat, organização da Lore, itens criados na mesa por jogadores) |
 | `blob:<id>` | `Blob` de imagem/mapa/áudio/imagem de token |
 | `desk:<userId>:<worldId>` | `OpenWindow[]`: janelas da mesa de trabalho do Worldbuild daquele mundo (posição, tamanho, estado) |
 | `localStorage: dicetag.session` | id do usuário logado |

@@ -103,6 +103,16 @@
           (noteDown)="onNoteDown($event)"
         />
 
+        <!-- 4b. Itens no chão (largados; o jogador só vê os que algum token enxerga) -->
+        <app-drops-layer
+          [drops]="session.visibleDrops()"
+          [scale]="scale()"
+          [gridSize]="gridSize()"
+          [interactive]="selecting()"
+          [upright]="upright()"
+          (dropDown)="onDropDown($event)"
+        />
+
         <!-- 5. Névoa de guerra -->
         @if (session.fogEnabled()) {
           <app-fog-layer

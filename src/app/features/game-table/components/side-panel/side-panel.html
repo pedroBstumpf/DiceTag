@@ -52,6 +52,8 @@
           <button
             type="button"
             class="flex h-9 w-full items-center gap-2 rounded-lg pl-3 pr-1 text-left text-sm text-slate-300 transition-colors hover:bg-white/5 hover:text-white"
+            [attr.draggable]="isGm() ? 'true' : null"
+            (dragstart)="onTableItemDragStart($event, item.id)"
             (click)="opened.emit(item.id)"
           >
             <mat-icon class="!size-5 shrink-0 !text-[20px] text-amber-300">inventory_2</mat-icon>
