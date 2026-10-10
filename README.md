@@ -88,7 +88,8 @@ O mapa ocupa a tela inteira e as barras flutuam por cima — todas escondíveis:
   estreita), maximizada e fixada.
 - **Visão de Jogador:** sem a ferramenta Névoa, sem as cenas da barra superior e sem as abas Sons e Ações; move
   tokens de personagens, mas de NPCs só os que o mestre liberou, e cria ações na aba Habilidades da ficha.
-- **Modo imersivo:** tecla `\` esconde/mostra todas as barras.
+- **Modo imersivo:** tecla `\` esconde/mostra todas as barras; no modo imersivo, o botão "Sair do modo imersivo"
+  (canto superior direito) reabre todas de uma vez.
 
 ### Ficha de personagem
 Clicar num personagem no painel abre a ficha, com quatro abas:

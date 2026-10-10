@@ -709,7 +709,8 @@ Na mesa, janelas "Token" usam o id `token:<id da colocação>` e fecham sozinhas
 0. `MapStage` ocupa a tela inteira.
 1. Barras sobrepostas com `.glass`: topo (cenas), esquerda (ferramentas + submenus), direita (painel 320px), baixo (ações).
 2. Camada de janelas (`pointer-events-none`; janelas com `pointer-events-auto`) acima das barras.
-3. Abas nas bordas para reabrir barras escondidas.
+3. Abas nas bordas para reabrir barras escondidas e, no modo imersivo (`session.immersive()`), o botão
+   "Sair do modo imersivo" no canto superior direito (`toggleImmersive`: reabre todas de uma vez).
 O `MapStage` recebe `insets` para enquadrar o mapa só na área livre entre as barras.
 
 ### Mapa (`map-stage` + `map-layers/`)

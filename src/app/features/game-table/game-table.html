@@ -125,6 +125,19 @@
   </div>
 
   <!-- ===== Camada 3: abas para reabrir barras escondidas ===== -->
+  @if (session.immersive()) {
+    <!-- Modo imersivo: reabre todas as barras de uma vez (o mesmo que a tecla "\") -->
+    <button
+      type="button"
+      class="glass absolute right-3 top-3 z-30 flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs text-slate-300 opacity-60 transition-opacity hover:text-white hover:opacity-100"
+      matTooltip="Mostrar todas as barras (tecla \)"
+      matTooltipPosition="left"
+      (click)="session.toggleImmersive()"
+    >
+      <mat-icon class="!size-4 !text-[16px]">fullscreen_exit</mat-icon>
+      Sair do modo imersivo
+    </button>
+  }
   @if (!panels.scenes) {
     <button
       type="button"
