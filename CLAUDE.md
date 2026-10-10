@@ -623,8 +623,9 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - **Fixos no mapa:** chave "Fixar no mapa" no menu da ferramenta (`session.fxFixed`, sessão). Com ela, `castFx` grava
   um `FixedFx { kind, color, from, to, seed, scale, level?, ownerUserId }` em `Scene.effects` (comandos `addFixedFx`,
   `removeFixedFx`, `clearFixedFx` em `state/fixed-fx.ts` + spec). `session.fixedEffects` remonta o desenho igual
-  (mesma semente e zoom); a `FxLayer` (input `fixed`) o recria a cada ciclo (`cycleKey`: duração + 700ms de pausa),
-  reiniciando as animações juntas. O menu lista os fixos da camada em foco; remove quem lançou e o mestre
+  (mesma semente e zoom); a `FxLayer` (input `fixed`) o recria a cada ciclo (`fixedCycles`: duração + 300ms de pausa,
+  contados de quando cada efeito apareceu), reiniciando as animações juntas. O relógio (`now`, `Date.now()` a cada
+  200ms) é lido pelo `computed` que o template usa: lê-lo só na expressão `track` do `@for` não redesenha no zoneless. O menu lista os fixos da camada em foco; remove quem lançou e o mestre
   (`canRemoveFixedFx`). Excluir a camada apaga os efeitos dela.
 - Animações genéricas `@keyframes fx-*` em `tailwind.css`, parametrizadas por variáveis CSS (`--dx/--dy`,
   `--s0/--s1`, `--o0`, `--rot`, `--sy`). **Todas começam invisíveis** (partes com atraso usam fill-mode `both`).

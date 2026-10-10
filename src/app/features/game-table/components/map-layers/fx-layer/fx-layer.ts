@@ -7,7 +7,7 @@ import { FxPart, fxCss, isRadialFx } from '../../../utils/effects';
 import { Mat2 } from '../../../utils/projection';
 
 /** Pausa entre as repetições de um efeito fixo (ms). */
-const FIXED_FX_PAUSE_MS = 700;
+const FIXED_FX_PAUSE_MS = 300;
 
 /** Efeito sendo mirado (arraste em andamento). */
 export interface FxDraft {
@@ -79,7 +79,8 @@ export class FxPartAttrs {
       </defs>
 
       <!-- Efeitos fixos: recriados a cada ciclo (a chave muda), o que reinicia todas as animações juntas -->
-      @for (fx of fixed(); track cycleKey(fx)) {
+      @for (cycle of fixedCycles(); track cycle.key) {
+        @let fx = cycle.fx;
         <g [attr.transform]="transformOf(fx)">
           @for (p of fx.drawing.parts; track $index) {
             <ng-container *ngTemplateOutlet="part; context: { $implicit: p }" />
@@ -150,21 +151,38 @@ export class FxLayer {
   readonly allEffects = computed(() => [...this.fixed(), ...this.effects()]);
 
   /** Relógio dos efeitos fixos (só corre enquanto há algum). */
-  private readonly now = signal(performance.now());
+  private readonly now = signal(Date.now());
+  /** Quando cada efeito fixo apareceu (o ciclo dele conta a partir daí). */
+  private readonly starts = new Map<string, number>();
 
   constructor() {
     effect((onCleanup) => {
       if (!this.fixed().length) return;
-      const timer = setInterval(() => this.now.set(performance.now()), 200);
+      const timer = setInterval(() => this.now.set(Date.now()), 200);
       onCleanup(() => clearInterval(timer));
     });
   }
 
-  /** Chave do ciclo atual do efeito fixo: muda ao fim de cada repetição (recria o desenho). */
-  cycleKey(fx: FxInstance): string {
-    const period = fx.drawing.duration + FIXED_FX_PAUSE_MS;
-    return `${fx.id}:${Math.floor(this.now() / period)}`;
-  }
+  /**
+   * Efeitos fixos com a chave do ciclo atual: muda ao fim de cada repetição (animação + pausa).
+   * O template lê este computed, então cada tique do relógio redesenha e a chave nova recria o
+   * desenho, reiniciando todas as animações juntas — o efeito se repete sem parar.
+   */
+  readonly fixedCycles = computed(() => {
+    const now = this.now();
+    const fixed = this.fixed();
+    // Esquece os que saíram do mapa
+    for (const id of this.starts.keys()) if (!fixed.some((fx) => fx.id === id)) this.starts.delete(id);
+    return fixed.map((fx) => {
+      let start = this.starts.get(fx.id);
+      if (start === undefined) {
+        start = Date.now();
+        this.starts.set(fx.id, start);
+      }
+      const period = fx.drawing.duration + FIXED_FX_PAUSE_MS;
+      return { fx, key: `${fx.id}:${Math.floor(Math.max(0, now - start) / period)}` };
+    });
+  });
   /** Mira do lançamento em andamento. */
   readonly draft = input<FxDraft | null>(null);
   /** Forma e cor do próximo lançamento (para desenhar a mira). */

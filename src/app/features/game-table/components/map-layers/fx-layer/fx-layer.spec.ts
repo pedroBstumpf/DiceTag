@@ -28,4 +28,38 @@ describe('FxLayer', () => {
     for (const g of drawing.gradients) expect(root.querySelector(`#${g.id}`)).not.toBeNull();
     expect(root.querySelector('g')?.getAttribute('transform')).toBe(drawing.transform);
   });
+
+  it('efeito fixo se repete: ao fim de cada ciclo o desenho é recriado e continua na tela', async () => {
+    vi.useFakeTimers();
+    try {
+      const drawing = buildFx('vortex', '#000000', { x: 100, y: 100 }, { x: 200, y: 100 }, { uid: 'fx-f', scale: 1, grid: 70, random: seededRandom(1) });
+      const fixture = TestBed.createComponent(FxLayer);
+      fixture.componentRef.setInput('effects', []);
+      fixture.componentRef.setInput('fixed', [{ id: 'f', drawing }]);
+      fixture.componentRef.setInput('current', { kind: 'vortex', color: '#000000' });
+      fixture.componentRef.setInput('scale', 1);
+      fixture.componentRef.setInput('width', 1000);
+      fixture.componentRef.setInput('height', 800);
+      fixture.detectChanges();
+
+      const root: HTMLElement = fixture.nativeElement;
+      const first = root.querySelector('svg > g');
+      expect(first).not.toBeNull();
+
+      // Ainda no primeiro ciclo: o mesmo desenho
+      vi.advanceTimersByTime(drawing.duration / 2);
+      fixture.detectChanges();
+      expect(root.querySelector('svg > g')).toBe(first);
+
+      // Depois da animação + pausa: desenho novo (animações reiniciadas), ainda no mapa
+      vi.advanceTimersByTime(drawing.duration);
+      fixture.detectChanges();
+      const second = root.querySelector('svg > g');
+      expect(second).not.toBeNull();
+      expect(second).not.toBe(first);
+      expect(second?.getAttribute('transform')).toBe(drawing.transform);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
