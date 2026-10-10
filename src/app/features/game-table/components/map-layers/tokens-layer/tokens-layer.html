@@ -74,8 +74,9 @@
       >
         @for (tag of t.tags; track tag.id) {
           <span
-            class="whitespace-nowrap rounded-full font-semibold leading-none text-ink-950 shadow"
+            class="whitespace-nowrap rounded-full font-semibold leading-none shadow"
             [style.background]="tag.color"
+            [style.color]="textOn(tag.color)"
             [style.font-size.px]="legible(px * 0.15, 10)"
             [style.padding]="ui(3) + 'px ' + ui(7) + 'px'"
           >

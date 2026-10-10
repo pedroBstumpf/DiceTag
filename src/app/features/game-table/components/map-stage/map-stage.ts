@@ -937,7 +937,14 @@ export class MapStage {
       // Diagonal com a mesma velocidade; no máximo 50ms por quadro (aba em segundo plano)
       const dt = Math.min(now - last, 50) / 1000;
       const step = (token.speed * (this.keyFast ? KEY_SPEED_FAST : 1) * this.gridSize() * dt) / len;
-      this.session.moveTokens(shiftGroup(this.origins(group), { x: dx * step, y: dy * step }));
+      // Jogador encostado numa parede: tenta o movimento inteiro e, se bloqueado, só um dos eixos
+      // (desliza ao longo dela em vez de parar)
+      const lead = token.placement;
+      const full = { x: dx * step, y: dy * step };
+      const delta = [full, { x: full.x, y: 0 }, { x: 0, y: full.y }].find(
+        (d) => (d.x || d.y) && this.session.canMoveTokenTo(lead.id, { x: lead.x + d.x, y: lead.y + d.y }),
+      );
+      if (delta) this.session.moveTokens(shiftGroup(this.origins(group), delta));
     }
     this.keyFrame = requestAnimationFrame((t) => this.glide(t, now));
   }

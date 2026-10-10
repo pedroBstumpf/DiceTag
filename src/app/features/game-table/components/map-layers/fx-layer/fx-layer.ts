@@ -1,10 +1,13 @@
 import { NgTemplateOutlet } from '@angular/common';
-import { Component, Directive, ElementRef, Renderer2, computed, effect, inject, input } from '@angular/core';
+import { Component, Directive, ElementRef, Renderer2, computed, effect, inject, input, signal } from '@angular/core';
 import { Point } from '../../../../../core/models/geometry.model';
 import { FxStyle } from '../../../../../core/models/table-session.model';
 import { FxInstance } from '../../../services/table-session.service';
 import { FxPart, fxCss, isRadialFx } from '../../../utils/effects';
 import { Mat2 } from '../../../utils/projection';
+
+/** Pausa entre as repetições de um efeito fixo (ms). */
+const FIXED_FX_PAUSE_MS = 700;
 
 /** Efeito sendo mirado (arraste em andamento). */
 export interface FxDraft {
@@ -37,6 +40,7 @@ export class FxPartAttrs {
  * Camada de efeitos especiais (dentro do "mundo" do mapa).
  * Só desenha: cada efeito já chega pronto (`FxInstance.drawing`, montado por
  * utils/effects.ts no lançamento) e some sozinho — a sessão o remove ao terminar.
+ * Os efeitos fixos (`fixed`) repetem: a cada ciclo o desenho é recriado, reiniciando as animações.
  * Também desenha a mira enquanto o usuário arrasta.
  */
 @Component({
@@ -55,7 +59,7 @@ export class FxPartAttrs {
             <feMergeNode in="SourceGraphic" />
           </feMerge>
         </filter>
-        @for (fx of effects(); track fx.id) {
+        @for (fx of allEffects(); track fx.id) {
           @for (g of fx.drawing.gradients; track g.id) {
             @if (g.type === 'radial') {
               <radialGradient [attr.id]="g.id">
@@ -73,6 +77,15 @@ export class FxPartAttrs {
           }
         }
       </defs>
+
+      <!-- Efeitos fixos: recriados a cada ciclo (a chave muda), o que reinicia todas as animações juntas -->
+      @for (fx of fixed(); track cycleKey(fx)) {
+        <g [attr.transform]="transformOf(fx)">
+          @for (p of fx.drawing.parts; track $index) {
+            <ng-container *ngTemplateOutlet="part; context: { $implicit: p }" />
+          }
+        </g>
+      }
 
       @for (fx of effects(); track fx.id) {
         <g [attr.transform]="transformOf(fx)">
@@ -132,6 +145,26 @@ export class FxPartAttrs {
 })
 export class FxLayer {
   readonly effects = input.required<FxInstance[]>();
+  /** Efeitos fixos no mapa: repetem a animação (com uma pausa) até serem removidos. */
+  readonly fixed = input<FxInstance[]>([]);
+  readonly allEffects = computed(() => [...this.fixed(), ...this.effects()]);
+
+  /** Relógio dos efeitos fixos (só corre enquanto há algum). */
+  private readonly now = signal(performance.now());
+
+  constructor() {
+    effect((onCleanup) => {
+      if (!this.fixed().length) return;
+      const timer = setInterval(() => this.now.set(performance.now()), 200);
+      onCleanup(() => clearInterval(timer));
+    });
+  }
+
+  /** Chave do ciclo atual do efeito fixo: muda ao fim de cada repetição (recria o desenho). */
+  cycleKey(fx: FxInstance): string {
+    const period = fx.drawing.duration + FIXED_FX_PAUSE_MS;
+    return `${fx.id}:${Math.floor(this.now() / period)}`;
+  }
   /** Mira do lançamento em andamento. */
   readonly draft = input<FxDraft | null>(null);
   /** Forma e cor do próximo lançamento (para desenhar a mira). */

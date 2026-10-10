@@ -28,4 +28,4 @@ export const GAME_SYSTEMS = [
 ] as const;
 
 /** Cores de destaque disponíveis para as mesas. */
-export const TABLE_ACCENTS = ['#4f86f7', '#b18cff', '#5fd4e0', '#e8eefc', '#ff8fb1', '#ffc66d'] as const;
+export const TABLE_ACCENTS = ['#4f86f7', '#b18cff', '#5fd4e0', '#e8eefc', '#ff8fb1', '#ffc66d', '#000000'] as const;

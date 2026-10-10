@@ -96,7 +96,7 @@ Clicar num personagem no painel abre a ficha, com quatro abas:
 - **Ficha:** cards de tamanhos diferentes — **Básico** (imagem, nome, raça, sub-raça e rótulos), **Status**
   (barras Corpo, Mente e Espírito, começando em 24, e as etiquetas do personagem, que também aparecem no token), **Relações**
   (personagens com nível de 1 a 6 e descrição) e três **Temas** (nome, tags com nível de 1 a 6, **Defeitos**
-  com nível de -1 a -6 e um **Objetivo** com 5 marcadores de avanço) e, abaixo deles, os itens **Equipados** (clique
+  com nível de -1 a -6 e um **Objetivo** com 5 marcadores azuis de avanço e, à esquerda, 5 vermelhos de abandono) e, abaixo deles, os itens **Equipados** (clique
   abre o cartão do item numa janela) e os **Estudos e Treinos**: três etiquetas com SA (Sucessos Acumulados) e SN
   (Sucessos Necessários, definido pelo mestre). Ligado a uma rolagem, sem modificador, o estudo ganha 1 SA com 12+ e 2
   com sucesso crítico; ao alcançar o SN, mestre e jogador são avisados de que ele subiu de nível.
@@ -160,10 +160,12 @@ eletricidade, sombra…):
 - **Área:** explosão, onda de choque, fumaça, chuva de meteoros, erupção de estacas, vórtice
 - **Magia:** cura, escudo, círculo de runas, teleporte
 
-Uma ação pode ter efeito: ao usá-la, ele fica no mouse até você arrastar.
+Uma ação pode ter efeito: ao usá-la, ele fica no mouse até você arrastar. Com **"Fixar no mapa"** ligado no menu da
+ferramenta, o efeito fica na cena, repetindo, até ser removido pela lista do mesmo menu (por quem lançou ou pelo mestre).
 
 ### Névoa de guerra
-Paredes em linha ou círculo e **portas** (abrem e fecham com um clique) bloqueiam a visão dos tokens.
+Paredes em linha ou círculo e **portas** (abrem e fecham com um clique) bloqueiam a visão dos tokens — e também o
+movimento dos tokens dos jogadores, que não atravessam paredes nem portas fechadas (o mestre move livre).
 Paredes podem ser movidas e editadas ponto a ponto. Na visão de **Jogador** a névoa é opaca e só se abre
 onde os tokens enxergam — e as áreas já exploradas continuam reveladas, escurecidas (memória da névoa).
 Na de **Mestre** fica semitransparente, com o contorno das áreas visíveis.

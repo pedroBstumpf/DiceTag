@@ -26,6 +26,7 @@ import {
 import { AuthService } from '../../../../core/services/auth.service';
 import { newId } from '../../../../core/utils/id';
 import { TagEditor } from '../../../../shared/components/tag-editor/tag-editor';
+import { readableTextOn } from '../../../../shared/utils/color';
 import { BlobUrlService } from '../../services/blob-url.service';
 import { SheetStore } from '../../../../core/services/sheet-store';
 import { TableSessionService } from '../../services/table-session.service';
@@ -74,6 +75,8 @@ export class CharacterSheetView {
   /** Presente só na mesa. */
   readonly session = inject(TableSessionService, { optional: true });
   readonly blobs = inject(BlobUrlService);
+  /** Texto legível sobre a cor de uma etiqueta (branco em cores escuras, como o preto). */
+  readonly textOn = readableTextOn;
   private readonly auth = inject(AuthService);
   private readonly worldbuild = inject(WorldbuildService);
 
@@ -361,6 +364,12 @@ export class CharacterSheetView {
   /** Clicar no último marcador aceso desmarca ele (permite voltar a 0). */
   setGoalProgress(theme: CharacterTheme, value: number): void {
     this.updateTheme(theme.id, { goalProgress: value === theme.goalProgress ? value - 1 : value });
+  }
+
+  /** Marcadores vermelhos de abandono (chegam como -1…-5); clicar no último aceso desmarca ele. */
+  setGoalAbandon(theme: CharacterTheme, signed: number): void {
+    const value = Math.abs(signed);
+    this.updateTheme(theme.id, { goalAbandon: value === theme.goalAbandon ? value - 1 : value });
   }
 
   // --- Estudos e Treinos (personagem) --------------------------------------

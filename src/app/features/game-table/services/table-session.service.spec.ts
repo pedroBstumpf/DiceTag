@@ -113,6 +113,23 @@ describe('TableSessionService (fachada)', () => {
     expect(session.manaOf(pc.id)).toBe(2);
   });
 
+  it('paredes: o jogador não atravessa paredes nem portas fechadas; o mestre passa', async () => {
+    await session.addScene();
+    const pc = session.addEntry('character');
+    const token = session.placeToken(pc.id, { x: 35, y: 35 })!;
+    session.addWall({ kind: 'line', points: [{ x: 70, y: 0 }, { x: 70, y: 700 }] });
+
+    session.setRole('player');
+    session.moveToken(token.id, { x: 105, y: 35 });
+    expect(session.placementById(token.id)).toMatchObject({ x: 35, y: 35 });
+    session.moveTokens([{ placementId: token.id, x: 35, y: 105 }]);
+    expect(session.placementById(token.id)).toMatchObject({ x: 35, y: 105 });
+
+    session.setRole('gm');
+    session.moveToken(token.id, { x: 105, y: 105 });
+    expect(session.placementById(token.id)).toMatchObject({ x: 105, y: 105 });
+  });
+
   it('regra de vínculo: alterar o token do personagem altera a ficha', async () => {
     await session.addScene();
     const pc = session.addEntry('character');

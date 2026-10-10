@@ -41,6 +41,29 @@ export interface Scene {
   playerLevel?: number;
   /** Itens largados no chão do mapa. Padrão: []. */
   drops?: DroppedItem[];
+  /** Efeitos especiais fixos (repetem a animação até serem removidos). Padrão: []. */
+  effects?: FixedFx[];
+}
+
+/**
+ * Efeito especial fixo no mapa: guardado na cena e desenhado em repetição até alguém removê-lo.
+ * O desenho é remontado sempre igual a partir destes dados (`buildFx` com a mesma semente).
+ */
+export interface FixedFx {
+  id: string;
+  kind: FxKind;
+  color: string;
+  /** Origem e alvo do arraste (radiais: centro e borda), em coordenadas do mapa. */
+  from: Point;
+  to: Point;
+  /** Semente do sorteio das partículas (o mesmo desenho sempre). */
+  seed: number;
+  /** Zoom no lançamento (tamanhos mínimos legíveis do desenho). */
+  scale: number;
+  /** Camada do mapa (0 = térreo). Padrão: 0. */
+  level?: number;
+  /** Conta de quem lançou (ela e o mestre removem). */
+  ownerUserId?: string;
 }
 
 // --- Itens no mapa -----------------------------------------------------------
@@ -113,7 +136,7 @@ export interface MapNote {
 }
 
 /** Cores dos marcadores de anotação. */
-export const NOTE_COLORS = ['#facc15', '#7aa7ff', '#ef4444', '#22c55e', '#b18cff', '#e8eefc'] as const;
+export const NOTE_COLORS = ['#facc15', '#7aa7ff', '#ef4444', '#22c55e', '#b18cff', '#e8eefc', '#000000'] as const;
 
 // --- Desenho -----------------------------------------------------------------
 
@@ -128,8 +151,8 @@ export interface Stroke {
   opacity: number;
 }
 
-/** Paleta do pincel: tokens do projeto + branco, vermelho, amarelo e verde. */
-export const BRUSH_COLORS = ['#7aa7ff', '#3462d6', '#b6c8f2', '#ffffff', '#ef4444', '#facc15', '#22c55e', '#04060c'] as const;
+/** Paleta do pincel: tokens do projeto + branco, vermelho, amarelo, verde e preto. */
+export const BRUSH_COLORS = ['#7aa7ff', '#3462d6', '#b6c8f2', '#ffffff', '#ef4444', '#facc15', '#22c55e', '#000000'] as const;
 /** Espessuras do pincel (px do mapa). */
 export const BRUSH_WIDTHS = [4, 8, 16, 32] as const;
 /** Opacidades do pincel. */
@@ -266,6 +289,11 @@ export interface CharacterTheme {
   goal: string;
   /** Personagem: avanço do objetivo, de 0 a GOAL_STEPS marcadores. Padrão: 0. */
   goalProgress: number;
+  /**
+   * Personagem: abandono do objetivo, de 0 a GOAL_STEPS marcadores vermelhos (à esquerda dos de
+   * avanço). Todos acesos = objetivo abandonado. Padrão: 0.
+   */
+  goalAbandon: number;
 }
 
 /** Marcadores de avanço do objetivo de cada tema. */
@@ -408,6 +436,7 @@ export function defaultSheet(): CharacterSheet {
       flaws: [],
       goal: '',
       goalProgress: 0,
+      goalAbandon: 0,
     })),
     inventory: [],
     notes: withFixedNotePages([]),
@@ -426,7 +455,14 @@ export function normalizeSheet(raw: Partial<CharacterSheet> | undefined): Charac
   const sheet = { ...empty, ...raw };
   const themes = empty.themes.map((theme, i) => {
     const saved = sheet.themes[i];
-    return { ...theme, ...saved, flaws: saved?.flaws ?? [], goal: saved?.goal ?? '', goalProgress: saved?.goalProgress ?? 0 };
+    return {
+      ...theme,
+      ...saved,
+      flaws: saved?.flaws ?? [],
+      goal: saved?.goal ?? '',
+      goalProgress: saved?.goalProgress ?? 0,
+      goalAbandon: saved?.goalAbandon ?? 0,
+    };
   });
   const studies = empty.studies.map((study, i) => ({ ...study, ...sheet.studies?.[i] }));
   return { ...sheet, themes, studies, notes: withFixedNotePages(sheet.notes) };
@@ -634,6 +670,7 @@ export const FX_COLORS: { color: string; label: string }[] = [
   { color: '#ff3355', label: 'Sangue' },
   { color: '#7aa7ff', label: 'Arcano' },
   { color: '#e8eefc', label: 'Físico' },
+  { color: '#000000', label: 'Trevas' },
 ];
 
 export const DEFAULT_FX: FxStyle = { kind: 'slash', color: '#e8eefc' };

@@ -12,6 +12,7 @@ import {
   DEFAULT_SOUND_VOLUME,
   DoorWall,
   DroppedItem,
+  FixedFx,
   FxStyle,
   ItemDragData,
   MANA_BAR,
@@ -65,7 +66,8 @@ import { addOne, inventoryRow, itemTagId, itemTagLevel, quantityOf, takeOne, uni
 import { SheetData, SheetStore } from '../../../core/services/sheet-store';
 import { FxDrawing, buildFx, seededRandom } from '../utils/effects';
 import { createMask, decodeMask, encodeMask, markPolygons, maskFits } from '../utils/fog-memory';
-import { computeVisibilityPolygon, doorSeen, wallsToSegments } from '../utils/visibility';
+import { Segment, computeVisibilityPolygon, doorSeen, wallsToSegments } from '../utils/visibility';
+import { movePathBlocked } from '../utils/walls';
 import { FogView, visibleDoorsFor, visibleDropsFor, visibleNotesFor, visibleTokensFor } from '../state/player-view';
 import { findDrop } from '../state/drops';
 import { NO_SELECTION, TokenSelection, keepOnly, selectMany, selectOne, toggleInSelection, without } from '../utils/selection';
@@ -167,6 +169,7 @@ const NO_MESSAGES: ChatMessage[] = [];
 const NO_RESOLVED: ResolvedToken[] = [];
 const NO_FOLDERS: SceneFolder[] = [];
 const NO_DROPS: DroppedItem[] = [];
+const NO_FIXED_FX: FixedFx[] = [];
 
 /** Personagem ou token de NPC que pode pegar um item do chão. */
 export interface PickupCandidate {
@@ -697,6 +700,25 @@ export class TableSessionService extends SheetStore {
     const armed = this.armedFx();
     const { kind, color } = armed ?? this.fxStyle();
     const id = newId();
+    // "Fixar no mapa": vai para a cena (salvo) e fica repetindo até ser removido
+    const sceneId = this.activeSceneId();
+    if (this.fxFixed() && sceneId) {
+      const level = this.currentLevel();
+      const fx: FixedFx = {
+        id,
+        kind,
+        color,
+        from,
+        to,
+        seed: Math.floor(Math.random() * 2 ** 32),
+        scale,
+        ...(level > 0 && { level }),
+        ownerUserId: this.auth.user()?.id,
+      };
+      this.dispatch('addFixedFx', { sceneId, fx });
+      if (armed) this.cancelArmedFx();
+      return;
+    }
     const drawing = buildFx(kind, color, from, to, {
       uid: `fx-${id}`,
       scale,
@@ -706,6 +728,47 @@ export class TableSessionService extends SheetStore {
     this.effects.update((list) => [...list, { id, drawing }]);
     setTimeout(() => this.effects.update((list) => list.filter((f) => f.id !== id)), drawing.duration + 100);
     if (armed) this.cancelArmedFx();
+  }
+
+  // --- Efeitos fixos no mapa (salvos na cena) ------------------------------
+
+  /** Lançar os próximos efeitos fixos no mapa (sessão; opção do menu da ferramenta Efeitos). */
+  readonly fxFixed = signal(false);
+
+  /** Efeitos fixos da camada em foco (mesma referência enquanto não mudam). */
+  readonly fixedFxList = computed(
+    () => {
+      const level = this.currentLevel();
+      return (this.activeScene()?.effects ?? NO_FIXED_FX).filter((f) => levelOf(f) === level);
+    },
+    { equal: sameItems },
+  );
+
+  /** Desenhos dos efeitos fixos, remontados sempre iguais (mesma semente e zoom do lançamento). */
+  readonly fixedEffects = computed<FxInstance[]>(() => {
+    const grid = this.activeScene()?.gridSize ?? 70;
+    return this.fixedFxList().map((f) => ({
+      id: f.id,
+      drawing: buildFx(f.kind, f.color, f.from, f.to, { uid: `fx-${f.id}`, scale: f.scale, grid, random: seededRandom(f.seed) }),
+    }));
+  });
+
+  /** Pode tirar este efeito fixo? (quem lançou e o mestre) */
+  canRemoveFixedFx(fx: FixedFx): boolean {
+    return rules.canRemoveFixedFx(fx, this.viewer());
+  }
+
+  removeFixedFx(fxId: string): void {
+    const sceneId = this.activeSceneId();
+    const fx = this.fixedFxList().find((f) => f.id === fxId);
+    if (sceneId && fx && this.canRemoveFixedFx(fx)) this.dispatch('removeFixedFx', { sceneId, fxId });
+  }
+
+  /** Tira os efeitos fixos da camada em foco que a conta pode remover. */
+  clearFixedFx(): void {
+    const sceneId = this.activeSceneId();
+    const fxIds = this.fixedFxList().filter((f) => this.canRemoveFixedFx(f)).map((f) => f.id);
+    if (sceneId && fxIds.length) this.dispatch('clearFixedFx', { sceneId, fxIds });
   }
 
   /** Desarma o efeito da ação e volta à ferramenta anterior. */
@@ -1672,12 +1735,32 @@ export class TableSessionService extends SheetStore {
   }
 
   moveToken(placementId: string, p: Point): void {
-    this.dispatch('moveToken', { placementId, x: p.x, y: p.y });
+    if (this.canMoveTokenTo(placementId, p)) this.dispatch('moveToken', { placementId, x: p.x, y: p.y });
   }
 
-  /** Move vários tokens de uma vez (grupo selecionado), num comando só. */
+  /**
+   * Move vários tokens de uma vez (grupo selecionado), num comando só. No papel de jogador,
+   * os que atravessariam uma parede ou porta fechada ficam onde estão.
+   */
   moveTokens(moves: { placementId: string; x: number; y: number }[]): void {
-    if (moves.length) this.dispatch('moveTokens', { moves });
+    const allowed = moves.filter((m) => this.canMoveTokenTo(m.placementId, m));
+    if (allowed.length) this.dispatch('moveTokens', { moves: allowed });
+  }
+
+  /**
+   * O token pode ir da posição atual até `to`? Jogador: não atravessa paredes nem portas
+   * fechadas da camada dele (regra em `rules.wallsBlockMovement` + `movePathBlocked`).
+   */
+  canMoveTokenTo(placementId: string, to: Point): boolean {
+    const placement = this.findPlacement(placementId);
+    if (!placement || !rules.wallsBlockMovement(this.viewer())) return true;
+    return !movePathBlocked(placement, to, this.segmentsAt(levelOf(placement)));
+  }
+
+  /** Segmentos de parede de uma camada da cena ativa (a em foco já vem calculada). */
+  private segmentsAt(level: number): Segment[] {
+    if (level === this.currentLevel()) return this.wallSegments();
+    return wallsToSegments((this.activeScene()?.walls ?? NO_WALLS).filter((w) => levelOf(w) === level));
   }
 
   /** Remove o token do mapa (a ficha continua; a cópia do NPC, com o inventário dela, some). */

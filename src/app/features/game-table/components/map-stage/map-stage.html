@@ -160,9 +160,10 @@
         }
 
         <!-- 8. Efeitos especiais (e a mira em andamento) -->
-        @if (session.effects().length || fxDraft()) {
+        @if (session.effects().length || session.fixedEffects().length || fxDraft()) {
           <app-fx-layer
             [effects]="session.effects()"
+            [fixed]="session.fixedEffects()"
             [draft]="fxDraft()"
             [current]="fxCurrent()"
             [scale]="scale()"

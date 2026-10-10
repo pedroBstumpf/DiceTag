@@ -112,6 +112,7 @@ src/
     │   ├── components/floating-window/ # JANELA FLUTUANTE (peça central da UX)
     │   ├── components/empty-state/
     │   ├── components/color-picker/    # bolinha de cor + paleta (mat-menu) + cor livre
+    │   ├── utils/color.ts              # readableTextOn: texto claro/escuro sobre uma cor (etiquetas pretas) + spec
     │   ├── components/tag-editor/      # lista editável de etiquetas (cor, texto, nível): token, ficha, item
     │   ├── components/rich-text-editor/ # Tiptap + barra de formatação (documentos e anotações da ficha)
     │   ├── directives/auto-focus.directive.ts
@@ -460,7 +461,9 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   - **Relações:** nome, nível **1–6** (`LevelPips`) e descrição.
   - **Temas (3):** nome + tags com nível **1–6** (cada tag pode ser **mágica**, ver "Tags mágicas") e, embaixo, **Defeitos** (`flaws`) com nível **-1 a -6**
     (`LevelPips` com `negative`). Fichas antigas ganham `flaws: []` em `sheetOf`. Só personagem: **Objetivo** abaixo dos
-    defeitos (`goal`, texto, + `goalProgress` de 0 a `GOAL_STEPS` = 5 marcadores; clicar no último aceso desmarca).
+    defeitos (`goal`, texto, + `goalProgress` de 0 a `GOAL_STEPS` = 5 marcadores azuis; clicar no último aceso desmarca)
+    e, à esquerda dos azuis, 5 marcadores vermelhos de **abandono** (`goalAbandon`, crescem para a esquerda:
+    `LevelPips` com `negative` + `reverse`); todos acesos = "Objetivo abandonado".
   - **Equipados** (personagem e NPC, abaixo dos temas, fora do `fieldset` para quem só lê também abrir): itens com
     `InventoryEntry.equipped` (caixa à esquerda de cada item na aba Inventário, `canEquip`). Clique (só na mesa) abre a
     janela `equip:<id da ficha>:<id no inventário>` (`EquippedItemWindow`: o mesmo `ItemCardView` do inventário,
@@ -607,7 +610,7 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 ### Efeitos especiais (ferramenta `fx`, tecla E)
 - 20 formas em `FX_KINDS` (grupos `FX_GROUPS`): **Golpes** corte, garras, estocada, impacto · **Disparos** flecha,
   orbe, bola de fogo, raio, feixe, jato · **Área** explosão, onda, fumaça, meteoros, erupção, vórtice ·
-  **Magia** cura, escudo, runa, teleporte. 13 cores por elemento (`FX_COLORS`).
+  **Magia** cura, escudo, runa, teleporte. 14 cores por elemento (`FX_COLORS`, com "Trevas" = preto).
 - `radial: true` = arrastar do centro até a borda (não gira; "para cima" é para cima na tela; clique simples
   usa raio de 1,5 quadrado); os demais vão da origem ao alvo e giram na direção do arraste.
 - **Arquitetura orientada a dados:** `buildFx(kind, color, from, to, ctx)` (puro, `utils/effects.ts`) devolve um
@@ -615,6 +618,14 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   `appFxPart` + template recursivo com prefixo `svg:`). Novo efeito = nova função no `BUILDERS`.
 - Montado **uma vez** no lançamento (`castFx`, semente aleatória própria — `seededRandom`); a duração é calculada
   pelas partes (`lastEnd`) e o efeito sai da tela ao terminar. **Transitórios**, não são salvos.
+- **Mais lentos:** `buildFx` estica todas as durações e atrasos por `FX_TIME_SCALE` (1,8; `stretchParts`). Para
+  acelerar ou desacelerar todos os efeitos, mude só essa constante.
+- **Fixos no mapa:** chave "Fixar no mapa" no menu da ferramenta (`session.fxFixed`, sessão). Com ela, `castFx` grava
+  um `FixedFx { kind, color, from, to, seed, scale, level?, ownerUserId }` em `Scene.effects` (comandos `addFixedFx`,
+  `removeFixedFx`, `clearFixedFx` em `state/fixed-fx.ts` + spec). `session.fixedEffects` remonta o desenho igual
+  (mesma semente e zoom); a `FxLayer` (input `fixed`) o recria a cada ciclo (`cycleKey`: duração + 700ms de pausa),
+  reiniciando as animações juntas. O menu lista os fixos da camada em foco; remove quem lançou e o mestre
+  (`canRemoveFixedFx`). Excluir a camada apaga os efeitos dela.
 - Animações genéricas `@keyframes fx-*` em `tailwind.css`, parametrizadas por variáveis CSS (`--dx/--dy`,
   `--s0/--s1`, `--o0`, `--rot`, `--sy`). **Todas começam invisíveis** (partes com atraso usam fill-mode `both`).
   `opacity` é da animação: translucidez fixa vai em `fill-opacity`/`stroke-opacity`.
@@ -646,7 +657,11 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - Selecionar: clique seleciona, arrastar move com snap (Shift livre), alça redimensiona em passos de 0,5,
   Delete remove do mapa. **WASD/setas** com token selecionado: desliza na velocidade da ficha
   (`TokenSettings.speed`, padrão 2 quadrados/s, 0,5–12, editada na janela "Token"; vem sempre da ficha, inclusive no NPC; Shift ×2,5);
-  ao soltar, alinha à grade se ela estiver visível. Movimento não colide com paredes.
+  ao soltar, alinha à grade se ela estiver visível. **Paredes bloqueiam o jogador:** no papel de jogador, mover
+  (arrastar, WASD, alinhar à grade) não atravessa paredes nem portas fechadas da camada do token
+  (`rules.wallsBlockMovement` + `movePathBlocked` em `utils/walls.ts`, pelo centro do token; aplicado em
+  `session.moveToken`/`moveTokens` via `canMoveTokenTo`). No WASD, encostado numa parede, o token desliza pelo eixo
+  livre. O mestre move livre.
 - **Seleção de vários tokens** (regras puras em `utils/selection.ts`; na sessão, `selectedTokenIds` + o **principal**
   `selectedTokenId`, alterados só por `selectToken` / `toggleTokenSelection` / `selectTokens`):
   - arrastar no **fundo** com Selecionar desenha a **caixa de seleção** (pega os tokens da camada em foco que a conta pode
@@ -781,7 +796,7 @@ repositórios por domínio, servidor autoritativo (névoa, rolagens, permissões
 - Persistir janelas abertas, visibilidade das barras e pincel por mesa.
 - Imagens de token substituídas durante a sessão só liberam a URL antiga ao sair da mesa (`BlobUrlService`).
 - Névoa: visão só por token; portas sem tranca nem permissão (qualquer papel abre/fecha).
-- Movimento de tokens (arrastar ou WASD) não colide com paredes.
+- Paredes bloqueiam o movimento só pelo centro do token (o corpo do token pode encostar/sobrepor a parede).
 - Ctrl+Z cobre só desenhos (não tokens, paredes ou anotações).
 - Backend + multiplayer em tempo real; permissões reais de mestre/jogador; convite de jogadores.
 - Mundos: limite fixo de 2 por usuário; trocar o mundo de uma mesa já criada ainda não é possível.
