@@ -17,6 +17,13 @@ npx ng test --watch=false    # testes das funções puras (utils/)
 
 > Requer Node.js 20.19+ ou 22.12+.
 
+### Servidor (back-end)
+
+O back-end fica em [`server/`](server/README.md), com instruções completas para preparar, abrir e testar.
+Resumo: `cd server && npm install && npm run setup && npm run seed`, depois `npm run dev` (porta 3000).
+O `npm start` do front repassa `/api` e `/ws` para ele (`proxy.conf.json`). As telas ainda usam o
+IndexedDB: a ligação com o servidor é a próxima etapa.
+
 ## Estrutura
 
 Arquitetura detalhada (camadas, fluxos de dados e onde fica o estado) em [`ARCHITECTURE.md`](ARCHITECTURE.md).
@@ -204,7 +211,6 @@ itens desse mundo.
 
 ## Dados (provisório)
 
-Ainda não há backend. Contas, mesas e worldbuild ficam no **IndexedDB do navegador**
-(`core/services/storage.service.ts`). Para conectar uma API, basta trocar a
-implementação desse serviço e do `AuthService` — a interface usada pelas telas
-continua a mesma.
+O back-end já existe ([`server/`](server/README.md)), mas as telas ainda não o usam: contas, mesas e
+worldbuild ficam no **IndexedDB do navegador** (`core/services/storage.service.ts`). A ligação será feita
+com repositórios por domínio (SPEC.md §2), trocando a implementação do IndexedDB pela HTTP/WebSocket.

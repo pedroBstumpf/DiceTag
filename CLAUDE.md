@@ -13,7 +13,7 @@ online com amigos, no mundo de Zehenia.
 A meta final inclui simular eventos, calcular rolagens, manter fichas, criar mapas, tocar sons e
 organizar toda a atmosfera de uma campanha.
 
-**Estado atual (MVP de interface, sem backend):**
+**Estado atual (MVP de interface; servidor pronto, ainda não ligado às telas):**
 
 | Área | Status |
 |---|---|
@@ -35,9 +35,10 @@ organizar toda a atmosfera de uma campanha.
 | **Automações** (dono personagem/NPC/geral, ícone, rolagem 2d12/3d6 + modificador, efeito especial) | Pronto |
 | **Rolagem de dados** (2d12: falha crítica…sucesso crítico; 3d6: azar/neutro/sorte) + **chat** da mesa | Pronto |
 | **Efeitos especiais** no mapa (20 efeitos em 4 grupos; 13 cores por elemento) | Pronto |
-| Backend, multiplayer em tempo real | Não iniciado |
+| **Servidor** (`server/`: API HTTP + sala da mesa por WebSocket, SQLite, contas/convites reais) | Pronto, testado |
+| Front-end usando o servidor (repositórios HTTP/WebSocket, multiplayer de fato) | Não iniciado |
 
-Todos os dados ficam **no navegador (IndexedDB)**. Não há API.
+As telas ainda guardam tudo **no navegador (IndexedDB)**. O servidor existe, mas nenhuma tela o chama ainda.
 
 ---
 
@@ -64,11 +65,20 @@ Todos os dados ficam **no navegador (IndexedDB)**. Não há API.
 - Node 20.19+ ou 22.12+
 
 ```bash
+# Front-end (raiz)
 npm install                  # .npmrc usa legacy-peer-deps=true (contorna erro de peer deps do npm com vitest)
 npm start                    # http://localhost:4200
 npm run build                # SEMPRE rodar após alterações para validar (deve terminar sem erros)
-npx ng test --watch=false    # testes Vitest (*.spec.ts), uma execução
+npx ng test --watch=false    # testes Vitest (*.spec.ts), uma execução (usa bastante memória: vários processos)
+
+# Servidor (pasta server/) — guia completo em server/README.md
+npm install && npm run setup # dependências + .env com segredos aleatórios (nunca versionar o .env)
+npm run seed                 # contas de exemplo (senha = SEED_PASSWORD do .env) e uma mesa
+npm run dev                  # http://localhost:3000 (o ng serve repassa /api e /ws: proxy.conf.json)
+npm test                     # 81 testes, um arquivo por vez; npm run smoke = ponta a ponta com o servidor aberto
 ```
+
+**Antes de iniciar servidores ou testes, pergunte ao dono do projeto** (a máquina tem pouca memória livre).
 
 Configuração relevante do `angular.json` (produção):
 - `optimization.fonts: false` → não tenta embutir Google Fonts no build (evita travar em redes restritas).
@@ -187,6 +197,15 @@ src/
                 └── note-popover/       # edição de anotação junto ao marcador
 ```
 
+Servidor (`server/`, pacote Node separado; detalhes em `ARCHITECTURE.md` §11 e `server/README.md`):
+```
+server/src/  main.ts · app.ts · context.ts · config/env.ts · db/ (SQLite + migrações)
+             domain/index.ts   # importa de src/app as regras puras (comandos, permissões, dados, paredes)
+             repositories/ services/ security/ lib/ http/ (plugins + rotas) realtime/ (sala da mesa)
+server/scripts/ (setup, seed, smoke) · server/dev/ (página /dev/) · server/test/
+```
+`proxy.conf.json` (raiz) liga o `ng serve` ao servidor em desenvolvimento.
+
 Rotas (`app.routes.ts`, todas lazy):
 - `''` (Shell) → `''` Home · `mesas` Tables · `worldbuild` Worldbuild do mundo aberto (aceita `?novo=<tipo>` e `?abrir=<id>`).
 - `mesa/:id` → GameTablePage (tela cheia, **fora** do Shell)
@@ -222,6 +241,10 @@ Rotas (`app.routes.ts`, todas lazy):
   Blobs e o Worldbuild continuam no serviço. Comando sem efeito devolve o mesmo objeto.
 - **Permissões e visibilidade novas** entram em `state/permissions.ts` ou `state/player-view.ts` (puras, com
   `Viewer`), nunca só no template: o servidor vai reaplicá-las.
+- **Front ↔ servidor:** arquivos de `state/`, `utils/` e `core/models/` usados por `server/src/domain` não podem
+  importar Angular. Novo comando em `TABLE_COMMANDS` exige esquema em `server/src/realtime/command-schemas.ts` e
+  regra em `command-rules.ts` (o servidor não compila sem eles); nova regra de visibilidade vai também para
+  `server/src/realtime/projection.ts`.
 - **Commits:** um por feature/fase, em branch separada da `main`, no formato Conventional Commits em PT-BR
   (`feat(mesa): …`, `fix(mesas): …`), com corpo explicando o que mudou.
 
@@ -292,7 +315,8 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - `APP_SETTINGS.requireAuth` (`core/config/app-settings.ts`), hoje **`false` = modo de teste**:
   `AuthService.user()` devolve um visitante fixo (`id: 'guest'`) quando ninguém está logado.
 - `isLoggedIn()` = há usuário (real ou visitante). `isGuest()` = é o visitante.
-- Contas reais: e-mail único (normalizado em minúsculas), senha com mínimo de 6 caracteres, hash SHA-256 (`dicetag:` + senha).
+- **No servidor** (`server/`), contas usam senha de 8 a 128 caracteres (sem as mais comuns), scrypt com pimenta e sessão por cookie HttpOnly; o papel na mesa vem da conta (dono = mestre, convite = jogador).
+- Contas locais (provisórias): e-mail único (normalizado em minúsculas), senha com mínimo de 6 caracteres, hash SHA-256 (`dicetag:` + senha).
   Sessão = id do usuário em `localStorage['dicetag.session']`. **É provisório** — não é segurança real.
 - Todos os dados são separados por usuário (o visitante tem os próprios dados).
 
@@ -799,7 +823,8 @@ repositórios por domínio, servidor autoritativo (névoa, rolagens, permissões
 - Névoa: visão só por token; portas sem tranca nem permissão (qualquer papel abre/fecha).
 - Paredes bloqueiam o movimento só pelo centro do token (o corpo do token pode encostar/sobrepor a parede).
 - Ctrl+Z cobre só desenhos (não tokens, paredes ou anotações).
-- Backend + multiplayer em tempo real; permissões reais de mestre/jogador; convite de jogadores.
+- **Ligar o front ao servidor** (`server/` pronto): repositórios HTTP/WebSocket no lugar do IndexedDB e reconciliação de
+  comandos no `TableSessionService` (SPEC §1–2); depois, comandos atômicos de compra/loot/drop e visão calculada no servidor.
 - Mundos: limite fixo de 2 por usuário; trocar o mundo de uma mesa já criada ainda não é possível.
 - Mural de notícias alimentado por API/CMS (`NewsService.posts`).
 - Testes de componentes (hoje têm testes as funções puras de `utils/` e `state/`, as regras da ficha no modelo, a

@@ -431,9 +431,27 @@ Também têm specs:
 
 ---
 
-## 11. Rumo ao backend
+## 11. Servidor (`server/`)
 
-O plano completo, com as decisões e a ordem de execução, está no [`SPEC.md`](SPEC.md). Em resumo:
+Pacote Node separado (Fastify + `ws` + `node:sqlite` + zod), com guia em [`server/README.md`](server/README.md).
+
+- **Camadas:** `http/routes` e `realtime/` → `services/` → `repositories/` (único lugar com SQL) → SQLite.
+  `context.ts` monta as dependências (injeção manual); `app.ts` monta HTTP + WebSocket sem escutar (os
+  testes usam o mesmo app com banco em memória).
+- **Regras compartilhadas:** `server/src/domain/index.ts` importa direto de `src/app` os comandos
+  (`applyCommand`), as permissões, a rolagem e as paredes. Esses arquivos precisam continuar **sem Angular**:
+  o servidor os executa. Novo comando no front exige esquema em `realtime/command-schemas.ts` e regra em
+  `realtime/command-rules.ts` (o tipo obriga; sem isso o servidor não compila).
+- **Sala da mesa:** `Room` guarda o estado oficial e a versão. Cada comando passa por formato →
+  autorização → `applyCommand` → gravação agrupada (500 ms). Quem enviou recebe `ack`, o mestre recebe o
+  comando e os jogadores recebem o estado **projetado** (`realtime/projection.ts`).
+- **Papel vem da conta:** dono da mesa = mestre; quem entra por convite = jogador (`table_members`).
+- **Ligação com o front (pendente):** em desenvolvimento, `proxy.conf.json` repassa `/api` e `/ws` do
+  `ng serve` para `localhost:3000`, então o front usa URLs relativas e o cookie de sessão na mesma origem.
+
+## 12. Rumo ao backend
+
+O servidor já existe (§11); falta o front usá-lo. O plano completo está no [`SPEC.md`](SPEC.md). Em resumo:
 
 - **O que já ajuda:**
   - toda mutação da mesa é um comando puro e serializável, aplicado por um único `dispatch`: é o que

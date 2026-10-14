@@ -16,6 +16,11 @@ Complementa o [`ARCHITECTURE.md`](ARCHITECTURE.md) (como o app é hoje) e o [`CL
 | **O que o jogador vê** sob a névoa (tokens, anotações, portas) | `state/player-view.ts` | Base do filtro do estado enviado a cada jogador |
 | Rolagem com sorteio injetável (`rollDice(config, random, levels)`) | `utils/dice.ts` | O servidor rola com o próprio gerador |
 | `navigator.storage.persist()` ao criar dados | `StorageService.requestPersistence` | Reduz o risco de perder dados enquanto tudo é local |
+| **Servidor** (HTTP + WebSocket, SQLite) com contas e sessões reais, mesas, membros, convites, mundos e arquivos | `server/` ([guia](server/README.md)) | Base dos repositórios do §2 (falta o front usá-lo) |
+| Sala da mesa com snapshot + versão, comandos validados (formato e permissão) e aplicados com `applyCommand` | `server/src/realtime/` | §1 itens 1–3 e 5; falta a reconciliação no cliente (item 4) |
+| Projeção por jogador (cena aberta, sem notas secretas, fichas de NPC liberadas, sem ações do mestre) | `realtime/projection.ts` | §3.1, exceto visão/névoa (paredes e tokens sob a névoa ainda são enviados) |
+| Rolagem no servidor (`crypto.randomInt`, níveis dos temas da ficha atual, gasto de Espírito) | `realtime/rolls.ts` | §3.2 (etiquetas de itens, status e estudos ainda valem 0) |
+| Papel vindo da conta (dono = mestre, convite = jogador) e permissões por comando | `realtime/command-rules.ts` | §3.3 |
 
 ---
 
