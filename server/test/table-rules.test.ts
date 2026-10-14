@@ -1,0 +1,293 @@
+import { describe, expect, it } from 'vitest';
+import type { TableEntry, TableState } from '../src/domain';
+import { COMMAND_RULES, type RuleContext } from '../src/realtime/command-rules';
+import { COMMAND_SCHEMAS, COMMAND_TYPES } from '../src/realtime/command-schemas';
+import { projectLore, projectState } from '../src/realtime/projection';
+import { performRoll } from '../src/realtime/rolls';
+
+// --- Mesa de exemplo ---------------------------------------------------------------
+
+const bars = (spirit = 24) => [
+  { id: 'status-body', label: 'Corpo', color: '#ef4444', value: 24, max: 24 },
+  { id: 'status-mind', label: 'Mente', color: '#22c55e', value: 24, max: 24 },
+  { id: 'status-spirit', label: 'Espírito', color: '#4f86f7', value: spirit, max: 24 },
+];
+const token = (spirit = 24) => ({ size: 1, vision: { enabled: true, range: 18 }, bars: bars(spirit), tags: [] });
+const sheet = (labels: string[]) => ({
+  race: '',
+  subrace: '',
+  labels,
+  relations: [],
+  inventory: [],
+  notes: [{ id: 'background', title: 'Background', content: 'segredo pessoal' }],
+  eiros: 0,
+  studies: [{ id: 'study-1', text: 'Esgrima', sa: 0, sn: 5 }],
+  themes: [
+    {
+      id: 'theme-1',
+      name: 'Guerreira',
+      tags: [
+        { id: 'forca', text: 'Força', level: 3 },
+        { id: 'fogo', text: 'Fogo', level: 4, magic: true },
+      ],
+      flaws: [{ id: 'medo', text: 'Medo', level: -2 }],
+      goal: '',
+      goalProgress: 0,
+      goalAbandon: 0,
+    },
+  ],
+});
+
+function table(): TableState {
+  const entries: TableEntry[] = [
+    { id: 'pc-ana', kind: 'character', name: 'Ana', createdAt: 1, ownerUserId: 'u-ana', token: token(), sheet: sheet(['A']) as never },
+    { id: 'pc-bia', kind: 'character', name: 'Bia', createdAt: 1, ownerUserId: 'u-bia', token: token(), sheet: sheet(['B']) as never },
+    { id: 'npc-orc', kind: 'npc', name: 'Orc', createdAt: 1, token: token(), sheet: sheet(['secreto']) as never },
+    { id: 'npc-pet', kind: 'npc', name: 'Lobo', createdAt: 1, token: token(), controllerUserId: 'u-ana', sheet: sheet(['pet']) as never },
+    { id: 'act-ana', kind: 'automation', name: 'Golpe', createdAt: 1, ownerEntryId: 'pc-ana' },
+    { id: 'act-gm', kind: 'automation', name: 'Emboscada', createdAt: 1 },
+    { id: 'act-orc', kind: 'automation', name: 'Machadada', createdAt: 1, ownerEntryId: 'npc-orc' },
+  ];
+  return {
+    activeSceneId: 's1',
+    entries,
+    sceneFolders: [{ id: 'f1', name: 'Capítulo 2' }],
+    chat: [],
+    lore: { revealed: ['pasta-publica'] },
+    scenes: [
+      {
+        id: 's1',
+        name: 'Ponte',
+        gridSize: 70,
+        showGrid: true,
+        tokens: [
+          { id: 't-ana', entryId: 'pc-ana', x: 100, y: 100 },
+          { id: 't-orc', entryId: 'npc-orc', x: 500, y: 100, sheet: sheet(['ficha do token']) as never },
+          { id: 't-orc2', entryId: 'npc-orc', x: 600, y: 100, inventoryPublic: true, sheet: sheet(['outro token']) as never },
+        ],
+        walls: [
+          { id: 'w1', kind: 'line', points: [{ x: 300, y: 0 }, { x: 300, y: 400 }] },
+          { id: 'd1', kind: 'door', points: [{ x: 300, y: 400 }, { x: 300, y: 500 }], open: false },
+        ],
+        notes: [
+          { id: 'n-pub', x: 0, y: 0, title: 'Placa', text: '', color: '#facc15', gmOnly: false },
+          { id: 'n-gm', x: 0, y: 0, title: 'Armadilha', text: '', color: '#ef4444', gmOnly: true },
+        ],
+        effects: [{ id: 'fx-bia', kind: 'explosion', color: '#ef4444', from: { x: 0, y: 0 }, to: { x: 1, y: 1 }, seed: 1, scale: 1, ownerUserId: 'u-bia' }],
+      },
+      { id: 's2', name: 'Covil (segredo)', gridSize: 70, showGrid: true, folderId: 'f1' },
+    ],
+  };
+}
+
+const gm: RuleContext['viewer'] = { role: 'gm', userId: 'u-gm' };
+const ana: RuleContext['viewer'] = { role: 'player', userId: 'u-ana' };
+
+/** Valida o formato e aplica a regra, como a sala faz. */
+function run(type: (typeof COMMAND_TYPES)[number], payload: unknown, viewer = ana, state = table()) {
+  const parsed = COMMAND_SCHEMAS[type].safeParse(payload);
+  if (!parsed.success) return { ok: false as const, reason: 'formato' };
+  const rule = COMMAND_RULES[type] as (p: unknown, c: RuleContext) => { ok: boolean; reason?: string; payload?: any };
+  return rule(parsed.data, { state, viewer, userName: viewer.role === 'gm' ? 'Mestre' : 'Ana', now: 42, full: false });
+}
+
+// --- Formato -------------------------------------------------------------------------
+
+describe('formato dos comandos', () => {
+  it('há esquema e regra para todo comando do front-end', () => {
+    expect(COMMAND_TYPES.length).toBeGreaterThanOrEqual(49);
+    for (const type of COMMAND_TYPES) expect(COMMAND_RULES[type]).toBeTypeOf('function');
+  });
+
+  it('nomes que alterariam o protótipo não são comandos', () => {
+    for (const name of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) expect(COMMAND_TYPES).not.toContain(name);
+  });
+
+  it('recusa campos desconhecidos, ids inválidos e valores fora do limite', () => {
+    expect(run('moveToken', { placementId: 't-ana', x: 1, y: 1, admin: true }, gm).ok).toBe(false);
+    expect(run('moveToken', { placementId: '../x', x: 1, y: 1 }, gm).ok).toBe(false);
+    expect(run('moveToken', { placementId: 't-ana', x: 1e9, y: 1 }, gm).ok).toBe(false);
+    expect(run('addNote', { sceneId: 's1', note: { id: 'n', x: 0, y: 0, title: '', text: '', color: 'red;background:url(x)', gmOnly: false } }, gm).ok).toBe(false);
+  });
+
+  it('o cliente não pode enviar resultado de rolagem pelo chat', () => {
+    const message = { id: 'm', at: 0, userId: 'u-ana', author: 'Ana', role: 'player', text: 'oi', roll: { total: 99 } };
+    expect(run('addChatMessage', { message }).ok).toBe(false);
+  });
+});
+
+// --- Permissões --------------------------------------------------------------------
+
+describe('permissões no servidor', () => {
+  it('preparação da mesa é só do mestre', () => {
+    for (const [type, payload] of [
+      ['setActiveScene', { sceneId: 's2' }],
+      ['setFog', { sceneId: 's1', enabled: true }],
+      ['removeWall', { sceneId: 's1', wallId: 'w1' }],
+      ['toggleLoreReveal', { folderId: 'x' }],
+      ['clearChat', {}],
+      ['setExplored', { sceneId: 's1' }],
+      ['toggleTokenPublic', { placementId: 't-orc', part: 'sheet' }],
+    ] as const) {
+      expect(run(type, payload).ok, type).toBe(false);
+      expect(run(type, payload, gm).ok, type).toBe(true);
+    }
+  });
+
+  it('jogador move o próprio token, não o dos outros', () => {
+    expect(run('moveToken', { placementId: 't-ana', x: 150, y: 100 }).ok).toBe(true);
+    expect(run('moveToken', { placementId: 't-orc', x: 150, y: 100 }).ok).toBe(false);
+    expect(run('moveTokens', { moves: [{ placementId: 't-ana', x: 1, y: 1 }, { placementId: 't-orc', x: 2, y: 2 }] }).ok).toBe(false);
+  });
+
+  it('paredes e portas fechadas bloqueiam o jogador; o mestre move livre', () => {
+    expect(run('moveToken', { placementId: 't-ana', x: 400, y: 100 }).reason).toMatch(/parede/);
+    expect(run('moveToken', { placementId: 't-ana', x: 400, y: 450 }).ok).toBe(false);
+    expect(run('moveToken', { placementId: 't-ana', x: 400, y: 100 }, gm).ok).toBe(true);
+  });
+
+  it('personagem de outro jogador não é editável (diferente do modo local)', () => {
+    expect(run('updateEntry', { entryId: 'pc-bia', patch: { name: 'Hackeada' } }).ok).toBe(false);
+    expect(run('updateEntry', { entryId: 'pc-ana', patch: { name: 'Ana Clara' } }).ok).toBe(true);
+  });
+
+  it('jogador não escolhe controlador, não vincula a outra conta nem altera o SN dos estudos', () => {
+    expect(run('updateEntry', { entryId: 'pc-ana', patch: { controllerUserId: 'u-ana' } }).ok).toBe(false);
+    expect(run('updateEntry', { entryId: 'pc-ana', patch: { ownerUserId: 'u-bia' } }).ok).toBe(false);
+    const studies = [{ id: 'study-1', text: 'Esgrima', sa: 0, sn: 1 }];
+    expect(run('updateEntry', { entryId: 'pc-ana', patch: { sheet: { ...sheet(['A']), studies } } }).reason).toMatch(/SN/);
+    expect(run('updateEntry', { entryId: 'pc-ana', patch: { sheet: { ...sheet(['A']), studies } } }, gm).ok).toBe(true);
+  });
+
+  it('NPC: só quem controla edita; ações do mestre não são do jogador', () => {
+    expect(run('updateEntry', { entryId: 'npc-pet', patch: { name: 'Lobo Alfa' } }).ok).toBe(true);
+    expect(run('updateEntry', { entryId: 'npc-orc', patch: { name: 'x' } }).ok).toBe(false);
+    expect(run('updateEntry', { entryId: 'act-gm', patch: { name: 'x' } }).ok).toBe(false);
+    expect(run('removeEntry', { entryId: 'act-ana' }).ok).toBe(true);
+  });
+
+  it('personagem criado pelo jogador fica sempre com a conta dele', () => {
+    const entry = { id: 'pc-nova', kind: 'character', name: 'Nova', createdAt: 1, ownerUserId: 'u-bia', controllerUserId: 'u-ana' };
+    const result = run('addEntry', { entry });
+    expect(result.ok).toBe(true);
+    expect(result.payload.entry.ownerUserId).toBe('u-ana');
+    expect(result.payload.entry.controllerUserId).toBeUndefined();
+    expect(run('addEntry', { entry: { id: 'npc-x', kind: 'npc', name: 'x', createdAt: 1 } }).ok).toBe(false);
+  });
+
+  it('jogador não cria anotação secreta nem mexe nas do mestre', () => {
+    const note = { id: 'n-novo', x: 0, y: 0, title: 'x', text: '', color: '#ffffff', gmOnly: true };
+    expect(run('addNote', { sceneId: 's1', note }).payload.note.gmOnly).toBe(false);
+    expect(run('removeNote', { sceneId: 's1', noteId: 'n-gm' }).ok).toBe(false);
+    expect(run('updateNote', { sceneId: 's1', noteId: 'n-pub', patch: { gmOnly: true } }).ok).toBe(false);
+  });
+
+  it('jogador só mexe na cena aberta', () => {
+    const stroke = { id: 'st', points: [{ x: 0, y: 0 }], color: '#ffffff', width: 4, opacity: 1 };
+    expect(run('addStroke', { sceneId: 's1', stroke }).ok).toBe(true);
+    expect(run('addStroke', { sceneId: 's2', stroke }).ok).toBe(false);
+  });
+
+  it('efeito fixo: dono carimbado; só o dono e o mestre removem', () => {
+    const fx = { id: 'fx-novo', kind: 'heal', color: '#22c55e', from: { x: 0, y: 0 }, to: { x: 1, y: 1 }, seed: 3, scale: 1, ownerUserId: 'u-bia' };
+    expect(run('addFixedFx', { sceneId: 's1', fx }).payload.fx.ownerUserId).toBe('u-ana');
+    expect(run('removeFixedFx', { sceneId: 's1', fxId: 'fx-bia' }).ok).toBe(false);
+    expect(run('removeFixedFx', { sceneId: 's1', fxId: 'fx-bia' }, { role: 'player', userId: 'u-bia' }).ok).toBe(true);
+  });
+
+  it('chat: autor, conta, papel e horário vêm do servidor', () => {
+    const message = { id: 'm1', at: 0, userId: 'u-gm', author: 'Mestre', role: 'gm', text: 'confia' };
+    const result = run('addChatMessage', { message });
+    expect(result.payload.message).toMatchObject({ userId: 'u-ana', author: 'Ana', role: 'player', at: 42 });
+  });
+
+  it('ids repetidos e mesa cheia são recusados', () => {
+    const scene = { id: 's1', name: 'Dup', gridSize: 70, showGrid: true };
+    expect(run('addScene', { scene }, gm).ok).toBe(false);
+    const parsed = COMMAND_SCHEMAS.addScene.parse({ scene: { ...scene, id: 's9' } });
+    expect(COMMAND_RULES.addScene(parsed, { state: table(), viewer: gm, userName: 'Mestre', now: 0, full: true }).ok).toBe(false);
+  });
+});
+
+// --- Projeção --------------------------------------------------------------------------
+
+describe('o que cada um recebe (projeção)', () => {
+  it('o mestre recebe tudo', () => {
+    const state = table();
+    expect(projectState(state, gm)).toBe(state);
+  });
+
+  it('o jogador não recebe cenas em preparação, anotações secretas nem pastas de cenas', () => {
+    const view = projectState(table(), ana);
+    expect(view.scenes.map((s) => s.id)).toEqual(['s1']);
+    expect(view.scenes[0].notes?.map((n) => n.id)).toEqual(['n-pub']);
+    expect(view.sceneFolders).toEqual([]);
+  });
+
+  it('fichas de NPC: só as que controla; de tokens, só o liberado', () => {
+    const view = projectState(table(), ana);
+    expect(view.entries.find((e) => e.id === 'npc-orc')?.sheet).toBeUndefined();
+    expect(view.entries.find((e) => e.id === 'npc-pet')?.sheet).toBeDefined();
+    const tokens = view.scenes[0].tokens!;
+    expect(tokens.find((t) => t.id === 't-orc')?.sheet).toBeUndefined();
+    expect(tokens.find((t) => t.id === 't-orc2')?.sheet).toEqual({ inventory: [] });
+  });
+
+  it('ações: só as dele; anotações pessoais dos outros personagens somem', () => {
+    const view = projectState(table(), ana);
+    expect(view.entries.filter((e) => e.kind === 'automation').map((e) => e.id)).toEqual(['act-ana']);
+    expect(view.entries.find((e) => e.id === 'pc-bia')?.sheet?.notes).toEqual([]);
+    expect(view.entries.find((e) => e.id === 'pc-ana')?.sheet?.notes).toHaveLength(1);
+  });
+
+  it('lore: só pastas reveladas; NPCs da mesa sem a ficha base', () => {
+    const items = [
+      { id: 'pasta-publica', type: 'folder', name: 'Pública', parentId: null, createdAt: 0, updatedAt: 0 },
+      { id: 'doc-publico', type: 'document', name: 'Lenda', parentId: 'pasta-publica', createdAt: 0, updatedAt: 0 },
+      { id: 'doc-secreto', type: 'document', name: 'Plano do vilão', parentId: null, createdAt: 0, updatedAt: 0 },
+      { id: 'bestia', type: 'npc', name: 'Dragão', parentId: null, createdAt: 0, updatedAt: 0, sheet: { labels: ['fraqueza: gelo'] } },
+    ] as never[];
+    const state = { ...table(), entries: [...table().entries, { id: 'ref', kind: 'npc', name: 'Dragão', createdAt: 0, worldNpcId: 'bestia' } as TableEntry] };
+    const lore = projectLore(items, state, ana);
+    expect(lore.map((i) => i.id).sort()).toEqual(['bestia', 'doc-publico', 'pasta-publica']);
+    expect(lore.find((i) => i.id === 'bestia')?.sheet).toBeUndefined();
+    expect(projectLore(items, state, gm)).toHaveLength(4);
+  });
+});
+
+// --- Rolagem no servidor -----------------------------------------------------------------
+
+describe('rolagem no servidor', () => {
+  const fixed = () => 0.5; // cada d12 = 7
+  const roll = (attributes: string[] = [], extra = {}) => ({ dice: '2d12' as const, modifier: 1, attributes, ...extra });
+
+  it('recalcula o modificador com os níveis atuais da ficha', () => {
+    const result = performRoll(table(), { sheetId: 'pc-ana', roll: roll(['forca', 'medo']), label: 'Golpe', icon: 'swords' }, ana, 'Ana', 1, 'm', fixed);
+    expect(result.ok && result.message.roll).toMatchObject({ rolls: [7, 7], modifier: 2, total: 16, outcome: 'partial' });
+  });
+
+  it('não rola por ficha de outra conta', () => {
+    const result = performRoll(table(), { sheetId: 'pc-bia', roll: roll(), label: '', icon: '' }, ana, 'Ana', 1, 'm', fixed);
+    expect(result.ok).toBe(false);
+  });
+
+  it('tag mágica gasta Espírito; sem Espírito suficiente, não rola', () => {
+    const ok = performRoll(table(), { sheetId: 'pc-ana', roll: roll(['fogo'], { powers: { fogo: 3 } }), label: 'Bola de fogo', icon: '' }, ana, 'Ana', 1, 'm', fixed);
+    expect(ok.ok).toBe(true);
+    if (ok.ok) {
+      expect(ok.message.roll?.mana).toBe(3);
+      expect(ok.commands[0]).toMatchObject({ type: 'updateEntry', payload: { entryId: 'pc-ana' } });
+    }
+    const state = table();
+    state.entries[0] = { ...state.entries[0], token: token(1) };
+    const refused = performRoll(state, { sheetId: 'pc-ana', roll: roll(['fogo']), label: '', icon: '' }, ana, 'Ana', 1, 'm', fixed);
+    expect(refused.ok).toBe(false);
+  });
+
+  it('o sorteio fica entre 1 e o número de faces', () => {
+    for (const r of [0, 0.999999]) {
+      const result = performRoll(table(), { roll: { dice: '3d6', modifier: 0 }, label: '', icon: '' }, gm, 'Mestre', 1, 'm', () => r);
+      expect(result.ok && result.message.roll?.rolls.every((d) => d >= 1 && d <= 6)).toBe(true);
+    }
+  });
+});

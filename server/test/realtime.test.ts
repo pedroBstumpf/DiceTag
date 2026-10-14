@@ -1,0 +1,156 @@
+import type { AddressInfo } from 'node:net';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { call, createTestServer, openSocket, register, type TestServer } from './helpers';
+
+/**
+ * Sala da mesa por WebSocket, com servidor real escutando numa porta livre:
+ * abertura (origem, sessão, participação), projeção, comandos, recusas e expulsão.
+ */
+
+let server: TestServer;
+let port: number;
+let gm: { id: string; cookie: string };
+let player: { id: string; cookie: string };
+let tableId: string;
+
+const scene = { id: 's1', name: 'Cena', gridSize: 70, showGrid: true };
+
+beforeEach(async () => {
+  server = await createTestServer();
+  await server.app.http.listen({ host: '127.0.0.1', port: 0 });
+  port = (server.app.http.server.address() as AddressInfo).port;
+  gm = await register(server, 'gm@exemplo.com', 'Mestre');
+  player = await register(server, 'p@exemplo.com', 'Jogadora');
+  tableId = (await call(server, gm.cookie, 'POST', '/api/tables', { name: 'M', system: '', description: '', maxPlayers: 4, accent: '#4f86f7' })).json().table.id;
+  const { code } = (await call(server, gm.cookie, 'POST', `/api/tables/${tableId}/invites`)).json();
+  await call(server, player.cookie, 'POST', '/api/invites/accept', { code });
+});
+
+afterEach(async () => {
+  await server.close();
+});
+
+describe('abertura da conexão', () => {
+  it('recusa outra origem, sem sessão e quem não é membro', async () => {
+    const stranger = await register(server, 'x@exemplo.com');
+    await expect(openSocket(port, tableId, gm.cookie, 'https://evil.example')).rejects.toThrow('HTTP 403');
+    await expect(openSocket(port, tableId, '')).rejects.toThrow('HTTP 401');
+    await expect(openSocket(port, tableId, stranger.cookie)).rejects.toThrow('HTTP 404');
+    await expect(openSocket(port, 'mesa-que-nao-existe', gm.cookie)).rejects.toThrow('HTTP 404');
+  });
+
+  it('o papel vem da conta: dono = mestre, convidado = jogador', async () => {
+    const a = await openSocket(port, tableId, gm.cookie);
+    const b = await openSocket(port, tableId, player.cookie);
+    expect((await a.next('welcome')).you.role).toBe('gm');
+    expect((await b.next('welcome')).you.role).toBe('player');
+    a.ws.close();
+    b.ws.close();
+  });
+});
+
+describe('comandos em tempo real', () => {
+  it('mestre cria a cena; jogador recebe o estado projetado (sem a anotação secreta)', async () => {
+    const a = await openSocket(port, tableId, gm.cookie);
+    const b = await openSocket(port, tableId, player.cookie);
+    await a.next('welcome');
+    await b.next('welcome');
+
+    a.ws.send(JSON.stringify({ t: 'cmd', seq: 1, type: 'addScene', payload: { scene } }));
+    expect((await a.next('ack')).version).toBe(1);
+    await b.next('state');
+
+    const secret = { id: 'n1', x: 0, y: 0, title: 'Armadilha', text: '', color: '#ef4444', gmOnly: true };
+    a.ws.send(JSON.stringify({ t: 'cmd', seq: 2, type: 'addNote', payload: { sceneId: 's1', note: secret } }));
+    await a.next('ack');
+    const view = await b.next('state');
+    expect(view.state.scenes[0].notes).toEqual([]);
+    expect(JSON.stringify(b.inbox)).not.toContain('Armadilha');
+    a.ws.close();
+    b.ws.close();
+  });
+
+  it('jogador recebe nack em comando do mestre; o mestre recebe os comandos dos jogadores', async () => {
+    const a = await openSocket(port, tableId, gm.cookie);
+    const b = await openSocket(port, tableId, player.cookie);
+    await a.next('welcome');
+    await b.next('welcome');
+    b.ws.send(JSON.stringify({ t: 'cmd', seq: 1, type: 'addScene', payload: { scene } }));
+    expect((await b.next('nack')).reason).toMatch(/mestre/);
+
+    a.ws.send(JSON.stringify({ t: 'cmd', seq: 1, type: 'addScene', payload: { scene } }));
+    await a.next('ack');
+    const stroke = { id: 'st1', points: [{ x: 1, y: 1 }], color: '#ffffff', width: 4, opacity: 1 };
+    b.ws.send(JSON.stringify({ t: 'cmd', seq: 2, type: 'addStroke', payload: { sceneId: 's1', stroke } }));
+    await b.next('ack');
+    const seen = await a.next('cmd');
+    expect(seen).toMatchObject({ type: 'addStroke', by: player.id });
+    a.ws.close();
+    b.ws.close();
+  });
+
+  it('o estado é gravado e volta ao reconectar', async () => {
+    const a = await openSocket(port, tableId, gm.cookie);
+    await a.next('welcome');
+    a.ws.send(JSON.stringify({ t: 'cmd', seq: 1, type: 'addScene', payload: { scene } }));
+    await a.next('ack');
+    a.ws.close();
+    await a.closed;
+    const again = await openSocket(port, tableId, gm.cookie);
+    const welcome = await again.next('welcome');
+    expect(welcome.version).toBe(1);
+    expect(welcome.state.scenes[0].name).toBe('Cena');
+    again.ws.close();
+  });
+
+  it('rolagem no servidor aparece no chat de todos', async () => {
+    const a = await openSocket(port, tableId, gm.cookie);
+    const b = await openSocket(port, tableId, player.cookie);
+    await a.next('welcome');
+    await b.next('welcome');
+    b.ws.send(JSON.stringify({ t: 'roll', seq: 7, roll: { dice: '3d6', modifier: 0 }, label: 'Sorte', icon: 'casino' }));
+    const ack = await b.next('ack');
+    expect(ack.payload.roll.rolls).toHaveLength(3);
+    const cmd = await a.next('cmd');
+    expect(cmd.type).toBe('addChatMessage');
+    expect(cmd.payload.message.roll.total).toBe(ack.payload.roll.total);
+    a.ws.close();
+    b.ws.close();
+  });
+});
+
+describe('mensagens inválidas e expulsão', () => {
+  it('JSON malformado, chave de protótipo e tipo desconhecido = erro; binário fecha', async () => {
+    const a = await openSocket(port, tableId, gm.cookie);
+    await a.next('welcome');
+    a.ws.send('{não é json');
+    expect((await a.next('error')).code).toBe('invalid');
+    a.ws.send('{"t":"cmd","seq":1,"type":"addScene","payload":{"__proto__":{"x":1}}}');
+    expect((await a.next('error')).code).toBe('invalid');
+    a.ws.send(JSON.stringify({ t: 'cmd', seq: 1, type: 'constructor', payload: {} }));
+    expect((await a.next('error')).code).toBe('invalid');
+    a.ws.send(Buffer.from([1, 2, 3]), { binary: true });
+    expect((await a.closed).code).toBe(1008);
+  });
+
+  it('mensagem acima de 512 KB derruba a conexão', async () => {
+    const a = await openSocket(port, tableId, gm.cookie);
+    await a.next('welcome');
+    a.ws.send(JSON.stringify({ t: 'sync', pad: 'x'.repeat(600 * 1024) }));
+    expect((await a.closed).code).toBe(1009);
+  });
+
+  it('jogador removido da mesa é desconectado na hora', async () => {
+    const b = await openSocket(port, tableId, player.cookie);
+    await b.next('welcome');
+    await call(server, gm.cookie, 'DELETE', `/api/tables/${tableId}/members/${player.id}`);
+    expect((await b.closed).code).toBe(4403);
+  });
+
+  it('mesa excluída fecha a sala', async () => {
+    const a = await openSocket(port, tableId, gm.cookie);
+    await a.next('welcome');
+    await call(server, gm.cookie, 'DELETE', `/api/tables/${tableId}`);
+    expect((await a.closed).code).toBe(4404);
+  });
+});
