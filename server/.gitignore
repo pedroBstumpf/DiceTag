@@ -1,0 +1,10 @@
+# Segredos e configuração local (o modelo versionado é o .env.example)
+.env
+.env.*
+!.env.example
+
+# Banco SQLite, arquivos enviados e dados locais de teste
+/data/
+
+node_modules/
+coverage/
