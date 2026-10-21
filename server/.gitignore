@@ -3,8 +3,14 @@
 .env.*
 !.env.example
 
-# Banco SQLite, arquivos enviados e dados locais de teste
+# Banco SQLite, backups, arquivos enviados e dados locais de teste (onde quer que estejam)
 /data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+backups/
 
 node_modules/
 coverage/

@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Back-end do Crônicas de Zehenia: API HTTP + sala da mesa por WebSocket.",
   "engines": {
-    "node": ">=22.13.0"
+    "node": "^22.13.0 || ^24.0.0"
   },
   "scripts": {
     "setup": "tsx scripts/setup.ts",

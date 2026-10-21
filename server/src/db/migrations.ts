@@ -1,6 +1,6 @@
 /**
  * Migrações do banco, em ordem. Nunca altere uma migração já publicada: acrescente outra
- * no fim da lista (o banco guarda em `PRAGMA user_version` quantas já aplicou).
+ * no fim da lista (o banco registra as aplicadas em `schema_migrations`; ver `database.ts`).
  *
  * Datas em milissegundos (como o front-end). Ids gerados no servidor (`newId`).
  */
