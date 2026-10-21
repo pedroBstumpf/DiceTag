@@ -14,7 +14,8 @@ Roda só na sua máquina: nada é publicado.
 
 ## 1. Preparar (uma vez só)
 
-Pré-requisito: **Node.js 22.13 ou mais novo** (o seu é o 24). Nada mais: sem Docker, sem banco para instalar.
+Pré-requisito: **Node.js 22 (22.13+) ou 24**, as linhas LTS (versão usada em `.nvmrc`). Nada mais: sem Docker,
+sem banco para instalar.
 
 Num terminal, na pasta `server/`:
 
@@ -98,7 +99,7 @@ No fim, mostra "Tudo certo.".
 
 ```bash
 cd server
-npm test            # 81 testes: unidade + integração (HTTP e WebSocket reais, banco em memória)
+npm test            # 127 testes: unidade + integração (HTTP e WebSocket reais, banco em memória)
 npm run typecheck   # checagem de tipos
 npm run check       # typecheck + testes + npm audit
 ```
@@ -115,7 +116,8 @@ pouca RAM livre: feche programas pesados antes ou rode-os sozinhos.
 |---|---|
 | `Configuração inválida (arquivo .env)` | Rode `npm run setup` (ou corrija o item listado no erro). |
 | Login recusado (`401`) | Confira a senha em `SEED_PASSWORD` do `.env` e rode `npm run seed`. |
-| `Muitas tentativas para este e-mail` (`429`) | Bloqueio após 5 senhas erradas: espere 15 minutos ou reinicie o servidor. |
+| `Muitas tentativas para este e-mail` (`429`) | Atraso crescente: depois de 5 senhas erradas do mesmo IP, a espera dobra a cada erro (30 s até 15 min). A mensagem diz quantos segundos; reiniciar o servidor zera. |
+| `TRUST_PROXY foi substituído por TRUSTED_PROXIES` | Apague `TRUST_PROXY` do `.env` (ou deixe `false`). Atrás de um proxy, liste o IP dele em `TRUSTED_PROXIES`. |
 | `Origem não autorizada` (`403`) | Use `http://localhost:...`. Outra origem? Acrescente em `ALLOWED_ORIGINS` no `.env`. |
 | `EADDRINUSE` na porta 3000 | Já há um servidor aberto. Feche-o (Ctrl+C no outro terminal) ou mude `PORT` no `.env` **e** no `proxy.conf.json`. |
 | Começar do zero | Pare o servidor e apague a pasta `server/data/` (banco e arquivos de teste). **Apaga tudo** o que foi criado no servidor. Depois, `npm run seed`. |
@@ -132,8 +134,10 @@ experimental no Node. Os scripts já o escondem.
 
 | Rota | O quê |
 |---|---|
-| `POST /auth/register` · `POST /auth/login` · `POST /auth/logout` | Conta e sessão (cookie) |
-| `GET/PATCH /auth/me` · `POST /auth/password` | Conta atual, nome, troca de senha |
+| `POST /auth/register` · `POST /auth/login` · `POST /auth/logout` | Conta e sessão (cookie) — as únicas rotas públicas, com `/health` |
+| `POST /auth/logout-all` | Sair de todos os dispositivos |
+| `GET/PATCH /auth/me` · `POST /auth/password` | Conta atual, nome, troca de senha (renova a sessão) |
+| `GET /auth/me/export` · `DELETE /auth/me` | LGPD: baixar os próprios dados; excluir a conta (pede a senha) |
 | `GET/POST /tables` · `GET/PATCH/DELETE /tables/:id` | Mesas da conta (como mestre ou jogador) |
 | `GET /tables/:id/members` · `DELETE /tables/:id/members/:userId` | Membros (mestre remove, jogador sai) |
 | `POST/DELETE /tables/:id/invites` · `POST /invites/accept` | Convites (código mostrado uma vez, 7 dias) |
@@ -148,30 +152,47 @@ experimental no Node. Os scripts já o escondem.
 Mensagens JSON com o campo `t`; o protocolo completo está em `src/realtime/protocol.ts`.
 
 - Cliente envia `cmd` (um dos 49 comandos da mesa, os mesmos do `TableSessionService`), `roll`, `event`
-  (ping/efeito, não salvo) e `sync`.
+  (ping/efeito, não salvo) e `sync`. Cada tipo tem o próprio limite de tamanho (`realtime/budgets.ts`).
 - Servidor responde `welcome` (estado inicial), `ack`/`nack` (aceito/recusado), `cmd` (para o mestre),
-  `state` (para jogadores: o estado já filtrado), `event` e `error`.
+  `state` (para jogadores: o estado já filtrado, só quando muda para eles), `event` e `error`.
+- Com névoa, `welcome`/`state` levam `vision`: os polígonos de visão calculados no servidor. O jogador
+  não recebe as paredes (revelariam a planta), só as portas que já viu.
 
 ### Segurança
 
-- **Senhas:** scrypt (custo da OWASP) + sal + "pimenta" fora do banco; mínimo de 8 caracteres e recusa
-  das mais comuns. Login com a mesma resposta e o mesmo tempo para e-mail inexistente e senha errada;
-  bloqueio do e-mail após 5 erros.
+As regras completas estão no [`BACKEND_SECURITY.md`](../BACKEND_SECURITY.md); a operação em produção, no
+[`OPERATIONS.md`](OPERATIONS.md).
+
+- **Senhas:** scrypt (custo da OWASP) + sal + "pimenta" fora do banco, com a versão da pimenta no hash
+  (dá para trocá-la sem invalidar senhas). Política no zod: 8 a 128 caracteres, sem as mais comuns.
+  Login com a mesma resposta e o mesmo tempo para e-mail inexistente e senha errada; atraso crescente
+  por e-mail + IP e por e-mail.
 - **Sessão:** token aleatório num cookie `HttpOnly` + `Secure` + `SameSite=Strict` (`__Host-`); o banco guarda
-  só o HMAC. Expira em 7 dias (ou 24 h sem uso). Logout e troca de senha valem na hora, inclusive no WebSocket.
-- **CSRF e WebSocket de outro site:** toda alteração e todo WebSocket exigem uma origem da lista.
-- **Autorização:** o papel vem da conta (dono = mestre). Todo comando da mesa é validado (formato e
-  permissão) com as mesmas regras do front-end. Recurso de outra conta responde 404.
-- **O jogador só recebe o que pode ver:** cena aberta, sem anotações secretas, sem fichas de NPC não
-  liberadas, sem ações do mestre.
-- **Rolagens no servidor**, com gerador criptográfico e níveis lidos da ficha atual.
+  só o HMAC. Expira em 7 dias (ou 24 h sem uso). Logout, "sair de todos" e troca de senha (que renova a
+  sessão) valem na hora, inclusive no WebSocket.
+- **CSRF e WebSocket de outro site:** toda alteração e todo WebSocket exigem o cabeçalho `Origin` com uma
+  origem da lista.
+- **Autorização:** toda rota exige sessão, menos as públicas da lista. O papel vem da conta (dono =
+  mestre). Dono e participação são conferidos dentro das consultas SQL. Recurso de outra conta responde 404.
+- **Comandos da mesa:** formato estrito (inclusive a ficha, com os limites das regras do jogo) e
+  permissão, com as mesmas regras do front-end. O jogador não muda o máximo das barras de status; a raça
+  é aplicada pelo servidor com a Raça do mundo; paredes valem em todo movimento dele.
+- **O jogador só recebe o que pode ver:** cena aberta; com névoa, só tokens, anotações, itens, efeitos e
+  portas à vista (visão calculada no servidor), sem as paredes; sem fichas de NPC não liberadas, sem
+  NPCs fora da vista, sem ações do mestre, sem sons.
+- **Rolagens no servidor**, com gerador criptográfico obrigatório e níveis lidos da ficha atual.
 - **Entrada:** tudo validado (zod); JSON com `__proto__` recusado; limites de tamanho e profundidade.
-- **Arquivos:** tipo conferido pelos bytes (SVG/HTML recusados), nome gerado pelo servidor, cota por
-  conta, download com `nosniff` e CSP `sandbox`.
-- **Abuso:** limite de requisições por IP, de mensagens por conexão e de conexões por conta.
+- **Arquivos:** recebidos em streaming; tipo conferido pelos bytes, pela extensão e pelo tipo declarado
+  (SVG/HTML recusados); nome gerado pelo servidor; cotas por conta e por mesa, conferidas no registro;
+  download com `nosniff` e CSP `sandbox`.
+- **Abuso:** limite de requisições por IP (o IP real só atrás dos proxies de `TRUSTED_PROXIES`), de
+  mensagens e tamanho por conexão e de conexões por conta.
 - **Cabeçalhos:** CSP, `X-Frame-Options: DENY`, `nosniff`, sem `Referer`; HSTS em produção.
-- **Segredos e logs:** segredos só no `.env` (validados ao subir); logs escondem cookies e senhas;
-  erros não mostram detalhes internos.
+- **Segredos e logs:** segredos só no `.env` (validados ao subir); eventos de segurança no log (campo
+  `security`), sem senhas, cookies, tokens nem e-mails; erro 500 só com o `requestId`.
+- **Banco:** arquivo 600, migrações registradas em `schema_migrations`, backup antes de migrar.
+- **LGPD:** exportar os dados e excluir a conta (em cascata). Backup com teste de restauração
+  (`npm run backup`, `npm run backup:check`).
 - **Dependências:** versões exatas, lockfile, `ignore-scripts`, `npm audit` sem vulnerabilidades.
 
 ---
@@ -180,10 +201,14 @@ Mensagens JSON com o campo `t`; o protocolo completo está em `src/realtime/prot
 
 1. **Ligar o front-end ao servidor** (SPEC.md §2): repositórios por domínio no front (contas, mesas,
    mundos, arquivos), com a implementação HTTP trocando a do IndexedDB, e o `TableSessionService`
-   enviando os comandos pelo WebSocket (SPEC §1). O IndexedDB continua como modo offline.
+   enviando os comandos pelo WebSocket (SPEC §1). O IndexedDB continua como modo offline. Online, o
+   jogador desenha a névoa com os polígonos de `vision` (não recebe paredes) e o front remove os
+   metadados (EXIF) das imagens antes de enviar.
 2. Comandos atômicos no servidor para compra, loot, largar/pegar itens e ficha por campo (SPEC §1).
-3. Visão e névoa calculadas no servidor (o jogador deixa de receber paredes e tokens fora da visão).
-4. Antes de publicar: HTTPS (proxy reverso), `NODE_ENV=production`, backup do banco e e-mail de verificação.
+3. Memória da névoa calculada no servidor (hoje o cliente do mestre a grava) e etiquetas de itens,
+   status e estudos nas rolagens do servidor.
+4. Antes de publicar: seguir o [`OPERATIONS.md`](OPERATIONS.md) (HTTPS, `NODE_ENV=production`, segredos,
+   backups, política de privacidade) e verificação de e-mail.
 
 ## Estrutura
 
@@ -196,12 +221,14 @@ server/
 │   ├── db/                # SQLite + migrações
 │   ├── domain/index.ts    # regras puras importadas do front-end (mesma lógica dos dois lados)
 │   ├── repositories/      # único lugar com SQL
-│   ├── services/          # contas e sessões
-│   ├── security/          # senha, tokens, origem, cookie, tipo de arquivo
-│   ├── lib/               # erros, ids, JSON seguro, limitadores, esquemas
+│   ├── services/          # contas e sessões; exportar e excluir conta (LGPD)
+│   ├── security/          # senha, tokens, origem, cookie, tipo de arquivo, atraso no login
+│   ├── lib/               # erros, ids, JSON seguro, limitadores, esquemas, IP real, envio em streaming, auditoria
 │   ├── http/              # plugins (segurança, sessão) e rotas
-│   └── realtime/          # sala da mesa: protocolo, esquemas, regras, projeção, rolagem
-├── scripts/               # setup, seed, smoke
+│   ├── realtime/          # sala da mesa: protocolo, limites, esquemas, regras (e da ficha), visão, projeção, rolagem
+│   └── ops/               # backup e teste de restauração
+├── scripts/               # setup, seed, smoke, backup, backup-check
+├── OPERATIONS.md          # operação segura em produção
 ├── dev/                   # página /dev/
 └── test/                  # testes Vitest
 ```

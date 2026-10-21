@@ -18,7 +18,8 @@ Complementa o [`ARCHITECTURE.md`](ARCHITECTURE.md) (como o app é hoje) e o [`CL
 | `navigator.storage.persist()` ao criar dados | `StorageService.requestPersistence` | Reduz o risco de perder dados enquanto tudo é local |
 | **Servidor** (HTTP + WebSocket, SQLite) com contas e sessões reais, mesas, membros, convites, mundos e arquivos | `server/` ([guia](server/README.md)) | Base dos repositórios do §2 (falta o front usá-lo) |
 | Sala da mesa com snapshot + versão, comandos validados (formato e permissão) e aplicados com `applyCommand` | `server/src/realtime/` | §1 itens 1–3 e 5; falta a reconciliação no cliente (item 4) |
-| Projeção por jogador (cena aberta, sem notas secretas, fichas de NPC liberadas, sem ações do mestre) | `realtime/projection.ts` | §3.1, exceto visão/névoa (paredes e tokens sob a névoa ainda são enviados) |
+| Projeção por jogador (cena aberta, sem notas secretas, fichas de NPC liberadas, sem ações do mestre) com **visão calculada no servidor**: com névoa, só tokens, anotações, itens, efeitos e portas à vista, sem as paredes; os polígonos vão no campo `vision` | `realtime/projection.ts`, `realtime/vision.ts` | §3.1 (a memória da névoa ainda é gravada pelo cliente do mestre) |
+| Ficha validada no servidor (esquema estrito com os limites das regras; raça aplicada pelo servidor; máximo das barras só do mestre; itens revelados) | `realtime/sheet-rules.ts` | §1 "ficha gravada inteira": protegida até virar comandos por campo |
 | Rolagem no servidor (`crypto.randomInt`, níveis dos temas da ficha atual, gasto de Espírito) | `realtime/rolls.ts` | §3.2 (etiquetas de itens, status e estudos ainda valem 0) |
 | Papel vindo da conta (dono = mestre, convite = jogador) e permissões por comando | `realtime/command-rules.ts` | §3.3 |
 

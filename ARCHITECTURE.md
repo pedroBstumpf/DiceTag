@@ -433,18 +433,27 @@ Também têm specs:
 
 ## 11. Servidor (`server/`)
 
-Pacote Node separado (Fastify + `ws` + `node:sqlite` + zod), com guia em [`server/README.md`](server/README.md).
+Pacote Node separado (Fastify + `ws` + `node:sqlite` + zod), com guia em [`server/README.md`](server/README.md),
+regras de segurança em [`BACKEND_SECURITY.md`](BACKEND_SECURITY.md) e operação em [`server/OPERATIONS.md`](server/OPERATIONS.md).
 
 - **Camadas:** `http/routes` e `realtime/` → `services/` → `repositories/` (único lugar com SQL) → SQLite.
   `context.ts` monta as dependências (injeção manual); `app.ts` monta HTTP + WebSocket sem escutar (os
-  testes usam o mesmo app com banco em memória).
+  testes usam o mesmo app com banco em memória). Toda rota exige sessão, menos as marcadas como públicas
+  (`PUBLIC`), e os repositórios conferem dono e participação dentro das consultas.
 - **Regras compartilhadas:** `server/src/domain/index.ts` importa direto de `src/app` os comandos
   (`applyCommand`), as permissões, a rolagem e as paredes. Esses arquivos precisam continuar **sem Angular**:
   o servidor os executa. Novo comando no front exige esquema em `realtime/command-schemas.ts` e regra em
-  `realtime/command-rules.ts` (o tipo obriga; sem isso o servidor não compila).
+  `realtime/command-rules.ts` (o tipo obriga; sem isso o servidor não compila). O mesmo vale para um campo
+  novo na ficha (`SHEET_SCHEMA_IS_COMPLETE`); as regras da ficha para jogadores ficam em
+  `realtime/sheet-rules.ts` (raça aplicada pelo servidor, máximo das barras, itens revelados).
 - **Sala da mesa:** `Room` guarda o estado oficial e a versão. Cada comando passa por formato →
   autorização → `applyCommand` → gravação agrupada (500 ms). Quem enviou recebe `ack`, o mestre recebe o
-  comando e os jogadores recebem o estado **projetado** (`realtime/projection.ts`).
+  comando e os jogadores recebem o estado **projetado** (`realtime/projection.ts`), só quando ele muda.
+- **Visão no servidor:** `realtime/vision.ts` calcula a névoa da cena aberta com as funções de
+  `state/player-view.ts` (`visionSourcesOf`, `visionPolygonsOf`), uma vez por versão para todos os
+  jogadores. Com névoa, o jogador recebe os polígonos (`vision`) e só o que está à vista, sem as paredes.
+- **Mundo da mesa na sala:** `realtime/world.ts` (`WorldView`) lê do banco, com cache, o token padrão
+  dos NPCs do bestiário e as Raças/itens usados pelas regras; as rotas do Worldbuild avisam o hub.
 - **Papel vem da conta:** dono da mesa = mestre; quem entra por convite = jogador (`table_members`).
 - **Ligação com o front (pendente):** em desenvolvimento, `proxy.conf.json` repassa `/api` e `/ws` do
   `ng serve` para `localhost:3000`, então o front usa URLs relativas e o cookie de sessão na mesma origem.

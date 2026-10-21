@@ -36,7 +36,7 @@ organizar toda a atmosfera de uma campanha.
 | **Automações** (dono personagem/NPC/geral, ícone, rolagem 2d12/3d6 + modificador, efeito especial) | Pronto |
 | **Rolagem de dados** (2d12: falha crítica…sucesso crítico; 3d6: azar/neutro/sorte) + **chat** da mesa | Pronto |
 | **Efeitos especiais** no mapa (20 efeitos em 4 grupos; 13 cores por elemento) | Pronto |
-| **Servidor** (`server/`: API HTTP + sala da mesa por WebSocket, SQLite, contas/convites reais) | Pronto, testado |
+| **Servidor** (`server/`: API HTTP + sala da mesa por WebSocket, SQLite, contas/convites reais, visão no servidor, LGPD, backup) | Pronto, testado, auditado contra o `BACKEND_SECURITY.md` |
 | Front-end usando o servidor (repositórios HTTP/WebSocket, multiplayer de fato) | Não iniciado |
 
 As telas ainda guardam tudo **no navegador (IndexedDB)**. O servidor existe, mas nenhuma tela o chama ainda.
@@ -76,7 +76,8 @@ npx ng test --watch=false    # testes Vitest (*.spec.ts), uma execução (usa ba
 npm install && npm run setup # dependências + .env com segredos aleatórios (nunca versionar o .env)
 npm run seed                 # contas de exemplo (senha = SEED_PASSWORD do .env) e uma mesa
 npm run dev                  # http://localhost:3000 (o ng serve repassa /api e /ws: proxy.conf.json)
-npm test                     # 81 testes, um arquivo por vez; npm run smoke = ponta a ponta com o servidor aberto
+npm test                     # 127 testes, um arquivo por vez; npm run smoke = ponta a ponta com o servidor aberto
+npm run backup               # cópia do banco e dos arquivos + conferência (operação: server/OPERATIONS.md)
 ```
 
 **Antes de iniciar servidores ou testes, pergunte ao dono do projeto** (a máquina tem pouca memória livre).
@@ -200,10 +201,10 @@ src/
 
 Servidor (`server/`, pacote Node separado; detalhes em `ARCHITECTURE.md` §11 e `server/README.md`):
 ```
-server/src/  main.ts · app.ts · context.ts · config/env.ts · db/ (SQLite + migrações)
-             domain/index.ts   # importa de src/app as regras puras (comandos, permissões, dados, paredes)
-             repositories/ services/ security/ lib/ http/ (plugins + rotas) realtime/ (sala da mesa)
-server/scripts/ (setup, seed, smoke) · server/dev/ (página /dev/) · server/test/
+server/src/  main.ts · app.ts · context.ts · config/env.ts · db/ (SQLite + migrações + backup antes de migrar)
+             domain/index.ts   # importa de src/app as regras puras (comandos, permissões, visão, dados, paredes, raça)
+             repositories/ services/ security/ lib/ http/ (plugins + rotas) realtime/ (sala da mesa) ops/ (backup)
+server/scripts/ (setup, seed, smoke, backup) · server/dev/ (página /dev/) · server/test/ · server/OPERATIONS.md
 ```
 `proxy.conf.json` (raiz) liga o `ng serve` ao servidor em desenvolvimento.
 
@@ -244,8 +245,13 @@ Rotas (`app.routes.ts`, todas lazy):
   `Viewer`), nunca só no template: o servidor vai reaplicá-las.
 - **Front ↔ servidor:** arquivos de `state/`, `utils/` e `core/models/` usados por `server/src/domain` não podem
   importar Angular. Novo comando em `TABLE_COMMANDS` exige esquema em `server/src/realtime/command-schemas.ts` e
-  regra em `command-rules.ts` (o servidor não compila sem eles); nova regra de visibilidade vai também para
-  `server/src/realtime/projection.ts`.
+  regra em `command-rules.ts` (o servidor não compila sem eles); campo novo em `CharacterSheet` também exige
+  esquema (`SHEET_SCHEMA_IS_COMPLETE`) e, se for regra do mestre, a conferência em `realtime/sheet-rules.ts`;
+  nova regra de visibilidade vai também para `server/src/realtime/projection.ts`. A visão (origens e polígonos)
+  é calculada por `visionSourcesOf`/`visionPolygonsOf` em `state/player-view.ts`, usadas pelos dois lados.
+- **Código em `server/`** segue o [`BACKEND_SECURITY.md`](BACKEND_SECURITY.md): rota nova nasce protegida (só
+  `config: PUBLIC` a abre), consultas com o dono/participação no SQL, todo payload com `strictObject` e limites,
+  eventos de segurança por `audit()`.
 - **Commits:** um por feature/fase, em branch separada da `main`, no formato Conventional Commits em PT-BR
   (`feat(mesa): …`, `fix(mesas): …`), com corpo explicando o que mudou.
 
