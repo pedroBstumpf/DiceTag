@@ -56,17 +56,6 @@ export class UsersRepository {
   rename(id: string, name: string): void {
     this.db.prepare('UPDATE users SET name = ? WHERE id = ?').run(name, id);
   }
-
-  /** Nomes das contas (para listar membros de uma mesa). */
-  namesOf(ids: readonly string[]): Map<string, string> {
-    const names = new Map<string, string>();
-    const stmt = this.db.prepare('SELECT name FROM users WHERE id = ?');
-    for (const id of ids) {
-      const row = stmt.get(id) as { name: string } | undefined;
-      if (row) names.set(id, row.name);
-    }
-    return names;
-  }
 }
 
 function toPublic(row: UserRow): PublicUser {

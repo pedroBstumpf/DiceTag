@@ -33,7 +33,7 @@ export async function fileRoutes(app: FastifyInstance, ctx: AppContext): Promise
     const scope = parse(uploadQuery, req.query);
     if (!!scope.tableId === !!scope.worldId) throw badRequest('Informe tableId ou worldId.');
     if (scope.tableId && !ctx.tables.roleOf(scope.tableId, user.id)) throw notFound('Mesa não encontrada.');
-    if (scope.worldId && ctx.worlds.find(scope.worldId)?.ownerId !== user.id) throw notFound('Mundo não encontrado.');
+    if (scope.worldId && !ctx.worlds.findOwned(scope.worldId, user.id)) throw notFound('Mundo não encontrado.');
 
     const part = await req.file({ limits: { fileSize: maxBytes, files: 1, fields: 0, parts: 1 } });
     if (!part) throw badRequest('Nenhum arquivo enviado.');
@@ -64,14 +64,9 @@ export async function fileRoutes(app: FastifyInstance, ctx: AppContext): Promise
   app.get('/files/:id', async (req, reply) => {
     const { user } = requireAuth(req);
     const { id } = parse(fileParams, req.params);
-    const file = ctx.files.find(id);
-    const allowed =
-      !!file &&
-      (file.ownerId === user.id ||
-        (!!file.tableId && !!ctx.tables.roleOf(file.tableId, user.id)) ||
-        (!!file.worldId && ctx.tables.isMemberOfWorldTable(file.worldId, user.id)));
     // Sem permissão = 404 (não revela que o arquivo existe)
-    if (!file || !allowed) throw notFound('Arquivo não encontrado.');
+    const file = ctx.files.findAccessible(id, user.id);
+    if (!file) throw notFound('Arquivo não encontrado.');
     return reply
       .header('Content-Type', file.mime)
       .header('Content-Length', file.size)
@@ -87,15 +82,10 @@ export async function fileRoutes(app: FastifyInstance, ctx: AppContext): Promise
   app.delete('/files/:id', async (req, reply) => {
     const { user } = requireAuth(req);
     const { id } = parse(fileParams, req.params);
-    const file = ctx.files.find(id);
-    if (!file) throw notFound('Arquivo não encontrado.');
-    const isGm = !!file.tableId && ctx.tables.roleOf(file.tableId, user.id) === 'gm';
-    if (file.ownerId !== user.id && !isGm) {
+    if (!(await ctx.files.deleteIfAllowed(id, user.id))) {
       // Membro que pode ver mas não excluir recebe 403; os demais, 404
-      const canSee = (!!file.tableId && !!ctx.tables.roleOf(file.tableId, user.id)) || (!!file.worldId && ctx.tables.isMemberOfWorldTable(file.worldId, user.id));
-      throw canSee ? forbidden() : notFound('Arquivo não encontrado.');
+      throw ctx.files.findAccessible(id, user.id) ? forbidden() : notFound('Arquivo não encontrado.');
     }
-    await ctx.files.delete([file.id]);
     return reply.code(204).send();
   });
 }

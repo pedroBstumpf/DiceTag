@@ -1,4 +1,4 @@
-import type { Db } from '../db/database';
+import { transaction, type Db } from '../db/database';
 
 export interface SessionRecord {
   userId: string;
@@ -17,18 +17,20 @@ export const MAX_SESSIONS_PER_USER = 10;
 export class SessionsRepository {
   constructor(private readonly db: Db) {}
 
+  /** Abre a sessão e, na mesma transação, apaga as mais antigas além do máximo da conta. */
   create(tokenHash: string, userId: string, now: number, expiresAt: number): void {
-    this.db
-      .prepare('INSERT INTO sessions (token_hash, user_id, created_at, last_seen_at, expires_at) VALUES (?, ?, ?, ?, ?)')
-      .run(tokenHash, userId, now, now, expiresAt);
-    // Limita sessões por conta: apaga as mais antigas além do máximo
-    this.db
-      .prepare(
-        `DELETE FROM sessions WHERE user_id = ? AND token_hash NOT IN (
-           SELECT token_hash FROM sessions WHERE user_id = ? ORDER BY created_at DESC LIMIT ?
-         )`,
-      )
-      .run(userId, userId, MAX_SESSIONS_PER_USER);
+    transaction(this.db, () => {
+      this.db
+        .prepare('INSERT INTO sessions (token_hash, user_id, created_at, last_seen_at, expires_at) VALUES (?, ?, ?, ?, ?)')
+        .run(tokenHash, userId, now, now, expiresAt);
+      this.db
+        .prepare(
+          `DELETE FROM sessions WHERE user_id = ? AND token_hash NOT IN (
+             SELECT token_hash FROM sessions WHERE user_id = ? ORDER BY created_at DESC LIMIT ?
+           )`,
+        )
+        .run(userId, userId, MAX_SESSIONS_PER_USER);
+    });
   }
 
   find(tokenHash: string): SessionRecord | null {

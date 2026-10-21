@@ -78,10 +78,10 @@ export class RealtimeHub {
 
     const session = this.ctx.auth.resolve(readCookie(req.headers.cookie, sessionCookieName(this.ctx.config)));
     if (!session) return reject(401, 'Unauthorized');
-    const role = this.ctx.tables.roleOf(tableId, session.user.id);
-    const table = role && this.ctx.tables.find(tableId);
+    const table = this.ctx.tables.findForMember(tableId, session.user.id);
     // Mesa de outra pessoa ou inexistente: mesma resposta (não revela que a mesa existe)
-    if (!role || !table) return reject(404, 'Not Found');
+    if (!table) return reject(404, 'Not Found');
+    const { role } = table;
     if ((this.socketsByUser.get(session.user.id) ?? 0) >= MAX_SOCKETS_PER_USER) return reject(429, 'Too Many Requests');
     if ((this.rooms.get(tableId)?.clients.size ?? 0) >= MAX_SOCKETS_PER_ROOM) return reject(503, 'Service Unavailable');
 

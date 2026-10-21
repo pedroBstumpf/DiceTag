@@ -47,15 +47,27 @@ function migrate(db: Db): void {
   });
 }
 
-/** Executa `fn` numa transação: tudo ou nada. */
+/** Transações abertas por banco: dentro de outra, uma transação vira SAVEPOINT. */
+const depth = new WeakMap<Db, number>();
+
+/**
+ * Executa `fn` numa transação: tudo ou nada. Pode ser aninhada (um repositório que grava em
+ * várias tabelas dentro de um serviço que já abriu a sua): a interna vira SAVEPOINT.
+ */
 export function transaction<T>(db: Db, fn: () => T): T {
-  db.exec('BEGIN IMMEDIATE');
+  const level = depth.get(db) ?? 0;
+  // Nome gerado aqui (contador interno), nunca entrada externa
+  const savepoint = `sp${level}`;
+  db.exec(level === 0 ? 'BEGIN IMMEDIATE' : `SAVEPOINT ${savepoint}`);
+  depth.set(db, level + 1);
   try {
     const result = fn();
-    db.exec('COMMIT');
+    db.exec(level === 0 ? 'COMMIT' : `RELEASE ${savepoint}`);
     return result;
   } catch (err) {
-    db.exec('ROLLBACK');
+    db.exec(level === 0 ? 'ROLLBACK' : `ROLLBACK TO ${savepoint}; RELEASE ${savepoint}`);
     throw err;
+  } finally {
+    depth.set(db, level);
   }
 }

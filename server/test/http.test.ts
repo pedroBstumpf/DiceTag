@@ -218,6 +218,30 @@ describe('mesas, membros e convites', () => {
     expect((await call(server, p1.cookie, 'POST', '/api/invites/accept', { code })).statusCode).toBe(404);
   });
 
+  it('repositórios conferem dono e participação na própria consulta (não só nas rotas)', async () => {
+    const a = await register(server, 'a@exemplo.com');
+    const b = await register(server, 'b@exemplo.com');
+    const { worlds, tables } = server.ctx;
+    const world = worlds.listByOwner(a.id)[0];
+    expect(worlds.findOwned(world.id, b.id)).toBeNull();
+    expect(worlds.rename(world.id, b.id, 'Roubado')).toBe(false);
+    expect(worlds.upsertItem(world.id, b.id, 'doc', '{}', 0)).toBe(false);
+    expect(worlds.deleteItems(world.id, b.id, ['doc'])).toBe(0);
+    expect(worlds.delete(world.id, b.id)).toBe(false);
+    expect(worlds.listItems(world.id, b.id)).toEqual([]);
+
+    const { table } = (await newTable(a.cookie)).json();
+    expect(tables.findForMember(table.id, b.id)).toBeNull();
+    expect(tables.update(table.id, b.id, { name: 'Roubada' })).toBe(false);
+    expect(tables.createInvite('hash', table.id, b.id, 0, 1, 1)).toBe(false);
+    expect(tables.members(table.id, b.id)).toEqual([]);
+    expect(tables.delete(table.id, b.id)).toBe(false);
+    expect(worlds.listItemsForMember(table.id, b.id)).toEqual([]);
+    // O mestre nunca sai da mesa pela remoção de jogadores
+    expect(tables.removePlayer(table.id, a.id)).toBe(false);
+    expect(tables.findForMember(table.id, a.id)?.name).toBe('Mesa');
+  });
+
   it('jogador sai; mestre remove; dono não sai', async () => {
     const gm = await register(server, 'gm@exemplo.com');
     const p1 = await register(server, 'p1@exemplo.com');
@@ -283,6 +307,26 @@ describe('arquivos', () => {
 
     expect((await call(server, stranger.cookie, 'GET', `/api/files/${file.id}`)).statusCode).toBe(404);
     expect((await call(server, stranger.cookie, 'DELETE', `/api/files/${file.id}`)).statusCode).toBe(404);
+  });
+
+  it('excluir arquivo: quem enviou ou o mestre da mesa; outro membro 403; quem não participa 404', async () => {
+    const gm = await register(server, 'gm@exemplo.com');
+    const p1 = await register(server, 'p1@exemplo.com');
+    const p2 = await register(server, 'p2@exemplo.com');
+    const stranger = await register(server, 'x@exemplo.com');
+    const { table } = (await newTable(gm.cookie, { maxPlayers: 3 })).json();
+    const { code } = (await call(server, gm.cookie, 'POST', `/api/tables/${table.id}/invites`)).json();
+    await call(server, p1.cookie, 'POST', '/api/invites/accept', { code });
+    await call(server, p2.cookie, 'POST', '/api/invites/accept', { code });
+    const mine = (await upload(p1.cookie, `tableId=${table.id}`, PNG_1X1)).json().file;
+    const other = (await upload(p1.cookie, `tableId=${table.id}`, PNG_1X1)).json().file;
+
+    expect((await call(server, p2.cookie, 'GET', `/api/files/${mine.id}`)).statusCode).toBe(200);
+    expect((await call(server, p2.cookie, 'DELETE', `/api/files/${mine.id}`)).statusCode).toBe(403);
+    expect((await call(server, stranger.cookie, 'DELETE', `/api/files/${mine.id}`)).statusCode).toBe(404);
+    expect((await call(server, p1.cookie, 'DELETE', `/api/files/${mine.id}`)).statusCode).toBe(204);
+    expect((await call(server, gm.cookie, 'DELETE', `/api/files/${other.id}`)).statusCode).toBe(204);
+    expect((await call(server, gm.cookie, 'GET', `/api/files/${other.id}`)).statusCode).toBe(404);
   });
 
   it('recusa SVG com script mesmo com nome .png e Content-Type de imagem', async () => {

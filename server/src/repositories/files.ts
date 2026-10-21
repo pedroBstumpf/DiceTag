@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { rm, writeFile } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
-import type { Db } from '../db/database';
+import { transaction, type Db } from '../db/database';
 import { isSafeId } from '../lib/ids';
 
 export interface FileRecord {
@@ -16,11 +16,23 @@ export interface FileRecord {
 }
 
 /**
+ * Quem pode baixar o arquivo `f`: quem enviou, membro da mesa dele ou de uma mesa que se passa
+ * no mundo dele. Parâmetros: a conta, três vezes.
+ */
+const CAN_SEE = `(
+  f.owner_id = ?
+  OR EXISTS (SELECT 1 FROM table_members m WHERE m.table_id = f.table_id AND m.user_id = ?)
+  OR EXISTS (SELECT 1 FROM game_tables t JOIN table_members m ON m.table_id = t.id WHERE t.world_id = f.world_id AND m.user_id = ?)
+)`;
+
+/**
  * Arquivos enviados (mapas, imagens, áudios): metadados no banco, conteúdo em disco.
  *
  * O nome em disco é o id gerado pelo servidor (UUID), sem extensão e sem nada escolhido por
  * quem enviou: não há como montar um caminho para fora da pasta (path traversal) nem
  * sobrescrever outro arquivo. `pathOf` confere isso de novo antes de qualquer acesso.
+ *
+ * Quem pode ver ou apagar é conferido **na própria consulta** (BACKEND_SECURITY.md §3 e §8).
  */
 export class FilesRepository {
   private readonly dir: string;
@@ -55,9 +67,27 @@ export class FilesRepository {
     }
   }
 
-  find(id: string): FileRecord | null {
-    const row = this.db.prepare('SELECT * FROM files WHERE id = ?').get(id) as FileRow | undefined;
+  /** Arquivo que a conta pode baixar (null se não existe ou não pode: a rota responde 404 nos dois casos). */
+  findAccessible(id: string, userId: string): FileRecord | null {
+    const row = this.db.prepare(`SELECT f.* FROM files f WHERE f.id = ? AND ${CAN_SEE}`).get(id, userId, userId, userId) as FileRow | undefined;
     return row ? toFile(row) : null;
+  }
+
+  /**
+   * Apaga o arquivo se a conta pode: quem enviou ou o mestre da mesa do arquivo.
+   * Devolve false sem apagar nada caso contrário.
+   */
+  async deleteIfAllowed(id: string, userId: string): Promise<boolean> {
+    const removed = this.db
+      .prepare(
+        `DELETE FROM files WHERE id = ? AND (
+           owner_id = ? OR table_id IN (SELECT table_id FROM table_members WHERE user_id = ? AND role = 'gm')
+         )`,
+      )
+      .run(id, userId, userId);
+    if (!Number(removed.changes)) return false;
+    await rm(this.pathOf(id), { force: true });
+    return true;
   }
 
   /** Espaço usado pela conta, em bytes (para a cota). */
@@ -73,13 +103,14 @@ export class FilesRepository {
     return (this.db.prepare('SELECT id FROM files WHERE world_id = ?').all(worldId) as { id: string }[]).map((r) => r.id);
   }
 
-  /** Apaga registros e conteúdo. Arquivo já ausente em disco não é erro. */
+  /**
+   * Uso interno (mesa ou mundo excluídos pelo dono): apaga os registros numa transação e depois
+   * o conteúdo em disco. Arquivo já ausente em disco não é erro.
+   */
   async delete(ids: readonly string[]): Promise<void> {
     const stmt = this.db.prepare('DELETE FROM files WHERE id = ?');
-    for (const id of ids) {
-      stmt.run(id);
-      await rm(this.pathOf(id), { force: true });
-    }
+    transaction(this.db, () => ids.forEach((id) => stmt.run(id)));
+    for (const id of ids) await rm(this.pathOf(id), { force: true });
   }
 }
 

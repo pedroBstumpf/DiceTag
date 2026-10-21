@@ -39,11 +39,12 @@ const itemBody = z.looseObject({
  * Só o dono acessa; mundo de outra conta = 404.
  */
 export async function worldRoutes(app: FastifyInstance, ctx: AppContext, hub: RealtimeHub): Promise<void> {
+  /** Mundo da conta, numa consulta com o dono (404 se não existe ou é de outra pessoa). */
   const ownWorld = (req: FastifyRequest): WorldRecord => {
     const { user } = requireAuth(req);
     const { id } = parse(worldParams, req.params);
-    const world = ctx.worlds.find(id);
-    if (!world || world.ownerId !== user.id) throw notFound('Mundo não encontrado.');
+    const world = ctx.worlds.findOwned(id, user.id);
+    if (!world) throw notFound('Mundo não encontrado.');
     return world;
   };
 
@@ -63,7 +64,7 @@ export async function worldRoutes(app: FastifyInstance, ctx: AppContext, hub: Re
   app.patch('/worlds/:id', async (req) => {
     const world = ownWorld(req);
     const { name } = parse(nameBody, req.body);
-    ctx.worlds.rename(world.id, name);
+    ctx.worlds.rename(world.id, world.ownerId, name);
     return { world: { ...world, name } };
   });
 
@@ -73,14 +74,17 @@ export async function worldRoutes(app: FastifyInstance, ctx: AppContext, hub: Re
     if (ctx.tables.countByWorld(world.id) > 0) throw conflict('Há mesas que se passam neste mundo.');
     if (ctx.worlds.countByOwner(world.ownerId) <= 1) throw conflict('Não é possível excluir o único mundo.');
     const fileIds = ctx.files.idsByWorld(world.id);
-    ctx.worlds.delete(world.id);
+    ctx.worlds.delete(world.id, world.ownerId);
     await ctx.files.delete(fileIds);
     return reply.code(204).send();
   });
 
   // --- Itens do Worldbuild ------------------------------------------------------
 
-  app.get('/worlds/:id/items', async (req) => ({ items: ctx.worlds.listItems(ownWorld(req).id) }));
+  app.get('/worlds/:id/items', async (req) => {
+    const world = ownWorld(req);
+    return { items: ctx.worlds.listItems(world.id, world.ownerId) };
+  });
 
   /** Cria ou substitui um item (o id da URL precisa ser o do corpo). */
   app.put('/worlds/:id/items/:itemId', { bodyLimit: MAX_ITEM_BYTES + 1024 }, async (req) => {
@@ -95,7 +99,7 @@ export async function worldRoutes(app: FastifyInstance, ctx: AppContext, hub: Re
     if (!ctx.worlds.hasItem(world.id, itemId) && ctx.worlds.countItems(world.id) >= MAX_WORLD_ITEMS) {
       throw conflict(`Limite de ${MAX_WORLD_ITEMS} itens por mundo atingido.`);
     }
-    ctx.worlds.upsertItem(world.id, itemId, json, Date.now());
+    ctx.worlds.upsertItem(world.id, world.ownerId, itemId, json, Date.now());
     hub.worldChanged(world.id);
     return { item };
   });
@@ -103,7 +107,7 @@ export async function worldRoutes(app: FastifyInstance, ctx: AppContext, hub: Re
   app.delete('/worlds/:id/items/:itemId', async (req, reply) => {
     const world = ownWorld(req);
     const { itemId } = parse(itemParams, req.params);
-    ctx.worlds.deleteItems(world.id, [itemId]);
+    ctx.worlds.deleteItems(world.id, world.ownerId, [itemId]);
     hub.worldChanged(world.id);
     return reply.code(204).send();
   });
@@ -112,7 +116,7 @@ export async function worldRoutes(app: FastifyInstance, ctx: AppContext, hub: Re
   app.post('/worlds/:id/items/delete', async (req) => {
     const world = ownWorld(req);
     const { ids } = parse(deleteBody, req.body);
-    const deleted = ctx.worlds.deleteItems(world.id, ids);
+    const deleted = ctx.worlds.deleteItems(world.id, world.ownerId, ids);
     hub.worldChanged(world.id);
     return { deleted };
   });
