@@ -16,8 +16,13 @@ export class TokenService {
     return randomBytes(bytes).toString('base64url');
   }
 
-  /** HMAC do token para guardar/buscar no banco. `purpose` separa sessões de convites. */
-  hash(token: string, purpose: 'session' | 'invite'): string {
+  /** HMAC do token para guardar/buscar no banco. `purpose` separa sessões, convites e o log. */
+  hash(token: string, purpose: 'session' | 'invite' | 'audit'): string {
     return createHmac('sha256', this.secret).update(`${purpose}:${token}`).digest('hex');
+  }
+
+  /** Referência curta e não reversível de um dado pessoal (ex.: e-mail tentado no login) para o log. */
+  ref(value: string): string {
+    return this.hash(value, 'audit').slice(0, 16);
   }
 }

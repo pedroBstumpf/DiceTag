@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import type { LightMyRequestResponse } from 'fastify';
 import WebSocket from 'ws';
-import { buildApp, type App } from '../src/app';
+import { buildApp, type App, type BuildOptions } from '../src/app';
 import { loadConfig, type Config } from '../src/config/env';
 import { createContext, type AppContext } from '../src/context';
 import { openDatabase } from '../src/db/database';
@@ -24,7 +24,7 @@ export interface TestServer {
   close: () => Promise<void>;
 }
 
-export async function createTestServer(overrides: Record<string, string> = {}): Promise<TestServer> {
+export async function createTestServer(overrides: Record<string, string> = {}, options: BuildOptions = {}): Promise<TestServer> {
   const filesDir = mkdtempSync(join(tmpdir(), 'zehenia-test-'));
   const config = loadConfig({
     NODE_ENV: 'test',
@@ -40,7 +40,7 @@ export async function createTestServer(overrides: Record<string, string> = {}): 
   });
   const db = openDatabase(config.DATABASE_PATH);
   const ctx = createContext(config, db);
-  const app = await buildApp(ctx);
+  const app = await buildApp(ctx, options);
   return {
     app,
     ctx,

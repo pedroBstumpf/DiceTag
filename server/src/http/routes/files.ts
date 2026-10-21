@@ -3,6 +3,7 @@ import { rm } from 'node:fs/promises';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { AppContext } from '../../context';
+import { audit } from '../../lib/audit';
 import { HttpError, badRequest, forbidden, notFound, parse } from '../../lib/errors';
 import { idSchema, newId } from '../../lib/ids';
 import { receiveUpload } from '../../lib/upload';
@@ -59,6 +60,9 @@ export async function fileRoutes(app: FastifyInstance, ctx: AppContext): Promise
       const record = { id, ownerId: user.id, tableId: scope.tableId ?? null, worldId: scope.worldId ?? null, ...received, createdAt: Date.now() };
       if (!(await ctx.files.commit(record, temp, quota))) throw new HttpError(413, QUOTA_FULL);
       return reply.code(201).send({ file: { id, mime: received.mime, size: received.size } });
+    } catch (err) {
+      if (err instanceof HttpError) audit(req.log, 'upload.recusado', { userId: user.id, status: err.statusCode, motivo: err.message });
+      throw err;
     } finally {
       // Recusado no meio do caminho: o temporário some (depois do registro, ele já foi movido)
       await rm(temp, { force: true });

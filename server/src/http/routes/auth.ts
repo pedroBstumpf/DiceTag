@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { AppContext } from '../../context';
-import { parse } from '../../lib/errors';
+import { audit } from '../../lib/audit';
+import { HttpError, parse } from '../../lib/errors';
 import { email, passwordInput, text } from '../../lib/schemas';
 import { PUBLIC, clearSessionCookie, requireAuth, sessionCookieName, setSessionCookie } from '../plugins/auth';
 import { AUTH_RATE_LIMIT } from '../plugins/security';
@@ -20,20 +21,29 @@ export async function authRoutes(app: FastifyInstance, ctx: AppContext): Promise
   app.post('/register', { config: { ...AUTH_RATE_LIMIT, ...PUBLIC } }, async (req, reply) => {
     const body = parse(registerBody, req.body);
     const { user, token } = await ctx.auth.register(body);
+    audit(req.log, 'conta.criada', { userId: user.id, ip: req.ip });
     setSessionCookie(reply, ctx, token);
     return reply.code(201).send({ user });
   });
 
   app.post('/login', { config: { ...AUTH_RATE_LIMIT, ...PUBLIC } }, async (req, reply) => {
     const body = parse(loginBody, req.body);
-    const { user, token } = await ctx.auth.login(body.email, body.password);
-    setSessionCookie(reply, ctx, token);
-    return { user };
+    const attempt = { emailRef: ctx.tokens.ref(body.email), ip: req.ip };
+    const result = await ctx.auth.login(body.email, body.password).catch((err: unknown) => {
+      if (err instanceof HttpError && (err.statusCode === 401 || err.statusCode === 429)) {
+        audit(req.log, err.statusCode === 429 ? 'login.bloqueado' : 'login.falha', attempt);
+      }
+      throw err;
+    });
+    audit(req.log, 'login.ok', { userId: result.user.id, ip: req.ip });
+    setSessionCookie(reply, ctx, result.token);
+    return { user: result.user };
   });
 
   app.post('/logout', { config: PUBLIC }, async (req, reply) => {
     const token = req.cookies[sessionCookieName(ctx.config)];
     if (token) ctx.auth.logout(token);
+    if (req.auth) audit(req.log, 'sessao.encerrada', { userId: req.auth.user.id });
     clearSessionCookie(reply, ctx);
     return reply.code(204).send();
   });
@@ -51,6 +61,7 @@ export async function authRoutes(app: FastifyInstance, ctx: AppContext): Promise
     const session = requireAuth(req);
     const body = parse(passwordBody, req.body);
     await ctx.auth.changePassword(session, body.current, body.next);
+    audit(req.log, 'senha.trocada', { userId: session.user.id, ip: req.ip });
     return reply.code(204).send();
   });
 }

@@ -1,4 +1,5 @@
 import { readdirSync } from 'node:fs';
+import { Writable } from 'node:stream';
 import type { InjectOptions } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ORIGIN, PASSWORD, PNG_1X1, call, createTestServer, multipart, register, sessionCookie, type TestServer } from './helpers';
@@ -167,6 +168,42 @@ describe('limite de requisições', () => {
       expect(codes.slice(10)).toEqual([429, 429]);
     } finally {
       await limited.close();
+    }
+  });
+});
+
+describe('registro de eventos de segurança', () => {
+  it('cadastro, login com falha, permissão negada e erro interno vão para o log, sem segredos', async () => {
+    const lines: string[] = [];
+    const logStream = new Writable({
+      write(chunk, _encoding, done) {
+        lines.push(chunk.toString());
+        done();
+      },
+    });
+    const logged = await createTestServer({ LOG_LEVEL: 'info' }, { logStream });
+    logged.app.http.get('/api/quebra', async () => {
+      throw new Error('detalhe interno do servidor');
+    });
+    try {
+      const user = await register(logged, 'pessoa@exemplo.com');
+      const wrong = 'senha-errada-' + PASSWORD;
+      await logged.app.http.inject({ method: 'POST', url: '/api/auth/login', headers: { origin: ORIGIN }, payload: { email: 'pessoa@exemplo.com', password: wrong } });
+      await logged.app.http.inject({ method: 'POST', url: '/api/tables', headers: { cookie: user.cookie }, payload: {} });
+      const crash = await call(logged, user.cookie, 'GET', '/api/quebra');
+
+      expect(crash.statusCode).toBe(500);
+      expect(crash.json().requestId).toMatch(/^[0-9a-f-]{36}$/);
+      expect(crash.body).not.toContain('detalhe interno');
+      expect(lines.some((l) => l.includes(crash.json().requestId) && l.includes('detalhe interno'))).toBe(true);
+
+      const events = lines.map((l) => JSON.parse(l) as { security?: string; emailRef?: string }).filter((e) => e.security);
+      expect(events.map((e) => e.security)).toEqual(expect.arrayContaining(['conta.criada', 'login.falha', 'permissao.negada']));
+      expect(events.find((e) => e.security === 'login.falha')?.emailRef).toMatch(/^[0-9a-f]{16}$/);
+      const all = lines.join('\n');
+      for (const secret of [PASSWORD, wrong, 'pessoa@exemplo.com', user.cookie.split('=')[1]]) expect(all).not.toContain(secret);
+    } finally {
+      await logged.close();
     }
   });
 });

@@ -50,6 +50,8 @@ export interface RoomDeps {
   /** Mundo da mesa (bestiário, Raças): leitura síncrona com cache. */
   world: WorldView;
   onError: (err: unknown) => void;
+  /** Comando recusado (formato ou permissão): vai para o log de segurança. */
+  onDenied?: (client: Client, type: string, reason: string) => void;
   now?: () => number;
 }
 
@@ -77,6 +79,7 @@ export class Room {
   private view: { version: number; scene: PlayerScene | null } | null = null;
   private readonly store: RoomStore;
   private readonly onError: (err: unknown) => void;
+  private readonly onDenied: NonNullable<RoomDeps['onDenied']>;
   private readonly now: () => number;
 
   constructor(
@@ -87,6 +90,7 @@ export class Room {
     this.store = deps.store;
     this.world = deps.world;
     this.onError = deps.onError;
+    this.onDenied = deps.onDenied ?? (() => undefined);
     this.now = deps.now ?? Date.now;
     this.vision = new VisionCache((entry) => this.world.tokenOf(entry));
     const saved = this.store.load(tableId);
@@ -104,7 +108,7 @@ export class Room {
   /** Comando vindo de um cliente: valida, autoriza, aplica e avisa a sala. */
   handleCommand(client: Client, seq: number, type: TableCommand['type'], rawPayload: unknown): void {
     const parsed = COMMAND_SCHEMAS[type].safeParse(rawPayload);
-    if (!parsed.success) return this.send(client, { t: 'nack', seq, reason: 'Dados do comando inválidos.' });
+    if (!parsed.success) return this.deny(client, seq, type, 'Dados do comando inválidos.');
     const rule = COMMAND_RULES[type] as (p: unknown, ctx: Parameters<(typeof COMMAND_RULES)[typeof type]>[1]) => RuleResult<unknown>;
     const verdict = rule(parsed.data, {
       state: this.state,
@@ -114,10 +118,16 @@ export class Room {
       full: this.full,
       world: this.world,
     });
-    if (!verdict.ok) return this.send(client, { t: 'nack', seq, reason: verdict.reason });
+    if (!verdict.ok) return this.deny(client, seq, type, verdict.reason);
     const command = { type, payload: verdict.payload } as TableCommand;
     this.apply(command, client.userId, client);
     this.send(client, { t: 'ack', seq, version: this.version, type, payload: command.payload });
+  }
+
+  /** Recusa o comando: `nack` para quem enviou e registro no log de segurança. */
+  private deny(client: Client, seq: number, type: string, reason: string): void {
+    this.onDenied(client, type, reason);
+    this.send(client, { t: 'nack', seq, reason });
   }
 
   /**

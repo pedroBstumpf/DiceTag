@@ -3,6 +3,7 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import type { FastifyInstance } from 'fastify';
 import type { Config } from '../../config/env';
+import { audit } from '../../lib/audit';
 import { forbidden, HttpError } from '../../lib/errors';
 import { SAFE_METHODS, isAllowedOrigin } from '../../security/origin';
 
@@ -50,6 +51,7 @@ export async function registerSecurity(app: FastifyInstance, config: Config): Pr
       max: 300,
       timeWindow: '1 minute',
       errorResponseBuilder: (_req, ctx) => new HttpError(429, `Muitas requisições. Tente de novo em ${Math.ceil(ctx.ttl / 1000)}s.`),
+      onExceeded: (req) => audit(req.log, 'limite.atingido', { ip: req.ip, method: req.method, url: req.routeOptions.url }),
     });
   }
 

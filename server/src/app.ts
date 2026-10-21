@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import multipart from '@fastify/multipart';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import type { AppContext } from './context';
@@ -8,6 +9,7 @@ import { devRoutes } from './http/routes/dev';
 import { fileRoutes } from './http/routes/files';
 import { tableRoutes } from './http/routes/tables';
 import { worldRoutes } from './http/routes/worlds';
+import { audit } from './lib/audit';
 import { HttpError } from './lib/errors';
 import { RealtimeHub } from './realtime/hub';
 
@@ -16,21 +18,43 @@ export interface App {
   hub: RealtimeHub;
 }
 
+/** Campos ocultados no log, em qualquer objeto registrado (cabeçalhos, corpos, erros). */
+const REDACT = [
+  'req.headers.cookie',
+  'req.headers.authorization',
+  'res.headers["set-cookie"]',
+  '*.cookie',
+  '*.password',
+  '*.current',
+  '*.next',
+  '*.token',
+  '*.code',
+  '*.secret',
+  '*.pepper',
+  '*.email',
+];
+
+export interface BuildOptions {
+  /** Destino do log (testes leem os eventos de segurança); padrão: saída do processo. */
+  logStream?: NodeJS.WritableStream;
+}
+
 /**
  * Monta o servidor (HTTP + WebSocket) sem começar a escutar: `main.ts` chama `listen`, e os
  * testes usam o mesmo app com banco em memória.
  */
-export async function buildApp(ctx: AppContext): Promise<App> {
+export async function buildApp(ctx: AppContext, options: BuildOptions = {}): Promise<App> {
   const { config } = ctx;
   const http = Fastify({
     logger: {
       level: config.LOG_LEVEL,
-      // Nada de segredo no log: cookies, cabeçalho de autorização e senhas são ocultados
-      redact: {
-        paths: ['req.headers.cookie', 'req.headers.authorization', 'res.headers["set-cookie"]', '*.password', '*.current', '*.next'],
-        censor: '[oculto]',
-      },
+      // Nada de segredo no log: cookies, senhas, tokens, códigos de convite e e-mails são ocultados
+      redact: { paths: REDACT, censor: '[oculto]' },
+      ...(options.logStream && { stream: options.logStream }),
     },
+    // Id de requisição aleatório (não revela quantas houve) e nunca vindo do cliente
+    genReqId: () => randomUUID(),
+    requestIdHeader: false,
     // Só os proxies da lista (nenhum = IP da conexão): mesma regra de `lib/client-ip.ts` no WebSocket
     trustProxy: config.trustedProxies.entries.length ? [...config.trustedProxies.entries] : false,
     bodyLimit: 1024 * 1024,
@@ -46,12 +70,14 @@ export async function buildApp(ctx: AppContext): Promise<App> {
   // --- Erros: mensagem segura para o cliente, detalhe só no log -------------------
   http.setErrorHandler((err: FastifyError | HttpError, req, reply) => {
     if (err instanceof HttpError) {
+      if (err.statusCode === 403) audit(req.log, 'permissao.negada', { userId: req.auth?.user.id, method: req.method, url: req.url });
       return reply.code(err.statusCode).send({ error: err.message, ...(err.details && { details: err.details }) });
     }
     const status = err.statusCode ?? 500;
     if (status >= 500) {
+      // Detalhe e pilha só no log; o cliente recebe o id da requisição para o suporte achar o registro
       req.log.error({ err }, 'erro interno');
-      return reply.code(500).send({ error: 'Erro interno.' });
+      return reply.code(500).send({ error: 'Erro interno.', requestId: req.id });
     }
     // Erros do próprio Fastify/plugins (corpo grande, JSON inválido, tipo não aceito…)
     return reply.code(status).send({ error: clientMessage(status) });

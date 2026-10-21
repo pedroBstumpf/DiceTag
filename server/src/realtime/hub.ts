@@ -4,6 +4,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import { WebSocketServer, type RawData } from 'ws';
 import type { AppContext } from '../context';
 import type { Viewer, WorldItem } from '../domain';
+import { audit } from '../lib/audit';
 import { clientIp } from '../lib/client-ip';
 import { newId, isSafeId } from '../lib/ids';
 import { TokenBucket, WindowLimiter } from '../lib/limiter';
@@ -68,13 +69,14 @@ export class RealtimeHub {
 
   private handleUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer): void {
     socket.on('error', () => socket.destroy());
+    const ip = this.ipOf(req);
     const reject = (status: number, text: string) => {
+      audit(this.log, 'ws.recusado', { status, ip });
       socket.end(`HTTP/1.1 ${status} ${text}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
     };
     const tableId = WS_PATH.exec(new URL(req.url ?? '/', 'http://localhost').pathname)?.[1];
     if (!tableId || !isSafeId(tableId)) return reject(404, 'Not Found');
     if (!isAllowedOrigin(req.headers, this.ctx.config.allowedOrigins)) return reject(403, 'Forbidden');
-    const ip = this.ipOf(req);
     if (this.ctx.config.RATE_LIMIT && !this.upgradesByIp.hit(ip)) return reject(429, 'Too Many Requests');
 
     const session = this.ctx.auth.resolve(readCookie(req.headers.cookie, sessionCookieName(this.ctx.config)));
@@ -177,6 +179,7 @@ export class RealtimeHub {
   }
 
   private strike(room: Room, client: Client, code: string, message: string): void {
+    audit(this.log, 'ws.mensagem_invalida', { userId: client.userId, tableId: room.tableId, motivo: code, ip: client.ip });
     room.send(client, { t: 'error', code, message });
     if (++client.strikes >= MAX_STRIKES) client.ws.close(CLOSE.policy, 'Mensagens inválidas demais.');
   }
@@ -271,6 +274,7 @@ export class RealtimeHub {
       store: this.store,
       world: new WorldView((itemId) => this.ctx.worlds.findItem(worldId, itemId) as WorldItem | null),
       onError: (err) => this.log.error({ err, tableId }, 'erro ao gravar a mesa'),
+      onDenied: (client, type, reason) => audit(this.log, 'ws.comando_negado', { userId: client.userId, tableId, comando: type, motivo: reason }),
     });
   }
 
