@@ -3,7 +3,7 @@ import type { Duplex } from 'node:stream';
 import type { FastifyBaseLogger } from 'fastify';
 import { WebSocketServer, type RawData } from 'ws';
 import type { AppContext } from '../context';
-import type { Viewer, WorldItem } from '../domain';
+import type { TableCommand, TableState, Viewer, WorldItem } from '../domain';
 import { audit } from '../lib/audit';
 import { clientIp } from '../lib/client-ip';
 import { newId, isSafeId } from '../lib/ids';
@@ -24,6 +24,8 @@ const MAX_SOCKETS_PER_ROOM = 80;
 /** Mensagens inválidas ou acima do limite toleradas de uma vez; o crédito volta 1 a cada 3 s. */
 const MAX_INVALID = 20;
 const INVALID_REFILL_PER_SECOND = 1 / 3;
+/** Autor dos comandos que o próprio servidor aplica (aparece no `by` das mensagens ao mestre). */
+const SERVER_AUTHOR = 'servidor';
 const WS_PATH = /^\/ws\/tables\/([A-Za-z0-9_-]{1,64})$/;
 
 /**
@@ -222,6 +224,18 @@ export class RealtimeHub {
   /** O Worldbuild de um mundo mudou pela API: as salas das mesas dele releem o que usam. */
   worldChanged(worldId: string): void {
     for (const room of this.rooms.values()) if (room.worldId === worldId) room.worldChanged();
+  }
+
+  /**
+   * Comandos do próprio servidor numa mesa, aberta ou não (ex.: tirar as fichas de uma conta
+   * excluída): aplicados com as funções de sempre, avisados a quem está na sala e gravados na hora.
+   */
+  applyServerCommands(tableId: string, worldId: string, build: (state: TableState) => TableCommand[]): void {
+    const open = this.rooms.get(tableId);
+    const room = open ?? this.createRoom(tableId, worldId);
+    for (const command of build(room.snapshot.state)) room.apply(command, SERVER_AUTHOR);
+    if (open) room.flush();
+    else room.close(true);
   }
 
   /** A sessão foi encerrada (logout): as conexões abertas com ela caem na hora. */

@@ -56,6 +56,11 @@ export class UsersRepository {
   rename(id: string, name: string): void {
     this.db.prepare('UPDATE users SET name = ? WHERE id = ?').run(name, id);
   }
+
+  /** Exclui a conta; sessões, mundos (com os itens), participações e arquivos saem em cascata. */
+  delete(id: string): boolean {
+    return Number(this.db.prepare('DELETE FROM users WHERE id = ?').run(id).changes) > 0;
+  }
 }
 
 function toPublic(row: UserRow): PublicUser {

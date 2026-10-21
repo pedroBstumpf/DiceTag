@@ -135,6 +135,15 @@ export class FilesRepository {
     return Number((this.db.prepare('SELECT COALESCE(SUM(size), 0) AS n FROM files WHERE table_id = ?').get(tableId) as { n: number }).n);
   }
 
+  /** Arquivos enviados pela conta (exportação de dados), mais recentes primeiro. */
+  listByOwner(ownerId: string): FileRecord[] {
+    return (this.db.prepare('SELECT * FROM files WHERE owner_id = ? ORDER BY created_at DESC').all(ownerId) as unknown as FileRow[]).map(toFile);
+  }
+
+  idsByOwner(ownerId: string): string[] {
+    return (this.db.prepare('SELECT id FROM files WHERE owner_id = ?').all(ownerId) as { id: string }[]).map((r) => r.id);
+  }
+
   idsByTable(tableId: string): string[] {
     return (this.db.prepare('SELECT id FROM files WHERE table_id = ?').all(tableId) as { id: string }[]).map((r) => r.id);
   }

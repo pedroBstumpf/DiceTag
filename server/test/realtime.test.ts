@@ -1,6 +1,8 @@
 import type { AddressInfo } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { PASSWORD, call, createTestServer, openSocket, register, type TestServer } from './helpers';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { ORIGIN, PASSWORD, PNG_1X1, call, createTestServer, multipart, openSocket, register, type TestServer } from './helpers';
 
 /**
  * Sala da mesa por WebSocket, com servidor real escutando numa porta livre:
@@ -151,6 +153,60 @@ describe('comandos em tempo real', () => {
     expect(cmd.payload.message.roll.total).toBe(ack.payload.roll.total);
     a.ws.close();
     b.ws.close();
+  });
+});
+
+describe('LGPD: exportar e excluir a conta', () => {
+  const character = (id: string, name: string, ownerUserId: string) => ({ id, kind: 'character', name, createdAt: 1, ownerUserId });
+  const cmd = (seq: number, type: string, payload: unknown) => JSON.stringify({ t: 'cmd', seq, type, payload });
+
+  it('exporta os dados da conta, sem senha e sem os dados de outras pessoas', async () => {
+    const a = await openSocket(port, tableId, gm.cookie);
+    const b = await openSocket(port, tableId, player.cookie);
+    await a.next('welcome');
+    await b.next('welcome');
+    b.ws.send(cmd(1, 'addEntry', { entry: character('pc-p', 'Heroína', player.id) }));
+    await b.next('ack');
+    a.ws.send(cmd(1, 'addEntry', { entry: character('pc-x', 'Ficha de outra pessoa', 'outra-conta') }));
+    await a.next('ack');
+
+    const res = await call(server, player.cookie, 'GET', '/api/auth/me/export');
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-disposition']).toContain('attachment');
+    const data = res.json();
+    expect(data.user.email).toBe('p@exemplo.com');
+    expect(data.worlds).toHaveLength(1);
+    expect(data.tables.joined[0].characters.map((c: { id: string }) => c.id)).toEqual(['pc-p']);
+    expect(res.body).not.toMatch(/password|Ficha de outra pessoa/);
+    a.ws.close();
+    b.ws.close();
+  });
+
+  it('excluir a conta pede a senha e apaga tudo dela, inclusive as fichas nas mesas de outros', async () => {
+    const a = await openSocket(port, tableId, gm.cookie);
+    const b = await openSocket(port, tableId, player.cookie);
+    await a.next('welcome');
+    await b.next('welcome');
+    b.ws.send(cmd(1, 'addEntry', { entry: character('pc-p', 'Heroína', player.id) }));
+    await b.next('ack');
+    await a.next('cmd');
+    // Mesa própria da jogadora, com um arquivo
+    const own = (await call(server, player.cookie, 'POST', '/api/tables', { name: 'Minha', system: '', description: '', maxPlayers: 2, accent: '#4f86f7' })).json().table;
+    const form = multipart(PNG_1X1);
+    const headers = { cookie: player.cookie, origin: ORIGIN, 'content-type': form.contentType };
+    const file = (await server.app.http.inject({ method: 'POST', url: `/api/files?tableId=${own.id}`, headers, payload: form.body })).json().file;
+    expect(existsSync(join(server.config.FILES_DIR, file.id))).toBe(true);
+
+    expect((await call(server, player.cookie, 'DELETE', '/api/auth/me', { password: 'senha errada aqui' })).statusCode).toBe(401);
+    expect((await call(server, player.cookie, 'DELETE', '/api/auth/me', { password: PASSWORD })).statusCode).toBe(204);
+
+    expect((await b.closed).code).toBe(4401);
+    expect(await a.next('cmd')).toMatchObject({ type: 'removeEntry', payload: { entryId: 'pc-p' }, by: 'servidor' });
+    expect(server.ctx.tables.find(own.id)).toBeNull();
+    expect(existsSync(join(server.config.FILES_DIR, file.id))).toBe(false);
+    expect(server.ctx.users.findById(player.id)).toBeNull();
+    expect((await call(server, player.cookie, 'GET', '/api/auth/me')).statusCode).toBe(401);
+    a.ws.close();
   });
 });
 

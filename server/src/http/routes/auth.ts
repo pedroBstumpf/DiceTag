@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { AppContext } from '../../context';
 import type { RealtimeHub } from '../../realtime/hub';
+import { AccountService } from '../../services/account.service';
 import { audit } from '../../lib/audit';
 import { HttpError, parse } from '../../lib/errors';
 import { email, newPassword, passwordInput, text, withPasswordPolicy } from '../../lib/schemas';
@@ -12,13 +13,17 @@ const registerBody = withPasswordPolicy(z.strictObject({ name: text(1, 60), emai
 const loginBody = z.strictObject({ email, password: passwordInput });
 const passwordBody = z.strictObject({ current: passwordInput, next: newPassword });
 const profileBody = z.strictObject({ name: text(1, 60) });
+const deleteBody = z.strictObject({ password: passwordInput });
 
 /**
- * /api/auth — cadastro, login, logout (desta sessão ou de todas), conta atual, perfil e troca de senha.
+ * /api/auth — cadastro, login, logout (desta sessão ou de todas), conta atual, perfil, troca de senha,
+ * exportação dos dados e exclusão da conta (LGPD).
  * O token de sessão só existe no cookie HttpOnly: nunca aparece no corpo das respostas.
  * Públicas (sem sessão): cadastro, login e logout; as demais exigem login (hook de `plugins/auth.ts`).
  */
 export async function authRoutes(app: FastifyInstance, ctx: AppContext, hub: RealtimeHub): Promise<void> {
+  const account = new AccountService(ctx, hub);
+
   app.post('/register', { config: { ...AUTH_RATE_LIMIT, ...PUBLIC } }, async (req, reply) => {
     const body = parse(registerBody, req.body);
     const { user, token } = await ctx.auth.register(body);
@@ -69,6 +74,28 @@ export async function authRoutes(app: FastifyInstance, ctx: AppContext, hub: Rea
     const { name } = parse(profileBody, req.body);
     ctx.users.rename(session.user.id, name);
     return { user: { ...session.user, name } };
+  });
+
+  // --- LGPD: acesso aos dados e exclusão da conta ----------------------------------
+
+  /** Todos os dados da conta num arquivo JSON (o conteúdo dos arquivos sai por /api/files/:id). */
+  app.get('/me/export', async (req, reply) => {
+    const { user } = requireAuth(req);
+    return reply
+      .header('Content-Disposition', 'attachment; filename="zehenia-meus-dados.json"')
+      .header('Cache-Control', 'no-store')
+      .send(account.export(user));
+  });
+
+  /** Exclui a conta e tudo o que é dela. Pede a senha de novo (o cookie sozinho não basta). */
+  app.delete('/me', { config: AUTH_RATE_LIMIT }, async (req, reply) => {
+    const session = requireAuth(req);
+    const { password } = parse(deleteBody, req.body);
+    if (!(await ctx.auth.verifyPassword(session.user.id, password))) throw new HttpError(401, 'Senha incorreta.');
+    await account.delete(session.user.id);
+    audit(req.log, 'conta.excluida', { userId: session.user.id });
+    clearSessionCookie(reply, ctx);
+    return reply.code(204).send();
   });
 
   app.post('/password', { config: AUTH_RATE_LIMIT }, async (req, reply) => {

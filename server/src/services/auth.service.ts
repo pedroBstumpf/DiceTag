@@ -87,6 +87,12 @@ export class AuthService {
     this.sessions.delete(this.tokens.hash(token, 'session'));
   }
 
+  /** Confirma a senha da conta (ex.: antes de excluí-la). */
+  async verifyPassword(userId: string, password: string): Promise<boolean> {
+    const stored = this.users.passwordHashOf(userId);
+    return !!stored && (await this.hasher.verify(password, stored));
+  }
+
   /** Sair de todos os dispositivos: encerra todas as sessões da conta. */
   logoutAll(userId: string): void {
     this.sessions.deleteAllForUser(userId);
