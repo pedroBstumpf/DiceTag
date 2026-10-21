@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { loadConfig } from '../src/config/env';
+import { TrustedProxies, clientIp } from '../src/lib/client-ip';
 import { isSafeId } from '../src/lib/ids';
 import { Semaphore, TokenBucket, WindowLimiter } from '../src/lib/limiter';
 import { parseJsonSafely, unsafeJsonReason } from '../src/lib/safe-json';
@@ -166,6 +167,29 @@ describe('limitadores', () => {
   });
 });
 
+describe('IP real atrás de proxy', () => {
+  const nginx = new TrustedProxies(['127.0.0.1', '10.0.0.0/8']);
+
+  it('sem proxies na lista vale o IP da conexão, com qualquer X-Forwarded-For', () => {
+    expect(clientIp('203.0.113.9', '1.2.3.4', new TrustedProxies([]))).toBe('203.0.113.9');
+  });
+
+  it('atrás do proxy, o cliente é o último endereço que não é proxy', () => {
+    expect(clientIp('127.0.0.1', '6.6.6.6, 1.2.3.4', nginx)).toBe('1.2.3.4');
+    expect(clientIp('127.0.0.1', '1.2.3.4, 10.1.2.3', nginx)).toBe('1.2.3.4');
+    expect(clientIp('::ffff:127.0.0.1', ['1.2.3.4'], nginx)).toBe('1.2.3.4');
+  });
+
+  it('quem fala direto com o servidor não finge outro IP pelo X-Forwarded-For', () => {
+    expect(clientIp('203.0.113.9', '127.0.0.1, 1.2.3.4', nginx)).toBe('203.0.113.9');
+  });
+
+  it('endereços e faixas inválidos são recusados', () => {
+    expect(() => new TrustedProxies(['nao-e-ip'])).toThrow();
+    expect(() => new TrustedProxies(['10.0.0.0/33'])).toThrow();
+  });
+});
+
 describe('configuração', () => {
   const base = { TOKEN_SECRET: secret(), PASSWORD_PEPPER: secret() };
 
@@ -192,5 +216,12 @@ describe('configuração', () => {
     expect(config.COOKIE_SECURE).toBe(true);
     expect(config.RATE_LIMIT).toBe(true);
     expect(config.DEV_TOOLS).toBe(false);
+    expect(config.trustedProxies.entries).toEqual([]);
+  });
+
+  it('TRUST_PROXY antigo (confiava em qualquer X-Forwarded-For) é recusado, exceto desligado', () => {
+    expect(() => loadConfig({ ...base, TRUST_PROXY: 'true' })).toThrow(/TRUSTED_PROXIES/);
+    expect(loadConfig({ ...base, TRUST_PROXY: 'false', TRUSTED_PROXIES: '127.0.0.1' }).trustedProxies.entries).toEqual(['127.0.0.1']);
+    expect(() => loadConfig({ ...base, TRUSTED_PROXIES: '0.0.0.0/99' })).toThrow(/TRUSTED_PROXIES/);
   });
 });

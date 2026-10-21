@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { TrustedProxies } from '../lib/client-ip';
 
 /**
  * Configuração do servidor, lida das variáveis de ambiente (arquivo `.env`, nunca versionado)
@@ -43,8 +44,12 @@ const schema = z.object({
 
   /** Cookie só por HTTPS. Navegadores aceitam cookie `Secure` em http://localhost. */
   COOKIE_SECURE: bool(true),
-  /** Atrás de um proxy reverso (nginx, Caddy…): confiar no X-Forwarded-For para o IP real. */
-  TRUST_PROXY: bool(false),
+  /**
+   * IPs ou faixas CIDR dos proxies reversos (nginx, Caddy, balanceador…) na frente do servidor,
+   * separados por vírgula. Vazio = nenhum: vale o IP da conexão. Só o X-Forwarded-For escrito por
+   * esses endereços é considerado (`lib/client-ip.ts`).
+   */
+  TRUSTED_PROXIES: z.string().max(1000).default(''),
 
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(24 * 30).default(24 * 7),
   SESSION_IDLE_HOURS: z.coerce.number().int().min(1).max(24 * 7).default(24),
@@ -61,9 +66,10 @@ const schema = z.object({
 
 export type Env = z.infer<typeof schema>;
 
-/** Configuração pronta para uso (origens já interpretadas). */
-export interface Config extends Omit<Env, 'ALLOWED_ORIGINS'> {
+/** Configuração pronta para uso (origens e proxies já interpretados). */
+export interface Config extends Omit<Env, 'ALLOWED_ORIGINS' | 'TRUSTED_PROXIES'> {
   allowedOrigins: ReadonlySet<string>;
+  trustedProxies: TrustedProxies;
   isProduction: boolean;
 }
 
@@ -71,19 +77,37 @@ export interface Config extends Omit<Env, 'ALLOWED_ORIGINS'> {
 
 /** Lê e valida a configuração. Lança erro com a lista de problemas (sem mostrar os valores). */
 export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
+  // TRUST_PROXY=true confiava em qualquer X-Forwarded-For: quem usava precisa listar os proxies
+  if (source['TRUST_PROXY'] !== undefined && !['false', '0'].includes(source['TRUST_PROXY'])) {
+    throw new Error('Configuração inválida (arquivo .env):\n  - TRUST_PROXY foi substituído por TRUSTED_PROXIES (IPs ou faixas CIDR dos proxies).');
+  }
   const parsed = schema.safeParse(source);
   if (!parsed.success) {
     const problems = parsed.error.issues.map((i) => `  - ${i.path.join('.')}: ${i.message}`).join('\n');
     throw new Error(`Configuração inválida (arquivo .env):\n${problems}`);
   }
-  const { ALLOWED_ORIGINS, ...env } = parsed.data;
+  const { ALLOWED_ORIGINS, TRUSTED_PROXIES, ...env } = parsed.data;
   const config: Config = {
     ...env,
     allowedOrigins: parseOrigins(ALLOWED_ORIGINS),
+    trustedProxies: parseProxies(TRUSTED_PROXIES),
     isProduction: env.NODE_ENV === 'production',
   };
   assertSafeForProduction(config);
   return config;
+}
+
+/** "127.0.0.1, 10.0.0.0/8" → proxies confiáveis (rejeita endereço ou faixa inválidos). */
+function parseProxies(raw: string): TrustedProxies {
+  const entries = raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  try {
+    return new TrustedProxies(entries);
+  } catch (err) {
+    throw new Error(`TRUSTED_PROXIES: ${(err as Error).message}.`);
+  }
 }
 
 /** "http://a:1, https://b" → conjunto de origens normalizadas (rejeita caminhos e curingas). */

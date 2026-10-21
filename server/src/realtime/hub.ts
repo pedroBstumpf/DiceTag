@@ -4,6 +4,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import { WebSocketServer, type RawData } from 'ws';
 import type { AppContext } from '../context';
 import type { Viewer, WorldItem } from '../domain';
+import { clientIp } from '../lib/client-ip';
 import { newId, isSafeId } from '../lib/ids';
 import { TokenBucket, WindowLimiter } from '../lib/limiter';
 import { parseJsonSafely, unsafeJsonReason } from '../lib/safe-json';
@@ -273,14 +274,10 @@ export class RealtimeHub {
     });
   }
 
-  /** IP de quem conecta (com proxy confiável, o primeiro do X-Forwarded-For). */
+  /** IP de quem conecta (atrás dos proxies confiáveis, o cliente que eles registraram). */
   private ipOf(req: IncomingMessage): string {
-    if (this.ctx.config.TRUST_PROXY) {
-      const forwarded = req.headers['x-forwarded-for'];
-      const first = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(',')[0]?.trim();
-      if (first) return first;
-    }
-    return req.socket.remoteAddress ?? 'desconhecido';
+    return clientIp(req.socket.remoteAddress, req.headers['x-forwarded-for'], this.ctx.config.trustedProxies);
   }
+
 }
 

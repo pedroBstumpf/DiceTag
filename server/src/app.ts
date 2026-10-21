@@ -31,7 +31,8 @@ export async function buildApp(ctx: AppContext): Promise<App> {
         censor: '[oculto]',
       },
     },
-    trustProxy: config.TRUST_PROXY,
+    // Só os proxies da lista (nenhum = IP da conexão): mesma regra de `lib/client-ip.ts` no WebSocket
+    trustProxy: config.trustedProxies.entries.length ? [...config.trustedProxies.entries] : false,
     bodyLimit: 1024 * 1024,
     // Requisição lenta de propósito (slowloris) não segura o servidor
     requestTimeout: 30_000,
