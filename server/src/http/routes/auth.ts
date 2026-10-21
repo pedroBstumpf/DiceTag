@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { AppContext } from '../../context';
 import { parse } from '../../lib/errors';
 import { email, passwordInput, text } from '../../lib/schemas';
-import { clearSessionCookie, requireAuth, sessionCookieName, setSessionCookie } from '../plugins/auth';
+import { PUBLIC, clearSessionCookie, requireAuth, sessionCookieName, setSessionCookie } from '../plugins/auth';
 import { AUTH_RATE_LIMIT } from '../plugins/security';
 
 const registerBody = z.strictObject({ name: text(1, 60), email, password: passwordInput });
@@ -14,23 +14,24 @@ const profileBody = z.strictObject({ name: text(1, 60) });
 /**
  * /api/auth — cadastro, login, logout, conta atual, perfil e troca de senha.
  * O token de sessão só existe no cookie HttpOnly: nunca aparece no corpo das respostas.
+ * Públicas (sem sessão): cadastro, login e logout; as demais exigem login (hook de `plugins/auth.ts`).
  */
 export async function authRoutes(app: FastifyInstance, ctx: AppContext): Promise<void> {
-  app.post('/register', { config: AUTH_RATE_LIMIT }, async (req, reply) => {
+  app.post('/register', { config: { ...AUTH_RATE_LIMIT, ...PUBLIC } }, async (req, reply) => {
     const body = parse(registerBody, req.body);
     const { user, token } = await ctx.auth.register(body);
     setSessionCookie(reply, ctx, token);
     return reply.code(201).send({ user });
   });
 
-  app.post('/login', { config: AUTH_RATE_LIMIT }, async (req, reply) => {
+  app.post('/login', { config: { ...AUTH_RATE_LIMIT, ...PUBLIC } }, async (req, reply) => {
     const body = parse(loginBody, req.body);
     const { user, token } = await ctx.auth.login(body.email, body.password);
     setSessionCookie(reply, ctx, token);
     return { user };
   });
 
-  app.post('/logout', async (req, reply) => {
+  app.post('/logout', { config: PUBLIC }, async (req, reply) => {
     const token = req.cookies[sessionCookieName(ctx.config)];
     if (token) ctx.auth.logout(token);
     clearSessionCookie(reply, ctx);

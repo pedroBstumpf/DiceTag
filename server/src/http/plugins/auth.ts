@@ -7,15 +7,25 @@ import type { AuthSession } from '../../services/auth.service';
 
 declare module 'fastify' {
   interface FastifyRequest {
-    /** Sessão de quem fez a requisição (null = não logado). */
+    /** Sessão de quem fez a requisição (null = não logado: só chega a rotas públicas). */
     auth: AuthSession | null;
+  }
+  interface FastifyContextConfig {
+    /** Rota pública: atende sem sessão. Toda rota sem esta marca exige login (negar por padrão). */
+    public?: boolean;
   }
 }
 
 export { sessionCookieName };
 
+/** Configuração de rota pública (lista explícita: cadastro, login, logout, saúde e página de testes). */
+export const PUBLIC = { public: true } as const;
+
 /**
- * Sessão por cookie: lê o cookie em toda requisição e preenche `req.auth`.
+ * Sessão por cookie, com **negar por padrão** (BACKEND_SECURITY.md §0 e §3): o hook global lê o
+ * cookie em toda requisição, preenche `req.auth` e responde 401 em qualquer rota que não esteja
+ * marcada como pública (`config: { public: true }`). Uma rota nova esquecida nasce protegida.
+ *
  * Cookie `HttpOnly` (o JavaScript da página não lê: um XSS não rouba a sessão),
  * `SameSite=Strict` (não vai em requisições vindas de outros sites) e `Secure`.
  */
@@ -25,10 +35,12 @@ export async function registerAuth(app: FastifyInstance, ctx: AppContext): Promi
   app.decorateRequest('auth', null);
   app.addHook('onRequest', async (req) => {
     req.auth = ctx.auth.resolve(req.cookies[name]);
+    // Rota inexistente segue para o 404; as demais, sem sessão, só se forem públicas
+    if (!req.auth && !req.is404 && !req.routeOptions.config.public) throw unauthorized();
   });
 }
 
-/** Sessão obrigatória: sem login = 401. */
+/** Sessão da requisição (o hook já barrou quem não tem; aqui só dá o tipo certo às rotas). */
 export function requireAuth(req: FastifyRequest): AuthSession {
   if (!req.auth) throw unauthorized();
   return req.auth;

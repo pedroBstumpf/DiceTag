@@ -1,7 +1,7 @@
 import multipart from '@fastify/multipart';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import type { AppContext } from './context';
-import { registerAuth } from './http/plugins/auth';
+import { PUBLIC, registerAuth } from './http/plugins/auth';
 import { registerSecurity } from './http/plugins/security';
 import { authRoutes } from './http/routes/auth';
 import { devRoutes } from './http/routes/dev';
@@ -65,7 +65,7 @@ export async function buildApp(ctx: AppContext): Promise<App> {
 
   const hub = new RealtimeHub(ctx, http.log);
 
-  http.get('/api/health', async () => ({ status: 'ok' }));
+  http.get('/api/health', { config: PUBLIC }, async () => ({ status: 'ok' }));
   await http.register(async (api) => authRoutes(api, ctx), { prefix: '/api/auth' });
   await http.register(async (api) => tableRoutes(api, ctx, hub), { prefix: '/api' });
   await http.register(async (api) => worldRoutes(api, ctx, hub), { prefix: '/api' });

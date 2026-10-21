@@ -81,6 +81,26 @@ describe('contas e sessão', () => {
     expect((await call(server, '__Host-zh_session=inventado', 'GET', '/api/auth/me')).statusCode).toBe(401);
     expect((await inject({ method: 'GET', url: '/api/tables' })).statusCode).toBe(401);
   });
+
+  it('negar por padrão: toda rota exige sessão, menos as públicas da lista', async () => {
+    // Rota nova sem nenhuma marca: nasce protegida
+    server.app.http.get('/api/rota-nova', async () => ({ segredo: true }));
+    for (const [method, url] of [
+      ['GET', '/api/rota-nova'],
+      ['GET', '/api/tables'],
+      ['POST', '/api/tables'],
+      ['GET', '/api/worlds'],
+      ['PUT', '/api/worlds/w/items/i'],
+      ['GET', '/api/files/f'],
+      ['POST', '/api/invites/accept'],
+      ['PATCH', '/api/auth/me'],
+    ] as const) {
+      expect((await inject({ method, url, headers: { origin: ORIGIN } })).statusCode, url).toBe(401);
+    }
+    expect((await inject({ method: 'GET', url: '/api/health' })).statusCode).toBe(200);
+    expect((await inject({ method: 'POST', url: '/api/auth/logout', headers: { origin: ORIGIN } })).statusCode).toBe(204);
+    expect((await inject({ method: 'GET', url: '/api/nao-existe' })).statusCode).toBe(404);
+  });
 });
 
 // --- Proteções gerais -------------------------------------------------------------------

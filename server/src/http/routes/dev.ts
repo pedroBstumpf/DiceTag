@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import type { FastifyInstance } from 'fastify';
 import type { Config } from '../../config/env';
+import { PUBLIC } from '../plugins/auth';
 
 /** Arquivos da página de testes (fixos: nada da URL vira caminho de arquivo). */
 const PAGES = {
@@ -31,9 +32,9 @@ export async function devRoutes(app: FastifyInstance, config: Config): Promise<v
 
   for (const [path, page] of Object.entries(PAGES)) {
     const url = new URL(`../../../dev/${page.file}`, import.meta.url);
-    app.get(path, async (_req, reply) =>
+    app.get(path, { config: PUBLIC }, async (_req, reply) =>
       reply.header('Content-Type', page.type).header('Content-Security-Policy', csp).header('Cache-Control', 'no-store').send(await readFile(fileURLToPath(url))),
     );
   }
-  app.get('/dev', async (_req, reply) => reply.redirect('/dev/'));
+  app.get('/dev', { config: PUBLIC }, async (_req, reply) => reply.redirect('/dev/'));
 }
