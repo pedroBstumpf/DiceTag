@@ -3,15 +3,16 @@ import type { Duplex } from 'node:stream';
 import type { FastifyBaseLogger } from 'fastify';
 import { WebSocketServer, type RawData } from 'ws';
 import type { AppContext } from '../context';
-import { normalizeState, type TableState } from '../domain';
+import type { Viewer, WorldItem } from '../domain';
 import { newId, isSafeId } from '../lib/ids';
 import { TokenBucket, WindowLimiter } from '../lib/limiter';
 import { parseJsonSafely, unsafeJsonReason } from '../lib/safe-json';
 import { readCookie, sessionCookieName } from '../security/cookie';
 import { isAllowedOrigin } from '../security/origin';
 import { CLOSE, clientMessage, type ClientMessage } from './protocol';
-import { Room, type Client } from './room';
+import { Room, type Client, type ClientView } from './room';
 import { performRoll } from './rolls';
+import { WorldView } from './world';
 
 /** Tamanho máximo de uma mensagem recebida (o `ws` fecha a conexão acima disto). */
 const MAX_MESSAGE_BYTES = 512 * 1024;
@@ -78,8 +79,9 @@ export class RealtimeHub {
     const session = this.ctx.auth.resolve(readCookie(req.headers.cookie, sessionCookieName(this.ctx.config)));
     if (!session) return reject(401, 'Unauthorized');
     const role = this.ctx.tables.roleOf(tableId, session.user.id);
+    const table = role && this.ctx.tables.find(tableId);
     // Mesa de outra pessoa ou inexistente: mesma resposta (não revela que a mesa existe)
-    if (!role) return reject(404, 'Not Found');
+    if (!role || !table) return reject(404, 'Not Found');
     if ((this.socketsByUser.get(session.user.id) ?? 0) >= MAX_SOCKETS_PER_USER) return reject(429, 'Too Many Requests');
     if ((this.rooms.get(tableId)?.clients.size ?? 0) >= MAX_SOCKETS_PER_ROOM) return reject(503, 'Service Unavailable');
 
@@ -96,12 +98,12 @@ export class RealtimeHub {
         alive: true,
         strikes: 0,
       };
-      this.join(tableId, client);
+      this.join(tableId, table.worldId, client);
     });
   }
 
-  private join(tableId: string, client: Client): void {
-    const room = this.roomOf(tableId);
+  private join(tableId: string, worldId: string, client: Client): void {
+    const room = this.roomOf(tableId, worldId);
     room.clients.add(client);
     this.socketsByUser.set(client.userId, (this.socketsByUser.get(client.userId) ?? 0) + 1);
     const { ws } = client;
@@ -109,13 +111,7 @@ export class RealtimeHub {
     ws.on('message', (data, isBinary) => this.handleMessage(room, client, data, isBinary));
     ws.on('close', () => this.leave(room, client));
     ws.on('error', (err) => this.log.warn({ err: err.message, tableId }, 'erro no WebSocket'));
-    room.send(client, {
-      t: 'welcome',
-      tableId,
-      you: { userId: client.userId, name: client.userName, role: client.role },
-      version: room.snapshot.version,
-      state: room.stateFor(client),
-    });
+    room.sendState(client, 'welcome', { userId: client.userId, name: client.userName, role: client.role });
     this.log.info({ tableId, userId: client.userId, role: client.role }, 'entrou na mesa');
   }
 
@@ -173,9 +169,9 @@ export class RealtimeHub {
         if (!client.events.take()) return room.send(client, { t: 'error', code: 'rate', message: 'Eventos demais.' });
         // Jogador só envia eventos na cena aberta (é a única que ele vê)
         if (client.role !== 'gm' && msg.event.sceneId !== room.snapshot.state.activeSceneId) return;
-        return room.broadcast({ t: 'event', event: msg.event, by: client.userId }, client);
+        return room.broadcastEvent(msg.event, client);
       case 'sync':
-        return room.send(client, { t: 'state', version: room.snapshot.version, state: room.stateFor(client) });
+        return room.sendState(client, 'state');
     }
   }
 
@@ -210,10 +206,14 @@ export class RealtimeHub {
 
   // --- Usado pelas rotas HTTP ---------------------------------------------------------
 
-  /** Estado atual da mesa: o da sala aberta ou o salvo. */
-  stateOf(tableId: string): TableState {
-    const room = this.rooms.get(tableId);
-    return room ? room.snapshot.state : normalizeState(this.ctx.tables.loadState(tableId)?.state as TableState | undefined);
+  /** Estado da mesa projetado para a conta: o da sala aberta ou, com ela fechada, o salvo. */
+  viewOf(tableId: string, worldId: string, viewer: Viewer): ClientView {
+    return (this.rooms.get(tableId) ?? this.createRoom(tableId, worldId)).viewFor(viewer);
+  }
+
+  /** O Worldbuild de um mundo mudou pela API: as salas das mesas dele releem o que usam. */
+  worldChanged(worldId: string): void {
+    for (const room of this.rooms.values()) if (room.worldId === worldId) room.worldChanged();
   }
 
   /** Expulsa a conta da sala (saiu ou foi removida da mesa). */
@@ -255,13 +255,22 @@ export class RealtimeHub {
     };
   }
 
-  private roomOf(tableId: string): Room {
+  private roomOf(tableId: string, worldId: string): Room {
     let room = this.rooms.get(tableId);
     if (!room) {
-      room = new Room(tableId, this.store, (err) => this.log.error({ err, tableId }, 'erro ao gravar a mesa'));
+      room = this.createRoom(tableId, worldId);
       this.rooms.set(tableId, room);
     }
     return room;
+  }
+
+  /** Sala com o estado salvo e o mundo da mesa (só passa a valer quando registrada em `rooms`). */
+  private createRoom(tableId: string, worldId: string): Room {
+    return new Room(tableId, worldId, {
+      store: this.store,
+      world: new WorldView((itemId) => this.ctx.worlds.findItem(worldId, itemId) as WorldItem | null),
+      onError: (err) => this.log.error({ err, tableId }, 'erro ao gravar a mesa'),
+    });
   }
 
   /** IP de quem conecta (com proxy confiável, o primeiro do X-Forwarded-For). */

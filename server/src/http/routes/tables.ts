@@ -157,6 +157,8 @@ export async function tableRoutes(app: FastifyInstance, ctx: AppContext, hub: Re
   app.get('/tables/:id/lore', async (req) => {
     const { table, role, userId } = access(req);
     const items = ctx.worlds.listItems(table.worldId) as WorldItem[];
-    return { items: projectLore(items, hub.stateOf(table.id), { role, userId }) };
+    const viewer = { role, userId };
+    // Estado já projetado: só os NPCs que a conta vê na mesa (ou controla) entram na Lore
+    return { items: projectLore(items, hub.viewOf(table.id, table.worldId, viewer).state, viewer) };
   });
 }

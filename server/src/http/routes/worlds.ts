@@ -7,6 +7,7 @@ import { idSchema, newId } from '../../lib/ids';
 import { unsafeJsonReason } from '../../lib/safe-json';
 import { text } from '../../lib/schemas';
 import { MAX_WORLD_ITEMS, type WorldRecord } from '../../repositories/worlds';
+import type { RealtimeHub } from '../../realtime/hub';
 import { requireAuth } from '../plugins/auth';
 
 /** Tamanho máximo de um item do Worldbuild salvo (JSON). Documentos longos cabem com folga. */
@@ -37,7 +38,7 @@ const itemBody = z.looseObject({
  * /api/worlds — mundos da conta (até MAX_WORLDS) e os itens do Worldbuild de cada um.
  * Só o dono acessa; mundo de outra conta = 404.
  */
-export async function worldRoutes(app: FastifyInstance, ctx: AppContext): Promise<void> {
+export async function worldRoutes(app: FastifyInstance, ctx: AppContext, hub: RealtimeHub): Promise<void> {
   const ownWorld = (req: FastifyRequest): WorldRecord => {
     const { user } = requireAuth(req);
     const { id } = parse(worldParams, req.params);
@@ -95,6 +96,7 @@ export async function worldRoutes(app: FastifyInstance, ctx: AppContext): Promis
       throw conflict(`Limite de ${MAX_WORLD_ITEMS} itens por mundo atingido.`);
     }
     ctx.worlds.upsertItem(world.id, itemId, json, Date.now());
+    hub.worldChanged(world.id);
     return { item };
   });
 
@@ -102,6 +104,7 @@ export async function worldRoutes(app: FastifyInstance, ctx: AppContext): Promis
     const world = ownWorld(req);
     const { itemId } = parse(itemParams, req.params);
     ctx.worlds.deleteItems(world.id, [itemId]);
+    hub.worldChanged(world.id);
     return reply.code(204).send();
   });
 
@@ -109,6 +112,8 @@ export async function worldRoutes(app: FastifyInstance, ctx: AppContext): Promis
   app.post('/worlds/:id/items/delete', async (req) => {
     const world = ownWorld(req);
     const { ids } = parse(deleteBody, req.body);
-    return { deleted: ctx.worlds.deleteItems(world.id, ids) };
+    const deleted = ctx.worlds.deleteItems(world.id, ids);
+    hub.worldChanged(world.id);
+    return { deleted };
   });
 }

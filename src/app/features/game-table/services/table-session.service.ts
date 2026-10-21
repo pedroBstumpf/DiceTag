@@ -21,7 +21,6 @@ import {
   MapLevel,
   SceneFolder,
   RollResult,
-  METERS_PER_SQUARE,
   MapNote,
   NOTE_COLORS,
   Scene,
@@ -66,9 +65,18 @@ import { addOne, inventoryRow, itemTagId, itemTagLevel, quantityOf, takeOne, uni
 import { SheetData, SheetStore } from '../../../core/services/sheet-store';
 import { FxDrawing, buildFx, seededRandom } from '../utils/effects';
 import { createMask, decodeMask, encodeMask, markPolygons, maskFits } from '../utils/fog-memory';
-import { Segment, computeVisibilityPolygon, doorSeen, wallsToSegments } from '../utils/visibility';
+import { Segment, doorSeen, wallsToSegments } from '../utils/visibility';
 import { movePathBlocked } from '../utils/walls';
-import { FogView, visibleDoorsFor, visibleDropsFor, visibleNotesFor, visibleTokensFor } from '../state/player-view';
+import {
+  FogView,
+  sameVisionSources,
+  visibleDoorsFor,
+  visibleDropsFor,
+  visibleNotesFor,
+  visibleTokensFor,
+  visionPolygonsOf,
+  visionSourcesOf,
+} from '../state/player-view';
 import { findDrop } from '../state/drops';
 import { NO_SELECTION, TokenSelection, keepOnly, selectMany, selectOne, toggleInSelection, without } from '../utils/selection';
 import { TableCommandPayload, TableCommandType, applyCommand } from '../state/commands';
@@ -310,23 +318,13 @@ export class TableSessionService extends SheetStore {
    * não dispara novo cálculo.
    */
   private readonly visionSources = computed(
-    () => {
-      const grid = this.activeScene()?.gridSize ?? 70;
-      const level = this.currentLevel();
-      // A névoa fica na camada em foco: enxergam os tokens dela
-      return this.resolvedTokens()
-        .filter((t) => t.vision.enabled && levelOf(t.placement) === level)
-        .map((t) => ({ x: t.placement.x, y: t.placement.y, range: (t.vision.range / METERS_PER_SQUARE) * grid }));
-    },
-    { equal: (a, b) => a.length === b.length && a.every((s, i) => s.x === b[i].x && s.y === b[i].y && s.range === b[i].range) },
+    // A névoa fica na camada em foco: enxergam os tokens dela
+    () => visionSourcesOf(this.resolvedTokens(), this.currentLevel(), this.activeScene()?.gridSize ?? 70),
+    { equal: sameVisionSources },
   );
 
   /** Áreas visíveis dos tokens (recalculadas só quando token, parede ou cena mudam). */
-  readonly visionPolygons = computed(() => {
-    if (!this.fogEnabled()) return [];
-    const segments = this.wallSegments();
-    return this.visionSources().map((s) => computeVisibilityPolygon(s, s.range, segments));
-  });
+  readonly visionPolygons = computed(() => (this.fogEnabled() ? visionPolygonsOf(this.visionSources(), this.wallSegments()) : []));
 
   // --- Memória da névoa (áreas exploradas) ---------------------------------
 

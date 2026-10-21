@@ -1,9 +1,17 @@
 import {
   canSeeLoreItem,
   controlsNpc,
+  doorSeen,
   isDown,
+  isPointVisible,
+  levelOf,
   ownsCharacter,
+  visibleDoorsFor,
+  visibleDropsFor,
+  visibleNotesFor,
+  visibleTokensFor,
   type CharacterSheet,
+  type DoorWall,
   type Scene,
   type TableEntry,
   type TableState,
@@ -12,38 +20,93 @@ import {
   type WorldItem,
 } from '../domain';
 import { canEditEntry } from './command-rules';
+import type { TableEvent } from './protocol';
+import type { PlayerScene } from './vision';
 
 /**
- * Projeção do estado por quem olha (SPEC.md §3.1): o servidor envia a cada jogador só o que ele
- * pode ver. Esconder na tela não basta — o jogador pode ler os dados recebidos no navegador.
+ * Projeção do estado por quem olha (SPEC.md §3.1, BACKEND_SECURITY.md §4.3): o servidor envia a
+ * cada jogador só o que ele pode ver. Esconder na tela não basta — o jogador pode ler os dados
+ * recebidos no navegador. As regras de visibilidade são as do front-end (`state/player-view.ts`).
  *
- * O jogador NÃO recebe:
- * - cenas que não estão abertas (o mestre prepara as próximas em segredo) nem as pastas de cenas;
- * - anotações "só mestre";
- * - a ficha de NPCs que ele não controla — de tokens, só o que o mestre liberou (ficha e/ou
- *   inventário; inventário de token derrotado sempre);
- * - ações do mestre e de NPCs que ele não controla;
- * - as anotações pessoais (aba Anotações) dos personagens de outros jogadores.
+ * O jogador recebe só a cena aberta (sem as pastas de cenas) e, nela:
+ * - tokens: os que algum token enxerga agora (personagens sempre); a ficha de token de NPC só se
+ *   liberada (inteira ou só o inventário; inventário de token derrotado sempre);
+ * - paredes: com névoa, NENHUMA (revelariam a planta do mapa), só as portas vistas ou exploradas,
+ *   e os polígonos de visão vão à parte (`vision` na mensagem); sem névoa, as da camada dele;
+ * - anotações públicas vistas ou exploradas; itens no chão e efeitos fixos visíveis, da camada dele.
  *
- * Ainda recebe (próxima etapa, com a visão calculada no servidor — SPEC §3.1): paredes e tokens
- * sob a névoa, que o front-end usa hoje para calcular a visão localmente.
+ * E, das fichas: personagens (sem as anotações pessoais dos outros), NPCs que controla ou cujo
+ * token está à vista (sem a ficha base), e só as ações dele. Sons ficam com o mestre.
  */
-export function projectState(state: TableState, viewer: Viewer): TableState {
+export function projectState(state: TableState, viewer: Viewer, view: PlayerScene | null): TableState {
   if (viewer.role === 'gm') return state;
-  const active = state.scenes.find((s) => s.id === state.activeSceneId);
-  const entryById = new Map(state.entries.map((e) => [e.id, e]));
+  const scene = view ? projectScene(view, viewer) : null;
+  const onMap = new Set(scene?.tokens?.map((t) => t.entryId));
   return {
     ...state,
     sceneFolders: [],
-    scenes: active ? [projectScene(active, entryById, viewer)] : [],
-    entries: state.entries.filter((e) => entryVisible(e, state, viewer)).map((e) => projectEntry(e, viewer)),
+    scenes: scene ? [scene] : [],
+    entries: state.entries.filter((e) => entryVisible(e, state, viewer, onMap)).map((e) => projectEntry(e, viewer)),
   };
 }
 
-/** Arquivos que o jogador recebe: ações só as dele (personagem/NPC que controla); sons e fichas, todos. */
-function entryVisible(entry: TableEntry, state: TableState, viewer: Viewer): boolean {
-  if (entry.kind !== 'automation') return true;
-  return !!entry.ownerEntryId && canEditEntry(state, entry, viewer);
+/** Polígonos de visão enviados ao jogador (null = sem névoa: ele vê o mapa todo). */
+export function playerVision(viewer: Viewer, view: PlayerScene | null): PlayerScene['fog']['polygons'] | null {
+  return viewer.role !== 'gm' && view?.fog.enabled ? view.fog.polygons : null;
+}
+
+/**
+ * Evento efêmero (ping, efeito) que a conta pode receber: o jogador só os da cena aberta e, com
+ * névoa, efeitos que começam ou terminam numa área visível da camada dele. Pings sempre: são um
+ * aviso intencional de quem marcou.
+ */
+export function eventVisibleTo(event: TableEvent, viewer: Viewer, view: PlayerScene | null): boolean {
+  if (viewer.role === 'gm') return true;
+  if (!view || event.sceneId !== view.scene.id) return false;
+  if (event.kind === 'ping') return true;
+  const { fx } = event;
+  return levelOf(fx) === view.level && (isPointVisible(fx.from, view.fog) || isPointVisible(fx.to, view.fog));
+}
+
+// --- Cena ------------------------------------------------------------------------
+
+function projectScene({ scene, level, tokens, fog }: PlayerScene, viewer: Viewer): Scene {
+  const levelWalls = (scene.walls ?? []).filter((w) => levelOf(w) === level);
+  const doors = levelWalls.filter((w): w is DoorWall => w.kind === 'door');
+  return {
+    ...scene,
+    tokens: visibleTokensFor(tokens, 'player', fog).map((t) => projectPlacement(t.placement, t.entry, viewer)),
+    walls: fog.enabled ? visibleDoorsFor(doors, 'player', fog, (d) => doorSeen(d.points, fog.polygons)) : levelWalls,
+    notes: visibleNotesFor(scene.notes ?? [], 'player', fog),
+    drops: visibleDropsFor((scene.drops ?? []).filter((d) => levelOf(d) === level), 'player', fog),
+    effects: (scene.effects ?? []).filter((fx) => levelOf(fx) === level && (isPointVisible(fx.from, fog) || isPointVisible(fx.to, fog))),
+  };
+}
+
+/** Token de NPC: a ficha própria só se liberada (inteira ou só o inventário). */
+function projectPlacement(placement: TokenPlacement, entry: TableEntry, viewer: Viewer): TokenPlacement {
+  if (!placement.sheet || entry.kind !== 'npc' || controlsNpc(entry, viewer) || placement.sheetPublic) return placement;
+  const { sheet, ...rest } = placement;
+  const bars = placement.bars ?? entry.token?.bars ?? [];
+  if (placement.inventoryPublic || isDown(bars)) return { ...rest, sheet: { inventory: sheet.inventory } as CharacterSheet };
+  return rest;
+}
+
+// --- Fichas ------------------------------------------------------------------------
+
+function entryVisible(entry: TableEntry, state: TableState, viewer: Viewer, onMap: ReadonlySet<string>): boolean {
+  switch (entry.kind) {
+    case 'character':
+      return true;
+    case 'npc':
+      return controlsNpc(entry, viewer) || onMap.has(entry.id);
+    case 'automation':
+      // Só as ações dele (personagem ou NPC que controla); as gerais e as de NPCs são do mestre
+      return !!entry.ownerEntryId && canEditEntry(state, entry, viewer);
+    default:
+      // Sons: só o mestre usa (aba Sons)
+      return false;
+  }
 }
 
 function projectEntry(entry: TableEntry, viewer: Viewer): TableEntry {
@@ -57,28 +120,15 @@ function projectEntry(entry: TableEntry, viewer: Viewer): TableEntry {
   return entry;
 }
 
-function projectScene(scene: Scene, entryById: ReadonlyMap<string, TableEntry>, viewer: Viewer): Scene {
-  return {
-    ...scene,
-    notes: (scene.notes ?? []).filter((n) => !n.gmOnly),
-    tokens: (scene.tokens ?? []).map((t) => projectPlacement(t, entryById.get(t.entryId), viewer)),
-  };
-}
-
-/** Token de NPC: a ficha própria só se liberada (inteira ou só o inventário). */
-function projectPlacement(placement: TokenPlacement, entry: TableEntry | undefined, viewer: Viewer): TokenPlacement {
-  if (!placement.sheet || entry?.kind !== 'npc' || controlsNpc(entry, viewer) || placement.sheetPublic) return placement;
-  const { sheet, ...rest } = placement;
-  const bars = placement.bars ?? entry.token?.bars ?? [];
-  if (placement.inventoryPublic || isDown(bars)) return { ...rest, sheet: { inventory: sheet.inventory } as CharacterSheet };
-  return rest;
-}
+// --- Lore ----------------------------------------------------------------------------
 
 /**
  * Itens do mundo da mesa que a conta pode ver (aba Lore):
  * - mestre: todos;
  * - jogador: os que estão em pastas reveladas nesta mesa (`canSeeLoreItem`) + o mínimo dos NPCs
- *   do bestiário que estão na mesa (nome e token, para desenhar os tokens), sem a ficha base.
+ *   do bestiário que ele vê na mesa (nome e token, para desenhar os tokens), sem a ficha base.
+ *
+ * `state` é o estado JÁ PROJETADO para a conta: só os NPCs que ela vê ou controla entram.
  */
 export function projectLore(items: readonly WorldItem[], state: TableState, viewer: Viewer): WorldItem[] {
   if (viewer.role === 'gm') return [...items];

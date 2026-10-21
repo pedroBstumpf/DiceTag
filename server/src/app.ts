@@ -68,7 +68,7 @@ export async function buildApp(ctx: AppContext): Promise<App> {
   http.get('/api/health', async () => ({ status: 'ok' }));
   await http.register(async (api) => authRoutes(api, ctx), { prefix: '/api/auth' });
   await http.register(async (api) => tableRoutes(api, ctx, hub), { prefix: '/api' });
-  await http.register(async (api) => worldRoutes(api, ctx), { prefix: '/api' });
+  await http.register(async (api) => worldRoutes(api, ctx, hub), { prefix: '/api' });
   await http.register(async (api) => fileRoutes(api, ctx), { prefix: '/api' });
   if (config.DEV_TOOLS) await http.register(async (dev) => devRoutes(dev, config));
 

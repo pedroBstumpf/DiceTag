@@ -60,11 +60,15 @@ describe('comandos em tempo real', () => {
     expect((await a.next('ack')).version).toBe(1);
     await b.next('state');
 
+    // Anotação secreta: a visão do jogador não muda, então ele nem recebe um estado novo
     const secret = { id: 'n1', x: 0, y: 0, title: 'Armadilha', text: '', color: '#ef4444', gmOnly: true };
     a.ws.send(JSON.stringify({ t: 'cmd', seq: 2, type: 'addNote', payload: { sceneId: 's1', note: secret } }));
     await a.next('ack');
+    const visible = { ...secret, id: 'n2', title: 'Placa', gmOnly: false };
+    a.ws.send(JSON.stringify({ t: 'cmd', seq: 3, type: 'addNote', payload: { sceneId: 's1', note: visible } }));
+    await a.next('ack');
     const view = await b.next('state');
-    expect(view.state.scenes[0].notes).toEqual([]);
+    expect(view.state.scenes[0].notes.map((n: { id: string }) => n.id)).toEqual(['n2']);
     expect(JSON.stringify(b.inbox)).not.toContain('Armadilha');
     a.ws.close();
     b.ws.close();
@@ -85,6 +89,37 @@ describe('comandos em tempo real', () => {
     await b.next('ack');
     const seen = await a.next('cmd');
     expect(seen).toMatchObject({ type: 'addStroke', by: player.id });
+    a.ws.close();
+    b.ws.close();
+  });
+
+  it('névoa: o jogador recebe os polígonos de visão, sem paredes nem o NPC escondido', async () => {
+    const a = await openSocket(port, tableId, gm.cookie);
+    const b = await openSocket(port, tableId, player.cookie);
+    await a.next('welcome');
+    await b.next('welcome');
+    const send = (seq: number, type: string, payload: unknown) => a.ws.send(JSON.stringify({ t: 'cmd', seq, type, payload }));
+    const wall = { id: 'w1', kind: 'line', points: [{ x: 300, y: -2000 }, { x: 300, y: 2000 }] };
+    send(1, 'addScene', { scene: { ...scene, fog: { enabled: true }, walls: [wall] } });
+    send(2, 'addEntry', { entry: { id: 'pc', kind: 'character', name: 'Ana', createdAt: 1, ownerUserId: player.id } });
+    send(3, 'addEntry', { entry: { id: 'orc', kind: 'npc', name: 'Orc escondido', createdAt: 1 } });
+    send(4, 'placeToken', { sceneId: 's1', placement: { id: 't-pc', entryId: 'pc', x: 100, y: 100 } });
+    send(5, 'placeToken', { sceneId: 's1', placement: { id: 't-orc', entryId: 'orc', x: 600, y: 100 } });
+    for (let i = 0; i < 5; i++) await a.next('ack');
+
+    // Estados intermediários (agrupados a cada 30 ms) até o último comando chegar
+    let view = await b.next('state');
+    while (!view.state.scenes[0]?.tokens?.length || view.state.entries.length < 1) view = await b.next('state');
+    expect(view.state.scenes[0].tokens.map((t: { id: string }) => t.id)).toEqual(['t-pc']);
+    expect(view.vision).toHaveLength(1);
+    expect(view.state.scenes[0].walls).toEqual([]);
+    expect(JSON.stringify(view)).not.toContain('Orc escondido');
+
+    // O orc entra na visão: o jogador passa a recebê-lo
+    send(6, 'moveToken', { placementId: 't-orc', x: 200, y: 100 });
+    await a.next('ack');
+    const after = await b.next('state');
+    expect(after.state.scenes[0].tokens.map((t: { id: string }) => t.id)).toEqual(['t-pc', 't-orc']);
     a.ws.close();
     b.ws.close();
   });

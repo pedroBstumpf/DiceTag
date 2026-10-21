@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { TableRole, TableState } from '../domain';
+import type { Point, TableRole, TableState } from '../domain';
 import { idSchema as id } from '../lib/ids';
 import { COMMAND_TYPES, rollConfig } from './command-schemas';
 
@@ -13,13 +13,16 @@ import { COMMAND_TYPES, rollConfig } from './command-schemas';
  * - `sync`  {}  pede o estado completo de novo.
  *
  * Servidor → cliente
- * - `welcome` { you, version, state }  ao entrar (estado já projetado para quem olha);
+ * - `welcome` { you, version, state, vision }  ao entrar (estado já projetado para quem olha);
  * - `ack`     { seq, version, type, payload }  comando aceito (payload final, carimbado);
  * - `nack`    { seq, reason }  comando recusado (o cliente desfaz a previsão local);
  * - `cmd`     { version, type, payload, by }  comando de outra pessoa (só para o mestre);
- * - `state`   { version, state }  estado projetado (jogadores, após mudanças; ou após `sync`);
- * - `event`   { event, by }  evento efêmero de outra pessoa;
+ * - `state`   { version, state, vision }  estado projetado (jogadores, quando a visão deles muda; ou após `sync`);
+ * - `event`   { event, by }  evento efêmero de outra pessoa (só se ela pode vê-lo);
  * - `error`   { code, message }  mensagem inválida, limite de taxa…
+ *
+ * `vision`: polígonos de visão da cena aberta, calculados pelo servidor (jogador com névoa; null
+ * para o mestre ou sem névoa). Com névoa, o jogador não recebe as paredes, só as portas vistas.
  *
  * `seq` é o número que o cliente dá a cada envio, para casar `ack`/`nack` com o pedido.
  */
@@ -63,11 +66,18 @@ export type ClientMessage = z.infer<typeof clientMessage>;
 export type TableEvent = z.infer<typeof eventSchema>;
 
 export type ServerMessage =
-  | { t: 'welcome'; tableId: string; you: { userId: string; name: string; role: TableRole }; version: number; state: TableState }
+  | {
+      t: 'welcome';
+      tableId: string;
+      you: { userId: string; name: string; role: TableRole };
+      version: number;
+      state: TableState;
+      vision: Point[][] | null;
+    }
   | { t: 'ack'; seq: number; version: number; type: string; payload: unknown }
   | { t: 'nack'; seq: number; reason: string }
   | { t: 'cmd'; version: number; type: string; payload: unknown; by: string }
-  | { t: 'state'; version: number; state: TableState }
+  | { t: 'state'; version: number; state: TableState; vision: Point[][] | null }
   | { t: 'event'; event: TableEvent; by: string }
   | { t: 'error'; code: string; message: string };
 

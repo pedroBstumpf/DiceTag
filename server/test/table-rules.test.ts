@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { TableEntry, TableState } from '../src/domain';
+import { defaultToken, type Scene, type TableEntry, type TableState } from '../src/domain';
 import { COMMAND_RULES, type RuleContext } from '../src/realtime/command-rules';
 import { COMMAND_SCHEMAS, COMMAND_TYPES } from '../src/realtime/command-schemas';
-import { projectLore, projectState } from '../src/realtime/projection';
+import { eventVisibleTo, playerVision, projectLore, projectState } from '../src/realtime/projection';
 import { performRoll } from '../src/realtime/rolls';
+import { VisionCache } from '../src/realtime/vision';
 
 // --- Mesa de exemplo ---------------------------------------------------------------
 
@@ -80,8 +81,17 @@ function table(): TableState {
   };
 }
 
+/** A mesa com a cena aberta alterada. */
+function withScene(state: TableState, patch: Partial<Scene>): TableState {
+  return { ...state, scenes: state.scenes.map((s) => (s.id === state.activeSceneId ? { ...s, ...patch } : s)) };
+}
+
 const gm: RuleContext['viewer'] = { role: 'gm', userId: 'u-gm' };
 const ana: RuleContext['viewer'] = { role: 'player', userId: 'u-ana' };
+
+/** Cena dos jogadores e estado projetado, como a sala calcula. */
+const sceneOf = (state: TableState) => new VisionCache((e) => e.token ?? defaultToken(e.kind)).sceneOf(state);
+const viewOf = (state: TableState, viewer: RuleContext['viewer'] = ana) => projectState(state, viewer, sceneOf(state));
 
 /** Valida o formato e aplica a regra, como a sala faz. */
 function run(type: (typeof COMMAND_TYPES)[number], payload: unknown, viewer = ana, state = table()) {
@@ -214,18 +224,18 @@ describe('permissões no servidor', () => {
 describe('o que cada um recebe (projeção)', () => {
   it('o mestre recebe tudo', () => {
     const state = table();
-    expect(projectState(state, gm)).toBe(state);
+    expect(viewOf(state, gm)).toBe(state);
   });
 
   it('o jogador não recebe cenas em preparação, anotações secretas nem pastas de cenas', () => {
-    const view = projectState(table(), ana);
+    const view = viewOf(table());
     expect(view.scenes.map((s) => s.id)).toEqual(['s1']);
     expect(view.scenes[0].notes?.map((n) => n.id)).toEqual(['n-pub']);
     expect(view.sceneFolders).toEqual([]);
   });
 
   it('fichas de NPC: só as que controla; de tokens, só o liberado', () => {
-    const view = projectState(table(), ana);
+    const view = viewOf(table());
     expect(view.entries.find((e) => e.id === 'npc-orc')?.sheet).toBeUndefined();
     expect(view.entries.find((e) => e.id === 'npc-pet')?.sheet).toBeDefined();
     const tokens = view.scenes[0].tokens!;
@@ -234,7 +244,7 @@ describe('o que cada um recebe (projeção)', () => {
   });
 
   it('ações: só as dele; anotações pessoais dos outros personagens somem', () => {
-    const view = projectState(table(), ana);
+    const view = viewOf(table());
     expect(view.entries.filter((e) => e.kind === 'automation').map((e) => e.id)).toEqual(['act-ana']);
     expect(view.entries.find((e) => e.id === 'pc-bia')?.sheet?.notes).toEqual([]);
     expect(view.entries.find((e) => e.id === 'pc-ana')?.sheet?.notes).toHaveLength(1);
@@ -247,11 +257,102 @@ describe('o que cada um recebe (projeção)', () => {
       { id: 'doc-secreto', type: 'document', name: 'Plano do vilão', parentId: null, createdAt: 0, updatedAt: 0 },
       { id: 'bestia', type: 'npc', name: 'Dragão', parentId: null, createdAt: 0, updatedAt: 0, sheet: { labels: ['fraqueza: gelo'] } },
     ] as never[];
-    const state = { ...table(), entries: [...table().entries, { id: 'ref', kind: 'npc', name: 'Dragão', createdAt: 0, worldNpcId: 'bestia' } as TableEntry] };
-    const lore = projectLore(items, state, ana);
+    const ref = { id: 'ref', kind: 'npc', name: 'Dragão', createdAt: 0, worldNpcId: 'bestia' } as TableEntry;
+    const hidden = { ...table(), entries: [...table().entries, ref] };
+    // NPC do bestiário fora do mapa: o jogador nem sabe que ele está na mesa
+    expect(projectLore(items, viewOf(hidden), ana).map((i) => i.id).sort()).toEqual(['doc-publico', 'pasta-publica']);
+
+    const state = withScene(hidden, { tokens: [{ id: 't-dragao', entryId: 'ref', x: 10, y: 10 }] });
+    const lore = projectLore(items, viewOf(state), ana);
     expect(lore.map((i) => i.id).sort()).toEqual(['bestia', 'doc-publico', 'pasta-publica']);
     expect(lore.find((i) => i.id === 'bestia')?.sheet).toBeUndefined();
     expect(projectLore(items, state, gm)).toHaveLength(4);
+  });
+});
+
+describe('névoa: o jogador só recebe o que algum token enxerga', () => {
+  /**
+   * Ana (100, 100) enxerga 840 px; as paredes em x = 300 escondem o lado direito. Os NPCs ficam
+   * sem visão (padrão): token com visão ligada revela o mapa ao grupo, como no front-end.
+   */
+  const blind = (e: TableEntry): TableEntry => (e.kind === 'npc' ? { ...e, token: { ...token(), vision: { enabled: false, range: 18 } } } : e);
+  const fogged = () =>
+    withScene(
+      {
+        ...table(),
+        entries: [...table().entries.map(blind), { id: 'som', kind: 'sound', name: 'Tema do chefe', createdAt: 1 } as TableEntry],
+      },
+      {
+        fog: { enabled: true },
+        walls: [
+          { id: 'w1', kind: 'line', points: [{ x: 300, y: -1000 }, { x: 300, y: 400 }] },
+          { id: 'd1', kind: 'door', points: [{ x: 300, y: 400 }, { x: 300, y: 500 }], open: false },
+          { id: 'w2', kind: 'line', points: [{ x: 300, y: 500 }, { x: 300, y: 2000 }] },
+          { id: 'd-longe', kind: 'door', points: [{ x: 800, y: 100 }, { x: 800, y: 200 }], open: false },
+        ],
+        notes: [
+          { id: 'n-perto', x: 150, y: 150, title: 'Placa', text: '', color: '#facc15', gmOnly: false },
+          { id: 'n-longe', x: 600, y: 150, title: 'Mapa do tesouro', text: '', color: '#facc15', gmOnly: false },
+        ],
+        drops: [
+          { id: 'drop-perto', x: 150, y: 150, item: { id: 'i1', itemId: 'x' } },
+          { id: 'drop-longe', x: 600, y: 150, item: { id: 'i2', itemId: 'y' } },
+        ],
+        effects: [
+          { id: 'fx-perto', kind: 'explosion', color: '#ef4444', from: { x: 150, y: 150 }, to: { x: 160, y: 160 }, seed: 1, scale: 1 },
+          { id: 'fx-longe', kind: 'explosion', color: '#ef4444', from: { x: 600, y: 150 }, to: { x: 610, y: 160 }, seed: 1, scale: 1 },
+        ],
+      },
+    );
+
+  it('tokens, anotações, itens e efeitos sob a névoa não são enviados', () => {
+    const view = viewOf(fogged());
+    const [scene] = view.scenes;
+    expect(scene.tokens?.map((t) => t.id)).toEqual(['t-ana']);
+    expect(scene.notes?.map((n) => n.id)).toEqual(['n-perto']);
+    expect(scene.drops?.map((d) => d.id)).toEqual(['drop-perto']);
+    expect(scene.effects?.map((f) => f.id)).toEqual(['fx-perto']);
+    expect(JSON.stringify(view)).not.toMatch(/Mapa do tesouro|drop-longe|t-orc/);
+  });
+
+  it('paredes não vão ao jogador (revelariam a planta): só as portas vistas, e os polígonos à parte', () => {
+    const state = fogged();
+    expect(viewOf(state).scenes[0].walls?.map((w) => w.id)).toEqual(['d1']);
+    expect(playerVision(ana, sceneOf(state))).toHaveLength(1);
+    expect(playerVision(gm, sceneOf(state))).toBeNull();
+    // Sem névoa: as paredes da camada vão (o mapa todo está à vista), sem polígonos
+    expect(viewOf(table()).scenes[0].walls).toHaveLength(2);
+    expect(playerVision(ana, sceneOf(table()))).toBeNull();
+  });
+
+  it('NPC fora da vista e sons não são enviados; o NPC que controla, sim', () => {
+    const ids = viewOf(fogged()).entries.map((e) => e.id);
+    expect(ids).not.toContain('npc-orc');
+    expect(ids).not.toContain('som');
+    expect(ids).toContain('npc-pet');
+    expect(viewOf(fogged(), gm).entries.map((e) => e.id)).toContain('som');
+  });
+
+  it('o token que entra na visão passa a ser enviado', () => {
+    const state = fogged();
+    const tokens = state.scenes[0].tokens?.map((t) => (t.id === 't-orc' ? { ...t, x: 200 } : t));
+    const moved = withScene(state, { tokens });
+    expect(viewOf(moved).scenes[0].tokens?.map((t) => t.id)).toEqual(['t-ana', 't-orc']);
+    expect(viewOf(moved).entries.map((e) => e.id)).toContain('npc-orc');
+  });
+
+  it('eventos: só da cena aberta; efeitos só se visíveis; o mestre recebe todos', () => {
+    const view = sceneOf(fogged());
+    const fx = (x: number) => ({
+      kind: 'fx' as const,
+      sceneId: 's1',
+      fx: { kind: 'bolt', color: '#fff', from: { x, y: 150 }, to: { x, y: 160 }, seed: 1, scale: 1 },
+    });
+    expect(eventVisibleTo({ kind: 'ping', sceneId: 's2', x: 0, y: 0 }, ana, view)).toBe(false);
+    expect(eventVisibleTo({ kind: 'ping', sceneId: 's1', x: 600, y: 150 }, ana, view)).toBe(true);
+    expect(eventVisibleTo(fx(150), ana, view)).toBe(true);
+    expect(eventVisibleTo(fx(600), ana, view)).toBe(false);
+    expect(eventVisibleTo(fx(600), gm, null)).toBe(true);
   });
 });
 
