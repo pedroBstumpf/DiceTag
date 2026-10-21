@@ -1,10 +1,11 @@
-import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { migrate, openDatabase, transaction } from '../src/db/database';
 import { MIGRATIONS } from '../src/db/migrations';
+import { checkBackup, createBackup } from '../src/ops/backup';
 
 /**
  * Banco: migrações registradas e só para frente, backup antes de migrar, adoção de bancos da
@@ -52,6 +53,28 @@ describe('migrações', () => {
     expect(copy.prepare('SELECT COUNT(*) AS n FROM users').get()).toEqual({ n: 1 });
     expect(copy.prepare("SELECT name FROM sqlite_master WHERE name = 'nova'").get()).toBeUndefined();
     copy.close();
+    db.close();
+  });
+});
+
+describe('backup e teste de restauração', () => {
+  it('copia banco e arquivos com o servidor no ar e a cópia passa na conferência', async () => {
+    const db = openDatabase(join(dir, 'zehenia.db'));
+    const files = join(dir, 'files');
+    mkdirSync(files);
+    db.prepare("INSERT INTO users (id, email, name, password_hash, created_at) VALUES ('u', 'a@b.co', 'A', 'h', 0)").run();
+    db.prepare("INSERT INTO files (id, owner_id, mime, size, sha256, created_at) VALUES ('f1', 'u', 'image/png', 3, 'x', 0)").run();
+    writeFileSync(join(files, 'f1'), 'png');
+    writeFileSync(join(files, 'f2.part'), 'envio interrompido');
+
+    const backup = await createBackup(db, files, join(dir, 'backups'));
+    expect(readdirSync(join(backup, 'files'))).toEqual(['f1']);
+    const report = checkBackup(backup);
+    expect(report).toMatchObject({ ok: true, problems: [], counts: { users: 1, files: 1 } });
+
+    // Arquivo registrado sem o conteúdo: a conferência acusa
+    rmSync(join(backup, 'files', 'f1'));
+    expect(checkBackup(backup).problems).toEqual([expect.stringMatching(/sem o conteúdo/)]);
     db.close();
   });
 });
