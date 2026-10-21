@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { defaultToken, type Scene, type TableEntry, type TableState } from '../src/domain';
+import { defaultToken, type Scene, type TableEntry, type TableState, type WorldItem } from '../src/domain';
 import { COMMAND_RULES, type RuleContext } from '../src/realtime/command-rules';
 import { COMMAND_SCHEMAS, COMMAND_TYPES } from '../src/realtime/command-schemas';
 import { eventVisibleTo, playerVision, projectLore, projectState } from '../src/realtime/projection';
 import { performRoll } from '../src/realtime/rolls';
 import { VisionCache } from '../src/realtime/vision';
+import { WorldView } from '../src/realtime/world';
 
 // --- Mesa de exemplo ---------------------------------------------------------------
 
@@ -81,6 +82,15 @@ function table(): TableState {
   };
 }
 
+/** Mundo da mesa: uma Raça, um item numa pasta revelada e um item secreto. */
+const worldItems: Record<string, WorldItem> = {
+  'pasta-publica': { id: 'pasta-publica', type: 'folder', name: 'Pública', parentId: null, createdAt: 0, updatedAt: 0 },
+  espada: { id: 'espada', type: 'item', name: 'Espada', parentId: 'pasta-publica', createdAt: 0, updatedAt: 0 },
+  reliquia: { id: 'reliquia', type: 'item', name: 'Relíquia', parentId: null, createdAt: 0, updatedAt: 0 },
+  elfo: { id: 'elfo', type: 'race', name: 'Elfo', parentId: null, createdAt: 0, updatedAt: 0, traits: ['Visão no escuro'], statusMods: { 'status-mind': 2 } },
+};
+const world = new WorldView((id) => worldItems[id] ?? null);
+
 /** A mesa com a cena aberta alterada. */
 function withScene(state: TableState, patch: Partial<Scene>): TableState {
   return { ...state, scenes: state.scenes.map((s) => (s.id === state.activeSceneId ? { ...s, ...patch } : s)) };
@@ -98,7 +108,7 @@ function run(type: (typeof COMMAND_TYPES)[number], payload: unknown, viewer = an
   const parsed = COMMAND_SCHEMAS[type].safeParse(payload);
   if (!parsed.success) return { ok: false as const, reason: 'formato' };
   const rule = COMMAND_RULES[type] as (p: unknown, c: RuleContext) => { ok: boolean; reason?: string; payload?: any };
-  return rule(parsed.data, { state, viewer, userName: viewer.role === 'gm' ? 'Mestre' : 'Ana', now: 42, full: false });
+  return rule(parsed.data, { state, viewer, userName: viewer.role === 'gm' ? 'Mestre' : 'Ana', now: 42, full: false, world });
 }
 
 // --- Formato -------------------------------------------------------------------------
@@ -215,7 +225,66 @@ describe('permissões no servidor', () => {
     const scene = { id: 's1', name: 'Dup', gridSize: 70, showGrid: true };
     expect(run('addScene', { scene }, gm).ok).toBe(false);
     const parsed = COMMAND_SCHEMAS.addScene.parse({ scene: { ...scene, id: 's9' } });
-    expect(COMMAND_RULES.addScene(parsed, { state: table(), viewer: gm, userName: 'Mestre', now: 0, full: true }).ok).toBe(false);
+    expect(COMMAND_RULES.addScene(parsed, { state: table(), viewer: gm, userName: 'Mestre', now: 0, full: true, world }).ok).toBe(false);
+  });
+});
+
+// --- Ficha ---------------------------------------------------------------------------------
+
+describe('ficha: regras do servidor para o jogador', () => {
+  const updateSheet = (s: unknown, viewer = ana) => run('updateEntry', { entryId: 'pc-ana', patch: { sheet: s } }, viewer);
+  const updateBars = (b: unknown, viewer = ana) => run('updateEntry', { entryId: 'pc-ana', patch: { token: { ...token(), bars: b } } }, viewer);
+
+  it('esquema: níveis fora das regras e campos desconhecidos são recusados (até para o mestre)', () => {
+    const [first] = sheet(['A']).themes;
+    const withTag = (level: number) => ({ ...sheet(['A']), themes: [{ ...first, tags: [{ id: 'x', text: 'X', level }] }] });
+    expect(updateSheet(withTag(6), gm).ok).toBe(true);
+    expect(updateSheet(withTag(99), gm).ok).toBe(false);
+    expect(updateSheet({ ...sheet(['A']), themes: [{ ...first, flaws: [{ id: 'f', text: 'F', level: 2 }] }] }, gm).ok).toBe(false);
+    expect(updateSheet({ ...sheet(['A']), eiros: -1 }, gm).ok).toBe(false);
+    expect(updateSheet({ ...sheet(['A']), admin: true }, gm).ok).toBe(false);
+  });
+
+  it('jogador muda o valor das barras de status, mas não o máximo nem as remove; o mestre muda', () => {
+    const hurt = bars().map((b) => (b.id === 'status-body' ? { ...b, value: 10 } : b));
+    const stronger = bars().map((b) => (b.id === 'status-body' ? { ...b, max: 99 } : b));
+    expect(updateBars(hurt).ok).toBe(true);
+    expect(updateBars(stronger).reason).toMatch(/máximo/);
+    expect(updateBars(bars().slice(1)).reason).toMatch(/removidas/);
+    expect(updateBars(stronger, gm).ok).toBe(true);
+  });
+
+  it('raça: o servidor aplica a do mundo (rótulos e máximo); o que o cliente diz ter aplicado é ignorado', () => {
+    const forged = { ...sheet(['A']), raceRef: { id: 'elfo' }, race: 'Elfo', appliedRaces: { race: { labels: [], mods: { 'status-mind': 50 } } } };
+    const result = updateSheet(forged);
+    expect(result.ok).toBe(true);
+    expect(result.payload.patch.sheet.appliedRaces.race.mods).toEqual({ 'status-mind': 2 });
+    expect(result.payload.patch.sheet.labels).toEqual(['A', 'Visão no escuro']);
+    expect(result.payload.patch.token.bars.find((b: { id: string }) => b.id === 'status-mind').max).toBe(26);
+
+    expect(updateSheet({ ...sheet(['A']), raceRef: { id: 'reliquia' } }).reason).toMatch(/Raça/);
+    // Sem trocar a raça, o "aplicado" forjado some (vale o gravado)
+    const sneaky = { ...sheet(['A']), appliedRaces: { race: { labels: [], mods: { 'status-mind': 50 } } } };
+    expect(updateSheet(sneaky).payload.patch.sheet.appliedRaces).toBeUndefined();
+  });
+
+  it('inventário: item do mundo só se revelado; item da mesa só se existe', () => {
+    const withItem = (item: object) => ({ ...sheet(['A']), inventory: [{ id: 'linha', ...item }] });
+    expect(updateSheet(withItem({ itemId: 'espada' })).ok).toBe(true);
+    expect(updateSheet(withItem({ itemId: 'reliquia' })).ok).toBe(false);
+    expect(updateSheet(withItem({ itemId: 'nao-existe', table: true })).ok).toBe(false);
+    expect(updateSheet(withItem({ itemId: 'reliquia' }), gm).ok).toBe(true);
+  });
+
+  it('token novo do jogador leva só a posição (ficha, barras e liberações vêm da ficha de origem)', () => {
+    const placement = { id: 't-pet', entryId: 'npc-pet', x: 1, y: 1, bars: bars(), sheet: sheet(['forjada']), size: 6, sheetPublic: true };
+    expect(run('placeToken', { sceneId: 's1', placement }).payload.placement).toEqual({ id: 't-pet', entryId: 'npc-pet', x: 1, y: 1 });
+  });
+
+  it('personagem novo do jogador começa com o máximo padrão das barras', () => {
+    const entry = { id: 'pc-nova', kind: 'character', name: 'Nova', createdAt: 1, token: { ...token(), bars: bars().map((b) => ({ ...b, max: 99 })) } };
+    expect(run('addEntry', { entry }).reason).toMatch(/máximo/);
+    expect(run('addEntry', { entry: { ...entry, token: token() } }).ok).toBe(true);
   });
 });
 

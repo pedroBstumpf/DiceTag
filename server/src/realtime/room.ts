@@ -112,6 +112,7 @@ export class Room {
       userName: client.userName,
       now: this.now(),
       full: this.full,
+      world: this.world,
     });
     if (!verdict.ok) return this.send(client, { t: 'nack', seq, reason: verdict.reason });
     const command = { type, payload: verdict.payload } as TableCommand;

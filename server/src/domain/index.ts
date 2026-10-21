@@ -43,22 +43,30 @@ export { baseTagId, manaCost, rollDice, withPowers, type TagLevels } from '../..
 export { movePathBlocked } from '../../../src/app/features/game-table/utils/walls';
 export { doorSeen, wallsToSegments, type Segment } from '../../../src/app/features/game-table/utils/visibility';
 export { decodeMask, type ExploredMask } from '../../../src/app/features/game-table/utils/fog-memory';
+export { applyRace, type RaceChoice } from '../../../src/app/features/game-table/utils/race';
 export type { Point } from '../../../src/app/core/models/geometry.model';
 
 export {
   AUTOMATION_ICONS,
   DICE_KINDS,
   FX_KINDS,
+  GOAL_STEPS,
   MANA_BAR,
   MAX_CHAT_MESSAGES,
   MAX_TOKEN_SIZE,
   MIN_TOKEN_SIZE,
   NPC_TOKEN_SHEET,
+  SHEET_MAX_LEVEL,
+  SHEET_STUDY_COUNT,
+  SHEET_THEME_COUNT,
   STATUS_BARS,
   defaultToken,
   isDown,
   normalizeSheet,
+  withStatusBars,
   type CharacterSheet,
+  type CharacterStudy,
+  type InventoryEntry,
   type ChatMessage,
   type DoorWall,
   type ExploredData,
@@ -75,4 +83,4 @@ export {
 } from '../../../src/app/core/models/table-session.model';
 export { MAX_WORLDS } from '../../../src/app/core/models/world.model';
 export { TABLE_ACCENTS } from '../../../src/app/core/models/game-table.model';
-export { npcTokenOf, type WorldItem } from '../../../src/app/core/models/world-item.model';
+export { npcTokenOf, raceTraitsOf, type WorldItem } from '../../../src/app/core/models/world-item.model';

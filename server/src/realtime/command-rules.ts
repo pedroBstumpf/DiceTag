@@ -2,10 +2,12 @@ import {
   canEdit,
   canEditTableItem,
   canRemoveFixedFx,
+  defaultToken,
   findDrop,
   findPlacement,
   levelOf,
   movePathBlocked,
+  normalizeSheet,
   ownsCharacter,
   wallsBlockMovement,
   wallsToSegments,
@@ -16,6 +18,8 @@ import {
   type Viewer,
 } from '../domain';
 import type { ValidPayload } from './command-schemas';
+import { playerSheetChange } from './sheet-rules';
+import type { WorldView } from './world';
 
 /**
  * Autorização de cada comando da mesa no servidor (SPEC.md §3.3): o navegador não é confiável,
@@ -38,6 +42,8 @@ export interface RuleContext {
   now: number;
   /** A mesa passou do tamanho máximo: comandos que acrescentam dados são recusados. */
   full: boolean;
+  /** Mundo da mesa: Raças aplicadas na ficha e itens que entram no inventário. */
+  world: WorldView;
 }
 
 export type RuleResult<P> = { ok: true; payload: P } | { ok: false; reason: string };
@@ -117,16 +123,6 @@ function blockedByWalls(ctx: RuleContext, placementId: string, x: number, y: num
   return movePathBlocked(placement, { x, y }, wallsToSegments(walls));
 }
 
-/** O SN (sucessos necessários) dos estudos só o mestre define. */
-function changesStudyGoal(current: TableEntry, sheet: Record<string, unknown> | undefined): boolean {
-  const next = sheet?.['studies'];
-  if (!Array.isArray(next)) return false;
-  const before = new Map((current.sheet?.studies ?? []).map((s) => [s.id, s.sn]));
-  return next.some((s) => {
-    const study = s as { id?: unknown; sn?: unknown };
-    return typeof study.id === 'string' && (before.get(study.id) ?? 0) !== study.sn;
-  });
-}
 
 // --- Regras --------------------------------------------------------------------
 
@@ -168,7 +164,14 @@ export const COMMAND_RULES: { [K in TableCommandType]: Rule<K> } = {
     if (entry.kind === 'character') {
       // Personagem criado por jogador é sempre dele; não escolhe controlador nem vínculo ao bestiário
       const { controllerUserId: _c, worldNpcId: _w, ...rest } = entry;
-      return allow({ entry: { ...rest, ownerUserId: ctx.viewer.userId } });
+      // Ficha e barras novas valem como as de um personagem em branco (raça, máximos…)
+      const base = defaultToken('character');
+      const change = playerSheetChange(ctx, { sheet: normalizeSheet(undefined), bars: base.bars }, { sheet: rest.sheet, bars: rest.token?.bars });
+      if (!change.ok) return change;
+      const { sheet, bars } = change.payload;
+      return allow({
+        entry: { ...rest, ownerUserId: ctx.viewer.userId, ...(sheet && { sheet }), ...(bars && { token: { ...(rest.token ?? base), bars } }) },
+      });
     }
     if (entry.kind === 'automation' && canEditEntry(ctx.state, entryOf(ctx.state, entry.ownerEntryId), ctx.viewer)) return allow(p);
     return deny(NOT_ALLOWED);
@@ -183,8 +186,13 @@ export const COMMAND_RULES: { [K in TableCommandType]: Rule<K> } = {
     // "Vincular à minha conta": só para a própria conta
     if (patch.ownerUserId !== undefined && patch.ownerUserId !== ctx.viewer.userId) return deny(NOT_ALLOWED);
     if (patch.ownerEntryId !== undefined && !canEditEntry(ctx.state, entryOf(ctx.state, patch.ownerEntryId), ctx.viewer)) return deny(NOT_ALLOWED);
-    if (changesStudyGoal(current, patch.sheet)) return deny('Só o mestre define o SN dos estudos.');
-    return allow(p);
+    if (!patch.sheet && !patch.token) return allow(p);
+    // Ficha e barras: regras do servidor (raça, SN, máximo das barras de status, itens)
+    const token = ctx.world.tokenOf(current);
+    const change = playerSheetChange(ctx, { sheet: normalizeSheet(current.sheet), bars: token.bars }, { sheet: patch.sheet, bars: patch.token?.bars });
+    if (!change.ok) return change;
+    const { sheet, bars } = change.payload;
+    return allow({ ...p, patch: { ...patch, ...(sheet && { sheet }), ...(bars && { token: { ...(patch.token ?? token), bars } }) } });
   },
   removeEntry: (p, ctx) => {
     if (isGm(ctx)) return allow(p);
@@ -204,8 +212,10 @@ export const COMMAND_RULES: { [K in TableCommandType]: Rule<K> } = {
     if (entry?.kind !== 'character' && entry?.kind !== 'npc') return deny('Ficha não encontrada.');
     if (isGm(ctx)) return allow(p);
     if (!inActiveScene(ctx, p.sceneId) || !canEditEntry(ctx.state, entry, ctx.viewer)) return deny(NOT_ALLOWED);
-    const { sheetPublic: _s, inventoryPublic: _i, ...placement } = p.placement;
-    return allow({ ...p, placement });
+    // Token novo do jogador: só a posição; tamanho, barras, ficha e liberações vêm da ficha de
+    // origem (`resolveToken` usa a da ficha enquanto o token não tem os próprios valores)
+    const { id, entryId, x, y, level } = p.placement;
+    return allow({ ...p, placement: { id, entryId, x, y, ...(level !== undefined && { level }) } });
   },
   updatePlacement: (p, ctx) => {
     if (isGm(ctx)) return allow(p);
@@ -214,7 +224,14 @@ export const COMMAND_RULES: { [K in TableCommandType]: Rule<K> } = {
     if (p.patch.x !== undefined && p.patch.y !== undefined && blockedByWalls(ctx, p.placementId, p.patch.x, p.patch.y)) {
       return deny('Uma parede bloqueia o caminho.');
     }
-    return allow(p);
+    if (!p.patch.sheet && !p.patch.bars) return allow(p);
+    // Cópia da ficha no token (NPC que o jogador controla): mesmas regras da ficha
+    const placement = findPlacement(ctx.state.scenes, p.placementId)!;
+    const entry = entryOf(ctx.state, placement.entryId)!;
+    const before = { sheet: normalizeSheet(placement.sheet ?? entry.sheet), bars: placement.bars ?? ctx.world.tokenOf(entry).bars };
+    const change = playerSheetChange(ctx, before, { sheet: p.patch.sheet, bars: p.patch.bars });
+    if (!change.ok) return change;
+    return allow({ ...p, patch: { ...p.patch, ...change.payload } });
   },
   moveToken: (p, ctx) => {
     if (isGm(ctx)) return allow(p);

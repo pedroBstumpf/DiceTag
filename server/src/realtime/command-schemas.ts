@@ -1,15 +1,27 @@
 import { z } from 'zod';
-import { FX_KINDS, MAX_TOKEN_SIZE, MIN_TOKEN_SIZE, type TableCommandType } from '../domain';
+import {
+  FX_KINDS,
+  GOAL_STEPS,
+  MAX_TOKEN_SIZE,
+  MIN_TOKEN_SIZE,
+  SHEET_MAX_LEVEL,
+  SHEET_STUDY_COUNT,
+  SHEET_THEME_COUNT,
+  STATUS_BARS,
+  type CharacterSheet,
+  type TableCommandType,
+} from '../domain';
 import { idSchema as id } from '../lib/ids';
 
 /**
  * Formato aceito do payload de cada comando da mesa (o mesmo que o front-end monta em
- * `TableSessionService.dispatch`). Objetos com formato conhecido são `strictObject`: campo
- * desconhecido = comando recusado. Partes livres (a ficha) são só "objeto" aqui e passam pelos
- * limites de `safe-json` na entrada da mensagem.
+ * `TableSessionService.dispatch`). Todo objeto é `strictObject` (campo desconhecido = comando
+ * recusado), todo texto e toda lista têm tamanho máximo e todo número tem faixa — inclusive a
+ * ficha, com os limites das regras do jogo (tags de 1 a 6, defeitos de -1 a -6…).
  *
  * `satisfies Record<TableCommandType, …>`: se o front-end ganhar um comando novo sem esquema
- * aqui, o servidor nem compila — nenhum comando passa sem validação.
+ * aqui, o servidor nem compila — nenhum comando passa sem validação. O mesmo vale para um campo
+ * novo na ficha (`SHEET_SCHEMA_IS_COMPLETE`).
  */
 
 // --- Peças -------------------------------------------------------------------
@@ -43,8 +55,67 @@ const tokenSettings = z.strictObject({
   bars: z.array(bar).max(20),
   tags: z.array(tag).max(50),
 });
-/** Ficha (temas, inventário, anotações…): conteúdo livre, limitado por `safe-json`. */
-const sheet = z.record(z.string(), z.unknown());
+
+const inventoryEntry = z.strictObject({
+  id,
+  itemId: id,
+  table: z.boolean().optional(),
+  name: text(200).optional(),
+  tags: z.array(tag).max(50).optional(),
+  description: text(20_000).optional(),
+  blobId: id.optional(),
+  price: z.number().min(0).max(1e9).optional(),
+  quantity: z.int().min(0).max(1e6).optional(),
+  equipped: z.boolean().optional(),
+});
+
+// --- Ficha ---------------------------------------------------------------------
+
+const sheetLevel = z.int().min(1).max(SHEET_MAX_LEVEL);
+const goalSteps = z.int().min(0).max(GOAL_STEPS);
+const themeTag = z.strictObject({ id, text: text(100), level: sheetLevel, magic: z.boolean().optional() });
+const flaw = z.strictObject({ id, text: text(100), level: z.int().min(-SHEET_MAX_LEVEL).max(-1), magic: z.boolean().optional() });
+const theme = z.strictObject({
+  id,
+  name: text(100),
+  tags: z.array(themeTag).max(30),
+  flaws: z.array(flaw).max(30).optional(),
+  goal: text(1000).optional(),
+  goalProgress: goalSteps.optional(),
+  goalAbandon: goalSteps.optional(),
+});
+const relation = z.strictObject({ id, name: text(100), level: sheetLevel, description: text(4000) });
+const notePage = z.strictObject({ id, title: text(100), content: text(200_000) });
+const study = z.strictObject({ id, text: text(200), sa: z.int().min(0).max(1e6), sn: z.int().min(0).max(1e6) });
+const statusMods = z.partialRecord(z.enum(STATUS_BARS.map((s) => s.id) as [string, ...string[]]), z.int().min(-1000).max(1000));
+const appliedRace = z.strictObject({ labels: z.array(text(100)).max(50), mods: statusMods });
+const raceRef = z.strictObject({ id });
+
+/** Ficha (personagem, NPC e cópia de token de NPC). Campos ausentes recebem o padrão em `normalizeSheet`. */
+const sheet = z
+  .strictObject({
+    race: text(100),
+    subrace: text(100),
+    raceRef: raceRef.optional(),
+    subraceRef: raceRef.optional(),
+    appliedRaces: z.strictObject({ race: appliedRace.optional(), subrace: appliedRace.optional() }).optional(),
+    labels: z.array(text(100)).max(50),
+    relations: z.array(relation).max(100),
+    themes: z.array(theme).max(SHEET_THEME_COUNT),
+    inventory: z.array(inventoryEntry).max(500),
+    notes: z.array(notePage).max(100),
+    eiros: z.int().min(0).max(1e9),
+    studies: z.array(study).max(SHEET_STUDY_COUNT),
+  })
+  .partial();
+
+/** Ficha como chega do cliente (já validada; fichas antigas podem não ter todos os campos). */
+export type SheetInput = z.infer<typeof sheet>;
+
+/** Mesmas chaves nos dois tipos? */
+type SameKeys<A, B> = [Exclude<keyof A, keyof B> | Exclude<keyof B, keyof A>] extends [never] ? true : false;
+/** Só compila se o esquema tiver exatamente os campos de `CharacterSheet` (campo novo no front = servidor não compila). */
+export const SHEET_SCHEMA_IS_COMPLETE: SameKeys<z.infer<typeof sheet>, CharacterSheet> = true;
 
 const placementFields = {
   x: coord,
@@ -86,19 +157,6 @@ const stroke = z.strictObject({
 
 const noteFields = { x: coord, y: coord, title: text(200), text: text(20_000), color, gmOnly: z.boolean() };
 const note = z.strictObject({ id, ...noteFields });
-
-const inventoryEntry = z.strictObject({
-  id,
-  itemId: id,
-  table: z.boolean().optional(),
-  name: text(200).optional(),
-  tags: z.array(tag).max(50).optional(),
-  description: text(20_000).optional(),
-  blobId: id.optional(),
-  price: z.number().min(0).max(1e9).optional(),
-  quantity: z.int().min(0).max(1e6).optional(),
-  equipped: z.boolean().optional(),
-});
 
 const drop = z.strictObject({ id, x: coord, y: coord, level: level.optional(), size: size.optional(), color: color.optional(), item: inventoryEntry });
 
