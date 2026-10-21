@@ -21,8 +21,8 @@ export interface Client {
   events: TokenBucket;
   /** Respondeu ao último ping? */
   alive: boolean;
-  /** Mensagens inválidas/acima do limite seguidas (muitas = conexão fechada). */
-  strikes: number;
+  /** Crédito de mensagens inválidas/acima do limite (esgotado = conexão fechada; recarrega devagar). */
+  invalid: TokenBucket;
   /** Jogador: último estado projetado enviado (estado igual não é reenviado). */
   lastState?: string;
 }

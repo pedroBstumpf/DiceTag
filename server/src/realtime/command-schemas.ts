@@ -132,14 +132,17 @@ const placementFields = {
 };
 const placement = z.strictObject({ id, entryId: id, ...placementFields });
 
+/** Lado máximo da memória da névoa, em células (`MAX_CELLS_PER_SIDE` de `utils/fog-memory.ts`). */
+const MAX_EXPLORED_CELLS = 600;
 const explored = z
   .strictObject({
     cell: z.number().positive().max(10_000),
-    cols: z.int().min(1).max(20_000),
-    rows: z.int().min(1).max(20_000),
-    data: z.string().max(4_000_000).regex(/^[A-Za-z0-9+/=]*$/),
+    cols: z.int().min(1).max(MAX_EXPLORED_CELLS),
+    rows: z.int().min(1).max(MAX_EXPLORED_CELLS),
+    data: z.string().max(60_000).regex(/^[A-Za-z0-9+/=]*$/),
   })
-  .refine((e) => e.cols * e.rows <= 32_000_000, 'máscara grande demais');
+  // Base64 de um bit por célula: nada além do que a máscara ocupa
+  .refine((e) => e.data.length <= 4 * Math.ceil(Math.ceil((e.cols * e.rows) / 8) / 3), 'máscara maior que o tamanho declarado');
 
 const wall = z.discriminatedUnion('kind', [
   z.strictObject({ id, level: level.optional(), kind: z.literal('line'), points: z.array(point).min(2).max(2000) }),

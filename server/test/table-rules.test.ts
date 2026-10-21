@@ -130,6 +130,13 @@ describe('formato dos comandos', () => {
     expect(run('addNote', { sceneId: 's1', note: { id: 'n', x: 0, y: 0, title: '', text: '', color: 'red;background:url(x)', gmOnly: false } }, gm).ok).toBe(false);
   });
 
+  it('memória da névoa: no máximo 600 células por lado e dados do tamanho declarado', () => {
+    const mask = (cols: number, data: string) => ({ sceneId: 's1', explored: { cell: 10, cols, rows: 10, data } });
+    expect(run('setExplored', mask(10, 'AAAAAAAAAAAAAAAAAA=='), gm).ok).toBe(true);
+    expect(run('setExplored', mask(601, ''), gm).ok).toBe(false);
+    expect(run('setExplored', mask(10, 'A'.repeat(1000)), gm).ok).toBe(false);
+  });
+
   it('o cliente não pode enviar resultado de rolagem pelo chat', () => {
     const message = { id: 'm', at: 0, userId: 'u-ana', author: 'Ana', role: 'player', text: 'oi', roll: { total: 99 } };
     expect(run('addChatMessage', { message }).ok).toBe(false);

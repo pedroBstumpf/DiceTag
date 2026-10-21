@@ -175,6 +175,25 @@ describe('mensagens inválidas e expulsão', () => {
     expect((await a.closed).code).toBe(1009);
   });
 
+  it('cada tipo de mensagem tem o próprio limite de tamanho, bem abaixo do teto', async () => {
+    const a = await openSocket(port, tableId, gm.cookie);
+    await a.next('welcome');
+    // JSON válido (espaços são permitidos), mas 20 KB num pedido de "sync"
+    a.ws.send(`{"t":"sync"${' '.repeat(20 * 1024)}}`);
+    expect((await a.next('error')).code).toBe('too_big');
+    a.ws.close();
+  });
+
+  it('mensagens inválidas intercaladas com válidas não enganam o limite', async () => {
+    const a = await openSocket(port, tableId, gm.cookie);
+    await a.next('welcome');
+    for (let i = 0; i < 25; i++) {
+      a.ws.send('{não é json');
+      a.ws.send('{"t":"sync"}');
+    }
+    expect((await a.closed).code).toBe(1008);
+  });
+
   it('jogador removido da mesa é desconectado na hora', async () => {
     const b = await openSocket(port, tableId, player.cookie);
     await b.next('welcome');

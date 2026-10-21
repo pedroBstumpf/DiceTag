@@ -11,19 +11,19 @@ import { TokenBucket, WindowLimiter } from '../lib/limiter';
 import { parseJsonSafely, unsafeJsonReason } from '../lib/safe-json';
 import { readCookie, sessionCookieName } from '../security/cookie';
 import { isAllowedOrigin } from '../security/origin';
+import { MAX_MESSAGE_BYTES, budgetOf } from './budgets';
 import { CLOSE, clientMessage, type ClientMessage } from './protocol';
 import { Room, type Client, type ClientView } from './room';
 import { performRoll } from './rolls';
 import { WorldView } from './world';
 
-/** Tamanho máximo de uma mensagem recebida (o `ws` fecha a conexão acima disto). */
-const MAX_MESSAGE_BYTES = 512 * 1024;
 /** Intervalo do ping de verificação (conexões mortas caem em até 2 intervalos). */
 const HEARTBEAT_MS = 30_000;
 const MAX_SOCKETS_PER_USER = 8;
 const MAX_SOCKETS_PER_ROOM = 80;
-/** Mensagens inválidas ou acima do limite antes de derrubar a conexão. */
-const MAX_STRIKES = 20;
+/** Mensagens inválidas ou acima do limite toleradas de uma vez; o crédito volta 1 a cada 3 s. */
+const MAX_INVALID = 20;
+const INVALID_REFILL_PER_SECOND = 1 / 3;
 const WS_PATH = /^\/ws\/tables\/([A-Za-z0-9_-]{1,64})$/;
 
 /**
@@ -36,9 +36,10 @@ const WS_PATH = /^\/ws\/tables\/([A-Za-z0-9_-]{1,64})$/;
  * - não há sessão válida (cookie) ou a conta não é membro da mesa;
  * - a conta ou a sala já têm conexões demais.
  *
- * Depois de aberta: mensagens só de texto, até 512 KB, JSON seguro e validado; limite de taxa
- * por conexão; ping a cada 30 s (conexão morta cai); a cada ping, confere de novo se a sessão
- * e a participação na mesa continuam válidas (logout ou expulsão derrubam a conexão).
+ * Depois de aberta: mensagens só de texto, JSON seguro e validado, cada tipo com o próprio limite
+ * de tamanho (`budgets.ts`; teto de 512 KB); limite de taxa por conexão; ping a cada 30 s
+ * (conexão morta cai); a cada ping, confere de novo se a sessão e a participação na mesa
+ * continuam válidas (logout ou expulsão derrubam a conexão).
  * Sem compressão (`perMessageDeflate: false`): evita "bombas" de descompressão e custo de CPU.
  */
 export class RealtimeHub {
@@ -99,7 +100,7 @@ export class RealtimeHub {
         messages: new TokenBucket(20, 60),
         events: new TokenBucket(5, 15),
         alive: true,
-        strikes: 0,
+        invalid: new TokenBucket(INVALID_REFILL_PER_SECOND, MAX_INVALID),
       };
       this.join(tableId, table.worldId, client);
     });
@@ -136,9 +137,10 @@ export class RealtimeHub {
     if (isBinary) return client.ws.close(CLOSE.policy, 'Somente texto.');
     if (!client.messages.take()) return this.strike(room, client, 'rate', 'Mensagens demais. Aguarde um pouco.');
 
+    const text = data.toString();
     let raw: unknown;
     try {
-      raw = parseJsonSafely(data.toString());
+      raw = parseJsonSafely(text);
     } catch {
       return this.strike(room, client, 'invalid', 'Mensagem inválida.');
     }
@@ -146,7 +148,8 @@ export class RealtimeHub {
     if (unsafe) return this.strike(room, client, 'invalid', `Mensagem recusada: ${unsafe}.`);
     const parsed = clientMessage.safeParse(raw);
     if (!parsed.success) return this.strike(room, client, 'invalid', 'Formato de mensagem desconhecido.');
-    client.strikes = 0;
+    // Cada tipo de mensagem tem o próprio limite de tamanho, bem abaixo do teto do transporte
+    if (Buffer.byteLength(text) > budgetOf(parsed.data)) return this.strike(room, client, 'too_big', 'Mensagem grande demais para este comando.');
 
     try {
       this.dispatch(room, client, parsed.data);
@@ -181,7 +184,8 @@ export class RealtimeHub {
   private strike(room: Room, client: Client, code: string, message: string): void {
     audit(this.log, 'ws.mensagem_invalida', { userId: client.userId, tableId: room.tableId, motivo: code, ip: client.ip });
     room.send(client, { t: 'error', code, message });
-    if (++client.strikes >= MAX_STRIKES) client.ws.close(CLOSE.policy, 'Mensagens inválidas demais.');
+    // O contador decai com o tempo (não zera com uma mensagem válida): intercalar não engana o limite
+    if (!client.invalid.take()) client.ws.close(CLOSE.policy, 'Mensagens inválidas demais.');
   }
 
   // --- Verificação periódica --------------------------------------------------------
