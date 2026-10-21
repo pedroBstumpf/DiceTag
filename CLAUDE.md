@@ -3,6 +3,7 @@
 Contexto do projeto para o Claude Code. Leia antes de qualquer alteração.
 Idioma de trabalho: **português do Brasil** (respostas, comentários no código e textos da interface).
 Visão da arquitetura (camadas, fluxos de dados, onde fica o estado): [`ARCHITECTURE.md`](ARCHITECTURE.md).
+Regras obrigatórias de segurança para qualquer código em `server/`: [`BACKEND_SECURITY.md`](BACKEND_SECURITY.md).
 
 ---
 
