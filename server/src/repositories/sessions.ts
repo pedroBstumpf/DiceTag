@@ -48,9 +48,9 @@ export class SessionsRepository {
     this.db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(tokenHash);
   }
 
-  /** Encerra todas as sessões da conta, menos `keep` (ex.: depois de trocar a senha). */
-  deleteAllForUser(userId: string, keep?: string): void {
-    this.db.prepare('DELETE FROM sessions WHERE user_id = ? AND token_hash != ?').run(userId, keep ?? '');
+  /** Encerra todas as sessões da conta (troca de senha, sair de todos os dispositivos). */
+  deleteAllForUser(userId: string): void {
+    this.db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
   }
 
   /** Limpeza periódica das vencidas. */

@@ -1,6 +1,6 @@
 import type { AddressInfo } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { call, createTestServer, openSocket, register, type TestServer } from './helpers';
+import { PASSWORD, call, createTestServer, openSocket, register, type TestServer } from './helpers';
 
 /**
  * Sala da mesa por WebSocket, com servidor real escutando numa porta livre:
@@ -192,6 +192,18 @@ describe('mensagens inválidas e expulsão', () => {
       a.ws.send('{"t":"sync"}');
     }
     expect((await a.closed).code).toBe(1008);
+  });
+
+  it('logout e troca de senha derrubam o WebSocket na hora (sem esperar o ping)', async () => {
+    const b = await openSocket(port, tableId, player.cookie);
+    await b.next('welcome');
+    await call(server, player.cookie, 'POST', '/api/auth/logout');
+    expect((await b.closed).code).toBe(4401);
+
+    const a = await openSocket(port, tableId, gm.cookie);
+    await a.next('welcome');
+    await call(server, gm.cookie, 'POST', '/api/auth/password', { current: PASSWORD, next: 'outra senha bem longa' });
+    expect((await a.closed).code).toBe(4401);
   });
 
   it('jogador removido da mesa é desconectado na hora', async () => {

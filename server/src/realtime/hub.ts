@@ -224,6 +224,22 @@ export class RealtimeHub {
     for (const room of this.rooms.values()) if (room.worldId === worldId) room.worldChanged();
   }
 
+  /** A sessão foi encerrada (logout): as conexões abertas com ela caem na hora. */
+  sessionEnded(tokenHash: string): void {
+    this.closeWhere((c) => c.tokenHash === tokenHash);
+  }
+
+  /** Todas as sessões da conta foram encerradas (troca de senha, sair de todos, conta excluída). */
+  userSessionsEnded(userId: string): void {
+    this.closeWhere((c) => c.userId === userId);
+  }
+
+  private closeWhere(match: (client: Client) => boolean): void {
+    for (const room of this.rooms.values()) {
+      for (const client of room.clients) if (match(client)) client.ws.close(CLOSE.unauthorized, 'Sessão encerrada.');
+    }
+  }
+
   /** Expulsa a conta da sala (saiu ou foi removida da mesa). */
   kick(tableId: string, userId: string): void {
     for (const client of this.rooms.get(tableId)?.clients ?? []) {

@@ -28,7 +28,9 @@ const TOUCH_EVERY_MS = 5 * 60_000;
  * - Falhas de login por e-mail: 5 a cada 15 minutos; depois, bloqueio temporário daquele e-mail
  *   (contra adivinhação de senha distribuída em vários IPs).
  * - Sessão nova a cada login (o token antigo não é reaproveitado: sem fixação de sessão).
- * - Trocar a senha encerra as outras sessões da conta.
+ * - Trocar a senha encerra TODAS as sessões da conta e abre uma nova (id novo a cada mudança
+ *   de credencial); "sair de todos os dispositivos" encerra todas.
+ * - Quem chama avisa o hub para derrubar na hora os WebSockets das sessões encerradas.
  */
 export class AuthService {
   private readonly failures: WindowLimiter;
@@ -83,13 +85,23 @@ export class AuthService {
     this.sessions.delete(this.tokens.hash(token, 'session'));
   }
 
-  async changePassword(session: AuthSession, current: string, next: string): Promise<void> {
+  /** Sair de todos os dispositivos: encerra todas as sessões da conta. */
+  logoutAll(userId: string): void {
+    this.sessions.deleteAllForUser(userId);
+  }
+
+  /** Troca a senha, encerra todas as sessões e devolve o token da sessão nova (só para quem trocou). */
+  async changePassword(session: AuthSession, current: string, next: string): Promise<string> {
     const stored = this.users.passwordHashOf(session.user.id);
     if (!stored || !(await this.hasher.verify(current, stored))) throw new HttpError(401, 'Senha atual incorreta.');
     const problem = passwordProblem(next, session.user.email);
     if (problem) throw badRequest(problem);
-    this.users.setPasswordHash(session.user.id, await this.hasher.hash(next));
-    this.sessions.deleteAllForUser(session.user.id, session.tokenHash);
+    const hash = await this.hasher.hash(next);
+    return transaction(this.db, () => {
+      this.users.setPasswordHash(session.user.id, hash);
+      this.sessions.deleteAllForUser(session.user.id);
+      return this.openSession(session.user.id);
+    });
   }
 
   // --- Sessão ------------------------------------------------------------------

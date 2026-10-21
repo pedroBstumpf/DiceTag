@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { AppContext } from '../../context';
+import type { RealtimeHub } from '../../realtime/hub';
 import { audit } from '../../lib/audit';
 import { HttpError, parse } from '../../lib/errors';
 import { email, newPassword, passwordInput, text, withPasswordPolicy } from '../../lib/schemas';
@@ -13,11 +14,11 @@ const passwordBody = z.strictObject({ current: passwordInput, next: newPassword 
 const profileBody = z.strictObject({ name: text(1, 60) });
 
 /**
- * /api/auth — cadastro, login, logout, conta atual, perfil e troca de senha.
+ * /api/auth — cadastro, login, logout (desta sessão ou de todas), conta atual, perfil e troca de senha.
  * O token de sessão só existe no cookie HttpOnly: nunca aparece no corpo das respostas.
  * Públicas (sem sessão): cadastro, login e logout; as demais exigem login (hook de `plugins/auth.ts`).
  */
-export async function authRoutes(app: FastifyInstance, ctx: AppContext): Promise<void> {
+export async function authRoutes(app: FastifyInstance, ctx: AppContext, hub: RealtimeHub): Promise<void> {
   app.post('/register', { config: { ...AUTH_RATE_LIMIT, ...PUBLIC } }, async (req, reply) => {
     const body = parse(registerBody, req.body);
     const { user, token } = await ctx.auth.register(body);
@@ -43,7 +44,20 @@ export async function authRoutes(app: FastifyInstance, ctx: AppContext): Promise
   app.post('/logout', { config: PUBLIC }, async (req, reply) => {
     const token = req.cookies[sessionCookieName(ctx.config)];
     if (token) ctx.auth.logout(token);
-    if (req.auth) audit(req.log, 'sessao.encerrada', { userId: req.auth.user.id });
+    if (req.auth) {
+      hub.sessionEnded(req.auth.tokenHash);
+      audit(req.log, 'sessao.encerrada', { userId: req.auth.user.id });
+    }
+    clearSessionCookie(reply, ctx);
+    return reply.code(204).send();
+  });
+
+  /** Sair de todos os dispositivos: encerra todas as sessões da conta, inclusive esta. */
+  app.post('/logout-all', async (req, reply) => {
+    const { user } = requireAuth(req);
+    ctx.auth.logoutAll(user.id);
+    hub.userSessionsEnded(user.id);
+    audit(req.log, 'sessoes.encerradas', { userId: user.id, ip: req.ip });
     clearSessionCookie(reply, ctx);
     return reply.code(204).send();
   });
@@ -60,8 +74,11 @@ export async function authRoutes(app: FastifyInstance, ctx: AppContext): Promise
   app.post('/password', { config: AUTH_RATE_LIMIT }, async (req, reply) => {
     const session = requireAuth(req);
     const body = parse(passwordBody, req.body);
-    await ctx.auth.changePassword(session, body.current, body.next);
+    // Todas as sessões caem (inclusive as conexões abertas); quem trocou segue com uma sessão nova
+    const token = await ctx.auth.changePassword(session, body.current, body.next);
+    hub.userSessionsEnded(session.user.id);
     audit(req.log, 'senha.trocada', { userId: session.user.id, ip: req.ip });
+    setSessionCookie(reply, ctx, token);
     return reply.code(204).send();
   });
 }

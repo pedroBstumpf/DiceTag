@@ -69,14 +69,26 @@ describe('contas e sessão', () => {
     expect((await call(server, cookie, 'GET', '/api/auth/me')).statusCode).toBe(401);
   });
 
-  it('trocar a senha encerra as outras sessões', async () => {
+  it('trocar a senha encerra todas as sessões e dá uma nova a quem trocou', async () => {
     const { cookie } = await register(server, 'a@exemplo.com');
     const login = await inject({ method: 'POST', url: '/api/auth/login', headers: { origin: ORIGIN }, payload: { email: 'a@exemplo.com', password: PASSWORD } });
     const other = sessionCookie(login);
     const res = await call(server, cookie, 'POST', '/api/auth/password', { current: PASSWORD, next: 'outra senha bem longa' });
     expect(res.statusCode).toBe(204);
+    const renewed = sessionCookie(res);
+    expect(renewed).not.toBe(cookie);
     expect((await call(server, other, 'GET', '/api/auth/me')).statusCode).toBe(401);
-    expect((await call(server, cookie, 'GET', '/api/auth/me')).statusCode).toBe(200);
+    expect((await call(server, cookie, 'GET', '/api/auth/me')).statusCode).toBe(401);
+    expect((await call(server, renewed, 'GET', '/api/auth/me')).statusCode).toBe(200);
+  });
+
+  it('sair de todos os dispositivos encerra todas as sessões, inclusive a atual', async () => {
+    const { cookie } = await register(server, 'a@exemplo.com');
+    const login = await inject({ method: 'POST', url: '/api/auth/login', headers: { origin: ORIGIN }, payload: { email: 'a@exemplo.com', password: PASSWORD } });
+    const other = sessionCookie(login);
+    expect((await call(server, cookie, 'POST', '/api/auth/logout-all')).statusCode).toBe(204);
+    expect((await call(server, other, 'GET', '/api/auth/me')).statusCode).toBe(401);
+    expect((await call(server, cookie, 'GET', '/api/auth/me')).statusCode).toBe(401);
   });
 
   it('cookie forjado ou ausente = 401', async () => {
