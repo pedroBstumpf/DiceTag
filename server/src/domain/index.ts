@@ -9,6 +9,9 @@
  * Só este arquivo conhece os caminhos do front-end: se a estrutura mudar, ajuste aqui.
  */
 
+import { rollDice as rollDiceShared, type Random, type TagLevels } from '../../../src/app/features/game-table/utils/dice';
+import type { RollConfig } from '../../../src/app/core/models/table-session.model';
+
 export { TABLE_COMMANDS, applyCommand, type TableCommand, type TableCommandType } from '../../../src/app/features/game-table/state/commands';
 export { EMPTY_STATE, normalizeState } from '../../../src/app/features/game-table/state/table-state';
 export {
@@ -39,7 +42,7 @@ export {
   type FogView,
   type VisionSource,
 } from '../../../src/app/features/game-table/state/player-view';
-export { baseTagId, manaCost, rollDice, withPowers, type TagLevels } from '../../../src/app/features/game-table/utils/dice';
+export { baseTagId, manaCost, withPowers, type TagLevels } from '../../../src/app/features/game-table/utils/dice';
 export { movePathBlocked } from '../../../src/app/features/game-table/utils/walls';
 export { doorSeen, wallsToSegments, type Segment } from '../../../src/app/features/game-table/utils/visibility';
 export { decodeMask, type ExploredMask } from '../../../src/app/features/game-table/utils/fog-memory';
@@ -84,3 +87,15 @@ export {
 export { MAX_WORLDS } from '../../../src/app/core/models/world.model';
 export { TABLE_ACCENTS } from '../../../src/app/core/models/game-table.model';
 export { npcTokenOf, raceTraitsOf, type WorldItem } from '../../../src/app/core/models/world-item.model';
+
+// --- Adaptações do servidor ------------------------------------------------------
+
+/**
+ * `rollDice` do front com o sorteio OBRIGATÓRIO: no front ele usa `Math.random` quando ninguém
+ * passa o gerador, e no servidor toda rolagem precisa do gerador criptográfico
+ * (BACKEND_SECURITY.md §4.4). Sem gerador, lança em vez de cair no padrão.
+ */
+export function rollDice(roll: RollConfig, random: Random, levels?: TagLevels): ReturnType<typeof rollDiceShared> {
+  if (typeof random !== 'function') throw new Error('rolagem no servidor sem gerador de números aleatórios');
+  return rollDiceShared(roll, random, levels);
+}

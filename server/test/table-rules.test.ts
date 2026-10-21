@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultToken, type Scene, type TableEntry, type TableState, type WorldItem } from '../src/domain';
+import { defaultToken, rollDice, type Scene, type TableEntry, type TableState, type WorldItem } from '../src/domain';
 import { COMMAND_RULES, type RuleContext } from '../src/realtime/command-rules';
 import { COMMAND_SCHEMAS, COMMAND_TYPES } from '../src/realtime/command-schemas';
 import { eventVisibleTo, playerVision, projectLore, projectState } from '../src/realtime/projection';
@@ -477,6 +477,12 @@ describe('rolagem no servidor', () => {
     state.entries[0] = { ...state.entries[0], token: token(1) };
     const refused = performRoll(state, { sheetId: 'pc-ana', roll: roll(['fogo']), label: '', icon: '' }, ana, 'Ana', 1, 'm', fixed);
     expect(refused.ok).toBe(false);
+  });
+
+  it('sem gerador de números aleatórios, a rolagem do servidor não acontece (nunca cai no Math.random)', () => {
+    // @ts-expect-error o gerador é obrigatório no servidor
+    expect(() => rollDice({ dice: '2d12', modifier: 0 })).toThrow(/gerador/);
+    expect(rollDice({ dice: '2d12', modifier: 0 }, () => 0).rolls).toEqual([1, 1]);
   });
 
   it('o sorteio fica entre 1 e o número de faces', () => {
