@@ -55,11 +55,14 @@ describe('contas e sessão', () => {
     expect(wrong.json()).toEqual(missing.json());
   });
 
-  it('bloqueia o e-mail depois de 5 senhas erradas', async () => {
+  it('depois de 5 senhas erradas, o mesmo IP espera; de outro IP a conta não fica trancada', async () => {
     await register(server, 'a@exemplo.com');
-    const attempt = (password: string) => inject({ method: 'POST', url: '/api/auth/login', headers: { origin: ORIGIN }, payload: { email: 'a@exemplo.com', password } });
+    const attempt = (password: string, remoteAddress = '203.0.113.1') =>
+      inject({ method: 'POST', url: '/api/auth/login', remoteAddress, headers: { origin: ORIGIN }, payload: { email: 'a@exemplo.com', password } });
     for (let i = 0; i < 5; i++) expect((await attempt('errada-123')).statusCode).toBe(401);
     expect((await attempt(PASSWORD)).statusCode).toBe(429);
+    // A dona da conta, de outro IP, entra normalmente
+    expect((await attempt(PASSWORD, '198.51.100.7')).statusCode).toBe(200);
   });
 
   it('logout encerra a sessão no servidor (o cookie antigo deixa de valer)', async () => {

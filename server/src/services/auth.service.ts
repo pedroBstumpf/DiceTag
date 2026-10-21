@@ -2,10 +2,10 @@ import type { Config } from '../config/env';
 import { transaction, type Db } from '../db/database';
 import { HttpError, badRequest, conflict } from '../lib/errors';
 import { newId } from '../lib/ids';
-import { WindowLimiter } from '../lib/limiter';
 import type { SessionsRepository } from '../repositories/sessions';
 import type { PublicUser, UsersRepository } from '../repositories/users';
 import type { WorldsRepository } from '../repositories/worlds';
+import { LoginThrottle } from '../security/login-throttle';
 import { passwordProblem, type PasswordHasher } from '../security/password';
 import type { TokenService } from '../security/tokens';
 
@@ -25,15 +25,15 @@ const TOUCH_EVERY_MS = 5 * 60_000;
  *
  * - Login com mensagem única para e-mail inexistente e senha errada, e o mesmo tempo de
  *   resposta nos dois casos (`dummyVerify`): não dá para descobrir quais e-mails têm conta.
- * - Falhas de login por e-mail: 5 a cada 15 minutos; depois, bloqueio temporário daquele e-mail
- *   (contra adivinhação de senha distribuída em vários IPs).
+ * - Falhas de login: atraso crescente por e-mail + IP e, com mais folga, por e-mail
+ *   (`LoginThrottle`), em vez de bloquear a conta por um tempo fixo.
  * - Sessão nova a cada login (o token antigo não é reaproveitado: sem fixação de sessão).
  * - Trocar a senha encerra TODAS as sessões da conta e abre uma nova (id novo a cada mudança
  *   de credencial); "sair de todos os dispositivos" encerra todas.
  * - Quem chama avisa o hub para derrubar na hora os WebSockets das sessões encerradas.
  */
 export class AuthService {
-  private readonly failures: WindowLimiter;
+  private readonly throttle: LoginThrottle;
 
   constructor(
     private readonly db: Db,
@@ -45,7 +45,7 @@ export class AuthService {
     private readonly config: Config,
     private readonly now: () => number = Date.now,
   ) {
-    this.failures = new WindowLimiter(5, 15 * 60_000, now);
+    this.throttle = new LoginThrottle(now);
   }
 
   // --- Cadastro e login --------------------------------------------------------
@@ -65,17 +65,19 @@ export class AuthService {
     return { user, token: this.openSession(user.id) };
   }
 
-  async login(email: string, password: string): Promise<{ user: PublicUser; token: string }> {
-    if (this.failures.blocked(email)) {
-      throw new HttpError(429, 'Muitas tentativas para este e-mail. Tente novamente em alguns minutos.');
+  /** `ip`: de onde veio a tentativa (o atraso crescente conta e-mail + IP e só o e-mail). */
+  async login(email: string, password: string, ip: string): Promise<{ user: PublicUser; token: string }> {
+    const wait = this.throttle.waitMs(email, ip);
+    if (wait > 0) {
+      throw new HttpError(429, `Muitas tentativas para este e-mail. Tente novamente em ${Math.ceil(wait / 1000)} s.`);
     }
     const found = this.users.credentialsByEmail(email);
     const ok = found ? await this.hasher.verify(password, found.passwordHash) : (await this.hasher.dummyVerify(password), false);
     if (!found || !ok) {
-      this.failures.hit(email);
+      this.throttle.fail(email, ip);
       throw new HttpError(401, 'E-mail ou senha inválidos.');
     }
-    this.failures.reset(email);
+    this.throttle.succeed(email, ip);
     // Custo do hash mudou desde o cadastro: refaz agora que temos a senha
     if (this.hasher.needsRehash(found.passwordHash)) this.users.setPasswordHash(found.user.id, await this.hasher.hash(password));
     return { user: found.user, token: this.openSession(found.user.id) };

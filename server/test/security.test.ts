@@ -9,6 +9,7 @@ import { parseJsonSafely, unsafeJsonReason } from '../src/lib/safe-json';
 import { newPassword, withPasswordPolicy } from '../src/lib/schemas';
 import { declaredTypeMatches, detectFileType } from '../src/security/file-type';
 import { isAllowedOrigin } from '../src/security/origin';
+import { LoginThrottle } from '../src/security/login-throttle';
 import { PasswordHasher, passwordProblem } from '../src/security/password';
 import { TokenService } from '../src/security/tokens';
 import { PNG_1X1 } from './helpers';
@@ -170,6 +171,42 @@ describe('origem (CSRF/CSWSH)', () => {
     expect(isAllowedOrigin({ 'sec-fetch-site': 'same-origin' }, allowed)).toBe(true);
     expect(isAllowedOrigin({ 'sec-fetch-site': 'cross-site' }, allowed)).toBe(false);
     expect(isAllowedOrigin({}, allowed)).toBe(false);
+  });
+});
+
+describe('atraso crescente no login', () => {
+  it('5 falhas livres por e-mail + IP; depois a espera dobra a cada falha, até 15 min', () => {
+    let now = 0;
+    const throttle = new LoginThrottle(() => now);
+    for (let i = 0; i < 5; i++) {
+      expect(throttle.waitMs('a@b.co', 'ip1')).toBe(0);
+      throttle.fail('a@b.co', 'ip1');
+    }
+    expect(throttle.waitMs('a@b.co', 'ip1')).toBe(30_000);
+    now += 30_000;
+    throttle.fail('a@b.co', 'ip1');
+    expect(throttle.waitMs('a@b.co', 'ip1')).toBe(60_000);
+    for (let i = 0; i < 10; i++) throttle.fail('a@b.co', 'ip1');
+    expect(throttle.waitMs('a@b.co', 'ip1')).toBe(15 * 60_000);
+    // Outro IP não espera por causa deste
+    expect(throttle.waitMs('a@b.co', 'ip2')).toBe(0);
+  });
+
+  it('ataque distribuído: a conta inteira espera depois de 20 falhas de vários IPs', () => {
+    const throttle = new LoginThrottle(() => 0);
+    for (let i = 0; i < 20; i++) throttle.fail('a@b.co', `ip${i}`);
+    expect(throttle.waitMs('a@b.co', 'ip-novo')).toBe(30_000);
+  });
+
+  it('acerto zera o par; falhas são esquecidas uma hora depois da última', () => {
+    let now = 0;
+    const throttle = new LoginThrottle(() => now);
+    for (let i = 0; i < 5; i++) throttle.fail('a@b.co', 'ip1');
+    throttle.succeed('a@b.co', 'ip1');
+    expect(throttle.waitMs('a@b.co', 'ip1')).toBe(0);
+    for (let i = 0; i < 5; i++) throttle.fail('c@d.co', 'ip1');
+    now += 60 * 60_000 + 1;
+    expect(throttle.waitMs('c@d.co', 'ip1')).toBe(0);
   });
 });
 

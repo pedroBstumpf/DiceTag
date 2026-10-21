@@ -30,7 +30,7 @@ export async function authRoutes(app: FastifyInstance, ctx: AppContext, hub: Rea
   app.post('/login', { config: { ...AUTH_RATE_LIMIT, ...PUBLIC } }, async (req, reply) => {
     const body = parse(loginBody, req.body);
     const attempt = { emailRef: ctx.tokens.ref(body.email), ip: req.ip };
-    const result = await ctx.auth.login(body.email, body.password).catch((err: unknown) => {
+    const result = await ctx.auth.login(body.email, body.password, req.ip).catch((err: unknown) => {
       if (err instanceof HttpError && (err.statusCode === 401 || err.statusCode === 429)) {
         audit(req.log, err.statusCode === 429 ? 'login.bloqueado' : 'login.falha', attempt);
       }
