@@ -164,12 +164,12 @@ describe('nome e tipo declarado do arquivo', () => {
 
 describe('origem (CSRF/CSWSH)', () => {
   const allowed = new Set(['http://localhost:4200']);
-  it('aceita só origens da lista; sem Origin, só same-origin do navegador', () => {
+  it('aceita só origens da lista; sem o cabeçalho Origin, nega', () => {
     expect(isAllowedOrigin({ origin: 'http://localhost:4200' }, allowed)).toBe(true);
     expect(isAllowedOrigin({ origin: 'http://localhost:4200.evil.com' }, allowed)).toBe(false);
     expect(isAllowedOrigin({ origin: 'null' }, allowed)).toBe(false);
-    expect(isAllowedOrigin({ 'sec-fetch-site': 'same-origin' }, allowed)).toBe(true);
-    expect(isAllowedOrigin({ 'sec-fetch-site': 'cross-site' }, allowed)).toBe(false);
+    // Sec-Fetch-Site não substitui o Origin
+    expect(isAllowedOrigin({ 'sec-fetch-site': 'same-origin' }, allowed)).toBe(false);
     expect(isAllowedOrigin({}, allowed)).toBe(false);
   });
 });
