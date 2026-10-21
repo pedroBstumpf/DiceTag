@@ -2,6 +2,7 @@ import {
   canEdit,
   canEditTableItem,
   canRemoveFixedFx,
+  clampLevelIn,
   defaultToken,
   findDrop,
   findPlacement,
@@ -113,14 +114,18 @@ function sceneOfPlacement(state: TableState, placementId: string): Scene | undef
   return state.scenes.find((s) => s.tokens?.some((t) => t.id === placementId));
 }
 
-/** Jogador: o caminho do token até (x, y) atravessa parede ou porta fechada da camada dele? */
-function blockedByWalls(ctx: RuleContext, placementId: string, x: number, y: number): boolean {
-  if (!wallsBlockMovement(ctx.viewer)) return false;
+/**
+ * Jogador movendo um token até (x, y): só na cena aberta (a única que ele vê) e sem atravessar
+ * parede nem porta fechada da camada do token (`wallsBlockMovement` + `movePathBlocked`, as
+ * mesmas regras do front). Devolve o motivo da recusa, ou null.
+ */
+function playerMoveProblem(ctx: RuleContext, placementId: string, x: number, y: number): string | null {
   const scene = sceneOfPlacement(ctx.state, placementId);
   const placement = scene?.tokens?.find((t) => t.id === placementId);
-  if (!scene || !placement) return false;
+  if (!scene || !placement || !inActiveScene(ctx, scene.id)) return NOT_ALLOWED;
+  if (!wallsBlockMovement(ctx.viewer)) return null;
   const walls = (scene.walls ?? []).filter((w) => levelOf(w) === levelOf(placement));
-  return movePathBlocked(placement, { x, y }, wallsToSegments(walls));
+  return movePathBlocked(placement, { x, y }, wallsToSegments(walls)) ? 'Uma parede bloqueia o caminho.' : null;
 }
 
 
@@ -212,6 +217,10 @@ export const COMMAND_RULES: { [K in TableCommandType]: Rule<K> } = {
     if (entry?.kind !== 'character' && entry?.kind !== 'npc') return deny('Ficha não encontrada.');
     if (isGm(ctx)) return allow(p);
     if (!inActiveScene(ctx, p.sceneId) || !canEditEntry(ctx.state, entry, ctx.viewer)) return deny(NOT_ALLOWED);
+    // Só na camada dos jogadores, e um token por ficha na cena: um segundo token (arrastado ou
+    // colado do outro lado de uma parede) seria um jeito de atravessá-la
+    if (levelOf(p.placement) !== clampLevelIn(scene, scene.playerLevel ?? 0)) return deny(NOT_ALLOWED);
+    if ((scene.tokens ?? []).some((t) => t.entryId === entry.id)) return deny('Esta ficha já tem um token nesta cena.');
     // Token novo do jogador: só a posição; tamanho, barras, ficha e liberações vêm da ficha de
     // origem (`resolveToken` usa a da ficha enquanto o token não tem os próprios valores)
     const { id, entryId, x, y, level } = p.placement;
@@ -221,12 +230,15 @@ export const COMMAND_RULES: { [K in TableCommandType]: Rule<K> } = {
     if (isGm(ctx)) return allow(p);
     if (!canEditPlacement(ctx.state, p.placementId, ctx.viewer)) return deny(NOT_ALLOWED);
     if (p.patch.sheetPublic !== undefined || p.patch.inventoryPublic !== undefined) return deny(ONLY_GM);
-    if (p.patch.x !== undefined && p.patch.y !== undefined && blockedByWalls(ctx, p.placementId, p.patch.x, p.patch.y)) {
-      return deny('Uma parede bloqueia o caminho.');
+    const placement = findPlacement(ctx.state.scenes, p.placementId)!;
+    // Trocar de camada é do mestre (PageUp/PageDown); posição, mesmo só x ou só y, passa pelas paredes
+    if (p.patch.level !== undefined && p.patch.level !== levelOf(placement)) return deny(ONLY_GM);
+    if (p.patch.x !== undefined || p.patch.y !== undefined) {
+      const problem = playerMoveProblem(ctx, p.placementId, p.patch.x ?? placement.x, p.patch.y ?? placement.y);
+      if (problem) return deny(problem);
     }
     if (!p.patch.sheet && !p.patch.bars) return allow(p);
     // Cópia da ficha no token (NPC que o jogador controla): mesmas regras da ficha
-    const placement = findPlacement(ctx.state.scenes, p.placementId)!;
     const entry = entryOf(ctx.state, placement.entryId)!;
     const before = { sheet: normalizeSheet(placement.sheet ?? entry.sheet), bars: placement.bars ?? ctx.world.tokenOf(entry).bars };
     const change = playerSheetChange(ctx, before, { sheet: p.patch.sheet, bars: p.patch.bars });
@@ -236,13 +248,15 @@ export const COMMAND_RULES: { [K in TableCommandType]: Rule<K> } = {
   moveToken: (p, ctx) => {
     if (isGm(ctx)) return allow(p);
     if (!canEditPlacement(ctx.state, p.placementId, ctx.viewer)) return deny(NOT_ALLOWED);
-    return blockedByWalls(ctx, p.placementId, p.x, p.y) ? deny('Uma parede bloqueia o caminho.') : allow(p);
+    const problem = playerMoveProblem(ctx, p.placementId, p.x, p.y);
+    return problem ? deny(problem) : allow(p);
   },
   moveTokens: (p, ctx) => {
     if (isGm(ctx)) return allow(p);
     for (const m of p.moves) {
       if (!canEditPlacement(ctx.state, m.placementId, ctx.viewer)) return deny(NOT_ALLOWED);
-      if (blockedByWalls(ctx, m.placementId, m.x, m.y)) return deny('Uma parede bloqueia o caminho.');
+      const problem = playerMoveProblem(ctx, m.placementId, m.x, m.y);
+      if (problem) return deny(problem);
     }
     return allow(p);
   },

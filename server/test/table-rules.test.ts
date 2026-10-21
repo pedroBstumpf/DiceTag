@@ -166,6 +166,24 @@ describe('permissões no servidor', () => {
     expect(run('moveToken', { placementId: 't-ana', x: 400, y: 100 }, gm).ok).toBe(true);
   });
 
+  it('paredes valem em todo movimento do jogador: só x ou só y, camada, segundo token e outra cena', () => {
+    // x e y em comandos separados: cada um passa pela parede
+    expect(run('updatePlacement', { placementId: 't-ana', patch: { x: 400 } }).reason).toMatch(/parede/);
+    expect(run('updatePlacement', { placementId: 't-ana', patch: { x: 200 } }).ok).toBe(true);
+    // Trocar de camada é do mestre
+    expect(run('updatePlacement', { placementId: 't-ana', patch: { level: 1 } }).ok).toBe(false);
+    expect(run('updatePlacement', { placementId: 't-ana', patch: { level: 1 } }, gm).ok).toBe(true);
+    // Um token por ficha na cena (um segundo, do outro lado da parede, seria um atalho)
+    const copy = { id: 't-ana-2', entryId: 'pc-ana', x: 400, y: 100 };
+    expect(run('placeToken', { sceneId: 's1', placement: copy }).reason).toMatch(/já tem um token/);
+    expect(run('placeToken', { sceneId: 's1', placement: copy }, gm).ok).toBe(true);
+    // Só na camada dos jogadores
+    expect(run('placeToken', { sceneId: 's1', placement: { id: 't-pet', entryId: 'npc-pet', x: 1, y: 1, level: 1 } }).ok).toBe(false);
+    // Token numa cena que não está aberta: o jogador nem a vê
+    const elsewhere = { ...table(), activeSceneId: 's2' };
+    expect(run('moveToken', { placementId: 't-ana', x: 150, y: 100 }, ana, elsewhere).ok).toBe(false);
+  });
+
   it('personagem de outro jogador não é editável (diferente do modo local)', () => {
     expect(run('updateEntry', { entryId: 'pc-bia', patch: { name: 'Hackeada' } }).ok).toBe(false);
     expect(run('updateEntry', { entryId: 'pc-ana', patch: { name: 'Ana Clara' } }).ok).toBe(true);
