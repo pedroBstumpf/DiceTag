@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { TrustedProxies } from '../lib/client-ip';
+import type { Peppers } from '../security/password';
 
 /**
  * Configuração do servidor, lida das variáveis de ambiente (arquivo `.env`, nunca versionado)
@@ -39,6 +40,10 @@ const schema = z.object({
 
   TOKEN_SECRET: secret,
   PASSWORD_PEPPER: secret,
+  /** Versão da pimenta atual (vai em cada hash novo). Ao trocar a pimenta, some 1 e guarde a antiga abaixo. */
+  PASSWORD_PEPPER_VERSION: z.coerce.number().int().min(1).max(1000).default(1),
+  /** Pimentas anteriores, para as senhas ainda não refeitas: `1:segredo,2:segredo`. */
+  PASSWORD_PEPPERS_PREVIOUS: z.string().max(10_000).default(''),
   /** Custo do scrypt como expoente de 2 (17 = 2^17, recomendação da OWASP). Testes usam menos. */
   PASSWORD_COST: z.coerce.number().int().min(14).max(20).default(17),
 
@@ -68,10 +73,12 @@ const schema = z.object({
 
 export type Env = z.infer<typeof schema>;
 
-/** Configuração pronta para uso (origens e proxies já interpretados). */
-export interface Config extends Omit<Env, 'ALLOWED_ORIGINS' | 'TRUSTED_PROXIES'> {
+/** Configuração pronta para uso (origens, proxies e pimentas já interpretados). */
+export interface Config
+  extends Omit<Env, 'ALLOWED_ORIGINS' | 'TRUSTED_PROXIES' | 'PASSWORD_PEPPER' | 'PASSWORD_PEPPER_VERSION' | 'PASSWORD_PEPPERS_PREVIOUS'> {
   allowedOrigins: ReadonlySet<string>;
   trustedProxies: TrustedProxies;
+  peppers: Peppers;
   isProduction: boolean;
 }
 
@@ -88,11 +95,12 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
     const problems = parsed.error.issues.map((i) => `  - ${i.path.join('.')}: ${i.message}`).join('\n');
     throw new Error(`Configuração inválida (arquivo .env):\n${problems}`);
   }
-  const { ALLOWED_ORIGINS, TRUSTED_PROXIES, ...env } = parsed.data;
+  const { ALLOWED_ORIGINS, TRUSTED_PROXIES, PASSWORD_PEPPER, PASSWORD_PEPPER_VERSION, PASSWORD_PEPPERS_PREVIOUS, ...env } = parsed.data;
   const config: Config = {
     ...env,
     allowedOrigins: parseOrigins(ALLOWED_ORIGINS),
     trustedProxies: parseProxies(TRUSTED_PROXIES),
+    peppers: { version: PASSWORD_PEPPER_VERSION, current: PASSWORD_PEPPER, previous: parsePeppers(PASSWORD_PEPPERS_PREVIOUS, PASSWORD_PEPPER_VERSION) },
     isProduction: env.NODE_ENV === 'production',
   };
   assertSafeForProduction(config);
@@ -110,6 +118,22 @@ function parseProxies(raw: string): TrustedProxies {
   } catch (err) {
     throw new Error(`TRUSTED_PROXIES: ${(err as Error).message}.`);
   }
+}
+
+/** "1:segredo,2:segredo" → pimentas anteriores por versão (cada uma com as regras de segredo). */
+function parsePeppers(raw: string, currentVersion: number): ReadonlyMap<number, string> {
+  const peppers = new Map<number, string>();
+  for (const item of raw.split(',').map((s) => s.trim()).filter(Boolean)) {
+    const match = /^(\d+):(.+)$/.exec(item);
+    const version = Number(match?.[1]);
+    if (!match || !Number.isInteger(version) || version < 1 || version === currentVersion || peppers.has(version)) {
+      throw new Error('PASSWORD_PEPPERS_PREVIOUS: use "<versão>:<segredo>", versões únicas e diferentes da atual.');
+    }
+    const checked = secret.safeParse(match[2]);
+    if (!checked.success) throw new Error(`PASSWORD_PEPPERS_PREVIOUS (versão ${version}): ${checked.error.issues[0].message}.`);
+    peppers.set(version, match[2]);
+  }
+  return peppers;
 }
 
 /** "http://a:1, https://b" → conjunto de origens normalizadas (rejeita caminhos e curingas). */
@@ -139,7 +163,8 @@ function assertSafeForProduction(config: Config): void {
   if (config.DEV_TOOLS) problems.push('DEV_TOOLS precisa ser false');
   if (!config.RATE_LIMIT) problems.push('RATE_LIMIT precisa ser true');
   if (config.PASSWORD_COST < 17) problems.push('PASSWORD_COST precisa ser 17 ou mais');
-  if (config.TOKEN_SECRET === config.PASSWORD_PEPPER) problems.push('TOKEN_SECRET e PASSWORD_PEPPER precisam ser diferentes');
+  const peppers = [config.peppers.current, ...(config.peppers.previous?.values() ?? [])];
+  if (peppers.includes(config.TOKEN_SECRET)) problems.push('TOKEN_SECRET e as pimentas (PASSWORD_PEPPER*) precisam ser diferentes');
   for (const origin of config.allowedOrigins) {
     if (!origin.startsWith('https://')) problems.push(`origem sem HTTPS: ${origin}`);
   }

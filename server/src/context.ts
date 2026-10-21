@@ -29,7 +29,7 @@ export function createContext(config: Config, db: Db): AppContext {
   const sessions = new SessionsRepository(db);
   const worlds = new WorldsRepository(db);
   const tokens = new TokenService(config.TOKEN_SECRET);
-  const hasher = new PasswordHasher(config.PASSWORD_PEPPER, config.PASSWORD_COST);
+  const hasher = new PasswordHasher(config.peppers, config.PASSWORD_COST);
   return {
     config,
     db,

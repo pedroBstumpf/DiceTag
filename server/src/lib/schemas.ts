@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PASSWORD_MAX, passwordProblem } from '../security/password';
 
 /**
  * Esquemas de entrada reutilizados pelas rotas: textos com limite de tamanho e sem caracteres
@@ -34,5 +35,23 @@ export const email = z
   .transform((v) => v.trim().toLowerCase())
   .pipe(z.email('e-mail inválido').max(254));
 
-/** Senha recebida: só limite de tamanho aqui (a política completa fica em `passwordProblem`). */
-export const passwordInput = z.string().min(1).max(512);
+/** Senha digitada no login ou como senha atual: só o tamanho (a política vale para senhas novas). */
+export const passwordInput = z.string().min(1).max(PASSWORD_MAX);
+
+/**
+ * Senha nova (cadastro, troca): a política inteira no zod (BACKEND_SECURITY.md §1) — de 8 a 128
+ * caracteres, espaços e Unicode aceitos, sem as senhas mais comuns nem um caractere repetido.
+ * A comparação com o e-mail fica no objeto que tem os dois (`withPasswordPolicy`).
+ */
+export const newPassword = z.string().superRefine((value, ctx) => {
+  const problem = passwordProblem(value, '');
+  if (problem) ctx.addIssue({ code: 'custom', message: problem });
+});
+
+/** Cadastro: a senha também não pode ser o e-mail (nem a parte antes do @). */
+export function withPasswordPolicy<T extends z.ZodType<{ email: string; password: string }>>(schema: T) {
+  return schema.superRefine((body, ctx) => {
+    const problem = passwordProblem(body.password, body.email);
+    if (problem) ctx.addIssue({ code: 'custom', path: ['password'], message: problem });
+  });
+}

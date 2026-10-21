@@ -2,22 +2,43 @@ import { createHmac, randomBytes, scrypt, timingSafeEqual, type ScryptOptions } 
 import { Semaphore } from '../lib/limiter';
 
 /**
- * Hash de senhas com scrypt (nativo do Node), seguindo a OWASP:
- * - custo N = 2^17, r = 8, p = 1 (configurável em PASSWORD_COST; o custo fica salvo no hash,
- *   então hashes antigos continuam válidos se o custo mudar);
+ * Hash de senhas com scrypt (nativo do Node), seguindo a OWASP (BACKEND_SECURITY.md §1):
+ * - custo N = 2^17, r = 8, p = 1 (configurável em PASSWORD_COST);
  * - sal aleatório de 16 bytes por senha;
- * - "pimenta" (PASSWORD_PEPPER): HMAC da senha com um segredo que fica fora do banco. Quem
- *   roubar só o banco não consegue testar senhas offline;
+ * - "pimenta": HMAC-SHA256 da senha com um segredo que fica fora do banco. Quem roubar só o
+ *   banco não consegue testar senhas offline;
  * - comparação em tempo constante (`timingSafeEqual`);
  * - no máximo 4 hashes ao mesmo tempo (cada um usa ~128 MB de RAM).
  *
- * Formato salvo: `scrypt$<logN>$<r>$<p>$<sal base64>$<hash base64>`.
+ * Formato autodescritivo: `scrypt$<versão da pimenta>$N=131072,r=8,p=1$<sal base64>$<hash base64>`.
+ * Custo e pimenta ficam no hash, então dá para subir o custo ou trocar a pimenta sem invalidar as
+ * senhas: as pimentas anteriores continuam configuradas (PASSWORD_PEPPERS_PREVIOUS) e cada hash
+ * antigo é refeito no próximo login (`needsRehash`). O formato anterior,
+ * `scrypt$<logN>$<r>$<p>$<sal>$<hash>`, vale como feito com a pimenta da versão 1.
  */
+
+/** Pimentas do servidor: a atual (usada nos hashes novos) e as anteriores, por versão. */
+export interface Peppers {
+  version: number;
+  current: string;
+  previous?: ReadonlyMap<number, string>;
+}
 
 const KEY_LENGTH = 64;
 const BLOCK_SIZE = 8;
 const PARALLELISM = 1;
 const hashing = new Semaphore(4, 200);
+
+/** Hash salvo, já interpretado. */
+interface StoredHash {
+  version: number;
+  logN: number;
+  r: number;
+  p: number;
+  salt: Buffer;
+  key: Buffer;
+  legacy: boolean;
+}
 
 function scryptAsync(password: Buffer, salt: Buffer, options: ScryptOptions): Promise<Buffer> {
   return new Promise((resolve, reject) =>
@@ -25,36 +46,73 @@ function scryptAsync(password: Buffer, salt: Buffer, options: ScryptOptions): Pr
   );
 }
 
+/** Interpreta um hash salvo (null se malformado ou com parâmetros fora dos limites). */
+function parseStored(stored: string): StoredHash | null {
+  const parts = stored.split('$');
+  if (parts[0] !== 'scrypt') return null;
+  let version: number;
+  let logN: number;
+  let r: number;
+  let p: number;
+  let salt: string;
+  let key: string;
+  const legacy = parts.length === 6;
+  if (legacy) {
+    [logN, r, p] = parts.slice(1, 4).map(Number);
+    version = 1;
+    [salt, key] = parts.slice(4);
+  } else if (parts.length === 5) {
+    const params = /^N=(\d+),r=(\d+),p=(\d+)$/.exec(parts[2]);
+    if (!params || !/^\d+$/.test(parts[1])) return null;
+    version = Number(parts[1]);
+    const N = Number(params[1]);
+    logN = Math.log2(N);
+    r = Number(params[2]);
+    p = Number(params[3]);
+    [salt, key] = parts.slice(3);
+  } else {
+    return null;
+  }
+  if (![version, logN, r, p].every(Number.isInteger) || logN < 10 || logN > 22 || r < 1 || r > 32 || p < 1 || p > 16) return null;
+  const keyBytes = Buffer.from(key, 'base64');
+  if (keyBytes.length !== KEY_LENGTH) return null;
+  return { version, logN, r, p, salt: Buffer.from(salt, 'base64'), key: keyBytes, legacy };
+}
+
 export class PasswordHasher {
   constructor(
-    private readonly pepper: string,
+    private readonly peppers: Peppers,
     private readonly logCost: number,
   ) {}
 
-  /** Gera o hash de uma senha nova. */
+  /** Gera o hash de uma senha nova (pimenta e custo atuais). */
   async hash(password: string): Promise<string> {
     const salt = randomBytes(16);
-    const key = await this.derive(password, salt, this.logCost, BLOCK_SIZE, PARALLELISM);
-    return ['scrypt', this.logCost, BLOCK_SIZE, PARALLELISM, salt.toString('base64'), key.toString('base64')].join('$');
+    const key = await this.derive(password, this.peppers.current, salt, this.logCost, BLOCK_SIZE, PARALLELISM);
+    const params = `N=${2 ** this.logCost},r=${BLOCK_SIZE},p=${PARALLELISM}`;
+    return ['scrypt', this.peppers.version, params, salt.toString('base64'), key.toString('base64')].join('$');
   }
 
-  /** Confere a senha. Hash malformado = false (nunca lança por causa do conteúdo salvo). */
+  /** Confere a senha. Hash malformado ou de pimenta desconhecida = false (nunca lança por causa do conteúdo salvo). */
   async verify(password: string, stored: string): Promise<boolean> {
-    const parts = stored.split('$');
-    if (parts.length !== 6 || parts[0] !== 'scrypt') return false;
-    const [logN, r, p] = parts.slice(1, 4).map(Number);
-    if (![logN, r, p].every(Number.isInteger) || logN < 10 || logN > 22 || r < 1 || r > 32 || p < 1 || p > 16) return false;
-    const salt = Buffer.from(parts[4], 'base64');
-    const expected = Buffer.from(parts[5], 'base64');
-    if (expected.length !== KEY_LENGTH) return false;
-    const key = await this.derive(password, salt, logN, r, p);
-    return timingSafeEqual(key, expected);
+    const parsed = parseStored(stored);
+    const pepper = parsed && this.pepperOf(parsed.version);
+    if (!parsed || !pepper) return false;
+    const key = await this.derive(password, pepper, parsed.salt, parsed.logN, parsed.r, parsed.p);
+    return timingSafeEqual(key, parsed.key);
   }
 
-  /** O hash foi feito com um custo diferente do atual? (refazer no próximo login) */
+  /** O hash usa outro formato, outra pimenta ou outro custo? (refazer no próximo login) */
   needsRehash(stored: string): boolean {
-    const [, logN, r, p] = stored.split('$');
-    return Number(logN) !== this.logCost || Number(r) !== BLOCK_SIZE || Number(p) !== PARALLELISM;
+    const parsed = parseStored(stored);
+    return (
+      !parsed ||
+      parsed.legacy ||
+      parsed.version !== this.peppers.version ||
+      parsed.logN !== this.logCost ||
+      parsed.r !== BLOCK_SIZE ||
+      parsed.p !== PARALLELISM
+    );
   }
 
   /**
@@ -62,11 +120,15 @@ export class PasswordHasher {
    * a resposta demora igual e não revela quais e-mails têm conta.
    */
   async dummyVerify(password: string): Promise<void> {
-    await this.derive(password, randomBytes(16), this.logCost, BLOCK_SIZE, PARALLELISM);
+    await this.derive(password, this.peppers.current, randomBytes(16), this.logCost, BLOCK_SIZE, PARALLELISM);
   }
 
-  private derive(password: string, salt: Buffer, logN: number, r: number, p: number): Promise<Buffer> {
-    const peppered = createHmac('sha256', this.pepper).update(password.normalize('NFKC'), 'utf8').digest();
+  private pepperOf(version: number): string | undefined {
+    return version === this.peppers.version ? this.peppers.current : this.peppers.previous?.get(version);
+  }
+
+  private derive(password: string, pepper: string, salt: Buffer, logN: number, r: number, p: number): Promise<Buffer> {
+    const peppered = createHmac('sha256', pepper).update(password.normalize('NFKC'), 'utf8').digest();
     const N = 2 ** logN;
     // maxmem precisa caber 128 * N * r bytes (com folga)
     return hashing.run(() => scryptAsync(peppered, salt, { N, r, p, maxmem: 256 * N * r }));

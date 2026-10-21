@@ -3,13 +3,13 @@ import { z } from 'zod';
 import type { AppContext } from '../../context';
 import { audit } from '../../lib/audit';
 import { HttpError, parse } from '../../lib/errors';
-import { email, passwordInput, text } from '../../lib/schemas';
+import { email, newPassword, passwordInput, text, withPasswordPolicy } from '../../lib/schemas';
 import { PUBLIC, clearSessionCookie, requireAuth, sessionCookieName, setSessionCookie } from '../plugins/auth';
 import { AUTH_RATE_LIMIT } from '../plugins/security';
 
-const registerBody = z.strictObject({ name: text(1, 60), email, password: passwordInput });
+const registerBody = withPasswordPolicy(z.strictObject({ name: text(1, 60), email, password: newPassword }));
 const loginBody = z.strictObject({ email, password: passwordInput });
-const passwordBody = z.strictObject({ current: passwordInput, next: passwordInput });
+const passwordBody = z.strictObject({ current: passwordInput, next: newPassword });
 const profileBody = z.strictObject({ name: text(1, 60) });
 
 /**

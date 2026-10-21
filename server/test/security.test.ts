@@ -1,10 +1,12 @@
 import { randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import { loadConfig } from '../src/config/env';
 import { TrustedProxies, clientIp } from '../src/lib/client-ip';
 import { isSafeId } from '../src/lib/ids';
 import { Semaphore, TokenBucket, WindowLimiter } from '../src/lib/limiter';
 import { parseJsonSafely, unsafeJsonReason } from '../src/lib/safe-json';
+import { newPassword, withPasswordPolicy } from '../src/lib/schemas';
 import { declaredTypeMatches, detectFileType } from '../src/security/file-type';
 import { isAllowedOrigin } from '../src/security/origin';
 import { PasswordHasher, passwordProblem } from '../src/security/password';
@@ -14,12 +16,14 @@ import { PNG_1X1 } from './helpers';
 const secret = () => randomBytes(32).toString('hex');
 
 describe('senhas (scrypt + pimenta)', () => {
-  const hasher = new PasswordHasher(secret(), 14);
+  const peppers = (version = 1, current = secret(), previous?: Map<number, string>) => ({ version, current, previous });
+  const v1 = peppers();
+  const hasher = new PasswordHasher(v1, 14);
   const password = randomBytes(12).toString('base64url');
 
-  it('confere a senha certa e recusa a errada', async () => {
+  it('formato autodescritivo: versão da pimenta e parâmetros no hash', async () => {
     const hash = await hasher.hash(password);
-    expect(hash.startsWith('scrypt$14$8$1$')).toBe(true);
+    expect(hash).toMatch(/^scrypt\$1\$N=16384,r=8,p=1\$[A-Za-z0-9+/=]+\$[A-Za-z0-9+/=]+$/);
     expect(await hasher.verify(password, hash)).toBe(true);
     expect(await hasher.verify(`${password}x`, hash)).toBe(false);
   });
@@ -30,11 +34,30 @@ describe('senhas (scrypt + pimenta)', () => {
 
   it('sem a pimenta certa, o hash não confere (vazar só o banco não basta)', async () => {
     const hash = await hasher.hash(password);
-    expect(await new PasswordHasher(secret(), 14).verify(password, hash)).toBe(false);
+    expect(await new PasswordHasher(peppers(), 14).verify(password, hash)).toBe(false);
+  });
+
+  it('pimenta trocada: hashes da versão anterior continuam valendo e pedem novo hash', async () => {
+    const old = await hasher.hash(password);
+    const rotated = new PasswordHasher(peppers(2, secret(), new Map([[1, v1.current]])), 14);
+    expect(await rotated.verify(password, old)).toBe(true);
+    expect(rotated.needsRehash(old)).toBe(true);
+    const fresh = await rotated.hash(password);
+    expect(fresh.startsWith('scrypt$2$')).toBe(true);
+    expect(rotated.needsRehash(fresh)).toBe(false);
+    // Versão sem pimenta configurada: não confere
+    expect(await new PasswordHasher(peppers(3), 14).verify(password, old)).toBe(false);
+  });
+
+  it('formato anterior (sem versão) vale como pimenta 1 e pede novo hash', async () => {
+    const [, , , salt, key] = (await hasher.hash(password)).split('$');
+    const legacy = ['scrypt', 14, 8, 1, salt, key].join('$');
+    expect(await hasher.verify(password, legacy)).toBe(true);
+    expect(hasher.needsRehash(legacy)).toBe(true);
   });
 
   it('hash malformado não lança, só recusa', async () => {
-    for (const bad of ['', 'scrypt$', 'bcrypt$1$2$3$4$5', 'scrypt$99$8$1$AA$AA', 'scrypt$14$8$1$AA$AA']) {
+    for (const bad of ['', 'scrypt$', 'bcrypt$1$2$3$4$5', 'scrypt$99$8$1$AA$AA', 'scrypt$1$N=99,r=8,p=1$AA$AA', 'scrypt$x$N=16384,r=8,p=1$AA$AA']) {
       expect(await hasher.verify(password, bad)).toBe(false);
     }
   });
@@ -42,7 +65,14 @@ describe('senhas (scrypt + pimenta)', () => {
   it('pede novo hash quando o custo muda', async () => {
     const hash = await hasher.hash(password);
     expect(hasher.needsRehash(hash)).toBe(false);
-    expect(new PasswordHasher(secret(), 15).needsRehash(hash)).toBe(true);
+    expect(new PasswordHasher(v1, 15).needsRehash(hash)).toBe(true);
+  });
+
+  it('política no zod: senha nova validada no esquema, inclusive contra o e-mail', () => {
+    expect(newPassword.safeParse('12345678').success).toBe(false);
+    expect(newPassword.safeParse('uma frase bem longa').success).toBe(true);
+    const body = withPasswordPolicy(z.strictObject({ email: z.string(), password: z.string() }));
+    expect(body.safeParse({ email: 'fulano.silva@b.co', password: 'fulano.silva' }).success).toBe(false);
   });
 
   it('política: tamanho, senhas comuns, repetição e e-mail', () => {
@@ -211,6 +241,15 @@ describe('configuração', () => {
   it('recusa segredos de exemplo ou curtos', () => {
     expect(() => loadConfig({ ...base, TOKEN_SECRET: 'troque-este-valor-com-npm-run-setup-xxxxxx' })).toThrow(/exemplo/);
     expect(() => loadConfig({ ...base, PASSWORD_PEPPER: 'curto' })).toThrow(/32/);
+  });
+
+  it('pimentas anteriores: "versão:segredo", únicas e diferentes da atual', () => {
+    const old = secret();
+    const config = loadConfig({ ...base, PASSWORD_PEPPER_VERSION: '2', PASSWORD_PEPPERS_PREVIOUS: `1:${old}` });
+    expect(config.peppers.version).toBe(2);
+    expect(config.peppers.previous?.get(1)).toBe(old);
+    expect(() => loadConfig({ ...base, PASSWORD_PEPPERS_PREVIOUS: `1:${old}` })).toThrow(/diferentes da atual/);
+    expect(() => loadConfig({ ...base, PASSWORD_PEPPER_VERSION: '2', PASSWORD_PEPPERS_PREVIOUS: '1:curto' })).toThrow(/32/);
   });
 
   it('recusa curinga e caminhos em ALLOWED_ORIGINS', () => {
