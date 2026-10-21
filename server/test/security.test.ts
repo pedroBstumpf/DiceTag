@@ -5,7 +5,7 @@ import { TrustedProxies, clientIp } from '../src/lib/client-ip';
 import { isSafeId } from '../src/lib/ids';
 import { Semaphore, TokenBucket, WindowLimiter } from '../src/lib/limiter';
 import { parseJsonSafely, unsafeJsonReason } from '../src/lib/safe-json';
-import { detectFileType } from '../src/security/file-type';
+import { declaredTypeMatches, detectFileType } from '../src/security/file-type';
 import { isAllowedOrigin } from '../src/security/origin';
 import { PasswordHasher, passwordProblem } from '../src/security/password';
 import { TokenService } from '../src/security/tokens';
@@ -113,6 +113,21 @@ describe('tipo real do arquivo', () => {
     expect(detectFileType(Buffer.from('%PDF-1.7'))).toBeNull();
     expect(detectFileType(Buffer.from('MZ\x90\0'))).toBeNull();
     expect(detectFileType(Buffer.alloc(0))).toBeNull();
+  });
+});
+
+describe('nome e tipo declarado do arquivo', () => {
+  it('a extensão tem de ser a do tipo detectado; o tipo declarado, da mesma família ou genérico', () => {
+    expect(declaredTypeMatches('mapa.png', 'image/png', 'image/png')).toBe(true);
+    expect(declaredTypeMatches('mapa.png', '', 'image/png')).toBe(true);
+    expect(declaredTypeMatches('mapa.jpg', 'image/png', 'image/png')).toBe(false);
+    expect(declaredTypeMatches('mapa.png', 'image/svg+xml', 'image/png')).toBe(false);
+    expect(declaredTypeMatches('tema.webm', 'video/webm', 'audio/webm')).toBe(true);
+    expect(declaredTypeMatches('tema.ogg', 'application/ogg', 'audio/ogg')).toBe(true);
+    expect(declaredTypeMatches('tema.m4a', 'audio/x-m4a', 'audio/mp4')).toBe(true);
+    // MP4 com marca genérica e extensão de vídeo: não passa como áudio
+    expect(declaredTypeMatches('filme.mp4', 'video/mp4', 'audio/mp4')).toBe(false);
+    expect(declaredTypeMatches('tema.mp3', 'text/html', 'audio/mpeg')).toBe(false);
   });
 });
 

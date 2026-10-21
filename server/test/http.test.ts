@@ -1,3 +1,4 @@
+import { readdirSync } from 'node:fs';
 import type { InjectOptions } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ORIGIN, PASSWORD, PNG_1X1, call, createTestServer, multipart, register, sessionCookie, type TestServer } from './helpers';
@@ -334,6 +335,37 @@ describe('arquivos', () => {
     const { table } = (await newTable(cookie)).json();
     const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"></svg>');
     expect((await upload(cookie, `tableId=${table.id}`, svg, 'mapa.png', 'image/png')).statusCode).toBe(415);
+  });
+
+  it('nome e tipo declarado precisam conferir com o conteúdo', async () => {
+    const { cookie } = await register(server, 'gm@exemplo.com');
+    const { table } = (await newTable(cookie)).json();
+    const scope = `tableId=${table.id}`;
+    expect((await upload(cookie, scope, PNG_1X1, 'mapa.exe')).statusCode).toBe(415);
+    expect((await upload(cookie, scope, PNG_1X1, 'mapa.svg', 'image/svg+xml')).statusCode).toBe(415);
+    expect((await upload(cookie, scope, PNG_1X1, 'mapa.png', 'text/html')).statusCode).toBe(415);
+    expect((await upload(cookie, scope, PNG_1X1, 'mapa', 'image/png')).statusCode).toBe(415);
+    // Navegador sem tipo conhecido manda octet-stream: vale o conteúdo + a extensão
+    expect((await upload(cookie, scope, PNG_1X1, 'MAPA.PNG', 'application/octet-stream')).statusCode).toBe(201);
+  });
+
+  it('cota da mesa: dois envios simultâneos não passam juntos; recusados não deixam temporários', async () => {
+    const small = await createTestServer({ TABLE_QUOTA_MB: '1' });
+    try {
+      const gm = await register(small, 'gm@exemplo.com');
+      const { table } = (await call(small, gm.cookie, 'POST', '/api/tables', { name: 'M', system: '', description: '', maxPlayers: 2, accent: '#4f86f7' })).json();
+      const piece = Buffer.concat([PNG_1X1, Buffer.alloc(600 * 1024)]);
+      const send = () => {
+        const form = multipart(piece);
+        const headers = { cookie: gm.cookie, origin: ORIGIN, 'content-type': form.contentType };
+        return small.app.http.inject({ method: 'POST', url: `/api/files?tableId=${table.id}`, headers, payload: form.body });
+      };
+      const results = await Promise.all([send(), send()]);
+      expect(results.map((r) => r.statusCode).sort()).toEqual([201, 413]);
+      expect(readdirSync(small.config.FILES_DIR)).toHaveLength(1);
+    } finally {
+      await small.close();
+    }
   });
 
   it('recusa arquivo grande demais e envio em mesa de outra conta', async () => {

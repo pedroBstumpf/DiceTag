@@ -1,8 +1,19 @@
-import { mkdirSync } from 'node:fs';
-import { rm, writeFile } from 'node:fs/promises';
+import { mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { rename, rm } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 import { transaction, type Db } from '../db/database';
 import { isSafeId } from '../lib/ids';
+
+/** Cotas de espaço (bytes) conferidas ao gravar um arquivo novo. */
+export interface FileQuota {
+  /** Total dos arquivos enviados pela conta. */
+  user: number;
+  /** Total dos arquivos de uma mesa (de todos os membros). */
+  table: number;
+}
+
+/** Sufixo dos arquivos ainda sendo recebidos (nunca casa com um id: ids não têm ponto). */
+const TEMP_SUFFIX = '.part';
 
 export interface FileRecord {
   id: string;
@@ -43,6 +54,8 @@ export class FilesRepository {
   ) {
     this.dir = resolve(dir);
     mkdirSync(this.dir, { recursive: true, mode: 0o700 });
+    // Envios interrompidos por uma queda do servidor deixam temporários: não servem para nada
+    for (const name of readdirSync(this.dir)) if (name.endsWith(TEMP_SUFFIX)) rmSync(resolve(this.dir, name), { force: true });
   }
 
   /** Caminho em disco do arquivo `id` (lança se o id não for seguro). */
@@ -53,18 +66,40 @@ export class FilesRepository {
     return path;
   }
 
-  /** Grava o conteúdo (falha se já existir: `wx`) e registra os metadados. */
-  async save(record: FileRecord, content: Buffer): Promise<void> {
+  /** Caminho do arquivo temporário de um envio em andamento (o conteúdo chega em streaming). */
+  tempPathOf(id: string): string {
+    return `${this.pathOf(id)}${TEMP_SUFFIX}`;
+  }
+
+  /**
+   * Torna definitivo um envio recebido em `tempPath`: move para o nome final e registra os
+   * metadados **só se couber nas cotas** — a conferência e o registro são uma instrução só, então
+   * dois envios ao mesmo tempo nunca passam juntos da cota. Devolve false (e apaga o conteúdo)
+   * se não couber.
+   */
+  async commit(record: FileRecord, tempPath: string, quota: FileQuota): Promise<boolean> {
     const path = this.pathOf(record.id);
-    await writeFile(path, content, { flag: 'wx', mode: 0o600 });
+    await rename(tempPath, path);
     try {
-      this.db
-        .prepare('INSERT INTO files (id, owner_id, table_id, world_id, mime, size, sha256, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-        .run(record.id, record.ownerId, record.tableId, record.worldId, record.mime, record.size, record.sha256, record.createdAt);
+      const inserted = this.db
+        .prepare(
+          `INSERT INTO files (id, owner_id, table_id, world_id, mime, size, sha256, created_at)
+           SELECT ?, ?, ?, ?, ?, ?, ?, ?
+           WHERE (SELECT COALESCE(SUM(size), 0) FROM files WHERE owner_id = ?) + ? <= ?
+             AND (? IS NULL OR (SELECT COALESCE(SUM(size), 0) FROM files WHERE table_id = ?) + ? <= ?)`,
+        )
+        .run(
+          record.id, record.ownerId, record.tableId, record.worldId, record.mime, record.size, record.sha256, record.createdAt,
+          record.ownerId, record.size, quota.user,
+          record.tableId, record.tableId, record.size, quota.table,
+        );
+      if (Number(inserted.changes)) return true;
     } catch (err) {
       await rm(path, { force: true });
       throw err;
     }
+    await rm(path, { force: true });
+    return false;
   }
 
   /** Arquivo que a conta pode baixar (null se não existe ou não pode: a rota responde 404 nos dois casos). */
@@ -93,6 +128,11 @@ export class FilesRepository {
   /** Espaço usado pela conta, em bytes (para a cota). */
   usedBytes(ownerId: string): number {
     return Number((this.db.prepare('SELECT COALESCE(SUM(size), 0) AS n FROM files WHERE owner_id = ?').get(ownerId) as { n: number }).n);
+  }
+
+  /** Espaço usado pelos arquivos da mesa, em bytes (para a cota da mesa). */
+  tableBytes(tableId: string): number {
+    return Number((this.db.prepare('SELECT COALESCE(SUM(size), 0) AS n FROM files WHERE table_id = ?').get(tableId) as { n: number }).n);
   }
 
   idsByTable(tableId: string): string[] {

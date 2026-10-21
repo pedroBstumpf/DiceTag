@@ -1,24 +1,29 @@
-import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
+import { rm } from 'node:fs/promises';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { AppContext } from '../../context';
 import { HttpError, badRequest, forbidden, notFound, parse } from '../../lib/errors';
 import { idSchema, newId } from '../../lib/ids';
-import type { FileRecord } from '../../repositories/files';
-import { detectFileType } from '../../security/file-type';
+import { receiveUpload } from '../../lib/upload';
+import { declaredTypeMatches } from '../../security/file-type';
 import { requireAuth } from '../plugins/auth';
 import { UPLOAD_RATE_LIMIT } from '../plugins/security';
 
 const uploadQuery = z.strictObject({ tableId: idSchema.optional(), worldId: idSchema.optional() });
 const fileParams = z.object({ id: idSchema });
+const MB = 1024 * 1024;
+const QUOTA_FULL = 'Espaço de arquivos esgotado (da conta ou da mesa).';
 
 /**
  * /api/files — envio, download e exclusão de arquivos (mapas, imagens de token, áudios).
  *
  * Envio:
- * - um arquivo por requisição, até MAX_UPLOAD_MB; cota total por conta (USER_QUOTA_MB);
- * - tipo conferido pelos bytes (`detectFileType`): só imagens raster e áudio; SVG/HTML recusados;
+ * - um arquivo por requisição, até MAX_UPLOAD_MB, recebido em streaming direto para o disco;
+ * - cotas por conta (USER_QUOTA_MB) e por mesa (TABLE_QUOTA_MB), conferidas de novo, junto com o
+ *   registro, numa instrução só (dois envios simultâneos não passam juntos da cota);
+ * - tipo conferido pelos bytes, pela extensão e pelo tipo declarado (`security/file-type.ts`):
+ *   só imagens raster e áudio; SVG/HTML recusados;
  * - nome escolhido pelo servidor (UUID); o nome original é descartado;
  * - escopo: `tableId` (membro da mesa) ou `worldId` (dono do mundo) define quem pode baixar.
  *
@@ -26,7 +31,7 @@ const fileParams = z.object({ id: idSchema });
  * `nosniff`, CSP `sandbox` e o tipo detectado (o navegador nunca executa o conteúdo).
  */
 export async function fileRoutes(app: FastifyInstance, ctx: AppContext): Promise<void> {
-  const maxBytes = ctx.config.MAX_UPLOAD_MB * 1024 * 1024;
+  const maxBytes = ctx.config.MAX_UPLOAD_MB * MB;
 
   app.post('/files', { config: UPLOAD_RATE_LIMIT }, async (req, reply) => {
     const { user } = requireAuth(req);
@@ -37,28 +42,27 @@ export async function fileRoutes(app: FastifyInstance, ctx: AppContext): Promise
 
     const part = await req.file({ limits: { fileSize: maxBytes, files: 1, fields: 0, parts: 1 } });
     if (!part) throw badRequest('Nenhum arquivo enviado.');
-    const content = await part.toBuffer();
-    if (part.file.truncated) throw new HttpError(413, `Arquivo maior que ${ctx.config.MAX_UPLOAD_MB} MB.`);
-    if (!content.length) throw badRequest('Arquivo vazio.');
 
-    const mime = detectFileType(content);
-    if (!mime) throw new HttpError(415, 'Formato não aceito. Envie PNG, JPEG, GIF, WebP ou áudio (MP3, OGG, WAV, FLAC, M4A, WebM).');
-    if (ctx.files.usedBytes(user.id) + content.length > ctx.config.USER_QUOTA_MB * 1024 * 1024) {
-      throw new HttpError(413, 'Espaço de arquivos da conta esgotado.');
+    // O que sobra nas cotas limita o envio já no streaming (a conferência final é no registro)
+    const quota = { user: ctx.config.USER_QUOTA_MB * MB, table: ctx.config.TABLE_QUOTA_MB * MB };
+    const free = Math.min(quota.user - ctx.files.usedBytes(user.id), scope.tableId ? quota.table - ctx.files.tableBytes(scope.tableId) : Infinity);
+    if (free <= 0) throw new HttpError(413, QUOTA_FULL);
+    const id = newId();
+    const temp = ctx.files.tempPathOf(id);
+    try {
+      const tooBig = maxBytes <= free ? `Arquivo maior que ${ctx.config.MAX_UPLOAD_MB} MB.` : QUOTA_FULL;
+      const received = await receiveUpload(part.file, temp, Math.min(maxBytes, free), tooBig);
+      if (part.file.truncated) throw new HttpError(413, `Arquivo maior que ${ctx.config.MAX_UPLOAD_MB} MB.`);
+      if (!declaredTypeMatches(part.filename, part.mimetype, received.mime)) {
+        throw new HttpError(415, 'O nome ou o tipo do arquivo não corresponde ao conteúdo.');
+      }
+      const record = { id, ownerId: user.id, tableId: scope.tableId ?? null, worldId: scope.worldId ?? null, ...received, createdAt: Date.now() };
+      if (!(await ctx.files.commit(record, temp, quota))) throw new HttpError(413, QUOTA_FULL);
+      return reply.code(201).send({ file: { id, mime: received.mime, size: received.size } });
+    } finally {
+      // Recusado no meio do caminho: o temporário some (depois do registro, ele já foi movido)
+      await rm(temp, { force: true });
     }
-
-    const record: FileRecord = {
-      id: newId(),
-      ownerId: user.id,
-      tableId: scope.tableId ?? null,
-      worldId: scope.worldId ?? null,
-      mime,
-      size: content.length,
-      sha256: createHash('sha256').update(content).digest('hex'),
-      createdAt: Date.now(),
-    };
-    await ctx.files.save(record, content);
-    return reply.code(201).send({ file: { id: record.id, mime, size: record.size } });
   });
 
   app.get('/files/:id', async (req, reply) => {

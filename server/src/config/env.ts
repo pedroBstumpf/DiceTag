@@ -57,6 +57,8 @@ const schema = z.object({
   MAX_UPLOAD_MB: z.coerce.number().int().min(1).max(100).default(10),
   /** Espaço total de arquivos por conta. */
   USER_QUOTA_MB: z.coerce.number().int().min(10).max(10_000).default(500),
+  /** Espaço total de arquivos por mesa (somando os de todos os membros). */
+  TABLE_QUOTA_MB: z.coerce.number().int().min(1).max(100_000).default(2000),
 
   /** Página de testes do WebSocket em /dev (só desenvolvimento). */
   DEV_TOOLS: bool(false),
