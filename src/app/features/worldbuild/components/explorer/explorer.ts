@@ -134,14 +134,19 @@ export class Explorer {
   readonly renamingWorld = signal(false);
 
   createWorld(): void {
-    void this.worlds.create();
+    void this.worlds.create().catch((err: unknown) => this.warn(err));
   }
 
   finishWorldRename(value: string): void {
     if (!this.renamingWorld()) return;
     const id = this.worlds.activeId();
-    void this.worlds.rename(id, value);
+    void this.worlds.rename(id, value).catch((err: unknown) => this.warn(err));
     this.renamingWorld.set(false);
+  }
+
+  /** Erro ao mexer nos mundos (online: servidor fora do ar ou limite atingido). */
+  private warn(err: unknown): void {
+    this.snackBar.open(err instanceof Error ? err.message : 'Não foi possível concluir. Tente novamente.', undefined, { duration: 5000 });
   }
 
   /** Exclui o mundo aberto (com confirmação; só se nenhuma mesa se passa nele). */

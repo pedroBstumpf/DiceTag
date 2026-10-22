@@ -1,37 +1,35 @@
-import { Injectable, computed, effect, inject, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
+import { TablesRepository } from '../data/tables.repository';
 import { GameTable, NewGameTable } from '../models/game-table.model';
-import { TableState } from '../models/table-session.model';
-import { newId } from '../utils/id';
+import { User } from '../models/user.model';
 import { AuthService } from './auth.service';
-import { StorageService } from './storage.service';
-
-const TABLES_KEY = 'tables';
 
 /**
- * Mesas de jogo do usuário logado.
- * Recarrega automaticamente quando o usuário entra ou sai.
+ * Mesas de jogo da conta logada ("Minhas mesas").
+ * Recarrega automaticamente quando a conta muda. Os dados vêm do `TablesRepository` do modo em
+ * uso (IndexedDB offline; servidor online, com as mesas em que a conta joga por convite).
  */
 @Injectable({ providedIn: 'root' })
 export class GameTablesService {
-  private readonly storage = inject(StorageService);
+  private readonly repository = inject(TablesRepository);
   private readonly auth = inject(AuthService);
 
   // --- Estado --------------------------------------------------------------
   private readonly all = signal<GameTable[]>([]);
   readonly loaded = signal(false);
+  /** Motivo de a lista não ter carregado (ex.: servidor fora do ar); null = carregou. */
+  readonly loadError = signal<string | null>(null);
+  /** Carregamento mais recente (os anteriores são descartados ao terminar). */
+  private loading = 0;
 
-  /** Mesas do usuário atual, mais recentes primeiro. */
-  readonly tables = computed(() => {
-    const userId = this.auth.user()?.id;
-    return this.all()
-      .filter((t) => t.ownerId === userId)
-      .sort((a, b) => b.createdAt - a.createdAt);
-  });
+  /** Mesas da conta, mais recentes primeiro. */
+  readonly tables = computed(() => [...this.all()].sort((a, b) => b.createdAt - a.createdAt));
 
   constructor() {
-    // Carrega as mesas sempre que o usuário muda
+    // Recarrega quando a conta muda (só a conta dispara: o carregamento não é rastreado)
     effect(() => {
-      if (this.auth.user()) this.load();
+      const user = this.auth.user();
+      untracked(() => void this.load(user));
     });
   }
 
@@ -40,49 +38,55 @@ export class GameTablesService {
   async create(data: NewGameTable): Promise<GameTable> {
     const user = this.auth.user();
     if (!user) throw new Error('É preciso estar logado para criar uma mesa.');
-
-    const table: GameTable = { ...data, id: newId(), ownerId: user.id, createdAt: Date.now() };
+    const table = await this.repository.create(user, data);
     this.all.update((list) => [...list, table]);
-    await this.persist();
-    this.storage.requestPersistence();
     return table;
   }
 
-  /** Busca uma mesa do usuário atual pelo id. */
+  /** Busca uma mesa da conta pelo id. */
   getById(id: string): GameTable | undefined {
-    return this.tables().find((t) => t.id === id);
+    return this.all().find((t) => t.id === id);
+  }
+
+  /** A conta é dona da mesa? (só o dono exclui; online, só ele convida e remove jogadores) */
+  isOwner(table: GameTable): boolean {
+    return table.ownerId === this.auth.user()?.id;
   }
 
   /** Exclui a mesa, o estado salvo dela e todos os arquivos (mapas, sons, tokens). */
   async remove(id: string): Promise<void> {
+    const user = this.auth.user();
+    if (!user) return;
+    await this.repository.remove(user, id);
     this.all.update((list) => list.filter((t) => t.id !== id));
-    await this.persist();
-    await this.purgeTableData(id);
   }
 
-  // --- Persistência --------------------------------------------------------
-
-  private async load(): Promise<void> {
-    this.all.set((await this.storage.get<GameTable[]>(TABLES_KEY)) ?? []);
-    this.loaded.set(true);
+  /** Recarrega a lista (ex.: depois de entrar numa mesa com convite ou de sair de uma). */
+  reload(): Promise<void> {
+    return this.load(this.auth.user());
   }
 
-  private persist(): Promise<void> {
-    return this.storage.set(TABLES_KEY, this.all());
-  }
+  // --- Carregamento --------------------------------------------------------
 
-  /** Apaga "table-state:<id>" e os Blobs referenciados por ele. */
-  private async purgeTableData(id: string): Promise<void> {
-    const key = `table-state:${id}`;
-    const state = await this.storage.get<TableState>(key);
-    if (state) {
-      const blobIds = [
-        ...state.scenes.flatMap((s) => [s.blobId, ...(s.drops ?? []).map((d) => d.item.blobId)]),
-        ...state.entries.flatMap((e) => [e.blobId, e.token?.blobId]),
-        ...(state.items ?? []).map((i) => i.blobId),
-      ].filter((b): b is string => !!b);
-      await Promise.all(blobIds.map((b) => this.storage.delete(`blob:${b}`)));
+  private async load(user: User | null): Promise<void> {
+    const current = ++this.loading;
+    this.loaded.set(false);
+    this.loadError.set(null);
+    if (!user) {
+      this.all.set([]);
+      return;
     }
-    await this.storage.delete(key);
+    try {
+      const tables = await this.repository.list(user);
+      // A conta mudou (ou outro carregamento começou) enquanto este esperava: descarta
+      if (current !== this.loading) return;
+      this.all.set(tables);
+    } catch (err) {
+      if (current !== this.loading) return;
+      this.all.set([]);
+      this.loadError.set(err instanceof Error ? err.message : 'Não foi possível carregar as mesas.');
+    } finally {
+      if (current === this.loading) this.loaded.set(true);
+    }
   }
 }

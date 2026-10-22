@@ -223,3 +223,34 @@ O que dava para preparar (regras e visão como funções puras, sorteio injetáv
 6. Validação de permissões no servidor (§3.3) e rolagens no servidor (§3.2).
 7. Projeção por jogador com visão calculada no servidor (§3.1).
 8. Eventos efêmeros (ping, efeitos, arraste) e, se necessário, edição colaborativa de texto (Yjs).
+
+---
+
+## 6. Plano da ligação do front ao servidor
+
+**Metas:** (A) duas janelas no mesmo computador (normal + anônima) com os tokens se movendo nas duas;
+(B) amigos em outros computadores criam conta, entram com convite e jogam junto.
+
+**Decisões (do dono do projeto):**
+- **Dois modos, escolhidos na entrada** (`ModeDialog`, `core/config/app-mode.ts`): *online* (servidor) e
+  *offline* (IndexedDB, como sempre foi). A escolha fica em `localStorage dicetag.mode` e pode ser trocada no
+  menu da conta; trocar recarrega o app. Online não há visitante.
+- **Amigos pela internet** por túnel HTTPS (ex.: Cloudflare Tunnel), com o servidor entregando o app pronto.
+- **Sem migração** das campanhas locais (cada modo tem os próprios dados).
+
+**Como:** repositórios por domínio (§2) em `core/data/`, cada um com a implementação local e a do servidor,
+escolhida por `APP_MODE`; endereços relativos (`/api`, `/ws`), iguais com o proxy do `ng serve` e com o
+servidor entregando o app; a mesa aplica a ação na hora e reconcilia com o servidor (`ack`/`nack`, estado
+oficial por cima, pendentes reaplicadas); movimento contínuo (WASD, arrastar) agrupado em ~10 envios/s (o
+servidor aceita 20/s por conexão); arquivos pela API, exibidos por `/api/files/:id`.
+
+| Fase | O que entra | Situação |
+|---|---|---|
+| 1. Contas e mesas online | Escolha do modo; `AuthGateway`, `TablesRepository`, `WorldRepository` (mundos) locais e do servidor; `ApiClient`; convites, membros e "sair da mesa" | **Feita** |
+| 2. Worldbuild e arquivos | Itens do mundo pela API, envio de imagens, Lore projetada para o jogador | Pendente |
+| 3. Mesa em tempo real | `TableSessionRepository` (WebSocket), reconciliação, papel da conta, névoa por `vision`, eventos, rolagens no servidor, movimento agrupado, conexão e presença | Pendente |
+| 4. Regras que faltam no servidor | Comprar, lootear, pegar do chão e "Dar para" atômicos; rolagens com itens, status e Estudos | Pendente |
+| 5. Jogar com outras pessoas | Servidor entrega o build (CSP do app), túnel HTTPS, guia e checklist | Pendente |
+
+Na Fase 1, online, o Worldbuild ainda grava os itens no navegador (sob o id do mundo do servidor) e a mesa
+não abre (aviso na página): os dois chegam nas Fases 2 e 3.

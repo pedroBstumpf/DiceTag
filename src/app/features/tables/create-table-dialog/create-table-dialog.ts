@@ -35,6 +35,7 @@ export class CreateTableDialog {
   readonly systems = GAME_SYSTEMS;
   readonly accents = TABLE_ACCENTS;
   readonly saving = signal(false);
+  readonly error = signal('');
 
   // --- Formulário ----------------------------------------------------------
   readonly form = inject(FormBuilder).nonNullable.group({
@@ -61,7 +62,14 @@ export class CreateTableDialog {
       return;
     }
     this.saving.set(true);
-    const table = await this.tables.create(this.form.getRawValue());
-    this.dialogRef.close(table);
+    this.error.set('');
+    try {
+      const table = await this.tables.create(this.form.getRawValue());
+      this.dialogRef.close(table);
+    } catch (err) {
+      this.error.set(err instanceof Error ? err.message : 'Não foi possível criar a mesa. Tente novamente.');
+    } finally {
+      this.saving.set(false);
+    }
   }
 }

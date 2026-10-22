@@ -37,9 +37,11 @@ organizar toda a atmosfera de uma campanha.
 | **Rolagem de dados** (2d12: falha crítica…sucesso crítico; 3d6: azar/neutro/sorte) + **chat** da mesa | Pronto |
 | **Efeitos especiais** no mapa (20 efeitos em 4 grupos; 13 cores por elemento) | Pronto |
 | **Servidor** (`server/`: API HTTP + sala da mesa por WebSocket, SQLite, contas/convites reais, visão no servidor, LGPD, backup) | Pronto, testado, auditado contra o `BACKEND_SECURITY.md` |
-| Front-end usando o servidor (repositórios HTTP/WebSocket, multiplayer de fato) | Não iniciado |
+| **Modo online x offline** (escolha na entrada) — online: contas, "Minhas mesas", mundos e **convites** pelo servidor | Fase 1 de 5 (SPEC §6) |
+| Front-end usando o servidor: Worldbuild/arquivos (Fase 2), mesa em tempo real (Fase 3), regras (4), jogar pela internet (5) | Em andamento |
 
-As telas ainda guardam tudo **no navegador (IndexedDB)**. O servidor existe, mas nenhuma tela o chama ainda.
+No modo **offline** tudo fica no navegador (IndexedDB), como sempre. No **online**, contas, mesas, mundos e convites
+já vêm do servidor; o Worldbuild ainda grava no navegador e a mesa ainda não abre (Fases 2 e 3).
 
 ---
 
@@ -84,9 +86,9 @@ npm run backup               # cópia do banco e dos arquivos + conferência (op
 
 Configuração relevante do `angular.json` (produção):
 - `optimization.fonts: false` → não tenta embutir Google Fonts no build (evita travar em redes restritas).
-- Budgets: inicial 800kB aviso / 1.5MB erro; estilo por componente 6kB / 12kB.
-  O aviso subiu para **850kB** porque o CSS global do Tailwind cresce com cada tela nova (inicial hoje ~841kB,
-  dos quais ~88kB de CSS). Evite importar coisas pesadas fora das rotas lazy.
+- Budgets: inicial 850kB aviso / 1.5MB erro; estilo por componente 6kB / 12kB. Inicial hoje **~690kB**: os
+  diálogos globais (modo, login, nova mesa) são carregados com `import()` pelo `QuickActionsService`, então os
+  formulários do Material saem do carregamento inicial. Evite importar coisas pesadas fora das rotas lazy.
 
 ---
 
@@ -100,7 +102,13 @@ src/
 └── app/
     ├── app.ts / app.config.ts / app.routes.ts
     ├── core/                   # regras e dados — sem UI
-    │   ├── config/app-settings.ts      # flags globais (requireAuth)
+    │   ├── config/app-settings.ts      # flags globais (requireAuth, só no offline)
+    │   ├── config/app-mode.ts          # AppMode online/offline, APP_MODE, dicetag.mode (escolha na entrada)
+    │   ├── api/api-client.ts           # ApiClient (/api, cookie de sessão, erros em mensagens, aviso de 401) + spec
+    │   ├── data/                       # repositórios por domínio (SPEC §2): abstratos, escolhidos por APP_MODE
+    │   │   ├── auth-gateway.ts tables.repository.ts world.repository.ts
+    │   │   ├── local/                  # IndexedDB (modo offline; o código de sempre)
+    │   │   └── server/                 # servidor via ApiClient (modo online) + spec
     │   ├── models/                     # interfaces e constantes de domínio
     │   │   ├── geometry.model.ts       # Point, Rect
     │   │   ├── user.model.ts
@@ -113,10 +121,11 @@ src/
     │   │   └── news.model.ts
     │   ├── services/
     │   │   ├── storage.service.ts      # wrapper chave/valor do IndexedDB (get/set/delete)
-    │   │   ├── auth.service.ts         # contas locais + visitante
+    │   │   ├── auth.service.ts         # conta (via AuthGateway) + visitante offline + spec
     │   │   ├── sheet-store.ts          # SheetStore: contrato da fonte de dados da ficha + inventário em comum
-    │   │   ├── game-tables.service.ts  # CRUD de mesas (excluir apaga table-state e blobs)
-    │   │   ├── worlds.service.ts       # mundos do usuário (lista, aberto, criar/renomear/excluir) + spec
+    │   │   ├── game-tables.service.ts  # mesas da conta (via TablesRepository; online com papel) + spec
+    │   │   ├── table-members.service.ts # online: membros, convites e sair da mesa
+    │   │   ├── worlds.service.ts       # mundos do usuário (via WorldRepository; lista, aberto, criar/renomear/excluir) + spec
     │   │   ├── layout.service.ts       # barra lateral (recolhida/mobile)
     │   │   └── news.service.ts         # notícias (vazio por enquanto)
     │   └── utils/id.ts                 # newId() com fallback fora de HTTPS
@@ -137,8 +146,9 @@ src/
     │   └── sidebar/
     └── features/
         ├── home/               # landing
-        ├── auth/auth-dialog/   # diálogo único Entrar/Criar conta
-        ├── tables/             # "Minhas mesas" + create-table-dialog
+        ├── auth/auth-dialog/   # diálogo único Entrar/Criar conta (senha mínima do modo)
+        ├── auth/mode-dialog/   # escolha online/offline (primeira vez e menu da conta)
+        ├── tables/             # "Minhas mesas" + create-table-dialog, players-dialog (jogadores e convites), join-dialog
         ├── worldbuild/
         │   ├── worldbuild.ts           # página: explorador (com seletor de mundo) + área de janelas
         │   ├── services/worldbuild.service.ts   # itens e mesa de trabalho do mundo aberto; migração de timelines antigas
@@ -318,8 +328,17 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 
 ## 7. Regras de negócio
 
+### Modo online x offline (`core/config/app-mode.ts`)
+- Na primeira abertura, o Shell pergunta (`ModeDialog`): **online** (servidor) ou **offline** (navegador). A escolha
+  fica em `localStorage dicetag.mode`; o menu da conta e o rodapé da barra lateral trocam (trocar recarrega o app).
+  Escolher online confere antes se o servidor responde (`/api/health`). Os dados de um modo não aparecem no outro.
+- Online: sem visitante; senha nova de 8 a 128; "Minhas mesas" lista também as mesas em que a conta joga
+  (`GameTable.role`), com **"Entrar com convite"** (`JoinDialog`), **"Jogadores e convites"** do mestre
+  (`PlayersDialog`: membros, remover, gerar/cancelar código, mostrado uma vez) e **"Sair da mesa"** do jogador;
+  menu da conta com "Sair de todos os dispositivos". A página da mesa avisa que a mesa online ainda não abre.
+
 ### Contas
-- `APP_SETTINGS.requireAuth` (`core/config/app-settings.ts`), hoje **`false` = modo de teste**:
+- `APP_SETTINGS.requireAuth` (`core/config/app-settings.ts`), hoje **`false` = modo de teste** (só offline):
   `AuthService.user()` devolve um visitante fixo (`id: 'guest'`) quando ninguém está logado.
 - `isLoggedIn()` = há usuário (real ou visitante). `isGuest()` = é o visitante.
 - **No servidor** (`server/`), contas usam senha de 8 a 128 caracteres (sem as mais comuns), scrypt com pimenta e sessão por cookie HttpOnly; o papel na mesa vem da conta (dono = mestre, convite = jogador).
@@ -798,7 +817,8 @@ O `MapStage` recebe `insets` para enquadrar o mapa só na área livre entre as b
 | `table-state:<tableId>` | `TableState` (cenas com tokens/névoa/memória/paredes/portas/desenhos/anotações/itens no chão/camadas/vista, pastas de cenas, cena ativa, arquivos — com a ficha do personagem em `sheet` e os NPCs como referência ao bestiário —, tokens de NPC com ficha própria, volume mestre, chat, organização da Lore, itens criados na mesa por jogadores) |
 | `blob:<id>` | `Blob` de imagem/mapa/áudio/imagem de token |
 | `desk:<userId>:<worldId>` | `OpenWindow[]`: janelas da mesa de trabalho do Worldbuild daquele mundo (posição, tamanho, estado) |
-| `localStorage: dicetag.session` | id do usuário logado |
+| `localStorage: dicetag.mode` | modo escolhido (`online` ou `offline`; ausente = perguntar na entrada) |
+| `localStorage: dicetag.session` | id do usuário logado (offline; online a sessão é o cookie do servidor) |
 | `localStorage: dicetag.world.<userId>` | último mundo aberto pelo usuário |
 | `localStorage: dicetag.sidebarCollapsed` | preferência da barra lateral |
 
@@ -809,8 +829,9 @@ do hash das senhas — para não perder dados, sessões e contas já salvos. **N
 sessão) ao criar uma mesa ou um item do Worldbuild/Lore, para o navegador não apagar o IndexedDB quando falta espaço.
 Não protege contra o usuário limpar os dados do site.
 
-Para conectar um backend: o `StorageService` chave/valor e o `AuthService` local **não** são a interface de uma
-API; serão trocados por repositórios por domínio fornecidos por injeção de dependência. Plano em `SPEC.md` §2.
+Ligação ao servidor (SPEC.md §6): contas, mesas e mundos já passam pelos repositórios de `core/data/` (local ou
+servidor, pelo modo). Código novo usa um repositório, nunca o `StorageService` direto; o Worldbuild, a sessão da
+mesa e os arquivos ainda usam o `StorageService` e são trocados nas Fases 2 e 3.
 
 ---
 

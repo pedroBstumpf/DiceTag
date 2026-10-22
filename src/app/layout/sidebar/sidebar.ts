@@ -7,6 +7,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/router';
+import { APP_MODE } from '../../core/config/app-mode';
 import { AuthService } from '../../core/services/auth.service';
 import { GameTablesService } from '../../core/services/game-tables.service';
 import { WorldsService } from '../../core/services/worlds.service';
@@ -25,7 +26,8 @@ interface NavLink {
 
 /**
  * Barra lateral principal: navegação entre páginas, os mundos do usuário (cada um abre
- * o Worldbuild dele), atalhos para as mesas e área da conta. Recolhível no desktop e gaveta no mobile.
+ * o Worldbuild dele), atalhos para as mesas e área da conta (com o modo em uso — online ou
+ * offline — e a troca de modo). Recolhível no desktop e gaveta no mobile.
  */
 @Component({
   selector: 'app-sidebar',
@@ -36,6 +38,8 @@ interface NavLink {
 export class Sidebar {
   readonly layout = inject(LayoutService);
   readonly auth = inject(AuthService);
+  /** Online: conta no servidor (mostra "sair de todos os dispositivos"). */
+  readonly online = inject(APP_MODE) === 'online';
   private readonly actions = inject(QuickActionsService);
   private readonly tables = inject(GameTablesService);
   private readonly router = inject(Router);
@@ -87,9 +91,30 @@ export class Sidebar {
     this.actions.openAuth(mode);
   }
 
-  logout(): void {
-    this.auth.logout();
+  async logout(): Promise<void> {
+    await this.signOut(() => this.auth.logout(), 'Você saiu da sua conta.');
+  }
+
+  /** Online: encerra a sessão em todos os computadores (inclusive este). */
+  async logoutEverywhere(): Promise<void> {
+    if (!confirm('Sair da conta em todos os computadores e navegadores, inclusive neste?')) return;
+    await this.signOut(() => this.auth.logoutAll(), 'Você saiu da conta em todos os dispositivos.');
+  }
+
+  /** Online ou offline (trocar recarrega o app). */
+  changeMode(): void {
+    this.layout.closeMobile();
+    void this.actions.chooseMode();
+  }
+
+  private async signOut(action: () => Promise<void>, done: string): Promise<void> {
+    try {
+      await action();
+      this.snackBar.open(done);
+    } catch {
+      // A conta já saiu deste navegador; o servidor encerra a sessão quando vencer
+      this.snackBar.open('Você saiu, mas o servidor não respondeu.');
+    }
     this.router.navigate(['/']);
-    this.snackBar.open('Você saiu da sua conta.');
   }
 }

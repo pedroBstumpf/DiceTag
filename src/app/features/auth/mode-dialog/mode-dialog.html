@@ -1,0 +1,58 @@
+<!-- Cabeçalho: emblema + título -->
+<div class="flex flex-col items-center gap-3 px-6 pt-6 text-center">
+  <img src="images/zehenia-emblem.png" alt="" class="size-14 rounded-2xl ring-1 ring-white/10" />
+  <h2 class="font-display text-2xl text-star-300">Como você quer jogar?</h2>
+  <p class="text-sm text-slate-400">
+    @if (data.firstTime) {
+      Escolha onde ficam suas mesas e mundos. Dá para trocar depois, no menu da sua conta.
+    } @else {
+      Os dados de um modo não aparecem no outro. Trocar recarrega o app.
+    }
+  </p>
+</div>
+
+<!-- Opções -->
+<div class="flex flex-col gap-3 px-6 pb-6 pt-5">
+  @for (option of options; track option.mode) {
+    <button
+      type="button"
+      class="flex items-start gap-4 rounded-2xl border p-4 text-left transition-colors disabled:opacity-60"
+      [class]="
+        current === option.mode
+          ? 'border-astral-400/60 bg-astral-500/10'
+          : 'border-white/10 bg-ink-950/40 hover:border-astral-400/40 hover:bg-white/5'
+      "
+      [disabled]="checking()"
+      (click)="choose(option.mode)"
+    >
+      <span class="grid size-11 shrink-0 place-items-center rounded-xl bg-ink-800 text-astral-300">
+        @if (checking() && option.mode === 'online') {
+          <mat-spinner diameter="22" />
+        } @else {
+          <mat-icon>{{ option.icon }}</mat-icon>
+        }
+      </span>
+      <span class="min-w-0 flex-1">
+        <span class="flex items-center gap-2 font-display text-lg text-slate-100">
+          {{ option.title }}
+          @if (current === option.mode) {
+            <span class="rounded-full bg-astral-500/20 px-2 py-0.5 font-sans text-xs text-astral-300">em uso</span>
+          }
+        </span>
+        <span class="mt-1 block text-sm leading-relaxed text-slate-400">{{ option.description }}</span>
+      </span>
+    </button>
+  }
+
+  <!-- Servidor fora do ar ao escolher online -->
+  @if (error()) {
+    <p class="flex items-start gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300" role="alert">
+      <mat-icon class="!size-5 shrink-0 !text-xl">error</mat-icon>
+      {{ error() }}
+    </p>
+  }
+
+  @if (!data.firstTime) {
+    <button mat-button type="button" class="self-end" mat-dialog-close>Cancelar</button>
+  }
+</div>

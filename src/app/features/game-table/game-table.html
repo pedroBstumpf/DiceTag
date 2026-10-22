@@ -1,4 +1,17 @@
-@if (table(); as t) {
+@if (online) {
+  <!-- ===== Online: a sala em tempo real ainda não está ligada ===== -->
+  <div class="grid h-full place-items-center p-6 text-center">
+    <div class="flex max-w-md flex-col items-center gap-3">
+      <mat-icon class="!size-10 !text-[40px] text-astral-300">cloud_sync</mat-icon>
+      <h1 class="font-display text-xl text-star-300">A mesa online abre em breve</h1>
+      <p class="text-sm text-slate-400">
+        A sala em tempo real ainda está sendo ligada ao servidor. Por enquanto, monte o grupo em Minhas mesas
+        (convites e jogadores); para jogar agora, use o modo offline.
+      </p>
+      <a mat-flat-button routerLink="/mesas">Voltar para Minhas mesas</a>
+    </div>
+  </div>
+} @else if (table(); as t) {
   <!-- ===== Camada 0: mapa (ocupa a tela inteira) ===== -->
   <app-map-stage
     #map

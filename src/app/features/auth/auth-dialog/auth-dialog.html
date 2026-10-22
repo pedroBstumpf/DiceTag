@@ -7,6 +7,10 @@
   <p class="text-sm text-slate-400">
     {{ mode() === 'login' ? 'Entre para acessar suas mesas e mundos.' : 'Comece a criar mesas e mundos em segundos.' }}
   </p>
+  <span class="flex items-center gap-1 rounded-full bg-white/5 px-3 py-1 text-xs text-slate-400">
+    <mat-icon class="!size-4 !text-base">{{ online ? 'cloud' : 'computer' }}</mat-icon>
+    {{ online ? 'Conta no servidor: vale em qualquer computador' : 'Modo offline: a conta fica só neste navegador' }}
+  </span>
 </div>
 
 <!-- Alternador Entrar / Criar conta -->
@@ -63,8 +67,10 @@
     >
       <mat-icon>{{ showPassword() ? 'visibility_off' : 'visibility' }}</mat-icon>
     </button>
-    @if (form.controls.password.invalid) {
-      <mat-error>Mínimo de 6 caracteres.</mat-error>
+    @if (form.controls.password.hasError('maxlength')) {
+      <mat-error>Máximo de 128 caracteres.</mat-error>
+    } @else if (form.controls.password.invalid) {
+      <mat-error>Mínimo de {{ minPassword }} caracteres.</mat-error>
     }
   </mat-form-field>
 

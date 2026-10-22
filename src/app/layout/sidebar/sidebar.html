@@ -121,6 +121,20 @@
 
   <!-- ===== Conta ===== -->
   <footer class="shrink-0 border-t border-white/5 p-3">
+    <!-- Modo em uso (clique para trocar) -->
+    @if (expanded()) {
+      <button
+        type="button"
+        class="mb-2 flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-xs text-slate-500 transition-colors hover:bg-white/5 hover:text-slate-300"
+        matTooltip="Trocar entre online e offline"
+        (click)="changeMode()"
+      >
+        <mat-icon class="!size-4 !text-base">{{ online ? 'cloud' : 'computer' }}</mat-icon>
+        <span class="flex-1">{{ online ? 'Online (servidor)' : 'Offline (neste navegador)' }}</span>
+        <mat-icon class="!size-4 !text-base">swap_horiz</mat-icon>
+      </button>
+    }
+
     @if (auth.isGuest() && expanded()) {
       <!-- Modo de teste: visitante, com atalho para entrar -->
       <div class="mb-2 flex items-center gap-2 rounded-xl bg-astral-500/10 px-3 py-2 text-xs text-astral-300">
@@ -153,6 +167,16 @@
         }
       </button>
       <mat-menu #accountMenu="matMenu" xPosition="after" yPosition="above">
+        <button mat-menu-item (click)="changeMode()">
+          <mat-icon>swap_horiz</mat-icon>
+          <span>{{ online ? 'Usar offline' : 'Usar online' }}</span>
+        </button>
+        @if (online) {
+          <button mat-menu-item (click)="logoutEverywhere()">
+            <mat-icon>devices</mat-icon>
+            <span>Sair de todos os dispositivos</span>
+          </button>
+        }
         <button mat-menu-item (click)="logout()">
           <mat-icon>logout</mat-icon>
           <span>Sair</span>

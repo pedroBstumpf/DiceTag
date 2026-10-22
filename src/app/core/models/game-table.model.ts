@@ -11,6 +11,11 @@ export interface GameTable {
   /** Mundo onde a mesa se passa (a aba Lore mostra os itens dele). Ausente = o primeiro mundo. */
   worldId?: string;
   createdAt: number;
+  /**
+   * Papel da conta nesta mesa: dono = mestre; quem entrou por convite = jogador (só no modo
+   * online). Ausente = mestre (offline, toda mesa é de quem a criou).
+   */
+  role?: 'gm' | 'player';
 }
 
 /** Dados necessários para criar uma mesa. */

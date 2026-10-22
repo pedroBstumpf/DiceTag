@@ -6,6 +6,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterLink } from '@angular/router';
 import { NPC_TOKEN_SHEET, ROLL_OUTCOMES, TABLE_ENTRY_META, TableEntry, hasSheet } from '../../core/models/table-session.model';
 import { WORLD_ITEM_META } from '../../core/models/world-item.model';
+import { APP_MODE } from '../../core/config/app-mode';
 import { GameTablesService } from '../../core/services/game-tables.service';
 import { FloatingWindow } from '../../shared/components/floating-window/floating-window';
 import { WindowManagerService } from '../../shared/services/window-manager.service';
@@ -133,6 +134,11 @@ export class GameTablePage {
 
   /** Id da mesa (parâmetro da rota /mesa/:id). */
   readonly id = input.required<string>();
+  /**
+   * Online, a mesa ainda não abre: a sala em tempo real (WebSocket) chega na próxima etapa da
+   * ligação ao servidor. Até lá a página só avisa — e não cria estado local para a mesa do servidor.
+   */
+  readonly online = inject(APP_MODE) === 'online';
 
   readonly table = computed(() => this.tables.getById(this.id()));
   /** Mestre: único que edita a lore na mesa (o jogador só lê o que foi revelado). */
@@ -157,7 +163,7 @@ export class GameTablePage {
     // Carrega o estado da mesa quando o id muda (untracked: só o id dispara o efeito)
     effect(() => {
       const id = this.id();
-      untracked(() => this.session.load(id));
+      if (!this.online) untracked(() => this.session.load(id));
     });
     inject(DestroyRef).onDestroy(() => this.session.flush());
 

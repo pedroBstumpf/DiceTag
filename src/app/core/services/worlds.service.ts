@@ -1,24 +1,23 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
-import { DEFAULT_WORLD_ID, DEFAULT_WORLD_NAME, MAX_WORLDS, World, worldbuildKey } from '../models/world.model';
-import { WorldItem, worldItemBlobIds } from '../models/world-item.model';
-import { newId } from '../utils/id';
+import { WorldRepository } from '../data/world.repository';
+import { User } from '../models/user.model';
+import { DEFAULT_WORLD_ID, MAX_WORLDS, World } from '../models/world.model';
 import { AuthService } from './auth.service';
 import { GameTablesService } from './game-tables.service';
-import { StorageService } from './storage.service';
 
 /** Preferência do último mundo aberto (por usuário). */
 const ACTIVE_KEY = 'dicetag.world.';
 
 /**
- * Mundos do usuário: cada um é um Worldbuild separado (até MAX_WORLDS).
+ * Mundos da conta: cada um é um Worldbuild separado (até MAX_WORLDS).
  *
- * Guarda a lista em `worlds:<usuário>` e qual está aberto (`activeId`). O WorldbuildService
- * carrega os itens do mundo aberto; a mesa abre o mundo dela (`GameTable.worldId`).
- * Sem lista salva, o usuário tem só o primeiro mundo, que usa a chave do Worldbuild antigo.
+ * Os dados vêm do `WorldRepository` do modo em uso (IndexedDB offline; servidor online). Guarda
+ * qual mundo está aberto (`activeId`, lembrado neste navegador): o WorldbuildService carrega os
+ * itens dele e a mesa abre o mundo dela (`GameTable.worldId`).
  */
 @Injectable({ providedIn: 'root' })
 export class WorldsService {
-  private readonly storage = inject(StorageService);
+  private readonly repository = inject(WorldRepository);
   private readonly auth = inject(AuthService);
   private readonly tables = inject(GameTablesService);
 
@@ -33,13 +32,15 @@ export class WorldsService {
   /** Ainda cabe outro mundo? */
   readonly canCreate = computed(() => this._worlds().length < MAX_WORLDS);
 
-  private userId: string | null = null;
+  private user: User | null = null;
+  /** Carregamento mais recente (os anteriores são descartados ao terminar). */
+  private loading = 0;
 
   constructor() {
-    // Recarrega os mundos quando o usuário muda
+    // Recarrega os mundos quando a conta muda
     effect(() => {
       const user = this.auth.user();
-      untracked(() => void this.load(user?.id ?? null));
+      untracked(() => void this.load(user));
     });
   }
 
@@ -49,28 +50,26 @@ export class WorldsService {
   select(id: string): void {
     if (!this._worlds().some((w) => w.id === id)) return;
     this._activeId.set(id);
-    if (this.userId) localStorage.setItem(ACTIVE_KEY + this.userId, id);
+    if (this.user) localStorage.setItem(ACTIVE_KEY + this.user.id, id);
   }
 
   /** Cria um mundo (respeita o limite) e o abre. Retorna null se não coube. */
   async create(name = ''): Promise<World | null> {
-    if (!this.userId || !this.canCreate()) return null;
-    const world: World = { id: newId(), name: name.trim() || `Mundo ${this._worlds().length + 1}`, createdAt: Date.now() };
+    if (!this.user || !this.canCreate()) return null;
+    const world = await this.repository.createWorld(this.user, name.trim() || `Mundo ${this._worlds().length + 1}`);
     this._worlds.update((list) => [...list, world]);
-    await this.persist();
-    this.storage.requestPersistence();
     this.select(world.id);
     return world;
   }
 
   async rename(id: string, name: string): Promise<void> {
     const trimmed = name.trim();
-    if (!trimmed) return;
+    if (!trimmed || !this.user) return;
+    await this.repository.renameWorld(this.user, id, trimmed);
     this._worlds.update((list) => list.map((w) => (w.id === id ? { ...w, name: trimmed } : w)));
-    await this.persist();
   }
 
-  /** Mesas do usuário que se passam no mundo. */
+  /** Mesas da conta que se passam no mundo. */
   tablesIn(worldId: string) {
     return this.tables.tables().filter((t) => (t.worldId ?? DEFAULT_WORLD_ID) === worldId);
   }
@@ -80,43 +79,42 @@ export class WorldsService {
    * sobrar pelo menos um. Retorna o motivo quando não pode excluir (null = excluído).
    */
   async remove(id: string): Promise<string | null> {
-    if (!this.userId) return 'Ninguém está usando o app.';
+    if (!this.user) return 'Ninguém está usando o app.';
     if (this._worlds().length <= 1) return 'É preciso ter pelo menos um mundo.';
     const used = this.tablesIn(id).length;
     if (used) return `${used} mesa(s) se passam neste mundo. Exclua-as antes.`;
-
-    const key = worldbuildKey(this.userId, id);
-    const items = (await this.storage.get<WorldItem[]>(key)) ?? [];
-    await Promise.all(items.flatMap(worldItemBlobIds).map((b) => this.storage.delete(`blob:${b}`)));
-    await this.storage.delete(key);
-    // Janelas salvas da mesa de trabalho deste mundo (WorldbuildService.saveDesk)
-    await this.storage.delete(`desk:${this.userId}:${id}`);
+    try {
+      await this.repository.removeWorld(this.user, id);
+    } catch (err) {
+      return err instanceof Error ? err.message : 'Não foi possível excluir o mundo.';
+    }
     this._worlds.update((list) => list.filter((w) => w.id !== id));
-    await this.persist();
     if (this._activeId() === id) this.select(this._worlds()[0].id);
     return null;
   }
 
   // --- Internos ------------------------------------------------------------
 
-  private async load(userId: string | null): Promise<void> {
-    this.userId = userId;
+  private async load(user: User | null): Promise<void> {
+    const current = ++this.loading;
+    this.user = user;
     this.loaded.set(false);
-    if (!userId) {
+    if (!user) {
       this._worlds.set([]);
       return;
     }
-    const saved = await this.storage.get<World[]>(`worlds:${userId}`);
-    // O usuário mudou durante o carregamento: descarta o resultado antigo
-    if (this.userId !== userId) return;
-    const worlds = saved?.length ? saved : [{ id: DEFAULT_WORLD_ID, name: DEFAULT_WORLD_NAME, createdAt: Date.now() }];
+    let worlds: World[];
+    try {
+      worlds = await this.repository.worlds(user);
+    } catch {
+      // Servidor fora do ar: sem mundos (as telas avisam ao tentar usar)
+      worlds = [];
+    }
+    // A conta mudou durante o carregamento: descarta o resultado antigo
+    if (current !== this.loading) return;
     this._worlds.set(worlds);
-    const last = localStorage.getItem(ACTIVE_KEY + userId);
-    this._activeId.set(worlds.some((w) => w.id === last) ? last! : worlds[0].id);
+    const last = localStorage.getItem(ACTIVE_KEY + user.id);
+    this._activeId.set(worlds.some((w) => w.id === last) ? last! : (worlds[0]?.id ?? DEFAULT_WORLD_ID));
     this.loaded.set(true);
-  }
-
-  private persist(): Promise<void> {
-    return this.userId ? this.storage.set(`worlds:${this.userId}`, this._worlds()) : Promise.resolve();
   }
 }

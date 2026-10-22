@@ -6,13 +6,14 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { APP_MODE } from '../../../core/config/app-mode';
 import { AuthService } from '../../../core/services/auth.service';
 
 export type AuthMode = 'login' | 'register';
 
 /**
- * Diálogo único para entrar ou criar conta.
- * Fecha com `true` quando o usuário termina autenticado.
+ * Diálogo único para entrar ou criar conta, no modo em uso: online (conta no servidor, senha de
+ * 8+) ou offline (conta só neste navegador). Fecha com `true` quando o usuário termina autenticado.
  */
 @Component({
   selector: 'app-auth-dialog',
@@ -30,6 +31,10 @@ export type AuthMode = 'login' | 'register';
 export class AuthDialog {
   private readonly auth = inject(AuthService);
   private readonly dialogRef = inject(MatDialogRef<AuthDialog, boolean>);
+  /** Online: a conta é do servidor e vale em qualquer computador. */
+  readonly online = inject(APP_MODE) === 'online';
+  /** Tamanho mínimo da senha nova no modo em uso (o servidor confere de novo). */
+  readonly minPassword = this.auth.minPasswordLength;
 
   // --- Estado --------------------------------------------------------------
   readonly modes: { id: AuthMode; label: string }[] = [
@@ -45,7 +50,7 @@ export class AuthDialog {
   readonly form = inject(FormBuilder).nonNullable.group({
     name: ['', [Validators.required, Validators.maxLength(40)]],
     email: ['', [Validators.required, Validators.email]],
-    password: ['', [Validators.required, Validators.minLength(6)]],
+    password: ['', [Validators.required, Validators.minLength(this.minPassword), Validators.maxLength(128)]],
   });
 
   constructor() {

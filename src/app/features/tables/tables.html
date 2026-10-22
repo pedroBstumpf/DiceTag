@@ -3,13 +3,23 @@
   <header class="flex flex-wrap items-end justify-between gap-4">
     <div>
       <h1 class="font-display text-3xl text-slate-100">Minhas mesas</h1>
-      <p class="mt-1 text-sm text-slate-400">Campanhas e sessões que você mestra.</p>
+      <p class="mt-1 text-sm text-slate-400">
+        {{ online ? 'Campanhas que você mestra e as que você joga.' : 'Campanhas e sessões que você mestra.' }}
+      </p>
     </div>
     @if (auth.isLoggedIn()) {
-      <button mat-flat-button class="!h-11" (click)="actions.createTable()">
-        <mat-icon>add</mat-icon>
-        Nova mesa
-      </button>
+      <div class="flex flex-wrap gap-2">
+        @if (online) {
+          <button mat-stroked-button class="!h-11" (click)="join()">
+            <mat-icon>key</mat-icon>
+            Entrar com convite
+          </button>
+        }
+        <button mat-flat-button class="!h-11" (click)="actions.createTable()">
+          <mat-icon>add</mat-icon>
+          Nova mesa
+        </button>
+      </div>
     }
   </header>
 
@@ -23,20 +33,28 @@
       <button mat-flat-button (click)="actions.openAuth('register')">Criar conta</button>
       <button mat-stroked-button (click)="actions.openAuth('login')">Entrar</button>
     </app-empty-state>
+  } @else if (service.loadError(); as error) {
+    <app-empty-state icon="cloud_off" title="Não deu para carregar as mesas" [message]="error">
+      <button mat-flat-button (click)="service.reload()">Tentar de novo</button>
+    </app-empty-state>
   } @else if (!service.tables().length) {
     <app-empty-state
       icon="casino"
       title="Nenhuma mesa ainda"
-      message="Toda grande campanha começa com uma mesa. Que tal criar a primeira?"
+      [message]="online ? 'Crie uma mesa ou entre na de um amigo com o código de convite.' : 'Toda grande campanha começa com uma mesa. Que tal criar a primeira?'"
     >
       <button mat-flat-button (click)="actions.createTable()">
         <mat-icon>add</mat-icon>
         Criar primeira mesa
       </button>
+      @if (online) {
+        <button mat-stroked-button (click)="join()">Entrar com convite</button>
+      }
     </app-empty-state>
   } @else {
     <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
       @for (table of service.tables(); track table.id) {
+        @let owner = service.isOwner(table);
         <article class="flex flex-col overflow-hidden rounded-2xl border border-white/5 bg-ink-900 animate-fade-in">
           <!-- Faixa de cor da mesa -->
           <div class="h-1.5" [style.background]="table.accent"></div>
@@ -45,16 +63,39 @@
             <div class="flex items-start gap-2">
               <div class="min-w-0 flex-1">
                 <h2 class="truncate font-display text-lg text-slate-100">{{ table.name }}</h2>
-                <span class="mt-1 inline-block rounded-full bg-white/5 px-2 py-0.5 text-xs text-slate-300">{{ table.system }}</span>
+                <div class="mt-1 flex flex-wrap gap-1">
+                  <span class="inline-block rounded-full bg-white/5 px-2 py-0.5 text-xs text-slate-300">{{ table.system }}</span>
+                  @if (online) {
+                    <span
+                      class="inline-block rounded-full px-2 py-0.5 text-xs"
+                      [class]="owner ? 'bg-astral-500/15 text-astral-300' : 'bg-star-500/10 text-star-300'"
+                    >
+                      {{ owner ? 'Mestre' : 'Jogador' }}
+                    </span>
+                  }
+                </div>
               </div>
               <button mat-icon-button [matMenuTriggerFor]="tableMenu" aria-label="Opções da mesa">
                 <mat-icon>more_vert</mat-icon>
               </button>
               <mat-menu #tableMenu="matMenu" xPosition="before">
-                <button mat-menu-item (click)="remove(table)">
-                  <mat-icon class="!text-red-400">delete</mat-icon>
-                  <span>Excluir mesa</span>
-                </button>
+                @if (owner) {
+                  @if (online) {
+                    <button mat-menu-item (click)="openPlayers(table)">
+                      <mat-icon>group_add</mat-icon>
+                      <span>Jogadores e convites</span>
+                    </button>
+                  }
+                  <button mat-menu-item (click)="remove(table)">
+                    <mat-icon class="!text-red-400">delete</mat-icon>
+                    <span>Excluir mesa</span>
+                  </button>
+                } @else {
+                  <button mat-menu-item (click)="leave(table)">
+                    <mat-icon class="!text-red-400">logout</mat-icon>
+                    <span>Sair da mesa</span>
+                  </button>
+                }
               </mat-menu>
             </div>
 

@@ -132,21 +132,31 @@ quase toda dúvida de "por que isso sumiu/persistiu".
 | **Sessão da mesa** (não persistido) | signals do `TableSessionService` e serviços da página | até sair da mesa | ferramenta ativa, papel, tokens selecionados, tokens copiados, pincel, barras visíveis, efeitos na tela, desfazer |
 | **Local do componente** | `signal` dentro do componente | enquanto o componente existir | campo em edição, aba aberta, arraste em andamento |
 
-Fora do IndexedDB, o `localStorage` guarda a sessão (`dicetag.session`, id do usuário logado) e uma
-preferência de interface (`dicetag.sidebarCollapsed`).
+Fora do IndexedDB, o `localStorage` guarda o modo escolhido (`dicetag.mode`), a sessão offline
+(`dicetag.session`, id do usuário logado) e uma preferência de interface (`dicetag.sidebarCollapsed`).
+
+**Modo online x offline** (`core/config/app-mode.ts`, SPEC.md §6): no offline, os dados globais ficam no
+IndexedDB como na tabela abaixo; no online, vêm do servidor. Os serviços globais não falam com o IndexedDB
+nem com a API diretamente: usam os **repositórios de `core/data/`** (`AuthGateway`, `TablesRepository`,
+`WorldRepository`), classes abstratas `providedIn: 'root'` cuja fábrica escolhe, pelo `APP_MODE`, a
+implementação de `core/data/local/` (IndexedDB) ou de `core/data/server/` (`ApiClient`, `core/api/`). Sem
+modo escolhido, vale o offline (é também o que os testes usam). Online, a sessão é o cookie HttpOnly do
+servidor (o app nunca vê o token) e o `ApiClient` avisa o `AuthService` quando ela vence (401).
 
 ### 4.1 Serviços globais (`providedIn: 'root'`)
 
 | Serviço | Estado | Chave no IndexedDB |
 |---|---|---|
 | `StorageService` | conexão com o banco (wrapper chave/valor `get`/`set`/`delete`) e pedido de armazenamento persistente (`requestPersistence`) | — |
-| `AuthService` | `user` (conta logada ou visitante), `isLoggedIn`, `isGuest` | `users` + `localStorage dicetag.session` |
-| `GameTablesService` | lista de mesas, filtrada pelo usuário atual | `tables` |
-| `WorldsService` | mundos do usuário (até 2) e o mundo aberto (`activeId`); criar, renomear, excluir | `worlds:<userId>` + `localStorage dicetag.world.<userId>` |
+| `AuthService` | `user` (conta logada ou visitante offline), `isLoggedIn`, `isGuest`, `restored`; via `AuthGateway` | offline: `users` + `localStorage dicetag.session`; online: `/api/auth` |
+| `GameTablesService` | mesas da conta (online, também as em que joga, com `role`), `loadError`, `reload`; via `TablesRepository` | offline: `tables`; online: `/api/tables` |
+| `WorldsService` | mundos do usuário (até 2) e o mundo aberto (`activeId`); criar, renomear, excluir; via `WorldRepository` | offline: `worlds:<userId>`; online: `/api/worlds`; `localStorage dicetag.world.<userId>` |
+| `TableMembersService` | só online: membros, convites (gerar, cancelar, aceitar) e sair da mesa | `/api/tables/:id/members`, `/invites` |
+| `ApiClient` | chamadas à API (cookie de sessão, erros em mensagens prontas, aviso de 401) | — |
 | `WorldbuildService` | árvore de `WorldItem` do **mundo aberto** (`items`, `byId`, `worldItems`, `worldNpcs`, `worldRaces`) | `worldbuild:<userId>` (1º mundo) ou `worldbuild:<userId>:<worldId>` |
 | `LayoutService` | barra lateral recolhida / modo mobile | `localStorage dicetag.sidebarCollapsed` |
 | `NewsService` | notícias do mural (vazio por enquanto) | — |
-| `QuickActionsService` | atalhos globais (login, criar mesa, abrir worldbuild) — sem estado próprio | — |
+| `QuickActionsService` | atalhos globais (modo, login, criar mesa, abrir worldbuild) — sem estado próprio; abre os diálogos com `import()` (fora do carregamento inicial) | — |
 
 Arquivos binários (mapas, imagens, áudios, imagens de token) são gravados à parte como
 `blob:<id>`; os objetos de domínio guardam só o `blobId`.
@@ -467,11 +477,10 @@ O servidor já existe (§11); falta o front usá-lo. O plano completo está no [
     será enviado ao servidor, e o servidor aplicará a mesma função;
   - permissões e visão do jogador são funções puras que o servidor pode reaproveitar;
   - a rolagem recebe o sorteio como parâmetro.
-- **O que ainda não é a interface de uma API:**
-  - o `StorageService` é chave/valor (`get`/`set` de `worldbuild:<userId>`…), e não operações de domínio;
-  - o `AuthService` guarda contas no IndexedDB, sem tokens nem expiração.
-
-  Ambos serão trocados por **repositórios por domínio** fornecidos por injeção de dependência (SPEC §2).
+- **Já ligado (SPEC §6, Fase 1):** contas, mesas, mundos e convites usam os repositórios de `core/data/`,
+  com implementação local e do servidor, escolhida pelo modo (online/offline).
+- **Ainda sobre o `StorageService` direto:** o Worldbuild (itens e mesa de trabalho), a sessão da mesa
+  (`table-state:<id>`) e os arquivos (`blob:<id>`) — trocados nas Fases 2 e 3 do SPEC §6.
 - **O que só o servidor pode garantir:** a projeção do estado por jogador (névoa, segredos do mestre),
   as rolagens e a validação de cada comando (SPEC §3). Hoje o papel é escolhido na mesa; no futuro virá
   da conta e do convite.

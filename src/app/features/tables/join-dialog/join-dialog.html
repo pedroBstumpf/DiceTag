@@ -1,0 +1,33 @@
+<h2 mat-dialog-title class="!font-display">Entrar com convite</h2>
+
+<form (submit)="submit($event)">
+  <mat-dialog-content class="!flex !flex-col gap-2">
+    <p class="text-sm text-slate-400">Cole o código que o mestre mandou. Você entra na mesa como jogador.</p>
+    <mat-form-field appearance="outline">
+      <mat-label>Código do convite</mat-label>
+      <input matInput [formControl]="code" autocomplete="off" spellcheck="false" />
+      <mat-icon matPrefix>key</mat-icon>
+      @if (code.invalid) {
+        <mat-error>Cole o código inteiro, como recebeu.</mat-error>
+      }
+    </mat-form-field>
+
+    @if (error()) {
+      <p class="flex items-start gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300" role="alert">
+        <mat-icon class="!size-5 shrink-0 !text-xl">error</mat-icon>
+        {{ error() }}
+      </p>
+    }
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button type="button" mat-dialog-close>Cancelar</button>
+    <button mat-flat-button type="submit" [disabled]="busy()">
+      @if (busy()) {
+        <mat-spinner diameter="20" />
+      } @else {
+        Entrar na mesa
+      }
+    </button>
+  </mat-dialog-actions>
+</form>

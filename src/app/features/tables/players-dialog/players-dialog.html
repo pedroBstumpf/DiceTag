@@ -1,0 +1,74 @@
+<h2 mat-dialog-title class="!font-display">Jogadores e convites</h2>
+
+<mat-dialog-content class="!flex !flex-col gap-5">
+  <!-- ===== Quem participa ===== -->
+  <section>
+    <h3 class="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-widest text-slate-500">
+      <span>{{ table.name }}</span>
+      <span>{{ players() }} de {{ table.maxPlayers }} jogadores</span>
+    </h3>
+    @if (members(); as list) {
+      <ul class="flex flex-col divide-y divide-white/5 rounded-xl border border-white/5 bg-ink-950/40">
+        @for (member of list; track member.userId) {
+          <li class="flex items-center gap-3 px-3 py-2">
+            <span class="grid size-8 shrink-0 place-items-center rounded-full bg-ink-700 text-sm font-semibold text-slate-200">
+              {{ member.name.charAt(0).toUpperCase() }}
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-sm text-slate-100">{{ member.name }}</span>
+              <span class="block text-xs text-slate-500">
+                {{ member.role === 'gm' ? 'Mestre' : 'Jogador' }} · desde {{ member.joinedAt | date: 'dd/MM/yyyy' }}
+              </span>
+            </span>
+            @if (member.role === 'player') {
+              <button mat-icon-button matTooltip="Remover da mesa" aria-label="Remover da mesa" [disabled]="busy()" (click)="remove(member)">
+                <mat-icon class="!text-red-400">person_remove</mat-icon>
+              </button>
+            }
+          </li>
+        }
+      </ul>
+    } @else {
+      <div class="grid place-items-center py-6"><mat-spinner diameter="28" /></div>
+    }
+  </section>
+
+  <!-- ===== Convite ===== -->
+  <section class="flex flex-col gap-3">
+    <h3 class="text-xs font-semibold uppercase tracking-widest text-slate-500">Convidar</h3>
+    @if (invite(); as inv) {
+      <p class="text-sm text-slate-400">
+        Mande este código para quem vai jogar. Ele aparece só agora e vale até
+        {{ inv.expiresAt | date: "dd/MM/yyyy 'às' HH:mm" }}, para até {{ table.maxPlayers }} pessoas.
+      </p>
+      <div class="flex items-center gap-2">
+        <code class="min-w-0 flex-1 select-all truncate rounded-lg bg-ink-950 px-3 py-2 font-mono text-sm text-star-300">{{ inv.code }}</code>
+        <button mat-stroked-button (click)="copy()">
+          <mat-icon>{{ copied() ? 'check' : 'content_copy' }}</mat-icon>
+          {{ copied() ? 'Copiado' : 'Copiar' }}
+        </button>
+      </div>
+      <p class="text-xs text-slate-500">Quem recebe usa "Entrar com convite", em Minhas mesas.</p>
+    } @else {
+      <p class="text-sm text-slate-400">Gere um código e mande para seus amigos. Cada código vale 7 dias.</p>
+    }
+    <div class="flex flex-wrap gap-2">
+      <button mat-flat-button [disabled]="busy()" (click)="generate()">
+        <mat-icon>key</mat-icon>
+        {{ invite() ? 'Gerar outro código' : 'Gerar código de convite' }}
+      </button>
+      <button mat-button [disabled]="busy()" (click)="revoke()">Cancelar convites</button>
+    </div>
+  </section>
+
+  @if (error()) {
+    <p class="flex items-start gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300" role="alert">
+      <mat-icon class="!size-5 shrink-0 !text-xl">error</mat-icon>
+      {{ error() }}
+    </p>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button mat-dialog-close>Fechar</button>
+</mat-dialog-actions>
