@@ -1,0 +1,83 @@
+<section class="flex flex-col gap-4 border-t border-white/5 pt-6">
+  <!-- ===== Cabeçalho: título + conta do servidor ===== -->
+  <header class="flex flex-wrap items-end justify-between gap-4">
+    <div>
+      <h2 class="flex items-center gap-2 font-display text-2xl text-slate-100">
+        Mesas online
+        <span class="rounded-full bg-astral-500/15 px-2 py-0.5 font-sans text-xs font-medium text-astral-300">servidor</span>
+      </h2>
+      <p class="mt-1 text-sm text-slate-400">Mesas guardadas no servidor, para jogar com amigos em tempo real.</p>
+    </div>
+
+    @if (account.user(); as user) {
+      <button
+        type="button"
+        [matMenuTriggerFor]="accountMenu"
+        class="flex items-center gap-3 rounded-xl border border-white/5 bg-ink-900 py-1.5 pl-1.5 pr-3 text-left transition-colors hover:bg-ink-800"
+      >
+        <span class="grid size-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-astral-500 to-star-500 text-sm font-semibold text-ink-950">
+          {{ user.name.charAt(0).toUpperCase() }}
+        </span>
+        <span class="min-w-0">
+          <span class="flex items-center gap-1.5 text-sm font-medium text-slate-100">
+            <span class="size-2 rounded-full bg-emerald-400"></span>
+            {{ user.name }}
+          </span>
+          <span class="block truncate text-xs text-slate-500">{{ user.email }}</span>
+        </span>
+        <mat-icon class="text-slate-500">unfold_more</mat-icon>
+      </button>
+      <mat-menu #accountMenu="matMenu" xPosition="before">
+        <a mat-menu-item [href]="account.exportUrl" download>
+          <mat-icon>download</mat-icon>
+          <span>Baixar meus dados</span>
+        </a>
+        <button mat-menu-item (click)="deleting.set(true)">
+          <mat-icon class="!text-red-400">person_remove</mat-icon>
+          <span>Excluir conta do servidor</span>
+        </button>
+        <button mat-menu-item (click)="logout()">
+          <mat-icon>logout</mat-icon>
+          <span>Sair do servidor</span>
+        </button>
+      </mat-menu>
+    }
+  </header>
+
+  <!-- ===== Excluir a conta: confirma com a senha ===== -->
+  @if (deleting() && account.user()) {
+    <form class="flex flex-wrap items-center gap-3 rounded-2xl border border-red-500/30 bg-red-500/5 p-4 animate-fade-in" (submit)="$event.preventDefault(); deleteAccount()">
+      <mat-icon class="text-red-400">warning</mat-icon>
+      <p class="min-w-48 flex-1 text-sm text-slate-300">
+        Excluir a conta apaga, no servidor, as mesas e os mundos dela. Digite a senha para confirmar.
+      </p>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="w-56">
+        <mat-label>Senha</mat-label>
+        <input #pwd matInput type="password" autocomplete="current-password" [value]="deletePassword()" (input)="deletePassword.set(pwd.value)" />
+      </mat-form-field>
+      <button mat-flat-button type="submit" class="!bg-red-500 !text-white" [disabled]="!deletePassword() || busy()">Excluir</button>
+      <button mat-button type="button" (click)="cancelDelete()">Cancelar</button>
+    </form>
+  }
+
+  <!-- ===== Conteúdo ===== -->
+  @if (!account.checked()) {
+    <div class="flex justify-center py-10"><mat-spinner diameter="32" /></div>
+  } @else if (account.error()) {
+    <app-empty-state icon="cloud_off" title="Sem conexão com o servidor" [message]="account.error()">
+      <button mat-stroked-button (click)="account.refresh()">
+        <mat-icon>refresh</mat-icon>
+        Tentar de novo
+      </button>
+    </app-empty-state>
+  } @else if (!account.user()) {
+    <app-empty-state
+      icon="cloud"
+      title="Entre no servidor"
+      message="A conta do servidor é separada da conta deste navegador. Use uma das contas de exemplo (npm run seed) ou crie a sua."
+    >
+      <button mat-flat-button (click)="openAuth('login')">Entrar no servidor</button>
+      <button mat-stroked-button (click)="openAuth('register')">Criar conta</button>
+    </app-empty-state>
+  }
+</section>

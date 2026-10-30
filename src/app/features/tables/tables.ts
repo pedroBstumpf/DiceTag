@@ -11,11 +11,12 @@ import { AuthService } from '../../core/services/auth.service';
 import { GameTablesService } from '../../core/services/game-tables.service';
 import { EmptyState } from '../../shared/components/empty-state/empty-state';
 import { QuickActionsService } from '../../shared/services/quick-actions.service';
+import { OnlineTables } from './online-tables/online-tables';
 
-/** Página "Minhas mesas": lista, cria e exclui mesas do usuário. */
+/** Página "Minhas mesas": lista, cria e exclui mesas do usuário; abaixo, as mesas online (servidor). */
 @Component({
   selector: 'app-tables',
-  imports: [DatePipe, RouterLink, MatButtonModule, MatIconModule, MatMenuModule, MatTooltipModule, EmptyState],
+  imports: [DatePipe, RouterLink, MatButtonModule, MatIconModule, MatMenuModule, MatTooltipModule, EmptyState, OnlineTables],
   templateUrl: './tables.html',
 })
 export class Tables {
