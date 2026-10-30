@@ -211,6 +211,7 @@ itens desse mundo.
 
 ## Dados (provisório)
 
-O back-end já existe ([`server/`](server/README.md)), mas as telas ainda não o usam: contas, mesas e
-worldbuild ficam no **IndexedDB do navegador** (`core/services/storage.service.ts`). A ligação será feita
+O back-end já existe ([`server/`](server/README.md)). A **mesa online** (seção "Mesas online" em Minhas mesas) já o
+usa: conta do servidor, mesas, convites e a mesa de jogo em tempo real. O resto (contas locais, mesas locais e
+worldbuild) fica no **IndexedDB do navegador** (`core/services/storage.service.ts`). A ligação será feita
 com repositórios por domínio (SPEC.md §2), trocando a implementação do IndexedDB pela HTTP/WebSocket.

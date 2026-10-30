@@ -22,6 +22,7 @@ Complementa o [`ARCHITECTURE.md`](ARCHITECTURE.md) (como o app é hoje) e o [`CL
 | Ficha validada no servidor (esquema estrito com os limites das regras; raça aplicada pelo servidor; máximo das barras só do mestre; itens revelados) | `realtime/sheet-rules.ts` | §1 "ficha gravada inteira": protegida até virar comandos por campo |
 | Rolagem no servidor (`crypto.randomInt`, níveis dos temas da ficha atual, gasto de Espírito) | `realtime/rolls.ts` | §3.2 (etiquetas de itens, status e estudos ainda valem 0) |
 | Papel vindo da conta (dono = mestre, convite = jogador) e permissões por comando | `realtime/command-rules.ts` | §3.3 |
+| **Mesa online no front**: conta do servidor, mesas e convites (`core/services/server-*.ts`, `online-tables.service.ts`) e a mesa de jogo ligada à sala (`TableRoom`), com reconciliação no cliente | `features/game-table/state/sync.ts`, `services/table-room.ts` | §1 item 4 (feito); faltam os repositórios do §2 (arquivos, Worldbuild) e os eventos efêmeros |
 
 ---
 

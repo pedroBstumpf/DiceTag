@@ -6,9 +6,9 @@ WebSocket** (comandos em tempo real, validados e aplicados pelo servidor).
 Node.js + TypeScript · Fastify · `ws` · zod · SQLite embutido no Node (`node:sqlite`) · Vitest.
 Roda só na sua máquina: nada é publicado.
 
-> **Estado atual:** o servidor está pronto e testado, mas o **front-end ainda não o usa** (continua
-> guardando tudo no IndexedDB). A ligação entre os dois é a próxima etapa (ver [Próximos passos](#próximos-passos)).
-> Até lá, teste o servidor pela página `/dev/` e pelos scripts abaixo.
+> **Estado atual:** o servidor está pronto e testado, e o app já o usa na **mesa online** (seção "Mesas online"
+> em Minhas mesas, ver §3.0). O resto do app continua no IndexedDB (ver [Próximos passos](#próximos-passos)).
+> Também dá para testar pela página `/dev/` e pelos scripts abaixo.
 
 ---
 
@@ -64,6 +64,28 @@ front e back ficam na mesma origem (`localhost:4200`), e o cookie de sessão fun
 ---
 
 ## 3. Testar
+
+### 3.0 Pelo app (localhost:4200): a mesa online
+
+Com os dois terminais abertos (servidor e `npm start`, ver §2):
+
+1. Abra **http://localhost:4200/mesas** e role até **Mesas online**. Clique em **Entrar no servidor** e use
+   `mestre@zehenia.local` com a senha `SEED_PASSWORD` do `.env`.
+2. Na "Mesa de testes" (papel **Mestre**), clique em **Abrir mesa online**. A barra de cima mostra **Online**.
+3. Numa **janela anônima** (outra sessão de cookies), repita com `jogador@zehenia.local`: a mesa aparece como
+   **Jogador**.
+4. Lado a lado, confira:
+   - o mestre vê as 2 cenas e as 2 anotações; a jogadora vê 1 cena e só a anotação pública;
+   - mover o token da Lyra numa janela aparece na outra; o goblin não se move pela jogadora (aviso
+     "O servidor recusou…");
+   - ligar a névoa (mestre, ferramenta Névoa) muda o que a jogadora vê, com a visão calculada pelo servidor;
+   - chat e rolagens (barra de baixo ou "Rolar") aparecem para os dois; o resultado é sorteado no servidor.
+5. Convites: no menu da mesa, **Gerar convite**; com outra conta (crie uma em "Criar conta"), cole o código em
+   **Código de convite** → **Entrar**.
+6. LGPD: menu da conta → **Baixar meus dados** ou **Excluir conta do servidor** (pede a senha).
+
+Ainda locais na mesa online: imagens, mapas e sons enviados (ficam só no navegador de quem enviou), Worldbuild e
+bestiário, pings e efeitos especiais.
 
 ### 3.1 Página de testes no navegador (o jeito mais visual)
 
@@ -199,11 +221,10 @@ As regras completas estão no [`BACKEND_SECURITY.md`](../BACKEND_SECURITY.md); a
 
 ## Próximos passos
 
-1. **Ligar o front-end ao servidor** (SPEC.md §2): repositórios por domínio no front (contas, mesas,
-   mundos, arquivos), com a implementação HTTP trocando a do IndexedDB, e o `TableSessionService`
-   enviando os comandos pelo WebSocket (SPEC §1). O IndexedDB continua como modo offline. Online, o
-   jogador desenha a névoa com os polígonos de `vision` (não recebe paredes) e o front remove os
-   metadados (EXIF) das imagens antes de enviar.
+1. **Terminar de ligar o front-end ao servidor** (SPEC.md §2): a mesa online já envia os comandos pelo
+   WebSocket e usa a `vision` do servidor; faltam os repositórios por domínio (arquivos, mundos/Worldbuild,
+   contas) com a implementação HTTP trocando a do IndexedDB, os eventos efêmeros (ping, efeitos) e remover os
+   metadados (EXIF) das imagens antes de enviar. O IndexedDB continua como modo offline.
 2. Comandos atômicos no servidor para compra, loot, largar/pegar itens e ficha por campo (SPEC §1).
 3. Memória da névoa calculada no servidor (hoje o cliente do mestre a grava) e etiquetas de itens,
    status e estudos nas rolagens do servidor.

@@ -112,9 +112,11 @@ Definidas em [`app.routes.ts`](src/app/app.routes.ts); **todas as páginas são 
 | `mesas` | `Tables` | `Shell` |
 | `worldbuild` | `Worldbuild` (aceita `?novo=<tipo>` e `?abrir=<id>`) | `Shell` |
 | `mesa/:id` | `GameTablePage` | tela cheia, **fora** do `Shell` |
+| `mesa-online/:id` | `GameTablePage` com `data: { online: true }` (mesa do servidor) | tela cheia, **fora** do `Shell` |
 | `**` | redireciona para `''` | — |
 
-`withComponentInputBinding()` entrega os parâmetros de rota como `input()` (ex.: `GameTablePage.id`).
+`withComponentInputBinding()` entrega os parâmetros e os dados da rota como `input()` (ex.: `GameTablePage.id` e
+`GameTablePage.online`).
 A mesa fica fora do `Shell` para ocupar a tela inteira; o chunk dela (`game-table`) só é baixado ao
 abrir uma mesa.
 
@@ -142,6 +144,9 @@ preferência de interface (`dicetag.sidebarCollapsed`).
 | `StorageService` | conexão com o banco (wrapper chave/valor `get`/`set`/`delete`) e pedido de armazenamento persistente (`requestPersistence`) | — |
 | `AuthService` | `user` (conta logada ou visitante), `isLoggedIn`, `isGuest` | `users` + `localStorage dicetag.session` |
 | `GameTablesService` | lista de mesas, filtrada pelo usuário atual | `tables` |
+| `ServerApiService` | cliente HTTP da API do servidor (`/api`, URLs relativas, erros em `ServerError`) | — (servidor) |
+| `ServerAccountService` | conta do servidor (`user`, `checked`): entrar, criar conta, sair, exportar, excluir | — (cookie HttpOnly do servidor) |
+| `OnlineTablesService` | mesas online da conta do servidor (`tables`) e convites | — (servidor) |
 | `WorldsService` | mundos do usuário (até 2) e o mundo aberto (`activeId`); criar, renomear, excluir | `worlds:<userId>` + `localStorage dicetag.world.<userId>` |
 | `WorldbuildService` | árvore de `WorldItem` do **mundo aberto** (`items`, `byId`, `worldItems`, `worldNpcs`, `worldRaces`) | `worldbuild:<userId>` (1º mundo) ou `worldbuild:<userId>:<worldId>` |
 | `LayoutService` | barra lateral recolhida / modo mobile | `localStorage dicetag.sidebarCollapsed` |
@@ -455,12 +460,30 @@ regras de segurança em [`BACKEND_SECURITY.md`](BACKEND_SECURITY.md) e operaçã
 - **Mundo da mesa na sala:** `realtime/world.ts` (`WorldView`) lê do banco, com cache, o token padrão
   dos NPCs do bestiário e as Raças/itens usados pelas regras; as rotas do Worldbuild avisam o hub.
 - **Papel vem da conta:** dono da mesa = mestre; quem entra por convite = jogador (`table_members`).
-- **Ligação com o front (pendente):** em desenvolvimento, `proxy.conf.json` repassa `/api` e `/ws` do
-  `ng serve` para `localhost:3000`, então o front usa URLs relativas e o cookie de sessão na mesma origem.
+- **Ligação com o front:** em desenvolvimento, `proxy.conf.json` repassa `/api` e `/ws` do `ng serve` para
+  `localhost:3000`, então o front usa URLs relativas e o cookie de sessão na mesma origem. A primeira parte ligada é
+  a **mesa online** (§12).
 
 ## 12. Rumo ao backend
 
-O servidor já existe (§11); falta o front usá-lo. O plano completo está no [`SPEC.md`](SPEC.md). Em resumo:
+O servidor já existe (§11) e a **mesa online** já o usa; o resto do app ainda é local. O plano completo está no
+[`SPEC.md`](SPEC.md).
+
+### 12.1 Mesa online (já ligada)
+
+```
+Minhas mesas → OnlineTables ── OnlineTablesService / ServerAccountService ── ServerApiService ── /api
+/mesa-online/:id → GameTablePage ── session.connect(id) ── TableRoom ── /ws/tables/:id
+                                          │
+                     dispatch → state/sync.ts (confirmado + pendentes = tela) → envio (rajadas a cada 100 ms)
+                     welcome/state/cmd/ack/nack → state/sync.ts → state.set(view)
+```
+
+- O `TableSessionService` é o mesmo nas duas mesas: sem sala, grava no IndexedDB; com sala, nunca grava no
+  navegador. O papel vem do `welcome`; as rolagens são pedidas ao servidor; o jogador com névoa usa a visão do servidor.
+- Ainda locais na mesa online: Blobs (imagens, mapas, sons), Worldbuild/bestiário e eventos efêmeros (ping, efeitos).
+
+### 12.2 Para o resto do app
 
 - **O que já ajuda:**
   - toda mutação da mesa é um comando puro e serializável, aplicado por um único `dispatch`: é o que
@@ -473,5 +496,5 @@ O servidor já existe (§11); falta o front usá-lo. O plano completo está no [
 
   Ambos serão trocados por **repositórios por domínio** fornecidos por injeção de dependência (SPEC §2).
 - **O que só o servidor pode garantir:** a projeção do estado por jogador (névoa, segredos do mestre),
-  as rolagens e a validação de cada comando (SPEC §3). Hoje o papel é escolhido na mesa; no futuro virá
-  da conta e do convite.
+  as rolagens e a validação de cada comando (SPEC §3). Na mesa local o papel é escolhido na mesa; na online,
+  já vem da conta e do convite.

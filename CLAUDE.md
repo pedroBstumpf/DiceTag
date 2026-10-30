@@ -14,7 +14,7 @@ online com amigos, no mundo de Zehenia.
 A meta final inclui simular eventos, calcular rolagens, manter fichas, criar mapas, tocar sons e
 organizar toda a atmosfera de uma campanha.
 
-**Estado atual (MVP de interface; servidor pronto, ainda não ligado às telas):**
+**Estado atual (MVP de interface; servidor pronto e com a primeira ligação às telas: a mesa online):**
 
 | Área | Status |
 |---|---|
@@ -37,9 +37,11 @@ organizar toda a atmosfera de uma campanha.
 | **Rolagem de dados** (2d12: falha crítica…sucesso crítico; 3d6: azar/neutro/sorte) + **chat** da mesa | Pronto |
 | **Efeitos especiais** no mapa (20 efeitos em 4 grupos; 13 cores por elemento) | Pronto |
 | **Servidor** (`server/`: API HTTP + sala da mesa por WebSocket, SQLite, contas/convites reais, visão no servidor, LGPD, backup) | Pronto, testado, auditado contra o `BACKEND_SECURITY.md` |
-| Front-end usando o servidor (repositórios HTTP/WebSocket, multiplayer de fato) | Não iniciado |
+| **Mesa online**: conta do servidor, mesas online com convites e a mesa de jogo ligada à sala (WebSocket) | Pronto (primeira versão) |
+| Front-end usando o servidor em tudo (repositórios HTTP no lugar do IndexedDB, arquivos e Worldbuild no servidor) | Não iniciado |
 
-As telas ainda guardam tudo **no navegador (IndexedDB)**. O servidor existe, mas nenhuma tela o chama ainda.
+As telas ainda guardam tudo **no navegador (IndexedDB)**, exceto a **mesa online** (seção "Mesas online" em Minhas mesas):
+ela usa a conta, as mesas, os convites e a sala do servidor.
 
 ---
 
@@ -116,6 +118,9 @@ src/
     │   │   ├── auth.service.ts         # contas locais + visitante
     │   │   ├── sheet-store.ts          # SheetStore: contrato da fonte de dados da ficha + inventário em comum
     │   │   ├── game-tables.service.ts  # CRUD de mesas (excluir apaga table-state e blobs)
+    │   │   ├── server-api.service.ts   # cliente HTTP da API do servidor (/api, ServerError, SERVER_OFFLINE)
+    │   │   ├── server-account.service.ts # conta do servidor (cookie HttpOnly): entrar, sair, exportar, excluir
+    │   │   ├── online-tables.service.ts  # mesas online: listar, criar, excluir, convidar, entrar, sair
     │   │   ├── worlds.service.ts       # mundos do usuário (lista, aberto, criar/renomear/excluir) + spec
     │   │   ├── layout.service.ts       # barra lateral (recolhida/mobile)
     │   │   └── news.service.ts         # notícias (vazio por enquanto)
@@ -138,7 +143,7 @@ src/
     └── features/
         ├── home/               # landing
         ├── auth/auth-dialog/   # diálogo único Entrar/Criar conta
-        ├── tables/             # "Minhas mesas" + create-table-dialog
+        ├── tables/             # "Minhas mesas" + create-table-dialog + online-tables (seção "Mesas online")
         ├── worldbuild/
         │   ├── worldbuild.ts           # página: explorador (com seletor de mundo) + área de janelas
         │   ├── services/worldbuild.service.ts   # itens e mesa de trabalho do mundo aberto; migração de timelines antigas
@@ -149,10 +154,11 @@ src/
         │   └── components/ explorer (abas Arquivos/Itens/NPCs/Raças/Linhas do tempo/Documentos/Mapas), race-card,
         │                   document-editor, timeline-editor, image-viewer,
         │                   item-card (ItemCard + ItemCardView)
-        └── game-table/         # MESA DE JOGO (rota /mesa/:id, tela cheia, fora do Shell)
+        └── game-table/         # MESA DE JOGO (rotas /mesa/:id e /mesa-online/:id, tela cheia, fora do Shell)
             ├── game-table.ts           # página: orquestra barras, janelas e atalhos
             ├── services/
             │   ├── table-session.service.ts  # FACHADA da mesa: signals, Blobs, sessão; toda mutação via dispatch + spec
+            │   ├── table-room.ts             # conexão WebSocket com a sala da mesa online (seq, reconexão)
             │   ├── sound-mixer.service.ts    # um HTMLAudioElement por som
             │   └── blob-url.service.ts       # object URLs com cache (imagens de token)
             ├── state/                  # puro + specs: comandos (estado, payload) → estado, permissões, visão
@@ -160,6 +166,7 @@ src/
             │   ├── scenes.ts levels.ts entries.ts tokens.ts drops.ts fog.ts drawings.ts notes.ts chat.ts lore.ts
             │   ├── permissions.ts      # canEdit, sheetAccess, canSeeLoreItem… com Viewer { role, userId }
             │   ├── player-view.ts      # o que o jogador vê sob a névoa (tokens, anotações, portas)
+            │   ├── sync.ts             # reconciliação da mesa online (confirmado + pendentes) e rajadas + spec
             │   └── table-state.ts helpers.ts  # EMPTY_STATE, normalizeState, mapScene/mapPlacement…
             ├── utils/                  # funções puras + specs Vitest
             │   ├── geometry.ts         # snap de token/canto, alça de tamanho, distâncias
@@ -211,6 +218,7 @@ server/scripts/ (setup, seed, smoke, backup) · server/dev/ (página /dev/) · s
 Rotas (`app.routes.ts`, todas lazy):
 - `''` (Shell) → `''` Home · `mesas` Tables · `worldbuild` Worldbuild do mundo aberto (aceita `?novo=<tipo>` e `?abrir=<id>`).
 - `mesa/:id` → GameTablePage (tela cheia, **fora** do Shell)
+- `mesa-online/:id` → a mesma GameTablePage com `data: { online: true }` (mesa do servidor)
 - `**` → redireciona para `''`
 
 ---
@@ -396,6 +404,34 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - **Pastas de cenas** (`TableState.sceneFolders`, `Scene.folderId`; só o mestre organiza): na barra superior, cada
   pasta é um botão que abre a lista das cenas dela (a cena aberta aparece como "Pasta › Cena"); cenas fora de
   pastas são abas. Excluir a pasta mantém as cenas (saem da pasta). Renomear cena de pasta: campo no botão da pasta.
+
+### Mesa online (servidor) — `OnlineTables`, rota `mesa-online/:id`
+- **Conta do servidor** (`ServerAccountService`, `core/`): separada da conta local (`AuthService`), sessão por cookie
+  HttpOnly (o token nunca chega ao JavaScript). Entrar/criar conta pelo mesmo `AuthDialog` em modo servidor (senha ≥ 8).
+  `ServerApiService` chama `/api` com URLs relativas (proxy do `ng serve`); erros do servidor viram `ServerError` em
+  PT-BR e servidor desligado vira o aviso `SERVER_OFFLINE`.
+- **Minhas mesas → "Mesas online"** (`features/tables/online-tables`): menu da conta (Baixar meus dados, Excluir conta
+  do servidor com a senha, Sair), criar mesa pelo nome, entrar com código de convite e, por mesa, o papel da conta
+  (dono = Mestre, convidado = Jogador), "Gerar convite" (código mostrado uma vez, com copiar), "Excluir mesa" ou
+  "Sair da mesa" e "Abrir mesa online". Chamadas em `OnlineTablesService`.
+- **A mesa online é a mesma `GameTablePage`** (input `online` = dado da rota): busca a mesa (`OnlineTablesService.get`,
+  com o motivo na tela se não abrir) e chama `session.connect(id)`. A conexão é a `TableRoom`
+  (`services/table-room.ts`: WebSocket, `seq`, reconexão até 5 vezes; fechamentos 4401/4403/4404 são definitivos).
+- **Na sessão** (`TableSessionService`): com sala, `dispatch` aplica pela reconciliação pura de `state/sync.ts`
+  (confirmado + pendentes = tela; `ack` confirma com o payload final, `nack` desfaz e avisa, `cmd` de outra pessoa entra
+  no confirmado, `state` do jogador substitui) e envia; `flush` não grava nada (o estado online nunca vai para o
+  IndexedDB). **Rajadas** (`burstKey`: mover tokens e memória da névoa) vão agrupadas a cada `BURST_MS` = 100 ms, só com
+  o último valor (`mergeBurst`/`squashPending`), por causa do limite de mensagens do servidor.
+- **Papel da conta:** `welcome.you.role`; `setRole` não faz nada online e a barra de ações mostra só o rótulo. A conta
+  usada nas regras (`viewer`, chat, dono de personagem/item/efeito) é `me` = a do servidor.
+- **Rolagens no servidor:** `useAction` devolve `RollSent` e `quickRoll` devolve `null`; o resultado chega no chat e em
+  `session.serverRoll` (aviso da página). Estudos/Treinos e etiquetas de itens/status ainda não entram (o servidor
+  ainda não os calcula).
+- **Névoa do jogador:** usa os polígonos `vision` do servidor (`serverVision`), que não envia as paredes; só o mestre
+  grava a memória da névoa.
+- **Barra superior:** situação da conexão (Online, Reconectando…, Desconectado com o motivo na dica).
+- **Limites:** imagens, mapas e sons enviados numa mesa online ficam só no navegador de quem enviou; o Worldbuild e o
+  bestiário continuam locais (o mundo aberto não muda ao abrir a mesa online); pings e efeitos não são repassados.
 
 ### Vista isométrica e camadas do mapa
 - `Scene.isometric` (mestre, botão na barra superior): a vista vira `matrix(...)` = escala × `isoMatrix()` (gira 45° e
@@ -830,8 +866,9 @@ repositórios por domínio, servidor autoritativo (névoa, rolagens, permissões
 - Névoa: visão só por token; portas sem tranca nem permissão (qualquer papel abre/fecha).
 - Paredes bloqueiam o movimento só pelo centro do token (o corpo do token pode encostar/sobrepor a parede).
 - Ctrl+Z cobre só desenhos (não tokens, paredes ou anotações).
-- **Ligar o front ao servidor** (`server/` pronto): repositórios HTTP/WebSocket no lugar do IndexedDB e reconciliação de
-  comandos no `TableSessionService` (SPEC §1–2); depois, comandos atômicos de compra/loot/drop e visão calculada no servidor.
+- **Terminar de ligar o front ao servidor:** a mesa online já usa a sala (reconciliação em `state/sync.ts`); faltam os
+  repositórios por domínio (SPEC §2) para arquivos (imagens/sons online), Worldbuild/bestiário e contas, os eventos
+  efêmeros (ping, efeitos) e, no servidor, comandos atômicos de compra/loot/drop e estudos/itens nas rolagens.
 - Mundos: limite fixo de 2 por usuário; trocar o mundo de uma mesa já criada ainda não é possível.
 - Mural de notícias alimentado por API/CMS (`NewsService.posts`).
 - Testes de componentes (hoje têm testes as funções puras de `utils/` e `state/`, as regras da ficha no modelo, a
