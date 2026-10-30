@@ -35,5 +35,12 @@ export const routes: Routes = [
     title: 'Zehenia — Mesa',
     loadComponent: () => import('./features/game-table/game-table').then((m) => m.GameTablePage),
   },
+  {
+    // Mesa online: a mesma tela, ligada à sala da mesa no servidor (input `online`)
+    path: 'mesa-online/:id',
+    title: 'Zehenia — Mesa online',
+    data: { online: true },
+    loadComponent: () => import('./features/game-table/game-table').then((m) => m.GameTablePage),
+  },
   { path: '**', redirectTo: '' },
 ];

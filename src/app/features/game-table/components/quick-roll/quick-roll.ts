@@ -207,7 +207,7 @@ export class QuickRoll {
     }
     const studies = this.usesTags() ? this.studies().filter((s) => this.studyPicks().has(s.id)).map((s) => s.id) : [];
     const itemsAdded = this.usesTags() && this.addItems();
-    const { author, roll, levelUps } = this.session.quickRoll(
+    const result = this.session.quickRoll(
       this.dice(),
       this.modifier(),
       this.sheetId(),
@@ -216,6 +216,12 @@ export class QuickRoll {
       itemsAdded,
       this.manaCost(),
     );
+    // Mesa online: o servidor sorteia e o resultado aparece no chat e no aviso da página
+    if (!result) {
+      this.done.emit();
+      return;
+    }
+    const { author, roll, levelUps } = result;
     const mana = roll.mana ? ` · −${roll.mana} Espírito` : '';
     const text = `${author} · ${roll.dice}${formatModifier(roll.modifier)} = ${roll.total} — ${ROLL_OUTCOMES[roll.outcome].label}${mana}`;
     this.snackBar.open(text, undefined, { duration: 3500 });

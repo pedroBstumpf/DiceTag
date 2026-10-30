@@ -8,6 +8,27 @@
     <span class="truncate text-[11px] text-slate-500">{{ table().system }}</span>
   </div>
 
+  <!-- ===== Mesa online: situação da conexão com o servidor ===== -->
+  @if (session.online(); as me) {
+    @let status = session.roomStatus();
+    <span
+      class="flex h-7 shrink-0 items-center gap-1.5 rounded-full bg-ink-950/60 px-2.5 text-[11px] font-medium"
+      [class]="status === 'online' ? 'text-emerald-300' : status === 'connecting' ? 'text-amber-300' : 'text-red-300'"
+      [matTooltip]="session.roomProblem() || 'Conectado como ' + me.name"
+    >
+      <span
+        class="size-2 rounded-full"
+        [class]="status === 'online' ? 'bg-emerald-400' : status === 'connecting' ? 'bg-amber-400 animate-pulse' : 'bg-red-400'"
+      ></span>
+      {{ status === 'online' ? 'Online' : status === 'connecting' ? 'Reconectando…' : 'Desconectado' }}
+    </span>
+  } @else if (session.roomStatus() === 'connecting') {
+    <span class="flex h-7 shrink-0 items-center gap-1.5 rounded-full bg-ink-950/60 px-2.5 text-[11px] font-medium text-amber-300">
+      <span class="size-2 animate-pulse rounded-full bg-amber-400"></span>
+      Conectando…
+    </span>
+  }
+
   @if (isGm()) {
   <span class="mx-1 hidden h-6 w-px bg-white/10 md:block"></span>
 

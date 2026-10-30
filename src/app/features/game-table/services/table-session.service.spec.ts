@@ -272,7 +272,8 @@ describe('TableSessionService (fachada)', () => {
     const saOf = () => session.sheetData(pc.id)?.sheet.studies.find((s) => s.id === 's1')?.sa;
 
     // −30 garante total < 0 no 2d12 (falha crítica)
-    const { roll } = session.quickRoll('2d12', -30, pc.id, 0, ['s1']);
+    // Mesa local: a rolagem é feita aqui (só a mesa online devolve null)
+    const { roll } = session.quickRoll('2d12', -30, pc.id, 0, ['s1'])!;
     expect(roll.outcome).toBe('critical-failure');
     expect(saOf()).toBe(1);
 

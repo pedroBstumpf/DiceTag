@@ -9,6 +9,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { TABLE_ACCENTS } from '../../../core/models/game-table.model';
 import { OnlineTable, OnlineTablesService, TableInvite } from '../../../core/services/online-tables.service';
@@ -23,7 +24,7 @@ import { AuthDialog, AuthMode } from '../../auth/auth-dialog/auth-dialog';
  */
 @Component({
   selector: 'app-online-tables',
-  imports: [DatePipe, MatButtonModule, MatTooltipModule, MatFormFieldModule, MatIconModule, MatInputModule, MatMenuModule, MatProgressSpinnerModule, EmptyState],
+  imports: [DatePipe, RouterLink, MatButtonModule, MatTooltipModule, MatFormFieldModule, MatIconModule, MatInputModule, MatMenuModule, MatProgressSpinnerModule, EmptyState],
   templateUrl: './online-tables.html',
 })
 export class OnlineTables {

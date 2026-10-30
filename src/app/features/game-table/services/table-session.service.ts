@@ -79,7 +79,20 @@ import {
 } from '../state/player-view';
 import { findDrop } from '../state/drops';
 import { NO_SELECTION, TokenSelection, keepOnly, selectMany, selectOne, toggleInSelection, without } from '../utils/selection';
-import { TableCommandPayload, TableCommandType, applyCommand } from '../state/commands';
+import { TableCommand, TableCommandPayload, TableCommandType, applyCommand } from '../state/commands';
+import {
+  SyncState,
+  ackCommand,
+  burstKey,
+  localCommand,
+  mergeBurst,
+  rejectCommand,
+  remoteCommand,
+  replaceState,
+  squashPending,
+  startSync,
+} from '../state/sync';
+import { RoomIdentity, RoomMessage, RoomRoll, RoomStatus, TableRoom } from './table-room';
 import { RemovedStroke, strokesToErase } from '../state/drawings';
 import { findPlacement, levelOf, tokenSheetPlacement, uniqueName } from '../state/helpers';
 import { clampLevelIn, levelCountOf } from '../state/levels';
@@ -129,6 +142,13 @@ export interface RollRefused {
   refused: string;
 }
 
+/** Mesa online: a rolagem foi enviada ao servidor; o resultado chega no chat (e em `serverRoll`). */
+export interface RollSent {
+  sent: true;
+  /** A ação tinha efeito especial (agora armado no mouse). */
+  armed: boolean;
+}
+
 /** Mestre agindo como "o token selecionado" (muda a cada seleção). */
 export const ACT_SELECTION = 'selection';
 
@@ -168,6 +188,8 @@ type DrawAction = { kind: 'add'; strokeId: string } | { kind: 'erase'; removed: 
 /** Omit que preserva cada membro de uma união (ex.: Wall sem o id). */
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
+/** Intervalo mínimo entre envios de uma rajada (arrastar, WASD, memória da névoa) na mesa online. */
+const BURST_MS = 100;
 const NO_TOKENS: TokenPlacement[] = [];
 const NO_WALLS: Wall[] = [];
 const NO_TABLE_ITEMS: TableItem[] = [];
@@ -228,6 +250,31 @@ export class TableSessionService extends SheetStore {
 
   readonly loaded = signal(false);
   readonly scenes = computed(() => this.state().scenes);
+
+  // --- Mesa online (servidor) ---------------------------------------------
+  // Sem sala = mesa local (IndexedDB). Com sala, o estado vem do servidor e cada comando vai para
+  // ele (reconciliação pura em state/sync.ts); o papel vem da conta (dono = mestre).
+  private room: TableRoom | null = null;
+  private sync: SyncState | null = null;
+  /** Rajadas ainda não enviadas (por `burstKey`): vão juntas, só com o último valor, a cada `BURST_MS`. */
+  private readonly bursts = new Map<string, { seqs: number[]; commands: TableCommand[] }>();
+  private burstTimer?: ReturnType<typeof setTimeout>;
+  /** Conta conectada e papel dela, segundo o servidor (null = mesa local). */
+  readonly online = signal<RoomIdentity | null>(null);
+  readonly roomStatus = signal<RoomStatus>('offline');
+  /** Motivo de a conexão ter caído de vez (sessão encerrada, mesa excluída…). */
+  readonly roomProblem = signal('');
+  /** Polígonos de visão calculados pelo servidor (jogador com névoa: ele não recebe as paredes). */
+  private readonly serverVision = signal<Point[][] | null>(null);
+  /** Aviso do servidor para a página mostrar (comando recusado, erro). */
+  readonly roomNotice = signal<{ text: string } | null>(null);
+  /** Última rolagem feita pelo servidor a pedido desta conta (a página mostra o resultado). */
+  readonly serverRoll = signal<ChatMessage | null>(null);
+  /** Conta atual: a do servidor na mesa online; a local, fora dela. */
+  private readonly me = computed(() => {
+    const online = this.online();
+    return online ? { id: online.userId, name: online.name } : this.auth.user();
+  });
   /**
    * Habilidades dos NPCs-referência: moram no NPC do mundo e aparecem aqui como ações
    * do NPC (valem em todas as mesas do mundo).
@@ -286,7 +333,7 @@ export class TableSessionService extends SheetStore {
     return this.tokens().flatMap((p) => this.resolveToken(p, byId) ?? []);
   });
   /** Quem está olhando a mesa (papel + conta), para as regras de `state/permissions.ts`. */
-  private readonly viewer = computed<Viewer>(() => ({ role: this.role(), userId: this.auth.user()?.id }));
+  private readonly viewer = computed<Viewer>(() => ({ role: this.role(), userId: this.me()?.id }));
 
   /** Desenhos da cena ativa. */
   readonly drawings = computed(() => this.activeScene()?.drawings ?? NO_STROKES);
@@ -323,8 +370,15 @@ export class TableSessionService extends SheetStore {
     { equal: sameVisionSources },
   );
 
-  /** Áreas visíveis dos tokens (recalculadas só quando token, parede ou cena mudam). */
-  readonly visionPolygons = computed(() => (this.fogEnabled() ? visionPolygonsOf(this.visionSources(), this.wallSegments()) : []));
+  /**
+   * Áreas visíveis dos tokens (recalculadas só quando token, parede ou cena mudam). Jogador
+   * na mesa online: vêm prontas do servidor, que não envia as paredes a ele.
+   */
+  readonly visionPolygons = computed(() => {
+    if (!this.fogEnabled()) return [];
+    if (this.online() && this.role() === 'player') return this.serverVision() ?? [];
+    return visionPolygonsOf(this.visionSources(), this.wallSegments());
+  });
 
   // --- Memória da névoa (áreas exploradas) ---------------------------------
 
@@ -395,8 +449,13 @@ export class TableSessionService extends SheetStore {
   readonly tool = signal<TableTool>('select');
   readonly role = signal<TableRole>('gm');
 
-  /** Troca o papel; no de jogador, sai da ferramenta Névoa (que é só do mestre). */
+  /** Troca o papel; no de jogador, sai da ferramenta Névoa (que é só do mestre). Online, o papel é da conta. */
   setRole(role: TableRole): void {
+    if (this.online()) return;
+    this.applyRole(role);
+  }
+
+  private applyRole(role: TableRole): void {
     this.role.set(role);
     if (role === 'player' && this.tool() === 'fog') this.tool.set('select');
   }
@@ -592,7 +651,7 @@ export class TableSessionService extends SheetStore {
    * `sheetId`: ficha que agiu (ex.: "Usar" na ficha de um token); padrão = quem age na barra,
    * se for o dono da ação, ou o próprio dono.
    */
-  useAction(entry: TableEntry, sheetId?: string): ActionUse | RollRefused {
+  useAction(entry: TableEntry, sheetId?: string): ActionUse | RollRefused | RollSent {
     const config = entry.roll ?? DEFAULT_ROLL;
     const actorSheet = this.actor()?.id === entry.ownerEntryId ? this.actorSheetId() : null;
     const sheet = sheetId ?? actorSheet ?? entry.ownerEntryId;
@@ -601,6 +660,14 @@ export class TableSessionService extends SheetStore {
     const mana = manaCost(config, levels, this.magicTagIds(sheet));
     const shortfall = this.manaShortfall(sheet, mana);
     if (shortfall) return { refused: shortfall };
+    // Mesa online: quem sorteia é o servidor (com as tags atuais da ficha); o resultado vem no chat
+    if (this.room) {
+      if (!this.sendRoll({ sheetId: sheet ?? undefined, roll: config, label: entry.name, icon: entry.icon ?? 'bolt' })) {
+        return { refused: 'Sem conexão com o servidor.' };
+      }
+      this.armEffect(entry);
+      return { sent: true, armed: !!entry.effect };
+    }
     const roll: RollResult = {
       action: entry.name,
       icon: entry.icon ?? 'bolt',
@@ -613,13 +680,16 @@ export class TableSessionService extends SheetStore {
     this.pushChat({ author, roll });
     // Estudos ligados à ação acumulam SA conforme o resultado
     const levelUps = this.trainStudies(sheet, (config.attributes ?? []).map(baseTagId), roll);
-
-    if (entry.effect) {
-      if (this.tool() !== 'fx') this.fxReturnTool = this.tool();
-      this.armedFx.set({ ...entry.effect, action: entry.name });
-      this.tool.set('fx');
-    }
+    this.armEffect(entry);
     return { author, roll, armed: !!entry.effect, levelUps };
+  }
+
+  /** Ação com efeito especial: deixa o efeito "na mão" (ferramenta Efeitos) até o próximo arraste. */
+  private armEffect(entry: TableEntry): void {
+    if (!entry.effect) return;
+    if (this.tool() !== 'fx') this.fxReturnTool = this.tool();
+    this.armedFx.set({ ...entry.effect, action: entry.name });
+    this.tool.set('fx');
   }
 
   /**
@@ -639,7 +709,15 @@ export class TableSessionService extends SheetStore {
     studies: readonly string[] = [],
     itemsAdded = false,
     mana = 0,
-  ): { author: string; roll: RollResult; levelUps: string[] } {
+  ): { author: string; roll: RollResult; levelUps: string[] } | null {
+    // Mesa online: o servidor sorteia (o modificador já vem somado); null = enviado, o resultado vem no chat
+    if (this.room) {
+      const roll: RollConfig = { dice, modifier: Math.max(-99, Math.min(99, Math.round(modifier))) };
+      if (!this.sendRoll({ sheetId: sheetId ?? undefined, roll, label: 'Rolagem', icon: 'casino' })) {
+        this.roomNotice.set({ text: 'Sem conexão com o servidor.' });
+      }
+      return null;
+    }
     const spent = rollUsesTags(dice) ? mana : 0;
     const roll: RollResult = {
       action: 'Rolagem',
@@ -671,12 +749,12 @@ export class TableSessionService extends SheetStore {
   }
 
   private pushChat(message: Pick<ChatMessage, 'author' | 'text' | 'roll'>): void {
-    const full: ChatMessage = { id: newId(), at: Date.now(), userId: this.auth.user()?.id ?? '', role: this.role(), ...message };
+    const full: ChatMessage = { id: newId(), at: Date.now(), userId: this.me()?.id ?? '', role: this.role(), ...message };
     this.dispatch('addChatMessage', { message: full });
   }
 
   private userName(): string {
-    return this.role() === 'gm' ? 'Mestre' : (this.auth.user()?.name ?? 'Jogador');
+    return this.role() === 'gm' ? 'Mestre' : (this.me()?.name ?? 'Jogador');
   }
 
   // --- Efeitos especiais (transitórios) ------------------------------------
@@ -711,7 +789,7 @@ export class TableSessionService extends SheetStore {
         seed: Math.floor(Math.random() * 2 ** 32),
         scale,
         ...(level > 0 && { level }),
-        ownerUserId: this.auth.user()?.id,
+        ownerUserId: this.me()?.id,
       };
       this.dispatch('addFixedFx', { sceneId, fx });
       if (armed) this.cancelArmedFx();
@@ -815,11 +893,112 @@ export class TableSessionService extends SheetStore {
   // --- Carregamento --------------------------------------------------------
 
   async load(tableId: string): Promise<void> {
+    // Nessa ordem: com a sala aberta, o flush não grava nada (o estado online nunca vai para o IndexedDB)
     this.flush();
+    this.disconnect();
     this.tableId = tableId;
     this.loaded.set(false);
     this.state.set(normalizeState(await this.storage.get<TableState>(this.key())));
     this.loaded.set(true);
+  }
+
+  /**
+   * Abre uma mesa online: conecta na sala do servidor e espera o estado inicial (`welcome`).
+   * Até lá, nenhum comando é aplicado (nem gravado no navegador).
+   */
+  connect(tableId: string): void {
+    this.flush();
+    this.disconnect();
+    this.tableId = tableId;
+    this.loaded.set(false);
+    this.room = new TableRoom(
+      tableId,
+      (message) => this.onRoomMessage(message),
+      (status, reason) => {
+        this.roomStatus.set(status);
+        this.roomProblem.set(reason ?? '');
+      },
+    );
+  }
+
+  /** Sai da sala (ao sair da mesa ou abrir outra). Sem mesa carregada, nada é gravado no navegador. */
+  disconnect(): void {
+    if (!this.room) return;
+    this.loaded.set(false);
+    clearTimeout(this.burstTimer);
+    this.burstTimer = undefined;
+    this.bursts.clear();
+    this.room?.close();
+    this.room = null;
+    this.sync = null;
+    this.online.set(null);
+    this.serverVision.set(null);
+    this.roomStatus.set('offline');
+  }
+
+  /** Mensagem da sala: estado inicial, confirmações, comandos dos outros e estados projetados. */
+  private onRoomMessage(message: RoomMessage): void {
+    switch (message.t) {
+      case 'welcome':
+        this.online.set(message.you);
+        this.applyRole(message.you.role);
+        this.serverVision.set(message.vision);
+        // Reconexão também chega aqui: o que estava pendente é descartado (o servidor manda tudo de novo)
+        clearTimeout(this.burstTimer);
+        this.burstTimer = undefined;
+        this.bursts.clear();
+        this.applySync(startSync(normalizeState(message.state), message.version));
+        this.loaded.set(true);
+        return;
+      case 'state':
+        this.serverVision.set(message.vision);
+        if (this.sync) this.applySync(replaceState(this.sync, normalizeState(message.state), message.version));
+        return;
+      case 'cmd':
+        if (this.sync) this.applySync(remoteCommand(this.sync, { type: message.type, payload: message.payload } as TableCommand, message.version));
+        return;
+      case 'ack':
+        if (message.type === 'roll') this.serverRoll.set(message.payload as ChatMessage);
+        else if (this.sync) this.applySync(ackCommand(this.sync, message.seq, { type: message.type, payload: message.payload } as TableCommand, message.version));
+        return;
+      case 'nack':
+        if (this.sync) this.applySync(rejectCommand(this.sync, message.seq));
+        this.roomNotice.set({ text: `O servidor recusou: ${message.reason}` });
+        return;
+      case 'error':
+        this.roomNotice.set({ text: message.message });
+        return;
+    }
+  }
+
+  /** Envia as rajadas pendentes, cada uma como um comando só (troca os pendentes dela por ele). */
+  private sendBursts(): void {
+    clearTimeout(this.burstTimer);
+    this.burstTimer = undefined;
+    if (!this.room || !this.sync) return this.bursts.clear();
+    for (const { seqs, commands } of this.bursts.values()) {
+      const command = mergeBurst(commands);
+      const seq = this.room.nextSeq();
+      this.applySync(squashPending(this.sync, seqs, seq, command));
+      this.sendToRoom(seq, command);
+    }
+    this.bursts.clear();
+  }
+
+  /** Envia um comando já aplicado na tela; sem conexão, desfaz (ao reconectar, o servidor manda tudo de novo). */
+  private sendToRoom(seq: number, command: TableCommand): void {
+    if (this.room?.sendCommand(seq, command.type, command.payload) || !this.sync) return;
+    this.applySync(rejectCommand(this.sync, seq));
+    this.roomNotice.set({ text: 'Sem conexão com o servidor: a alteração não foi feita.' });
+  }
+
+  private applySync(sync: SyncState): void {
+    this.sync = sync;
+    this.state.set(sync.view);
+  }
+
+  private sendRoll(roll: RoomRoll): boolean {
+    return !!this.room?.sendRoll(this.room.nextSeq(), roll);
   }
 
   // --- Cenas ---------------------------------------------------------------
@@ -1002,7 +1181,7 @@ export class TableSessionService extends SheetStore {
       createdAt: Date.now(),
       ...(kind === 'automation' && { icon: 'bolt', roll: { ...DEFAULT_ROLL } }),
       // O personagem pertence à conta de quem o criou
-      ...(kind === 'character' && { ownerUserId: this.auth.user()?.id }),
+      ...(kind === 'character' && { ownerUserId: this.me()?.id }),
       ...extra,
     };
     this.placeEntry(entry);
@@ -1587,7 +1766,7 @@ export class TableSessionService extends SheetStore {
       id: newId(),
       name: name.trim() || 'Novo item',
       tags: [],
-      ownerUserId: this.auth.user()?.id,
+      ownerUserId: this.me()?.id,
       createdAt: Date.now(),
     };
     this.dispatch('addTableItem', { item });
@@ -1847,6 +2026,8 @@ export class TableSessionService extends SheetStore {
 
   /** Soma as áreas visíveis à memória da cena (só grava se algo novo foi visto). */
   private markExplored(polygons: Point[][], size: { sceneId: string; w: number; h: number }): void {
+    // Mesa online: a memória é gravada pelo mestre (o jogador não pode alterá-la no servidor)
+    if (this.online() && this.role() !== 'gm') return;
     const scene = this.activeScene();
     if (!scene || scene.id !== size.sceneId) return;
     const current = scene.explored ? decodeMask(scene.explored) : null;
@@ -1948,10 +2129,32 @@ export class TableSessionService extends SheetStore {
 
   /**
    * Único ponto de alteração do estado salvo: aplica o comando puro (state/commands.ts)
-   * e agenda a gravação (alterações seguidas viram uma só). No multiplayer, é aqui que
-   * o comando também será enviado ao servidor.
+   * e agenda a gravação (alterações seguidas viram uma só). Na mesa online, o comando aparece
+   * na tela na hora e vai para o servidor, que o confirma (`ack`) ou recusa (`nack`).
    */
   private dispatch<K extends TableCommandType>(type: K, payload: TableCommandPayload<K>): void {
+    if (this.room) {
+      // Antes do estado inicial chegar não há o que alterar
+      if (!this.sync) return;
+      const command = { type, payload } as TableCommand;
+      const seq = this.room.nextSeq();
+      const next = localCommand(this.sync, seq, command);
+      if (next === this.sync) return;
+      this.applySync(next);
+      // Rajada (um comando por quadro): vai agrupada; os demais vão na hora, depois das rajadas, na ordem
+      const key = burstKey(command);
+      if (key) {
+        const burst = this.bursts.get(key) ?? { seqs: [], commands: [] };
+        burst.seqs.push(seq);
+        burst.commands.push(command);
+        this.bursts.set(key, burst);
+        this.burstTimer ??= setTimeout(() => this.sendBursts(), BURST_MS);
+        return;
+      }
+      this.sendBursts();
+      this.sendToRoom(seq, command);
+      return;
+    }
     const next = applyCommand(this.state(), { type, payload } as Parameters<typeof applyCommand>[1]);
     if (next === this.state()) return;
     this.state.set(next);
@@ -1959,9 +2162,10 @@ export class TableSessionService extends SheetStore {
     this.saveTimer = setTimeout(() => this.flush(), 300);
   }
 
-  /** Grava imediatamente o que estiver pendente. */
+  /** Grava imediatamente o que estiver pendente (mesa online: quem grava é o servidor). */
   flush(): void {
     clearTimeout(this.saveTimer);
+    if (this.room) return;
     if (this.loaded() && this.tableId) this.storage.set(this.key(), this.state());
   }
 }

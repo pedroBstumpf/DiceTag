@@ -1,5 +1,14 @@
 <div class="glass flex items-center gap-2 rounded-xl p-1.5 shadow-xl shadow-black/40">
-  <!-- Papel atual: mestre ou jogador -->
+  <!-- Papel atual: mestre ou jogador (na mesa online, o da conta: não se troca aqui) -->
+  @if (session.online(); as me) {
+    <div
+      class="flex shrink-0 flex-col items-center gap-0.5 rounded-lg bg-ink-950/60 px-2 py-1.5 text-[11px] font-semibold text-astral-300"
+      matTooltip="Papel da sua conta nesta mesa (dono = mestre; convidado = jogador)"
+    >
+      <mat-icon class="!size-4 !text-base">{{ me.role === 'gm' ? 'shield_person' : 'person' }}</mat-icon>
+      {{ me.role === 'gm' ? 'MESTRE' : 'JOGADOR' }}
+    </div>
+  } @else {
   <div class="flex shrink-0 flex-col gap-1 rounded-lg bg-ink-950/60 p-1 text-[11px] font-semibold">
     <button
       type="button"
@@ -20,6 +29,7 @@
       JOGADOR
     </button>
   </div>
+  }
 
   <!-- Quem está agindo: o mestre escolhe (fixo ou seguindo o token selecionado) -->
   @if (session.role() === 'gm') {

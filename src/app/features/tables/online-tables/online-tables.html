@@ -183,6 +183,11 @@
                 </span>
                 <span>{{ table.createdAt | date: 'dd/MM/yyyy' }}</span>
               </footer>
+
+              <a mat-flat-button class="w-full" [routerLink]="['/mesa-online', table.id]">
+                <mat-icon>play_arrow</mat-icon>
+                Abrir mesa online
+              </a>
             </div>
           </article>
         }

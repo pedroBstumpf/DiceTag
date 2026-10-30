@@ -1,12 +1,13 @@
-import { Component, DestroyRef, ElementRef, computed, effect, inject, input, untracked, viewChild } from '@angular/core';
+import { Component, DestroyRef, ElementRef, computed, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterLink } from '@angular/router';
-import { NPC_TOKEN_SHEET, ROLL_OUTCOMES, TABLE_ENTRY_META, TableEntry, hasSheet } from '../../core/models/table-session.model';
+import { NPC_TOKEN_SHEET, ROLL_OUTCOMES, RollResult, TABLE_ENTRY_META, TableEntry, hasSheet } from '../../core/models/table-session.model';
 import { WORLD_ITEM_META } from '../../core/models/world-item.model';
 import { GameTablesService } from '../../core/services/game-tables.service';
+import { OnlineTable, OnlineTablesService } from '../../core/services/online-tables.service';
 import { FloatingWindow } from '../../shared/components/floating-window/floating-window';
 import { WindowManagerService } from '../../shared/services/window-manager.service';
 import { DocumentEditor } from '../worldbuild/components/document-editor/document-editor';
@@ -78,6 +79,9 @@ const PANEL_SPACE = { top: 60, left: 76, right: 344, bottom: 100 };
  * Todas podem ser escondidas (ou tudo de uma vez: modo imersivo, tecla "\").
  * Arquivos abrem em janelas que podem ser movidas, redimensionadas,
  * minimizadas e fixadas em qualquer ponto da tela.
+ *
+ * Mesa online (rota /mesa-online/:id): a mesma tela, com o estado vindo da sala do servidor
+ * (`TableSessionService.connect`); o papel é o da conta e as rolagens são feitas no servidor.
  */
 @Component({
   selector: 'app-game-table',
@@ -127,17 +131,25 @@ export class GameTablePage {
   readonly session = inject(TableSessionService);
   readonly windows = inject(WindowManagerService);
   private readonly tables = inject(GameTablesService);
+  private readonly onlineTables = inject(OnlineTablesService);
   private readonly worldbuild = inject(WorldbuildService);
   private readonly worlds = inject(WorldsService);
   private readonly snackBar = inject(MatSnackBar);
 
-  /** Id da mesa (parâmetro da rota /mesa/:id). */
+  /** Id da mesa (parâmetro da rota /mesa/:id ou /mesa-online/:id). */
   readonly id = input.required<string>();
+  /** Mesa do servidor? (dado da rota /mesa-online/:id) */
+  readonly online = input(false);
 
-  readonly table = computed(() => this.tables.getById(this.id()));
+  /** Mesa online aberta (dados vindos do servidor) e o erro, se não abriu. */
+  private readonly onlineTable = signal<OnlineTable | null>(null);
+  private readonly onlineChecked = signal(false);
+  readonly onlineError = signal('');
+
+  readonly table = computed(() => (this.online() ? this.onlineTable() : this.tables.getById(this.id())));
   /** Mestre: único que edita a lore na mesa (o jogador só lê o que foi revelado). */
   readonly isGm = computed(() => this.session.role() === 'gm');
-  readonly tablesLoaded = this.tables.loaded;
+  readonly tablesLoaded = computed(() => (this.online() ? this.onlineChecked() : this.tables.loaded()));
 
   protected readonly map = viewChild(MapStage);
   private readonly windowLayer = viewChild<ElementRef<HTMLElement>>('windowLayer');
@@ -155,17 +167,43 @@ export class GameTablePage {
 
   constructor() {
     // Carrega o estado da mesa quando o id muda (untracked: só o id dispara o efeito)
-    effect(() => {
+    effect((onCleanup) => {
       const id = this.id();
-      untracked(() => this.session.load(id));
+      if (!this.online()) {
+        untracked(() => this.session.load(id));
+        return;
+      }
+      // Mesa online: confere a mesa no servidor (mensagem clara se não abrir) e entra na sala
+      let cancelled = false;
+      onCleanup(() => (cancelled = true));
+      untracked(() => this.openOnline(id, () => cancelled));
     });
-    inject(DestroyRef).onDestroy(() => this.session.flush());
+    inject(DestroyRef).onDestroy(() => {
+      this.session.flush();
+      this.session.disconnect();
+    });
 
     // Abre o mundo da mesa: a aba Lore, o bestiário, os itens e as raças vêm dele
+    // (mesa online: o Worldbuild ainda é o deste navegador, então o mundo aberto não muda)
     effect(() => {
       const table = this.table();
-      if (!table || !this.worlds.loaded()) return;
+      if (!table || this.online() || !this.worlds.loaded()) return;
       untracked(() => this.worlds.select(table.worldId ?? DEFAULT_WORLD_ID));
+    });
+
+    // Avisos da sala do servidor: comando recusado, erro, conexão perdida de vez
+    effect(() => {
+      const notice = this.session.roomNotice();
+      if (notice) untracked(() => this.snackBar.open(notice.text, undefined, { duration: 4000 }));
+    });
+    effect(() => {
+      const problem = this.session.roomProblem();
+      if (problem) untracked(() => this.snackBar.open(problem, 'OK', { duration: 10000 }));
+    });
+    // Rolagem feita pelo servidor: o mesmo aviso da rolagem local
+    effect(() => {
+      const message = this.session.serverRoll();
+      if (message?.roll) untracked(() => this.snackBar.open(this.rollText(message.author, message.roll!), undefined, { duration: 3500 }));
     });
 
     // Fecha janelas "Token" e fichas de token de tokens removidos do mapa, e as de itens que saíram do chão
@@ -177,6 +215,24 @@ export class GameTablePage {
       });
       if (stale.length) untracked(() => this.windows.closeMany(stale.map((w) => w.id)));
     });
+  }
+
+  /** Abre a mesa online: busca os dados dela no servidor e conecta na sala. */
+  private async openOnline(id: string, cancelled: () => boolean): Promise<void> {
+    this.onlineChecked.set(false);
+    this.onlineTable.set(null);
+    this.onlineError.set('');
+    try {
+      const table = await this.onlineTables.get(id);
+      if (cancelled()) return;
+      this.onlineTable.set(table);
+      this.session.connect(id);
+    } catch (e) {
+      if (cancelled()) return;
+      this.onlineError.set(e instanceof Error ? e.message : 'Não foi possível abrir a mesa.');
+    } finally {
+      if (!cancelled()) this.onlineChecked.set(true);
+    }
   }
 
   // --- Janelas -------------------------------------------------------------
@@ -298,13 +354,23 @@ export class GameTablePage {
       this.snackBar.open(use.refused, undefined, { duration: 4000 });
       return;
     }
+    // Mesa online: o resultado chega do servidor (aviso em `serverRoll`); aqui só o efeito armado
+    if ('sent' in use) {
+      if (use.armed) this.snackBar.open('Rolando no servidor… arraste no mapa para lançar o efeito', undefined, { duration: 3500 });
+      return;
+    }
     const { author, roll, armed, levelUps } = use;
-    const formula = roll.dice + formatModifier(roll.modifier);
-    const mana = roll.mana ? ` · −${roll.mana} Espírito` : '';
-    const text = `${author} · ${roll.action}: ${formula} = ${roll.total} — ${ROLL_OUTCOMES[roll.outcome].label}${mana}`;
+    const text = this.rollText(author, roll);
     this.snackBar.open(armed ? `${text} · arraste no mapa para lançar o efeito` : text, undefined, { duration: 3500 });
     // Estudo que alcançou o SN: notificação em destaque (também vai para o chat)
     if (levelUps.length) this.snackBar.open(levelUpText(levelUps), 'OK', { duration: 8000 });
+  }
+
+  /** Resumo de uma rolagem para o aviso na tela (o detalhe fica no chat). */
+  private rollText(author: string, roll: RollResult): string {
+    const formula = roll.dice + formatModifier(roll.modifier);
+    const mana = roll.mana ? ` · −${roll.mana} Espírito` : '';
+    return `${author} · ${roll.action}: ${formula} = ${roll.total} — ${ROLL_OUTCOMES[roll.outcome].label}${mana}`;
   }
 
   /** Atalhos de teclado da mesa (ignorados enquanto se digita). */
