@@ -103,8 +103,9 @@ Com os dois terminais abertos (servidor e `npm start`, ver §2) — ou só o ser
    **Código de convite** → **Entrar**.
 6. LGPD: menu da conta → **Baixar meus dados** ou **Excluir conta do servidor** (pede a senha).
 
-Ainda locais na mesa online: imagens, mapas e sons enviados (ficam só no navegador de quem enviou), Worldbuild e
-bestiário, pings e efeitos especiais.
+Mapas, tokens, sons e imagens de itens enviados na mesa online vão para o servidor (`/api/files`, cotas no `.env`):
+abra a mesa nas duas janelas e envie um mapa pelo mestre para conferir. Ainda locais: Worldbuild e bestiário, pings e
+efeitos especiais.
 
 ### 3.1 Página de testes no navegador (o jeito mais visual)
 

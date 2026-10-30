@@ -153,8 +153,9 @@ preferência de interface (`dicetag.sidebarCollapsed`).
 | `NewsService` | notícias do mural (vazio por enquanto) | — |
 | `QuickActionsService` | atalhos globais (login, criar mesa, abrir worldbuild) — sem estado próprio | — |
 
-Arquivos binários (mapas, imagens, áudios, imagens de token) são gravados à parte como
-`blob:<id>`; os objetos de domínio guardam só o `blobId`.
+Arquivos binários (mapas, imagens, áudios, imagens de token) são gravados à parte pela `FileStore`
+(`core/services/file-store.ts`): `LocalFileStore` = IndexedDB, chaves `blob:<id>`; `ServerFileStore` = `/api/files`
+(mesa online). Os objetos de domínio guardam só o `blobId`; a mesa grava por `SheetStore.files`.
 
 ### 4.2 Serviços por página (fornecidos no componente)
 
@@ -485,7 +486,9 @@ Minhas mesas → OnlineTables ── OnlineTablesService / ServerAccountService 
 
 - O `TableSessionService` é o mesmo nas duas mesas: sem sala, grava no IndexedDB; com sala, nunca grava no
   navegador. O papel vem do `welcome`; as rolagens são pedidas ao servidor; o jogador com névoa usa a visão do servidor.
-- Ainda locais na mesa online: Blobs (imagens, mapas, sons), Worldbuild/bestiário e eventos efêmeros (ping, efeitos).
+- Arquivos da mesa online vão para o servidor (`ServerFileStore`, trocada no `connect`); a leitura tenta o navegador
+  antes (imagens do Worldbuild).
+- Ainda locais na mesa online: Worldbuild/bestiário e eventos efêmeros (ping, efeitos).
 
 ### 12.2 Para o resto do app
 

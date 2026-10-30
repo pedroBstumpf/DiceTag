@@ -121,6 +121,8 @@ src/
     │   │   ├── storage.service.ts      # wrapper chave/valor do IndexedDB (get/set/delete)
     │   │   ├── auth.service.ts         # contas locais + visitante
     │   │   ├── sheet-store.ts          # SheetStore: contrato da fonte de dados da ficha + inventário em comum
+    │   │   ├── file-store.ts           # FileStore (put/get/remove/copy por id) + LocalFileStore (IndexedDB, blob:<id>)
+    │   │   ├── server-file-store.ts    # ServerFileStore: arquivos da mesa online em /api/files
     │   │   ├── game-tables.service.ts  # CRUD de mesas (excluir apaga table-state e blobs)
     │   │   ├── server-api.service.ts   # cliente HTTP da API do servidor (/api, ServerError, SERVER_OFFLINE)
     │   │   ├── server-account.service.ts # conta do servidor (cookie HttpOnly): entrar, sair, exportar, excluir
@@ -129,6 +131,7 @@ src/
     │   │   ├── layout.service.ts       # barra lateral (recolhida/mobile)
     │   │   └── news.service.ts         # notícias (vazio por enquanto)
     │   └── utils/id.ts                 # newId() com fallback fora de HTTPS
+    │       utils/file-name.ts          # uploadName: nome com extensão coerente para o servidor + spec
     ├── shared/                 # reutilizável entre features
     │   ├── components/floating-window/ # JANELA FLUTUANTE (peça central da UX)
     │   ├── components/empty-state/
@@ -435,8 +438,14 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - **Névoa do jogador:** usa os polígonos `vision` do servidor (`serverVision`), que não envia as paredes; só o mestre
   grava a memória da névoa.
 - **Barra superior:** situação da conexão (Online, Reconectando…, Desconectado com o motivo na dica).
-- **Limites:** imagens, mapas e sons enviados numa mesa online ficam só no navegador de quem enviou; o Worldbuild e o
-  bestiário continuam locais (o mundo aberto não muda ao abrir a mesa online); pings e efeitos não são repassados.
+- **Arquivos** (`FileStore`, SPEC §2): `SheetStore.files` é a `LocalFileStore` (IndexedDB) e o `connect` troca por
+  uma `ServerFileStore` da mesa (mapas, camadas, tokens/fichas, sons, itens da mesa, imagens personalizadas do
+  inventário vão para `/api/files`; o servidor confere tipo, cotas e quem baixa). Gravar arquivo = `uploadFile`
+  (null + aviso `uploadFailed` se o servidor recusar; nada muda). Ler = `session.getBlob` / `BlobUrlService`: primeiro
+  o navegador (imagens do Worldbuild, ainda locais), depois o servidor. Nunca gravar `blob:` direto no `StorageService`.
+- **Limites:** o Worldbuild e o bestiário continuam locais (o mundo aberto não muda ao abrir a mesa online; imagens
+  de itens e raças do mundo só aparecem para quem as tem no navegador); pings e efeitos não são repassados; o EXIF das
+  imagens ainda não é removido antes do envio.
 
 ### Vista isométrica e camadas do mapa
 - `Scene.isometric` (mestre, botão na barra superior): a vista vira `matrix(...)` = escala × `isoMatrix()` (gira 45° e
@@ -837,7 +846,7 @@ O `MapStage` recebe `insets` para enquadrar o mapa só na área livre entre as b
 | `worldbuild:<userId>` | `WorldItem[]` do primeiro mundo (`DEFAULT_WORLD_ID`; itens, NPCs do bestiário, raças…) |
 | `worldbuild:<userId>:<worldId>` | `WorldItem[]` dos outros mundos |
 | `table-state:<tableId>` | `TableState` (cenas com tokens/névoa/memória/paredes/portas/desenhos/anotações/itens no chão/camadas/vista, pastas de cenas, cena ativa, arquivos — com a ficha do personagem em `sheet` e os NPCs como referência ao bestiário —, tokens de NPC com ficha própria, volume mestre, chat, organização da Lore, itens criados na mesa por jogadores) |
-| `blob:<id>` | `Blob` de imagem/mapa/áudio/imagem de token |
+| `blob:<id>` | `Blob` de imagem/mapa/áudio/imagem de token (via `LocalFileStore`; na mesa online, no servidor) |
 | `desk:<userId>:<worldId>` | `OpenWindow[]`: janelas da mesa de trabalho do Worldbuild daquele mundo (posição, tamanho, estado) |
 | `localStorage: dicetag.session` | id do usuário logado |
 | `localStorage: dicetag.world.<userId>` | último mundo aberto pelo usuário |
