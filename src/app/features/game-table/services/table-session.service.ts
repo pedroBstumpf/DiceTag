@@ -47,6 +47,10 @@ import {
   withStatusBars,
 } from '../../../core/models/table-session.model';
 import { AuthService } from '../../../core/services/auth.service';
+import { LocalFileStore } from '../../../core/services/file-store';
+import { ServerApiService } from '../../../core/services/server-api.service';
+import { ServerFileStore } from '../../../core/services/server-file-store';
+import { StorageService } from '../../../core/services/storage.service';
 import { newId } from '../../../core/utils/id';
 import {
   TagLevels,
@@ -240,6 +244,10 @@ function sameItems<T>(a: readonly T[], b: readonly T[]): boolean {
 @Injectable()
 export class TableSessionService extends SheetStore {
   private readonly auth = inject(AuthService);
+  private readonly storage = inject(StorageService);
+  private readonly api = inject(ServerApiService);
+  /** Arquivos no navegador (mesa local e Worldbuild); na mesa online, `files` passa a ser o servidor. */
+  private readonly localFiles = inject(LocalFileStore);
   /** Mundo da mesa: bestiário (fichas base dos NPCs-referência), itens e raças. */
   private readonly worldbuild = inject(WorldbuildService);
 
@@ -911,6 +919,8 @@ export class TableSessionService extends SheetStore {
     this.disconnect();
     this.tableId = tableId;
     this.loaded.set(false);
+    // Arquivos da mesa online (mapas, tokens, sons, itens) vão para o servidor
+    this.files = new ServerFileStore(this.api, tableId);
     this.room = new TableRoom(
       tableId,
       (message) => this.onRoomMessage(message),
@@ -931,6 +941,7 @@ export class TableSessionService extends SheetStore {
     this.room?.close();
     this.room = null;
     this.sync = null;
+    this.files = this.localFiles;
     this.online.set(null);
     this.serverVision.set(null);
     this.roomStatus.set('offline');
@@ -1005,11 +1016,8 @@ export class TableSessionService extends SheetStore {
 
   /** Cria uma cena (com mapa opcional) e a torna ativa. */
   async addScene(file?: File): Promise<Scene> {
-    let blobId: string | undefined;
-    if (file) {
-      blobId = newId();
-      await this.storage.set(`blob:${blobId}`, file);
-    }
+    // Envio recusado: a cena é criada sem mapa (o aviso explica o motivo)
+    const blobId = (file && (await this.uploadFile(file))) || undefined;
     const scene: Scene = {
       id: newId(),
       name: file?.name.replace(/\.[^.]+$/, '') ?? `Cena ${this.scenes().length + 1}`,
@@ -1030,10 +1038,10 @@ export class TableSessionService extends SheetStore {
   /** Troca (ou define) o mapa de uma cena. */
   async setSceneMap(sceneId: string, file: File): Promise<void> {
     const old = this.scenes().find((s) => s.id === sceneId)?.blobId;
-    const blobId = newId();
-    await this.storage.set(`blob:${blobId}`, file);
+    const blobId = await this.uploadFile(file);
+    if (!blobId) return;
     this.updateScene(sceneId, { blobId });
-    if (old) this.storage.delete(`blob:${old}`);
+    if (old) void this.files.remove(old);
   }
 
   updateScene(id: string, patch: Partial<Omit<Scene, 'id'>>): void {
@@ -1050,7 +1058,7 @@ export class TableSessionService extends SheetStore {
     const scene = this.scenes().find((s) => s.id === id);
     this.dispatch('removeScene', { sceneId: id });
     for (const blobId of [scene?.blobId, ...(scene?.levels ?? []).map((l) => l.blobId)]) {
-      if (blobId) this.storage.delete(`blob:${blobId}`);
+      if (blobId) void this.files.remove(blobId);
     }
     // Imagens personalizadas dos inventários dos tokens de NPC da cena e dos itens no chão
     for (const token of scene?.tokens ?? []) this.deleteInventoryBlobs(token.sheet?.inventory);
@@ -1124,10 +1132,10 @@ export class TableSessionService extends SheetStore {
     if (!scene) return;
     if (index === 0) return this.setSceneMap(scene.id, file);
     const old = scene.levels?.[index - 1]?.blobId;
-    const blobId = newId();
-    await this.storage.set(`blob:${blobId}`, file);
+    const blobId = await this.uploadFile(file);
+    if (!blobId) return;
     this.dispatch('setLevelImage', { sceneId: scene.id, index, blobId });
-    if (old) this.storage.delete(`blob:${old}`);
+    if (old) void this.files.remove(old);
   }
 
   /** Tira a imagem de uma camada de cima: ela vira "ar" (mostra a de baixo). */
@@ -1136,7 +1144,7 @@ export class TableSessionService extends SheetStore {
     const old = scene?.levels?.[index - 1]?.blobId;
     if (!scene || index < 1 || !old) return;
     this.dispatch('setLevelImage', { sceneId: scene.id, index });
-    this.storage.delete(`blob:${old}`);
+    void this.files.remove(old);
   }
 
   /** Exclui uma camada de cima; os tokens dela descem uma camada e as paredes dela são apagadas. */
@@ -1146,7 +1154,7 @@ export class TableSessionService extends SheetStore {
     if (!scene || index < 1 || !level) return;
     this.dispatch('removeLevel', { sceneId: scene.id, index });
     this.gmLevel.update((n) => (n >= index ? n - 1 : n));
-    if (level.blobId) this.storage.delete(`blob:${level.blobId}`);
+    if (level.blobId) void this.files.remove(level.blobId);
   }
 
   /** Libera uma camada para os jogadores (é a que eles passam a ver). */
@@ -1201,10 +1209,10 @@ export class TableSessionService extends SheetStore {
     return owner ? this.worldNpcOf(owner) : undefined;
   }
 
-  /** Envia um arquivo de áudio e cria o som correspondente. */
-  async uploadSound(file: File): Promise<TableEntry> {
-    const blobId = newId();
-    await this.storage.set(`blob:${blobId}`, file);
+  /** Envia um arquivo de áudio e cria o som correspondente (null = envio recusado; o aviso explica). */
+  async uploadSound(file: File): Promise<TableEntry | null> {
+    const blobId = await this.uploadFile(file);
+    if (!blobId) return null;
     return this.addEntry('sound', {
       name: file.name.replace(/\.[^.]+$/, ''),
       blobId,
@@ -1256,14 +1264,24 @@ export class TableSessionService extends SheetStore {
       for (const token of sc.tokens ?? []) if (token.entryId === id) this.deleteInventoryBlobs(token.sheet?.inventory);
     }
     this.dispatch('removeEntry', { entryId: id });
-    if (entry?.blobId) this.storage.delete(`blob:${entry.blobId}`);
-    if (entry?.token?.blobId) this.storage.delete(`blob:${entry.token.blobId}`);
+    if (entry?.blobId) void this.files.remove(entry.blobId);
+    if (entry?.token?.blobId) void this.files.remove(entry.token.blobId);
     // Imagens personalizadas dos itens do inventário
     this.deleteInventoryBlobs(entry?.sheet?.inventory);
   }
 
-  getBlob(blobId: string): Promise<Blob | undefined> {
-    return this.storage.get<Blob>(`blob:${blobId}`);
+  /**
+   * Lê um arquivo. Na mesa online, os da mesa vêm do servidor; os do Worldbuild (imagens de itens
+   * e raças do mundo, ainda locais) continuam no navegador: procura primeiro no navegador.
+   */
+  async getBlob(blobId: string): Promise<Blob | undefined> {
+    const local = await this.localFiles.get(blobId);
+    return local ?? (this.files === this.localFiles ? undefined : this.files.get(blobId));
+  }
+
+  /** Envio recusado (mesa online: cota do servidor, tipo não aceito, sem conexão): aviso na tela. */
+  protected override uploadFailed(error: unknown): void {
+    this.roomNotice.set({ text: `Arquivo não enviado: ${error instanceof Error ? error.message : 'erro desconhecido.'}` });
   }
 
   // --- NPCs do bestiário (referências) -------------------------------------
@@ -1616,11 +1634,7 @@ export class TableSessionService extends SheetStore {
     const keepEmpty = from.kind === 'npc';
     const leavesList = !keepEmpty && quantityOf(item) === 1;
     let blobId = item.blobId;
-    if (blobId && !leavesList) {
-      const blob = await this.storage.get<Blob>(`blob:${blobId}`);
-      blobId = blob ? newId() : undefined;
-      if (blob && blobId) await this.storage.set(`blob:${blobId}`, blob);
-    }
+    if (blobId && !leavesList) blobId = await this.files.copy(blobId).catch(() => undefined);
 
     // Relê o inventário depois do await (pode ter mudado no meio)
     this.updateSheet(fromId, { inventory: takeOne(this.inventoryOf(fromId), inventoryId, keepEmpty).list });
@@ -1785,10 +1799,10 @@ export class TableSessionService extends SheetStore {
   /** Troca a imagem do item da mesa (apaga a anterior). */
   async setTableItemImage(itemId: string, file: File): Promise<void> {
     const old = this.tableItemById().get(itemId)?.blobId;
-    const blobId = newId();
-    await this.storage.set(`blob:${blobId}`, file);
+    const blobId = await this.uploadFile(file);
+    if (!blobId) return;
     this.dispatch('updateTableItem', { itemId, patch: { blobId } });
-    if (old) this.storage.delete(`blob:${old}`);
+    if (old) void this.files.remove(old);
   }
 
   // --- Tokens: regra de vínculo --------------------------------------------
@@ -1857,11 +1871,11 @@ export class TableSessionService extends SheetStore {
   async setTokenImage(entryId: string, file: File): Promise<void> {
     const entry = this.entryById().get(entryId);
     if (!entry) return;
-    const blobId = newId();
-    await this.storage.set(`blob:${blobId}`, file);
+    const blobId = await this.uploadFile(file);
+    if (!blobId) return;
     const old = this.tokenOf(entry).blobId;
     this.updateEntryToken(entryId, { blobId });
-    if (old) this.storage.delete(`blob:${old}`);
+    if (old) void this.files.remove(old);
   }
 
   // --- Tokens no mapa ------------------------------------------------------

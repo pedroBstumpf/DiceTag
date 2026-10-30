@@ -1,16 +1,20 @@
 import { DestroyRef, Injectable, WritableSignal, inject, signal } from '@angular/core';
-import { StorageService } from '../../../core/services/storage.service';
+import { LocalFileStore } from '../../../core/services/file-store';
+import { TableSessionService } from './table-session.service';
 
 /**
- * URLs temporárias (object URLs) para arquivos do IndexedDB, com cache.
+ * URLs temporárias (object URLs) para arquivos guardados, com cache.
  * Usado pelas imagens de token: vários tokens da mesma ficha compartilham
  * a mesma URL, e o arquivo é lido só uma vez.
  *
+ * Na mesa, lê pela sessão (`getBlob`: no navegador ou, na mesa online, no servidor); no
+ * Worldbuild (sem sessão), só do navegador.
  * Fornecido na página da mesa: ao sair dela, todas as URLs são liberadas.
  */
 @Injectable()
 export class BlobUrlService {
-  private readonly storage = inject(StorageService);
+  private readonly local = inject(LocalFileStore);
+  private readonly session = inject(TableSessionService, { optional: true });
   private readonly cache = new Map<string, WritableSignal<string | null>>();
 
   constructor() {
@@ -29,7 +33,8 @@ export class BlobUrlService {
     if (!url) {
       const created = signal<string | null>(null);
       this.cache.set(blobId, created);
-      this.storage.get<Blob>(`blob:${blobId}`).then((blob) => {
+      const read = this.session ? this.session.getBlob(blobId) : this.local.get(blobId);
+      read.then((blob) => {
         if (blob) created.set(URL.createObjectURL(blob));
       });
       url = created;

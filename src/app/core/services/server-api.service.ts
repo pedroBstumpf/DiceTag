@@ -35,6 +35,23 @@ export class ServerApiService {
     return this.request<T>('DELETE', path, body);
   }
 
+  /** Envia um arquivo (multipart, campo único `file`); o navegador monta o cabeçalho do envio. */
+  upload<T>(path: string, file: Blob, name: string): Promise<T> {
+    const form = new FormData();
+    form.append('file', file, name);
+    return this.request<T>('POST', path, form);
+  }
+
+  /** Baixa um arquivo; undefined se não existir ou a conta não puder vê-lo (404) ou sem conexão. */
+  async getBlob(path: string): Promise<Blob | undefined> {
+    try {
+      const res = await fetch(`/api${path}`, { credentials: 'same-origin' });
+      return res.ok ? await res.blob() : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   // --- Internos ------------------------------------------------------------
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -43,8 +60,9 @@ export class ServerApiService {
       res = await fetch(`/api${path}`, {
         method,
         credentials: 'same-origin',
-        headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
-        body: body === undefined ? undefined : JSON.stringify(body),
+        // FormData (envio de arquivo) leva o próprio Content-Type, com o separador das partes
+        headers: body === undefined || body instanceof FormData ? undefined : { 'Content-Type': 'application/json' },
+        body: body === undefined ? undefined : body instanceof FormData ? body : JSON.stringify(body),
       });
     } catch {
       throw new ServerError(0, SERVER_OFFLINE);
