@@ -7,6 +7,7 @@ import { registerSecurity } from './http/plugins/security';
 import { authRoutes } from './http/routes/auth';
 import { devRoutes } from './http/routes/dev';
 import { fileRoutes } from './http/routes/files';
+import { frontendRoutes } from './http/routes/frontend';
 import { tableRoutes } from './http/routes/tables';
 import { worldRoutes } from './http/routes/worlds';
 import { audit } from './lib/audit';
@@ -98,6 +99,8 @@ export async function buildApp(ctx: AppContext, options: BuildOptions = {}): Pro
   await http.register(async (api) => worldRoutes(api, ctx, hub), { prefix: '/api' });
   await http.register(async (api) => fileRoutes(api, ctx), { prefix: '/api' });
   if (config.DEV_TOOLS) await http.register(async (dev) => devRoutes(dev, config));
+  // App Angular compilado (FRONTEND_DIR): o que não é da API cai no index.html (rotas do app)
+  await http.register(async (front) => frontendRoutes(front, config));
 
   hub.attach(http.server);
   // preClose: antes de o HTTP parar, senão o fechamento esperaria os sockets abertos

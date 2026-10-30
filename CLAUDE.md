@@ -78,6 +78,8 @@ npx ng test --watch=false    # testes Vitest (*.spec.ts), uma execução (usa ba
 npm install && npm run setup # dependências + .env com segredos aleatórios (nunca versionar o .env)
 npm run seed                 # contas de exemplo (senha = SEED_PASSWORD do .env) e uma mesa
 npm run dev                  # http://localhost:3000 (o ng serve repassa /api e /ws: proxy.conf.json)
+                             # jeito leve: `npm run build` na raiz + `npm start` aqui = app inteiro em :3000
+                             # (FRONTEND_DIR no .env; sem o ng serve)
 npm test                     # 127 testes, um arquivo por vez; npm run smoke = ponta a ponta com o servidor aberto
 npm run backup               # cópia do banco e dos arquivos + conferência (operação: server/OPERATIONS.md)
 ```
@@ -86,6 +88,8 @@ npm run backup               # cópia do banco e dos arquivos + conferência (op
 
 Configuração relevante do `angular.json` (produção):
 - `optimization.fonts: false` → não tenta embutir Google Fonts no build (evita travar em redes restritas).
+- `optimization.styles.inlineCritical: false` → nenhum CSS/`onload` inline no `index.html` (a CSP do servidor, que
+  entrega o app no jeito leve, só aceita scripts de arquivo).
 - Budgets: inicial 800kB aviso / 1.5MB erro; estilo por componente 6kB / 12kB.
   O aviso subiu para **850kB** porque o CSS global do Tailwind cresce com cada tela nova (inicial hoje ~841kB,
   dos quais ~88kB de CSS). Evite importar coisas pesadas fora das rotas lazy.
@@ -212,6 +216,7 @@ server/src/  main.ts · app.ts · context.ts · config/env.ts · db/ (SQLite + m
              domain/index.ts   # importa de src/app as regras puras (comandos, permissões, visão, dados, paredes, raça)
              repositories/ services/ security/ lib/ http/ (plugins + rotas) realtime/ (sala da mesa) ops/ (backup)
 server/scripts/ (setup, seed, smoke, backup) · server/dev/ (página /dev/) · server/test/ · server/OPERATIONS.md
+http/routes/frontend.ts   # entrega o app compilado (FRONTEND_DIR): lista fixa de arquivos, rotas do app → index.html, CSP
 ```
 `proxy.conf.json` (raiz) liga o `ng serve` ao servidor em desenvolvimento.
 

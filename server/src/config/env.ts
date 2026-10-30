@@ -65,6 +65,11 @@ const schema = z.object({
   /** Espaço total de arquivos por mesa (somando os de todos os membros). */
   TABLE_QUOTA_MB: z.coerce.number().int().min(1).max(100_000).default(2000),
 
+  /**
+   * Pasta do app Angular já compilado (`npm run build` na raiz) para o servidor entregar junto com a
+   * API, sem o `ng serve`. Vazio = só a API. Ex.: ../dist/zehenia/browser
+   */
+  FRONTEND_DIR: z.string().max(1000).default(''),
   /** Página de testes do WebSocket em /dev (só desenvolvimento). */
   DEV_TOOLS: bool(false),
   /** Limites de requisições (desligar só nos testes automatizados). */

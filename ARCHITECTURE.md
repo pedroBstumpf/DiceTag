@@ -463,6 +463,10 @@ regras de segurança em [`BACKEND_SECURITY.md`](BACKEND_SECURITY.md) e operaçã
 - **Ligação com o front:** em desenvolvimento, `proxy.conf.json` repassa `/api` e `/ws` do `ng serve` para
   `localhost:3000`, então o front usa URLs relativas e o cookie de sessão na mesma origem. A primeira parte ligada é
   a **mesa online** (§12).
+- **App entregue pelo servidor** (`http/routes/frontend.ts`, ligado por `FRONTEND_DIR`): o build do Angular na
+  mesma origem da API, num processo só. A lista de arquivos é montada ao subir (nada da URL vira caminho no
+  disco); rotas sem extensão caem no `index.html`; `/api`, `/ws` e `/dev` nunca caem no app. CSP própria
+  (`frontendCsp`): scripts só do servidor, estilos inline permitidos (Angular/Material/Tiptap), Google Fonts.
 
 ## 12. Rumo ao backend
 

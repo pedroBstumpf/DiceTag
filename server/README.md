@@ -61,13 +61,32 @@ Fica em `http://localhost:3000`, acessível **só desta máquina** (`HOST=127.0.
 O `ng serve` já repassa `/api` e `/ws` para o servidor (`proxy.conf.json` na raiz). Para o navegador,
 front e back ficam na mesma origem (`localhost:4200`), e o cookie de sessão funciona sem ajustes.
 
+### Jeito leve: um processo só (sem o `ng serve`)
+
+O `ng serve` é o processo mais pesado (compila e fica observando os arquivos). Para só **usar** o app,
+compile uma vez e deixe o servidor entregá-lo:
+
+```bash
+npm run build        # na raiz do projeto (de novo só quando o front mudar)
+cd server
+npm start            # http://localhost:3000 — app + API + WebSocket
+```
+
+Precisa de `FRONTEND_DIR=../dist/zehenia/browser` no `server/.env` (já vem no `.env.example`; num `.env`
+antigo, acrescente a linha). Sem o build, o servidor avisa no log e entrega só a API. O app usa a mesma
+origem (`localhost:3000`), então cookie e WebSocket funcionam igual. Rotas do app (`/mesas`,
+`/mesa-online/...`) caem no `index.html`; `/api`, `/ws` e `/dev` continuam do servidor. A CSP do app
+(`frontendCsp` em `http/routes/frontend.ts`) só aceita scripts do próprio servidor: por isso o build não
+põe CSS crítico inline (`inlineCritical: false` no `angular.json`).
+
 ---
 
 ## 3. Testar
 
 ### 3.0 Pelo app (localhost:4200): a mesa online
 
-Com os dois terminais abertos (servidor e `npm start`, ver §2):
+Com os dois terminais abertos (servidor e `npm start`, ver §2) — ou só o servidor no jeito leve, trocando
+`localhost:4200` por `localhost:3000`:
 
 1. Abra **http://localhost:4200/mesas** e role até **Mesas online**. Clique em **Entrar no servidor** e use
    `mestre@zehenia.local` com a senha `SEED_PASSWORD` do `.env`.

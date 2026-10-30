@@ -19,6 +19,7 @@ Guia para publicar e manter o servidor (`server/`) em produção. Complementa o
 | Usuário do processo | Sem privilégios de administrador; dono só da pasta `data/` (o servidor cria o banco 600 e as pastas 700). |
 | Dependências | `npm ci` (lockfile) e `npm run check` (tipos, testes e `npm audit`) sem vulnerabilidade alta ou crítica. |
 | Execução | `npm start` (sem `--inspect`). |
+| App (front-end) | `npm run build` na raiz e `FRONTEND_DIR` apontando para `dist/zehenia/browser`: o servidor entrega o app na mesma origem da API, com CSP própria (scripts só do servidor). Ou sirva os arquivos pelo proxy reverso e deixe `FRONTEND_DIR` vazio. |
 | Backup | Agendado e com uma restauração testada (seção 3). |
 | Privacidade | Política de privacidade publicada (seção 6) e exclusão de conta funcionando (`DELETE /api/auth/me`). |
 
