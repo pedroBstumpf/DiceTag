@@ -83,7 +83,8 @@ describe('front-end servido pelo servidor', () => {
   });
 
   it('sem FRONTEND_DIR (ou pasta sem index.html), o servidor entrega só a API', async () => {
-    for (const overrides of [{}, { FRONTEND_DIR: join(outside, 'vazia') }]) {
+    const cases: Record<string, string>[] = [{}, { FRONTEND_DIR: join(outside, 'vazia') }];
+    for (const overrides of cases) {
       const apiOnly = await createTestServer(overrides);
       try {
         expect((await apiOnly.app.http.inject({ method: 'GET', url: '/' })).statusCode).toBe(404);

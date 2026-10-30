@@ -24,7 +24,9 @@ describe('reconciliação da mesa online', () => {
 
   it('comando sem efeito não fica pendente (nem precisa ser enviado)', () => {
     const start = startSync(base(), 1);
-    expect(localCommand(start, 1, move(0))).toBe(start);
+    // Token que não existe mais (ex.: removido por outra pessoa): o comando devolve o mesmo estado
+    const gone: TableCommand = { type: 'moveToken', payload: { placementId: 'removido', x: 70, y: 0 } };
+    expect(localCommand(start, 1, gone)).toBe(start);
   });
 
   it('ack confirma com o payload final do servidor', () => {
