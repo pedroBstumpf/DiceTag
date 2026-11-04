@@ -3,6 +3,9 @@ import {
   applyRace,
   canEditStatusMax,
   canSeeLoreItem,
+  controlsNpc,
+  npcSheetOf,
+  npcTokenOf,
   raceTraitsOf,
   withStatusBars,
   type CharacterSheet,
@@ -10,6 +13,8 @@ import {
   type InventoryEntry,
   type RaceChoice,
   type TokenBar,
+  type TokenSettings,
+  type WorldItem,
 } from '../domain';
 import type { RuleContext, RuleResult } from './command-rules';
 import type { SheetInput } from './command-schemas';
@@ -120,4 +125,33 @@ function newItemsAllowed(ctx: RuleContext, before: readonly InventoryEntry[], ne
     if (entry.table) return (ctx.state.items ?? []).some((i) => i.id === entry.itemId);
     return ctx.world.item(entry.itemId)?.type === 'item' && canSeeLoreItem(revealed, parentOf, entry.itemId, false, ctx.viewer);
   });
+}
+
+/** Alteração pedida por quem controla um NPC do bestiário (o resto do item é do mestre). */
+export interface ControlledNpcPatch {
+  sheet?: SheetInput;
+  bars?: TokenBar[];
+  tags?: TokenSettings['tags'];
+  abilities?: WorldItem['abilities'];
+}
+
+/**
+ * Item do mundo depois de uma alteração de quem controla o NPC: só vale para um NPC do bestiário
+ * que está na mesa sob o controle da conta. Ficha e barras passam pelas mesmas regras do jogador
+ * (raça, SN, máximo das barras, itens); nome, imagem, pasta e o resto não mudam por aqui.
+ */
+export function controlledNpcChange(ctx: RuleContext, npc: WorldItem, patch: ControlledNpcPatch): RuleResult<WorldItem> {
+  if (!ctx.state.entries.some((e) => e.worldNpcId === npc.id && controlsNpc(e, ctx.viewer))) return { ok: false, reason: 'Você não controla este NPC.' };
+  const token = npcTokenOf(npc);
+  const change = playerSheetChange(ctx, { sheet: npcSheetOf(npc), bars: token.bars }, { sheet: patch.sheet, bars: patch.bars });
+  if (!change.ok) return change;
+  return {
+    ok: true,
+    payload: {
+      ...npc,
+      ...(change.payload.sheet && { sheet: change.payload.sheet as CharacterSheet }),
+      token: { ...token, ...(change.payload.bars && { bars: change.payload.bars }), ...(patch.tags && { tags: patch.tags }) },
+      ...(patch.abilities && { abilities: patch.abilities }),
+    },
+  };
 }

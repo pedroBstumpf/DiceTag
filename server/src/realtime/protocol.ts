@@ -19,6 +19,7 @@ import { COMMAND_TYPES, rollConfig } from './command-schemas';
  * - `cmd`     { version, type, payload, by }  comando de outra pessoa (só para o mestre);
  * - `state`   { version, state, vision }  estado projetado (jogadores, quando a visão deles muda; ou após `sync`);
  * - `event`   { event, by }  evento efêmero de outra pessoa (só se ela pode vê-lo);
+ * - `world`   {}  o Worldbuild da mesa mudou: o jogador busca de novo o que pode ver (`/tables/:id/lore`);
  * - `error`   { code, message }  mensagem inválida, limite de taxa…
  *
  * `vision`: polígonos de visão da cena aberta, calculados pelo servidor (jogador com névoa; null
@@ -79,6 +80,7 @@ export type ServerMessage =
   | { t: 'cmd'; version: number; type: string; payload: unknown; by: string }
   | { t: 'state'; version: number; state: TableState; vision: Point[][] | null }
   | { t: 'event'; event: TableEvent; by: string }
+  | { t: 'world' }
   | { t: 'error'; code: string; message: string };
 
 /** Códigos de fechamento próprios (4000–4999 são livres para a aplicação). */

@@ -10,6 +10,8 @@ import {
   visibleDropsFor,
   visibleNotesFor,
   visibleTokensFor,
+  worldItemRefs,
+  raceTraitsOf,
   type CharacterSheet,
   type DoorWall,
   type Scene,
@@ -125,8 +127,11 @@ function projectEntry(entry: TableEntry, viewer: Viewer): TableEntry {
 /**
  * Itens do mundo da mesa que a conta pode ver (aba Lore):
  * - mestre: todos;
- * - jogador: os que estão em pastas reveladas nesta mesa (`canSeeLoreItem`) + o mínimo dos NPCs
- *   do bestiário que ele vê na mesa (nome e token, para desenhar os tokens), sem a ficha base.
+ * - jogador: os que estão em pastas reveladas nesta mesa (`canSeeLoreItem`) + o mínimo do que a
+ *   mesa mostra a ele, sempre fora da árvore (`parentId: null`, a aba Lore não os lista):
+ *   - NPCs do bestiário que ele vê (nome e token, para desenhar os tokens), sem a ficha base;
+ *   - Raças (ele escolhe a do personagem na ficha): nome, características e modificadores;
+ *   - cartão dos itens citados nos inventários e no chão que ele vê.
  *
  * `state` é o estado JÁ PROJETADO para a conta: só os NPCs que ela vê ou controla entram.
  */
@@ -144,6 +149,20 @@ export function projectLore(items: readonly WorldItem[], state: TableState, view
     // Quem controla o NPC edita a ficha base dele: recebe o item inteiro
     if (controlsNpc(entry, viewer)) visible.push({ ...npc, parentId: null });
     else visible.push({ id: npc.id, type: 'npc', name: npc.name, parentId: null, createdAt: npc.createdAt, updatedAt: npc.updatedAt, token: npc.token });
+  }
+  const summary = (i: WorldItem) => ({ id: i.id, type: i.type, name: i.name, parentId: null, createdAt: i.createdAt, updatedAt: i.updatedAt });
+  for (const race of items) {
+    if (race.type !== 'race' || seen.has(race.id)) continue;
+    seen.add(race.id);
+    visible.push({ ...summary(race), traits: raceTraitsOf(race), statusMods: race.statusMods });
+  }
+  // Itens: os do estado projetado e os do inventário dos NPCs do bestiário que a conta controla
+  const controlled = state.entries.filter((e) => controlsNpc(e, viewer)).flatMap((e) => byId.get(e.worldNpcId ?? '')?.sheet?.inventory ?? []);
+  for (const id of [...worldItemRefs(state), ...controlled.filter((i) => !i.table).map((i) => i.itemId)]) {
+    const item = byId.get(id);
+    if (item?.type !== 'item' || seen.has(id)) continue;
+    seen.add(id);
+    visible.push({ ...summary(item), tags: item.tags, description: item.description, blobId: item.blobId });
   }
   return visible;
 }

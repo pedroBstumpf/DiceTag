@@ -1,7 +1,7 @@
 import type { WebSocket } from 'ws';
 import { applyCommand, normalizeState, type TableCommand, type TableRole, type TableState, type Viewer } from '../domain';
 import type { TokenBucket } from '../lib/limiter';
-import { COMMAND_RULES, type RuleResult } from './command-rules';
+import { COMMAND_RULES, type RuleContext, type RuleResult } from './command-rules';
 import { COMMAND_SCHEMAS } from './command-schemas';
 import { eventVisibleTo, playerVision, projectState } from './projection';
 import type { ServerMessage, TableEvent } from './protocol';
@@ -39,6 +39,8 @@ export const MAX_STATE_BYTES = 20 * 1024 * 1024;
 const MAX_BUFFERED_BYTES = 8 * 1024 * 1024;
 const SAVE_DEBOUNCE_MS = 500;
 const PLAYER_SYNC_MS = 30;
+/** Edições seguidas no Worldbuild (digitação do mestre) viram um aviso só aos jogadores. */
+const WORLD_NOTICE_MS = 1500;
 
 export interface RoomStore {
   load(tableId: string): { state: unknown; version: number } | null;
@@ -73,6 +75,7 @@ export class Room {
   private full = false;
   private saveTimer: NodeJS.Timeout | null = null;
   private syncTimer: NodeJS.Timeout | null = null;
+  private worldTimer: NodeJS.Timeout | null = null;
   private closed = false;
   private readonly vision: VisionCache;
   /** Cena dos jogadores calculada para a versão atual (uma vez para todos). */
@@ -110,19 +113,16 @@ export class Room {
     const parsed = COMMAND_SCHEMAS[type].safeParse(rawPayload);
     if (!parsed.success) return this.deny(client, seq, type, 'Dados do comando inválidos.');
     const rule = COMMAND_RULES[type] as (p: unknown, ctx: Parameters<(typeof COMMAND_RULES)[typeof type]>[1]) => RuleResult<unknown>;
-    const verdict = rule(parsed.data, {
-      state: this.state,
-      viewer: { role: client.role, userId: client.userId },
-      userName: client.userName,
-      now: this.now(),
-      full: this.full,
-      world: this.world,
-      playerScene: () => this.playerScene(),
-    });
+    const verdict = rule(parsed.data, this.ruleContext({ role: client.role, userId: client.userId }, client.userName));
     if (!verdict.ok) return this.deny(client, seq, type, verdict.reason);
     const command = { type, payload: verdict.payload } as TableCommand;
     this.apply(command, client.userId, client);
     this.send(client, { t: 'ack', seq, version: this.version, type, payload: command.payload });
+  }
+
+  /** O que as regras precisam saber para julgar um pedido desta conta nesta mesa. */
+  ruleContext(viewer: RuleContext['viewer'], userName: string): RuleContext {
+    return { state: this.state, viewer, userName, now: this.now(), full: this.full, world: this.world, playerScene: () => this.playerScene() };
   }
 
   /** Recusa o comando: `nack` para quem enviou e registro no log de segurança. */
@@ -169,6 +169,16 @@ export class Room {
     this.vision.clear();
     this.view = null;
     this.schedulePlayerSync();
+    this.scheduleWorldNotice();
+  }
+
+  /** Avisa os jogadores (agrupado) que o Worldbuild mudou: eles buscam de novo o que podem ver. */
+  private scheduleWorldNotice(): void {
+    if (this.worldTimer || this.closed) return;
+    this.worldTimer = setTimeout(() => {
+      this.worldTimer = null;
+      for (const c of this.clients) if (c.role !== 'gm') this.send(c, { t: 'world' });
+    }, WORLD_NOTICE_MS);
   }
 
   /** Evento efêmero (ping, efeito): repassado só a quem pode vê-lo. */
@@ -254,5 +264,6 @@ export class Room {
     this.closed = true;
     if (this.saveTimer) clearTimeout(this.saveTimer);
     if (this.syncTimer) clearTimeout(this.syncTimer);
+    if (this.worldTimer) clearTimeout(this.worldTimer);
   }
 }

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { defaultToken, rollDice, type Scene, type TableEntry, type TableState, type WorldItem } from '../src/domain';
+import { defaultToken, npcTokenOf, rollDice, type Scene, type TableEntry, type TableState, type WorldItem } from '../src/domain';
 import { COMMAND_RULES, type RuleContext } from '../src/realtime/command-rules';
 import { COMMAND_SCHEMAS, COMMAND_TYPES } from '../src/realtime/command-schemas';
 import { eventVisibleTo, playerVision, projectLore, projectState } from '../src/realtime/projection';
+import { controlledNpcChange } from '../src/realtime/sheet-rules';
 import { performRoll } from '../src/realtime/rolls';
 import { VisionCache } from '../src/realtime/vision';
 import { WorldView } from '../src/realtime/world';
@@ -449,6 +450,64 @@ describe('o que cada um recebe (projeção)', () => {
     expect(lore.map((i) => i.id).sort()).toEqual(['bestia', 'doc-publico', 'pasta-publica']);
     expect(lore.find((i) => i.id === 'bestia')?.sheet).toBeUndefined();
     expect(projectLore(items, state, gm)).toHaveLength(4);
+  });
+
+  it('Lore do jogador: Raças para a ficha e cartão dos itens que ele tem, fora da árvore e sem o resto', () => {
+    const base = { createdAt: 0, updatedAt: 0 };
+    const items: WorldItem[] = [
+      { ...base, id: 'pasta-secreta', type: 'folder', name: 'Segredos', parentId: null },
+      { ...base, id: 'elfo', type: 'race', name: 'Elfo', parentId: 'pasta-secreta', traits: ['Visão no escuro'], statusMods: { 'status-mind': 2 }, maleBlobId: 'img' },
+      { ...base, id: 'adaga', type: 'item', name: 'Adaga', parentId: 'pasta-secreta', tags: [], description: 'Cega', blobId: 'img2' },
+      { ...base, id: 'moeda', type: 'item', name: 'Moeda', parentId: 'pasta-secreta' },
+      { ...base, id: 'tesouro', type: 'item', name: 'Tesouro secreto', parentId: 'pasta-secreta' },
+      { ...base, id: 'plano', type: 'document', name: 'Plano do mestre', parentId: 'pasta-secreta', content: 'traição' },
+    ];
+    const state = withScene(table(), { drops: [{ id: 'd', x: 100, y: 100, item: { id: 'x', itemId: 'moeda' } }] });
+    state.entries = state.entries.map((e) => (e.id === 'pc-ana' ? { ...e, sheet: { ...(e.sheet as object), inventory: [{ id: 'l', itemId: 'adaga' }] } as never } : e));
+    const lore = projectLore(items, viewOf(state), ana);
+
+    expect(lore.map((i) => i.id).sort()).toEqual(['adaga', 'elfo', 'moeda']);
+    expect(lore.every((i) => i.parentId === null)).toBe(true);
+    expect(lore.find((i) => i.id === 'elfo')).toMatchObject({ traits: ['Visão no escuro'], statusMods: { 'status-mind': 2 } });
+    expect(lore.find((i) => i.id === 'elfo')?.maleBlobId).toBeUndefined();
+    expect(lore.find((i) => i.id === 'adaga')).toMatchObject({ description: 'Cega', blobId: 'img2' });
+    expect(JSON.stringify(lore)).not.toContain('traição');
+  });
+
+  it('item citado em ficha que o jogador não recebe não vaza', () => {
+    const items: WorldItem[] = [{ createdAt: 0, updatedAt: 0, id: 'chave', type: 'item', name: 'Chave da masmorra', parentId: null }];
+    const state = table();
+    state.entries = state.entries.map((e) => (e.id === 'npc-orc' ? { ...e, sheet: { ...(e.sheet as object), inventory: [{ id: 'l', itemId: 'chave' }] } as never } : e));
+    state.scenes = state.scenes.map((s) => (s.id === 's1' ? { ...s, tokens: s.tokens!.filter((tk) => tk.entryId !== 'npc-orc') } : s));
+    expect(projectLore(items, viewOf(state), ana)).toEqual([]);
+  });
+});
+
+describe('quem controla um NPC do bestiário grava a ficha base', () => {
+  const npc: WorldItem = { id: 'bestia', type: 'npc', name: 'Lobo', parentId: 'pasta', createdAt: 0, updatedAt: 0 };
+  const ctx = (state: TableState, viewer = ana): RuleContext => ({ state, viewer, userName: 'Ana', now: 1, full: false, world, playerScene: () => null });
+  const withRef = (controller?: string) => {
+    const state = table();
+    state.entries = [...state.entries, { id: 'ref', kind: 'npc', name: 'Lobo', createdAt: 0, worldNpcId: 'bestia', ...(controller && { controllerUserId: controller }) }];
+    return state;
+  };
+
+  it('só quem controla, e só ficha, barras, etiquetas e ações: nome e pasta não mudam', () => {
+    const bars = npcTokenOf(npc).bars.map((b) => ({ ...b, value: 1 }));
+    const change = controlledNpcChange(ctx(withRef('u-ana')), npc, { bars });
+    expect(change.ok).toBe(true);
+    if (!change.ok) return;
+    expect(change.payload.token?.bars[0].value).toBe(1);
+    expect(change.payload.name).toBe('Lobo');
+    expect(change.payload.parentId).toBe('pasta');
+    expect(controlledNpcChange(ctx(withRef()), npc, { bars }).ok).toBe(false);
+    expect(controlledNpcChange(ctx(withRef('u-bia')), npc, { bars }).ok).toBe(false);
+  });
+
+  it('o máximo das barras de status continua sendo só do mestre', () => {
+    const bars = npcTokenOf(npc).bars.map((b) => ({ ...b, max: 999 }));
+    const change = controlledNpcChange(ctx(withRef('u-ana')), npc, { bars });
+    expect(change.ok).toBe(false);
   });
 });
 

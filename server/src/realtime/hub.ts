@@ -12,6 +12,7 @@ import { parseJsonSafely, unsafeJsonReason } from '../lib/safe-json';
 import { readCookie, sessionCookieName } from '../security/cookie';
 import { isAllowedOrigin } from '../security/origin';
 import { MAX_MESSAGE_BYTES, budgetOf } from './budgets';
+import type { RuleContext } from './command-rules';
 import { CLOSE, clientMessage, type ClientMessage } from './protocol';
 import { Room, type Client, type ClientView } from './room';
 import { performRoll } from './rolls';
@@ -219,6 +220,11 @@ export class RealtimeHub {
   /** Estado da mesa projetado para a conta: o da sala aberta ou, com ela fechada, o salvo. */
   viewOf(tableId: string, worldId: string, viewer: Viewer): ClientView {
     return (this.rooms.get(tableId) ?? this.createRoom(tableId, worldId)).viewFor(viewer);
+  }
+
+  /** Regras de uma conta na mesa, com o estado da sala aberta ou, com ela fechada, o salvo. */
+  ruleContextOf(tableId: string, worldId: string, viewer: Viewer & { userId: string }, userName: string): RuleContext {
+    return (this.rooms.get(tableId) ?? this.createRoom(tableId, worldId)).ruleContext(viewer, userName);
   }
 
   /** O Worldbuild de um mundo mudou pela API: as salas das mesas dele releem o que usam. */
