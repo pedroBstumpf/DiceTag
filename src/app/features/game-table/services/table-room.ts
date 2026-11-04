@@ -23,6 +23,7 @@ export type RoomMessage =
   | { t: 'cmd'; version: number; type: TableCommandType; payload: unknown; by: string }
   | { t: 'state'; version: number; state: TableState; vision: Point[][] | null }
   | { t: 'event'; event: unknown; by: string }
+  | { t: 'world' }
   | { t: 'error'; code: string; message: string };
 
 /** Pedido de rolagem: o servidor sorteia, recalcula as tags com a ficha atual e grava no chat. */

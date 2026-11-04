@@ -83,6 +83,7 @@ import {
 } from '../state/player-view';
 import { findDrop } from '../state/drops';
 import { inventoryHolder, unitNeedsImageCopy } from '../state/inventory';
+import { worldItemRefs } from '../state/lore';
 import { NO_SELECTION, TokenSelection, keepOnly, selectMany, selectOne, toggleInSelection, without } from '../utils/selection';
 import { TableCommand, TableCommandPayload, TableCommandType, applyCommand } from '../state/commands';
 import {
@@ -873,6 +874,11 @@ export class TableSessionService extends SheetStore {
       if (polys.length && size && this.fogMemory()) untracked(() => this.markExplored(polys, size));
     });
 
+    // Jogador na mesa online: busca de novo a Lore quando o que ele pode ver do mundo muda
+    effect(() => {
+      if (this.loreNeeds()) untracked(() => this.worldbuild.refreshOnline());
+    });
+
     // Trocar de ferramenta à mão desarma o efeito de uma ação
     effect(() => {
       if (this.tool() !== 'fx') untracked(() => this.armedFx.set(null));
@@ -887,7 +893,8 @@ export class TableSessionService extends SheetStore {
     // Ações de NPCs-referência criadas antes (gravadas na mesa) passam a morar no NPC do mundo,
     // com o mesmo id. Só move quando o NPC do mundo está carregado (o mundo certo).
     effect(() => {
-      if (!this.loaded()) return;
+      // Mesa online: quem grava no mundo é o mestre (e o mundo dele precisa ter carregado)
+      if (!this.loaded() || (this.online() && (this.role() !== 'gm' || !this.worldbuild.loaded()))) return;
       const legacy = this.state().entries.filter((e) => e.kind === 'automation' && !!this.abilityTarget(e.ownerEntryId));
       if (!legacy.length) return;
       untracked(() => {
@@ -900,6 +907,17 @@ export class TableSessionService extends SheetStore {
   }
 
   // --- Carregamento --------------------------------------------------------
+
+  /**
+   * Jogador na mesa online: o que ele precisa do mundo muda com a mesa (pastas reveladas, NPCs à
+   * vista, itens nos inventários e no chão). Texto: mudanças que não tocam nisso não buscam nada.
+   */
+  private readonly loreNeeds = computed(() => {
+    if (!this.online() || this.role() === 'gm') return '';
+    const state = this.state();
+    const npcs = state.entries.flatMap((e) => e.worldNpcId ?? []);
+    return JSON.stringify([...(state.lore?.revealed ?? []), ...npcs, ...worldItemRefs(state)].sort());
+  });
 
   async load(tableId: string): Promise<void> {
     // Nessa ordem: com a sala aberta, o flush não grava nada (o estado online nunca vai para o IndexedDB)
@@ -921,7 +939,7 @@ export class TableSessionService extends SheetStore {
     this.tableId = tableId;
     this.loaded.set(false);
     // Arquivos da mesa online (mapas, tokens, sons, itens) vão para o servidor
-    this.files = new ServerFileStore(this.api, tableId);
+    this.files = new ServerFileStore(this.api, { tableId });
     this.room = new TableRoom(
       tableId,
       (message) => this.onRoomMessage(message),
@@ -979,6 +997,9 @@ export class TableSessionService extends SheetStore {
         return;
       case 'error':
         this.roomNotice.set({ text: message.message });
+        return;
+      case 'world':
+        this.worldbuild.refreshOnline();
         return;
     }
   }
@@ -1272,8 +1293,8 @@ export class TableSessionService extends SheetStore {
   }
 
   /**
-   * Lê um arquivo. Na mesa online, os da mesa vêm do servidor; os do Worldbuild (imagens de itens
-   * e raças do mundo, ainda locais) continuam no navegador: procura primeiro no navegador.
+   * Lê um arquivo. Na mesa online, vem do servidor (arquivos da mesa e do mundo dela); o navegador
+   * vem antes para as imagens de mesas criadas quando o Worldbuild ainda era só local.
    */
   async getBlob(blobId: string): Promise<Blob | undefined> {
     const local = await this.localFiles.get(blobId);
@@ -1875,11 +1896,15 @@ export class TableSessionService extends SheetStore {
   async setTokenImage(entryId: string, file: File): Promise<void> {
     const entry = this.entryById().get(entryId);
     if (!entry) return;
-    const blobId = await this.uploadFile(file);
+    // NPC do bestiário: a imagem é do mundo (continua lá se esta mesa for excluída). Só o mestre grava no mundo.
+    const worldImage = !!this.worldNpcOf(entry) && this.role() === 'gm';
+    const blobId = worldImage ? await this.worldbuild.storeBlob(file).catch(() => null) : await this.uploadFile(file);
     if (!blobId) return;
     const old = this.tokenOf(entry).blobId;
     this.updateEntryToken(entryId, { blobId });
-    if (old) void this.files.remove(old);
+    if (!old) return;
+    if (worldImage) this.worldbuild.deleteBlob(old);
+    else void this.files.remove(old);
   }
 
   // --- Tokens no mapa ------------------------------------------------------

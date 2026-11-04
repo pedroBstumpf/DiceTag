@@ -181,14 +181,21 @@ export class GameTablePage {
     inject(DestroyRef).onDestroy(() => {
       this.session.flush();
       this.session.disconnect();
+      this.worldbuild.closeOnline();
     });
 
     // Abre o mundo da mesa: a aba Lore, o bestiário, os itens e as raças vêm dele
-    // (mesa online: o Worldbuild ainda é o deste navegador, então o mundo aberto não muda)
+    // (mesa online: o mundo vem do servidor, em openOnline)
     effect(() => {
       const table = this.table();
       if (!table || this.online() || !this.worlds.loaded()) return;
       untracked(() => this.worlds.select(table.worldId ?? DEFAULT_WORLD_ID));
+    });
+
+    // Avisos do mundo do servidor: item não salvo, envio recusado
+    effect(() => {
+      const notice = this.worldbuild.notice();
+      if (notice) untracked(() => this.snackBar.open(notice.text, undefined, { duration: 4000 }));
     });
 
     // Avisos da sala do servidor: comando recusado, erro, conexão perdida de vez
@@ -226,6 +233,7 @@ export class GameTablePage {
       const table = await this.onlineTables.get(id);
       if (cancelled()) return;
       this.onlineTable.set(table);
+      this.worldbuild.openOnline({ worldId: table.worldId, tableId: id, canEdit: table.role === 'gm' });
       this.session.connect(id);
     } catch (e) {
       if (cancelled()) return;

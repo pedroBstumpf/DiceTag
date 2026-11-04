@@ -1,7 +1,8 @@
-import { Component, ElementRef, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
+import { DestroyRef, Component, ElementRef, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { Router } from '@angular/router';
 import { WORLD_ITEM_META, WorldItemType } from '../../core/models/world-item.model';
 import { AuthService } from '../../core/services/auth.service';
@@ -66,12 +67,15 @@ export class Worldbuild {
   readonly actions = inject(QuickActionsService);
   private readonly layout = inject(LayoutService);
   private readonly router = inject(Router);
+  private readonly snackBar = inject(MatSnackBar);
 
   readonly meta = WORLD_ITEM_META;
 
   // --- Parâmetros de URL ---------------------------------------------------
   readonly novo = input<WorldItemType>();
   readonly abrir = input<string>();
+  /** Id de um mundo do servidor: o mestre o prepara aqui, sem abrir a mesa (vem de "Mesas online"). */
+  readonly servidor = input<string>();
 
   // --- Estado da página ----------------------------------------------------
   /** Explorador visível (no mobile começa escondido). */
@@ -79,6 +83,17 @@ export class Worldbuild {
   private readonly workspace = viewChild<ElementRef<HTMLElement>>('workspace');
 
   constructor() {
+    // Mundo do servidor pedido na URL (o servidor só entrega o mundo ao dono)
+    effect(() => {
+      const worldId = this.servidor();
+      untracked(() => (worldId ? this.service.openOnline({ worldId, canEdit: true }) : this.service.closeOnline()));
+    });
+    inject(DestroyRef).onDestroy(() => this.service.closeOnline());
+    effect(() => {
+      const notice = this.service.notice();
+      if (notice) untracked(() => this.snackBar.open(notice.text, undefined, { duration: 4000 }));
+    });
+
     // Mesa de trabalho: quando o mundo termina de carregar, volta às janelas salvas dele
     // (antes das ações da URL, que podem abrir mais uma janela por cima)
     effect(() => {
@@ -108,7 +123,7 @@ export class Worldbuild {
         if (openId && this.service.byId().has(openId)) this.open(openId);
 
         // Limpa a URL para não repetir a ação ao recarregar
-        this.router.navigate([], { queryParams: {}, replaceUrl: true });
+        this.router.navigate([], { queryParams: { novo: null, abrir: null }, queryParamsHandling: 'merge', replaceUrl: true });
       });
     });
   }
