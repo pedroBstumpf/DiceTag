@@ -14,7 +14,7 @@ online com amigos, no mundo de Zehenia.
 A meta final inclui simular eventos, calcular rolagens, manter fichas, criar mapas, tocar sons e
 organizar toda a atmosfera de uma campanha.
 
-**Estado atual (MVP de interface; servidor pronto e com a primeira ligação às telas: a mesa online):**
+**Estado atual (MVP de interface; servidor pronto; a mesa online e o mundo dela já funcionam entre máquinas):**
 
 | Área | Status |
 |---|---|
@@ -37,11 +37,12 @@ organizar toda a atmosfera de uma campanha.
 | **Rolagem de dados** (2d12: falha crítica…sucesso crítico; 3d6: azar/neutro/sorte) + **chat** da mesa | Pronto |
 | **Efeitos especiais** no mapa (20 efeitos em 4 grupos; 13 cores por elemento) | Pronto |
 | **Servidor** (`server/`: API HTTP + sala da mesa por WebSocket, SQLite, contas/convites reais, visão no servidor, LGPD, backup) | Pronto, testado, auditado contra o `BACKEND_SECURITY.md` |
-| **Mesa online**: conta do servidor, mesas online com convites e a mesa de jogo ligada à sala (WebSocket) | Pronto (primeira versão) |
-| Front-end usando o servidor em tudo (repositórios HTTP no lugar do IndexedDB, arquivos e Worldbuild no servidor) | Não iniciado |
+| **Mesa online**: conta do servidor, convites, mesa ligada à sala (WebSocket), Worldbuild e bestiário no servidor, sons, pings e efeitos em tempo real | Pronto (testado com dois navegadores: `npm run e2e` em `server/`) |
+| **Recuperação de senha** da conta do servidor (por e-mail ou por `npm run reset-link`) e remoção de metadados (EXIF) das imagens enviadas | Pronto |
+| Front-end usando o servidor em tudo (contas e mesas locais substituídas) | Não iniciado: as duas coisas convivem |
 
-As telas ainda guardam tudo **no navegador (IndexedDB)**, exceto a **mesa online** (seção "Mesas online" em Minhas mesas):
-ela usa a conta, as mesas, os convites e a sala do servidor.
+Fora da mesa online, as telas guardam tudo **no navegador (IndexedDB)**. A **mesa online** (seção "Mesas online" em Minhas
+mesas) usa a conta, as mesas, os convites, a sala e o mundo do servidor.
 
 ---
 
@@ -80,7 +81,11 @@ npm run seed                 # contas de exemplo (senha = SEED_PASSWORD do .env)
 npm run dev                  # http://localhost:3000 (o ng serve repassa /api e /ws: proxy.conf.json)
                              # jeito leve: `npm run build` na raiz + `npm start` aqui = app inteiro em :3000
                              # (FRONTEND_DIR no .env; sem o ng serve)
-npm test                     # 127 testes, um arquivo por vez; npm run smoke = ponta a ponta com o servidor aberto
+npm test                     # testes de unidade e integração, um arquivo por vez
+npm run smoke                # ponta a ponta contra o servidor aberto
+npm run e2e                  # dois navegadores reais na mesma mesa (precisa do Chrome e de `npm run build` na raiz;
+                             # sobe o próprio servidor, com banco e segredos temporários)
+npm run reset-link -- <e-mail> # link de recuperação de senha, sem serviço de e-mail
 npm run backup               # cópia do banco e dos arquivos + conferência (operação: server/OPERATIONS.md)
 ```
 
@@ -125,6 +130,7 @@ src/
     │   │   ├── server-file-store.ts    # ServerFileStore: arquivos da mesa online em /api/files
     │   │   ├── game-tables.service.ts  # CRUD de mesas (excluir apaga table-state e blobs)
     │   │   ├── server-api.service.ts   # cliente HTTP da API do servidor (/api, ServerError, SERVER_OFFLINE)
+    │   │   ├── world-import.service.ts # envia ao servidor um mundo guardado neste navegador + spec
     │   │   ├── server-account.service.ts # conta do servidor (cookie HttpOnly): entrar, sair, exportar, excluir
     │   │   ├── online-tables.service.ts  # mesas online: listar, criar, excluir, convidar, entrar, sair
     │   │   ├── worlds.service.ts       # mundos do usuário (lista, aberto, criar/renomear/excluir) + spec
@@ -132,6 +138,7 @@ src/
     │   │   └── news.service.ts         # notícias (vazio por enquanto)
     │   └── utils/id.ts                 # newId() com fallback fora de HTTPS
     │       utils/file-name.ts          # uploadName: nome com extensão coerente para o servidor + spec
+    │       utils/image-metadata.ts     # tira EXIF/XMP/IPTC de JPEG, PNG e WebP antes do envio + spec
     ├── shared/                 # reutilizável entre features
     │   ├── components/floating-window/ # JANELA FLUTUANTE (peça central da UX)
     │   ├── components/empty-state/
@@ -149,7 +156,8 @@ src/
     │   └── sidebar/
     └── features/
         ├── home/               # landing
-        ├── auth/auth-dialog/   # diálogo único Entrar/Criar conta
+        ├── auth/auth-dialog/   # diálogo único Entrar/Criar conta/Esqueci minha senha
+        ├── auth/reset-password/ # página aberta pelo link de recuperação de senha
         ├── tables/             # "Minhas mesas" + create-table-dialog + online-tables (seção "Mesas online")
         ├── worldbuild/
         │   ├── worldbuild.ts           # página: explorador (com seletor de mundo) + área de janelas
@@ -170,7 +178,7 @@ src/
             │   └── blob-url.service.ts       # object URLs com cache (imagens de token)
             ├── state/                  # puro + specs: comandos (estado, payload) → estado, permissões, visão
             │   ├── commands.ts         # TABLE_COMMANDS, TableCommand, applyCommand (catálogo de comandos)
-            │   ├── scenes.ts levels.ts entries.ts tokens.ts drops.ts fog.ts drawings.ts notes.ts chat.ts lore.ts
+            │   ├── scenes.ts levels.ts entries.ts tokens.ts drops.ts inventory.ts fog.ts drawings.ts notes.ts chat.ts lore.ts
             │   ├── permissions.ts      # canEdit, sheetAccess, canSeeLoreItem… com Viewer { role, userId }
             │   ├── player-view.ts      # o que o jogador vê sob a névoa (tokens, anotações, portas)
             │   ├── sync.ts             # reconciliação da mesa online (confirmado + pendentes) e rajadas + spec
@@ -224,7 +232,7 @@ http/routes/frontend.ts   # entrega o app compilado (FRONTEND_DIR): lista fixa d
 `proxy.conf.json` (raiz) liga o `ng serve` ao servidor em desenvolvimento.
 
 Rotas (`app.routes.ts`, todas lazy):
-- `''` (Shell) → `''` Home · `mesas` Tables · `worldbuild` Worldbuild do mundo aberto (aceita `?novo=<tipo>` e `?abrir=<id>`).
+- `''` (Shell) → `''` Home · `mesas` Tables · `worldbuild` Worldbuild do mundo aberto (aceita `?novo=<tipo>`, `?abrir=<id>` e `?servidor=<id do mundo>`) · `redefinir-senha` recuperação de senha.
 - `mesa/:id` → GameTablePage (tela cheia, **fora** do Shell)
 - `mesa-online/:id` → a mesma GameTablePage com `data: { online: true }` (mesa do servidor)
 - `**` → redireciona para `''`
@@ -339,6 +347,9 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   `AuthService.user()` devolve um visitante fixo (`id: 'guest'`) quando ninguém está logado.
 - `isLoggedIn()` = há usuário (real ou visitante). `isGuest()` = é o visitante.
 - **No servidor** (`server/`), contas usam senha de 8 a 128 caracteres (sem as mais comuns), scrypt com pimenta e sessão por cookie HttpOnly; o papel na mesa vem da conta (dono = mestre, convite = jogador).
+- **Recuperação de senha** (conta do servidor): `POST /auth/password/forgot` e `/reset`, token de uso único, 30 minutos, só o
+  HMAC no banco; o link usa `PUBLIC_URL` e leva o token no fragmento da URL. E-mail por `MAIL_PROVIDER` (`none`, `log` só em
+  desenvolvimento, `resend`); sem serviço de e-mail, `npm run reset-link -- <e-mail>`.
 - Contas locais (provisórias): e-mail único (normalizado em minúsculas), senha com mínimo de 6 caracteres, hash SHA-256 (`dicetag:` + senha).
   Sessão = id do usuário em `localStorage['dicetag.session']`. **É provisório** — não é segurança real.
 - Todos os dados são separados por usuário (o visitante tem os próprios dados).
@@ -428,13 +439,14 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - **Na sessão** (`TableSessionService`): com sala, `dispatch` aplica pela reconciliação pura de `state/sync.ts`
   (confirmado + pendentes = tela; `ack` confirma com o payload final, `nack` desfaz e avisa, `cmd` de outra pessoa entra
   no confirmado, `state` do jogador substitui) e envia; `flush` não grava nada (o estado online nunca vai para o
-  IndexedDB). **Rajadas** (`burstKey`: mover tokens e memória da névoa) vão agrupadas a cada `BURST_MS` = 100 ms, só com
+  IndexedDB). **Rajadas** (`burstKey`: mover tokens, memória da névoa e controles de volume) vão agrupadas a cada `BURST_MS` = 100 ms, só com
   o último valor (`mergeBurst`/`squashPending`), por causa do limite de mensagens do servidor.
 - **Papel da conta:** `welcome.you.role`; `setRole` não faz nada online e a barra de ações mostra só o rótulo. A conta
   usada nas regras (`viewer`, chat, dono de personagem/item/efeito) é `me` = a do servidor.
 - **Rolagens no servidor:** `useAction` devolve `RollSent` e `quickRoll` devolve `null`; o resultado chega no chat e em
-  `session.serverRoll` (aviso da página). Estudos/Treinos e etiquetas de itens/status ainda não entram (o servidor
-  ainda não os calcula).
+  `session.serverRoll` (aviso da página). O servidor soma temas e itens equipados (`equippedTagLevels`), gasta a Mana e
+  treina os estudos (`realtime/rolls.ts`). O "Rolar" envia o que foi escolhido (`RollConfig` com os ids); só o modificador
+  digitado e as etiquetas de status vão como número (são livres também na mesa local).
 - **Névoa do jogador:** usa os polígonos `vision` do servidor (`serverVision`), que não envia as paredes; só o mestre
   grava a memória da névoa.
 - **Barra superior:** situação da conexão (Online, Reconectando…, Desconectado com o motivo na dica).
@@ -442,10 +454,25 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   uma `ServerFileStore` da mesa (mapas, camadas, tokens/fichas, sons, itens da mesa, imagens personalizadas do
   inventário vão para `/api/files`; o servidor confere tipo, cotas e quem baixa). Gravar arquivo = `uploadFile`
   (null + aviso `uploadFailed` se o servidor recusar; nada muda). Ler = `session.getBlob` / `BlobUrlService`: primeiro
-  o navegador (imagens do Worldbuild, ainda locais), depois o servidor. Nunca gravar `blob:` direto no `StorageService`.
-- **Limites:** o Worldbuild e o bestiário continuam locais (o mundo aberto não muda ao abrir a mesa online; imagens
-  de itens e raças do mundo só aparecem para quem as tem no navegador); pings e efeitos não são repassados; o EXIF das
-  imagens ainda não é removido antes do envio.
+  o navegador (mesas antigas), depois o servidor. Nunca gravar `blob:` direto no `StorageService`.
+  **`ServerFileStore.put` é o único caminho de envio:** imagens saem dali sem metadados (`withoutImageMetadata`), com a
+  orientação da foto preservada.
+- **Mundo da mesa online** (`WorldbuildService.openOnline`/`closeOnline`): as mesmas telas, com os itens vindos do
+  servidor. O dono (mestre) lê e grava o mundo (`/worlds/:id/items`, um item por vez, agrupado em 1 s, com nova tentativa
+  se a conexão falhar). O jogador lê `/tables/:id/lore` (`projectLore`: pastas reveladas + o mínimo do que a mesa mostra a
+  ele, fora da árvore: NPCs à vista, Raças e o cartão dos itens que aparecem para ele) e busca de novo com a mensagem
+  `world` ou quando `loreNeeds` muda. Quem controla um NPC do bestiário grava por `PATCH /tables/:id/npcs/:itemId`.
+  Minhas mesas → menu da mesa: "Preparar o mundo da mesa" (`/worldbuild?servidor=<id>`) e "Enviar … deste navegador"
+  (`WorldImportService`; o mundo local não muda).
+- **Pings e efeitos** (`TableRoom.sendEvent`, mensagem `event`): repassados sem gravar; o efeito leva a semente, então
+  todas as máquinas desenham o mesmo. A névoa vale (`eventVisibleTo`).
+- **Sons:** `TableState.playing` + comandos `setSoundPlaying`/`stopAllSounds` (horário carimbado pelo servidor). O mixer
+  online segue essa lista em todas as máquinas e entra no ponto certo da faixa (`trackOffset`, `utils/sound.ts`). O jogador
+  recebe só o som que está tocando, sem o nome. Param quando o último sai da mesa. Navegador bloqueou o som: aviso, e o
+  primeiro clique libera. Cada máquina tem o próprio volume (botão na barra superior, `dicetag.soundVolume`).
+- **Fichas dos outros:** com `Viewer.shared` (mesa online), o personagem de outro jogador abre em só leitura.
+- **Limites:** ficha gravada inteira (duas pessoas editando a mesma ficha: vale a última); memória da névoa gravada pelo
+  cliente do mestre; depois de 5 tentativas de reconexão (cerca de 30 s), é preciso recarregar a página.
 
 ### Vista isométrica e camadas do mapa
 - `Scene.isometric` (mestre, botão na barra superior): a vista vira `matrix(...)` = escala × `isoMatrix()` (gira 45° e
@@ -495,8 +522,8 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   personalização de quem largou (sem preço nem "equipado"; `unitOf` em `utils/inventory.ts`). Comandos em `state/drops.ts`
   (`addDrop`, `moveDrop`, `setDropQuantity`, `updateDrop` — tamanho e cor —, `removeDrop`) + spec. **Largar** = arrastar até o mapa (`ITEM_DRAG_TYPE`, JSON
   `ItemDragData`): do explorador da aba Lore (itens do tipo `item`) e de "Itens da mesa" só o **mestre**; do inventário,
-  quem edita a ficha (fichas da mesa, não a base do bestiário), **uma unidade** por arraste (`session.takeUnit`, o mesmo de
-  `transferItem`: imagem duplicada enquanto sobra unidade). Alinha ao centro do quadrado com a grade visível; vai para a
+  quem edita a ficha (fichas da mesa, não a base do bestiário), **uma unidade** por arraste (comando `dropFromInventory`, em
+  `state/inventory.ts`, como `transferItem` e `pickUpDrop`: imagem duplicada enquanto sobra unidade). Alinha ao centro do quadrado com a grade visível; vai para a
   camada em foco. Camada `drops-layer` (losango com imagem e "×N", borda na cor `color` — padrão `DROP_COLOR` —, lado
   `size` em quadrados — padrão `DROP_SIZE` = 0,8; Selecionar). **Clique** seleciona (`session.selectedDropId`,
   exclusivo com a seleção de tokens: `selectDrop` limpa os tokens e `selectToken` limpa o item); o mestre arrasta,
@@ -639,7 +666,7 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   (`session.buyer`: o selecionado ou o primeiro da conta): `buyItem` desconta os Eiros e passa **uma unidade**.
 - **Quantidade:** `InventoryEntry.quantity` (ausente = 1), coluna "Qtd." em todos os inventários. Na loja, comprar ou
   lootear baixa 1 e a linha fica com 0 ("Esgotado", o mestre repõe); no personagem, a linha some ao zerar.
-- **Transferência única** (`transferItem(from, inventoryId, to, cost)`): usada por compra, loot e "Dar para". Leva a
+- **Transferência única** (`transferItem(from, inventoryId, to, cost)`, um comando só, `state/inventory.ts`; no servidor, o preço vem da loja e o estoque é conferido): usada por compra, loot e "Dar para". Leva a
   personalização (nome, etiquetas, imagem) e nunca o preço; quem recebe empilha num item idêntico sem imagem própria
   ou ganha linha nova. Imagem: duplicada enquanto sobra unidade na origem; movida quando a linha some.
   Regras puras em `utils/inventory.ts` (`quantityOf`, `takeOne`, `addOne`) + spec.
@@ -880,9 +907,8 @@ repositórios por domínio, servidor autoritativo (névoa, rolagens, permissões
 - Névoa: visão só por token; portas sem tranca nem permissão (qualquer papel abre/fecha).
 - Paredes bloqueiam o movimento só pelo centro do token (o corpo do token pode encostar/sobrepor a parede).
 - Ctrl+Z cobre só desenhos (não tokens, paredes ou anotações).
-- **Terminar de ligar o front ao servidor:** a mesa online já usa a sala (reconciliação em `state/sync.ts`); faltam os
-  repositórios por domínio (SPEC §2) para arquivos (imagens/sons online), Worldbuild/bestiário e contas, os eventos
-  efêmeros (ping, efeitos) e, no servidor, comandos atômicos de compra/loot/drop e estudos/itens nas rolagens.
+- **Terminar de ligar o front ao servidor:** a mesa online e o mundo dela já usam o servidor; contas e mesas locais
+  continuam em paralelo (decidir se ficam na versão publicada). Fichas por campo em vez de gravadas inteiras (SPEC §1).
 - Mundos: limite fixo de 2 por usuário; trocar o mundo de uma mesa já criada ainda não é possível.
 - Mural de notícias alimentado por API/CMS (`NewsService.posts`).
 - Testes de componentes (hoje têm testes as funções puras de `utils/` e `state/`, as regras da ficha no modelo, a

@@ -4,10 +4,10 @@ Back-end do VTT: **API HTTP** (contas, mesas, convites, mundos, arquivos) + **sa
 WebSocket** (comandos em tempo real, validados e aplicados pelo servidor).
 
 Node.js + TypeScript · Fastify · `ws` · zod · SQLite embutido no Node (`node:sqlite`) · Vitest.
-Roda só na sua máquina: nada é publicado.
+Por padrão, roda só na sua máquina (`HOST=127.0.0.1`). Para publicar: [`OPERATIONS.md`](OPERATIONS.md).
 
-> **Estado atual:** o servidor está pronto e testado, e o app já o usa na **mesa online** (seção "Mesas online"
-> em Minhas mesas, ver §3.0). O resto do app continua no IndexedDB (ver [Próximos passos](#próximos-passos)).
+> **Estado atual:** o servidor está pronto e testado, e o app o usa por inteiro na **mesa online** (seção "Mesas online"
+> em Minhas mesas, ver §3.0), inclusive o mundo da mesa. Contas, mesas e mundos locais continuam no IndexedDB.
 > Também dá para testar pela página `/dev/` e pelos scripts abaixo.
 
 ---
@@ -103,9 +103,13 @@ Com os dois terminais abertos (servidor e `npm start`, ver §2) — ou só o ser
    **Código de convite** → **Entrar**.
 6. LGPD: menu da conta → **Baixar meus dados** ou **Excluir conta do servidor** (pede a senha).
 
-Mapas, tokens, sons e imagens de itens enviados na mesa online vão para o servidor (`/api/files`, cotas no `.env`):
-abra a mesa nas duas janelas e envie um mapa pelo mestre para conferir. Ainda locais: Worldbuild e bestiário, pings e
-efeitos especiais.
+Mapas, tokens, sons e imagens enviados na mesa online vão para o servidor (`/api/files`, cotas no `.env`), sem metadados
+(EXIF): abra a mesa nas duas janelas e envie um mapa pelo mestre para conferir. O mundo da mesa também mora no servidor:
+no menu da mesa, **Preparar o mundo da mesa** abre o Worldbuild dele e **Enviar … deste navegador** copia um mundo local.
+Pings, efeitos e sons aparecem em tempo real nas duas janelas.
+
+7. Senha esquecida: em **Entrar no servidor** → **Esqueci minha senha**. Com `MAIL_PROVIDER=log` no `.env`, o e-mail com o
+   link aparece no terminal do servidor. Sem serviço de e-mail, gere o link com `npm run reset-link -- e-mail@exemplo.com`.
 
 ### 3.1 Página de testes no navegador (o jeito mais visual)
 
@@ -141,10 +145,22 @@ No fim, mostra "Tudo certo.".
 
 ```bash
 cd server
-npm test            # 127 testes: unidade + integração (HTTP e WebSocket reais, banco em memória)
+npm test            # unidade + integração (HTTP e WebSocket reais, banco em memória)
 npm run typecheck   # checagem de tipos
 npm run check       # typecheck + testes + npm audit
 ```
+
+### 3.4 Dois navegadores de verdade
+
+```bash
+npm run build   # na raiz: o servidor entrega o app compilado
+cd server
+npm run e2e     # precisa do Chrome (ou da variável CHROME_PATH)
+```
+
+Abre o app em dois navegadores isolados, com contas diferentes, na mesma mesa online, e confere o que vai de um para o
+outro: Lore e segredos, NPC do bestiário, itens, rolagens, pings, efeitos, sons, EXIF, recuperação de senha e o servidor
+reiniciando no meio da partida. Sobe o próprio servidor, com banco, arquivos e segredos temporários: não toca em `data/`.
 
 Os testes do servidor rodam **um arquivo por vez** (pouca memória). Os do front-end (`npx ng test
 --watch=false`, na raiz) abrem vários processos em paralelo e podem esgotar a memória numa máquina com
@@ -176,14 +192,16 @@ experimental no Node. Os scripts já o escondem.
 
 | Rota | O quê |
 |---|---|
-| `POST /auth/register` · `POST /auth/login` · `POST /auth/logout` | Conta e sessão (cookie) — as únicas rotas públicas, com `/health` |
+| `POST /auth/register` · `POST /auth/login` · `POST /auth/logout` | Conta e sessão (cookie) — públicas, como `/health` e a recuperação de senha |
+| `POST /auth/password/forgot` · `POST /auth/password/reset` | Recuperação de senha (públicas, com limite de taxa) |
 | `POST /auth/logout-all` | Sair de todos os dispositivos |
 | `GET/PATCH /auth/me` · `POST /auth/password` | Conta atual, nome, troca de senha (renova a sessão) |
 | `GET /auth/me/export` · `DELETE /auth/me` | LGPD: baixar os próprios dados; excluir a conta (pede a senha) |
 | `GET/POST /tables` · `GET/PATCH/DELETE /tables/:id` | Mesas da conta (como mestre ou jogador) |
 | `GET /tables/:id/members` · `DELETE /tables/:id/members/:userId` | Membros (mestre remove, jogador sai) |
 | `POST/DELETE /tables/:id/invites` · `POST /invites/accept` | Convites (código mostrado uma vez, 7 dias) |
-| `GET /tables/:id/lore` | Itens do mundo da mesa (jogador: só os revelados) |
+| `GET /tables/:id/lore` | Itens do mundo da mesa (jogador: os revelados + o mínimo do que a mesa mostra a ele) |
+| `PATCH /tables/:id/npcs/:itemId` | Quem controla um NPC do bestiário grava ficha, barras, etiquetas e ações |
 | `GET/POST /worlds` · `PATCH/DELETE /worlds/:id` | Mundos (até 2) |
 | `GET /worlds/:id/items` · `PUT/DELETE /worlds/:id/items/:itemId` · `POST /worlds/:id/items/delete` | Worldbuild |
 | `POST /files?tableId=…` ou `?worldId=…` · `GET/DELETE /files/:id` | Imagens e áudios |
@@ -193,10 +211,10 @@ experimental no Node. Os scripts já o escondem.
 
 Mensagens JSON com o campo `t`; o protocolo completo está em `src/realtime/protocol.ts`.
 
-- Cliente envia `cmd` (um dos 49 comandos da mesa, os mesmos do `TableSessionService`), `roll`, `event`
+- Cliente envia `cmd` (um dos comandos da mesa, os mesmos do `TableSessionService`), `roll`, `event`
   (ping/efeito, não salvo) e `sync`. Cada tipo tem o próprio limite de tamanho (`realtime/budgets.ts`).
 - Servidor responde `welcome` (estado inicial), `ack`/`nack` (aceito/recusado), `cmd` (para o mestre),
-  `state` (para jogadores: o estado já filtrado, só quando muda para eles), `event` e `error`.
+  `state` (para jogadores: o estado já filtrado, só quando muda para eles), `event`, `world` (o mundo mudou) e `error`.
 - Com névoa, `welcome`/`state` levam `vision`: os polígonos de visão calculados no servidor. O jogador
   não recebe as paredes (revelariam a planta), só as portas que já viu.
 
@@ -209,6 +227,8 @@ As regras completas estão no [`BACKEND_SECURITY.md`](../BACKEND_SECURITY.md); a
   (dá para trocá-la sem invalidar senhas). Política no zod: 8 a 128 caracteres, sem as mais comuns.
   Login com a mesma resposta e o mesmo tempo para e-mail inexistente e senha errada; atraso crescente
   por e-mail + IP e por e-mail.
+- **Recuperação de senha:** token de uso único, 30 minutos, só o HMAC no banco; mesma resposta exista ou não o e-mail;
+  link com o endereço da configuração (nunca o cabeçalho Host) e o token no fragmento da URL; redefinir encerra todas as sessões.
 - **Sessão:** token aleatório num cookie `HttpOnly` + `Secure` + `SameSite=Strict` (`__Host-`); o banco guarda
   só o HMAC. Expira em 7 dias (ou 24 h sem uso). Logout, "sair de todos" e troca de senha (que renova a
   sessão) valem na hora, inclusive no WebSocket.
@@ -221,8 +241,9 @@ As regras completas estão no [`BACKEND_SECURITY.md`](../BACKEND_SECURITY.md); a
   é aplicada pelo servidor com a Raça do mundo; paredes valem em todo movimento dele.
 - **O jogador só recebe o que pode ver:** cena aberta; com névoa, só tokens, anotações, itens, efeitos e
   portas à vista (visão calculada no servidor), sem as paredes; sem fichas de NPC não liberadas, sem
-  NPCs fora da vista, sem ações do mestre, sem sons.
-- **Rolagens no servidor**, com gerador criptográfico obrigatório e níveis lidos da ficha atual.
+  NPCs fora da vista, sem ações do mestre; dos sons, só o que está tocando, sem o nome da faixa.
+- **Rolagens no servidor**, com gerador criptográfico obrigatório e níveis lidos da ficha atual (temas e itens equipados).
+- **Itens:** comprar, lootear, dar, largar e pegar são um comando só, com preço e estoque conferidos aqui.
 - **Entrada:** tudo validado (zod); JSON com `__proto__` recusado; limites de tamanho e profundidade.
 - **Arquivos:** recebidos em streaming; tipo conferido pelos bytes, pela extensão e pelo tipo declarado
   (SVG/HTML recusados); nome gerado pelo servidor; cotas por conta e por mesa, conferidas no registro;
@@ -241,15 +262,10 @@ As regras completas estão no [`BACKEND_SECURITY.md`](../BACKEND_SECURITY.md); a
 
 ## Próximos passos
 
-1. **Terminar de ligar o front-end ao servidor** (SPEC.md §2): a mesa online já envia os comandos pelo
-   WebSocket e usa a `vision` do servidor; faltam os repositórios por domínio (arquivos, mundos/Worldbuild,
-   contas) com a implementação HTTP trocando a do IndexedDB, os eventos efêmeros (ping, efeitos) e remover os
-   metadados (EXIF) das imagens antes de enviar. O IndexedDB continua como modo offline.
-2. Comandos atômicos no servidor para compra, loot, largar/pegar itens e ficha por campo (SPEC §1).
-3. Memória da névoa calculada no servidor (hoje o cliente do mestre a grava) e etiquetas de itens,
-   status e estudos nas rolagens do servidor.
-4. Antes de publicar: seguir o [`OPERATIONS.md`](OPERATIONS.md) (HTTPS, `NODE_ENV=production`, segredos,
-   backups, política de privacidade) e verificação de e-mail.
+1. Publicar: seguir o [`OPERATIONS.md`](OPERATIONS.md) (hospedagem, HTTPS, `NODE_ENV=production`, segredos, backups, e-mail,
+   política de privacidade).
+2. Fichas por campo em vez de gravadas inteiras (SPEC §1) e memória da névoa calculada no servidor.
+3. Verificação de e-mail no cadastro. Decidir se contas e mesas locais ficam na versão publicada.
 
 ## Estrutura
 
@@ -268,7 +284,7 @@ server/
 │   ├── http/              # plugins (segurança, sessão) e rotas
 │   ├── realtime/          # sala da mesa: protocolo, limites, esquemas, regras (e da ficha), visão, projeção, rolagem
 │   └── ops/               # backup e teste de restauração
-├── scripts/               # setup, seed, smoke, backup, backup-check
+├── scripts/               # setup, seed, smoke, e2e, reset-link, backup, backup-check
 ├── OPERATIONS.md          # operação segura em produção
 ├── dev/                   # página /dev/
 └── test/                  # testes Vitest

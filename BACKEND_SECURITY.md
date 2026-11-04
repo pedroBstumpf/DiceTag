@@ -87,10 +87,13 @@ function safeEqual(a: Buffer, b: Buffer): boolean {
 }
 ```
 
-### Redefinição de senha (quando houver)
+### Redefinição de senha (`AuthService.createPasswordReset` / `resetPassword`)
 
 - Token aleatório de 32 bytes (`randomBytes(32)`), enviado ao usuário; no banco guarde **só o
-  SHA-256** do token, com expiração curta (30–60 min) e uso único.
+  hash** do token (aqui, o HMAC-SHA256 de `TokenService`, como sessões e convites), com expiração
+  curta (30–60 min) e uso único.
+- O link usa o endereço da configuração (`PUBLIC_URL`), nunca o cabeçalho Host, e leva o token no
+  fragmento da URL, que não vai ao servidor nem a logs.
 - Ao redefinir, **invalide todas as sessões** do usuário.
 - A resposta de "esqueci a senha" é a mesma exista ou não o e-mail.
 

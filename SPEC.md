@@ -20,9 +20,11 @@ Complementa o [`ARCHITECTURE.md`](ARCHITECTURE.md) (como o app é hoje) e o [`CL
 | Sala da mesa com snapshot + versão, comandos validados (formato e permissão) e aplicados com `applyCommand` | `server/src/realtime/` | §1 itens 1–3 e 5; falta a reconciliação no cliente (item 4) |
 | Projeção por jogador (cena aberta, sem notas secretas, fichas de NPC liberadas, sem ações do mestre) com **visão calculada no servidor**: com névoa, só tokens, anotações, itens, efeitos e portas à vista, sem as paredes; os polígonos vão no campo `vision` | `realtime/projection.ts`, `realtime/vision.ts` | §3.1 (a memória da névoa ainda é gravada pelo cliente do mestre) |
 | Ficha validada no servidor (esquema estrito com os limites das regras; raça aplicada pelo servidor; máximo das barras só do mestre; itens revelados) | `realtime/sheet-rules.ts` | §1 "ficha gravada inteira": protegida até virar comandos por campo |
-| Rolagem no servidor (`crypto.randomInt`, níveis dos temas da ficha atual, gasto de Espírito) | `realtime/rolls.ts` | §3.2 (etiquetas de itens, status e estudos ainda valem 0) |
+| Rolagem no servidor (`crypto.randomInt`, níveis da ficha atual, gasto de Espírito) | `realtime/rolls.ts` | §3.2 |
 | Papel vindo da conta (dono = mestre, convite = jogador) e permissões por comando | `realtime/command-rules.ts` | §3.3 |
-| **Mesa online no front**: conta do servidor, mesas e convites (`core/services/server-*.ts`, `online-tables.service.ts`) e a mesa de jogo ligada à sala (`TableRoom`), com reconciliação no cliente | `features/game-table/state/sync.ts`, `services/table-room.ts` | §1 item 4 (feito); arquivos da mesa online no servidor (`FileStore`/`ServerFileStore`, primeiro repositório do §2); faltam Worldbuild e os eventos efêmeros |
+| **Mesa online no front**: conta do servidor, mesas e convites (`core/services/server-*.ts`, `online-tables.service.ts`) e a mesa de jogo ligada à sala (`TableRoom`), com reconciliação no cliente | `features/game-table/state/sync.ts`, `services/table-room.ts` | §1 item 4 (feito); arquivos e Worldbuild da mesa online no servidor; eventos efêmeros (ping, efeitos) e sons em tempo real |
+| Itens que mudam de lugar em um comando só, com preço e estoque conferidos no servidor | `state/inventory.ts`, `realtime/command-rules.ts` | §1 "transferItem…": feito |
+| Rolagem no servidor com itens equipados, estudos e NPC do bestiário | `realtime/rolls.ts` | §3.2: feito |
 
 ---
 
@@ -60,7 +62,7 @@ Não usar CRDT no estado da mesa: é complexo demais para o ganho. A exceção �
 |---|---|---|
 | `toggleDoor`, `toggleTokenPublic`, `toggleLoreReveal` | Dois cliques ao mesmo tempo se anulam | Trocar por "definir" com o valor final: `setDoorOpen { open }`, `setTokenPublic { part, value }`… |
 | Ficha gravada inteira (`updateEntry { sheet }`, `updatePlacement { sheet }` montados com `{ ...fichaAtual, ...patch }`) | Um apaga a alteração do outro: o cliente lê a ficha, muda um campo e regrava tudo | Comandos de ficha por campo ou por item: `setSheetField`, `addInventoryItem`, `setInventoryQuantity`, `setTagLevel`… |
-| `transferItem`, `buyItem`, `lootItem` (várias gravações no cliente) | Dois jogadores comprando a última unidade duplicam o item | **Um comando só, executado no servidor**, que confere estoque e Eiros e faz tudo de uma vez |
+| ~~`transferItem`, `buyItem`, `lootItem` (várias gravações no cliente)~~ | ~~Dois jogadores comprando a última unidade duplicam o item~~ | **Feito:** um comando só, executado no servidor, que confere estoque e Eiros (`state/inventory.ts`) |
 | `updateScene { patch }` genérico | O servidor não sabe o que está sendo alterado (permissão) | Comandos específicos para os campos que o jogador pode mexer; o patch genérico fica só para o mestre |
 | Memória da névoa (`setExplored`) gravada pelo cliente | Cada cliente teria uma máscara diferente | Calcular no servidor a partir das posições oficiais dos tokens, ou guardar uma máscara por jogador |
 
