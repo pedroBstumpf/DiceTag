@@ -1,4 +1,5 @@
 import { uploadName } from '../utils/file-name';
+import { withoutImageMetadata } from '../utils/image-metadata';
 import { FileStore } from './file-store';
 import { ServerApiService } from './server-api.service';
 
@@ -11,6 +12,9 @@ export type FileScope = { tableId: string } | { worldId: string };
  * O servidor confere o tipo pelos bytes (só imagens raster e áudio), aplica as cotas da conta e
  * da mesa e só entrega o arquivo a quem participa. O id é gerado pelo servidor. Não é um serviço
  * do Angular: cada mesa ou mundo aberto cria o seu.
+ *
+ * Único caminho de envio ao servidor: imagens saem daqui sem metadados (EXIF, localização), porque
+ * os outros participantes baixam o arquivo.
  */
 export class ServerFileStore extends FileStore {
   constructor(
@@ -20,7 +24,8 @@ export class ServerFileStore extends FileStore {
     super();
   }
 
-  async put(file: Blob): Promise<string> {
+  async put(original: Blob): Promise<string> {
+    const file = await withoutImageMetadata(original);
     const query = 'tableId' in this.scope ? `tableId=${encodeURIComponent(this.scope.tableId)}` : `worldId=${encodeURIComponent(this.scope.worldId)}`;
     const { file: saved } = await this.api.upload<{ file: { id: string } }>(`/files?${query}`, file, uploadName(file));
     return saved.id;
