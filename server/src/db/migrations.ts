@@ -100,4 +100,14 @@ export const MIGRATIONS: readonly string[] = [
   CREATE INDEX files_table ON files(table_id);
   CREATE INDEX files_world ON files(world_id);
   `,
+  // 2 — recuperação de senha: só o HMAC do token fica no banco, com prazo curto
+  `
+  CREATE TABLE password_resets (
+    token_hash TEXT PRIMARY KEY,
+    user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL
+  ) STRICT;
+  CREATE INDEX password_resets_user ON password_resets(user_id);
+  `,
 ];

@@ -36,7 +36,8 @@ describe('migrações', () => {
     legacy.exec('PRAGMA user_version = 1');
     legacy.close();
     const db = openDatabase(path);
-    expect(versions(db)).toEqual([1]);
+    // A primeira migração já estava lá (reaplicá-la daria erro); as seguintes entram normalmente
+    expect(versions(db)).toEqual(MIGRATIONS.map((_, i) => i + 1));
     db.close();
   });
 
@@ -48,7 +49,7 @@ describe('migrações', () => {
 
     migrate(db, path, [...MIGRATIONS, 'CREATE TABLE nova (id TEXT PRIMARY KEY) STRICT']);
     const [backup] = readdirSync(join(dir, 'backups'));
-    expect(backup).toMatch(/^zehenia-.*-antes-v2\.db$/);
+    expect(backup).toMatch(new RegExp(`^zehenia-.*-antes-v${MIGRATIONS.length + 1}\\.db$`));
     const copy = new DatabaseSync(join(dir, 'backups', backup));
     expect(copy.prepare('SELECT COUNT(*) AS n FROM users').get()).toEqual({ n: 1 });
     expect(copy.prepare("SELECT name FROM sqlite_master WHERE name = 'nova'").get()).toBeUndefined();

@@ -1,6 +1,7 @@
 import type { Config } from './config/env';
 import type { Db } from './db/database';
 import { FilesRepository } from './repositories/files';
+import { PasswordResetsRepository } from './repositories/password-resets';
 import { SessionsRepository } from './repositories/sessions';
 import { TablesRepository } from './repositories/tables';
 import { UsersRepository } from './repositories/users';
@@ -8,6 +9,7 @@ import { WorldsRepository } from './repositories/worlds';
 import { PasswordHasher } from './security/password';
 import { TokenService } from './security/tokens';
 import { AuthService } from './services/auth.service';
+import { createMailer, type Mailer } from './services/mailer';
 
 /**
  * Dependências do servidor montadas num lugar só (injeção manual, sem framework de DI).
@@ -22,6 +24,7 @@ export interface AppContext {
   files: FilesRepository;
   tokens: TokenService;
   auth: AuthService;
+  mailer: Mailer;
 }
 
 export function createContext(config: Config, db: Db): AppContext {
@@ -30,6 +33,7 @@ export function createContext(config: Config, db: Db): AppContext {
   const worlds = new WorldsRepository(db);
   const tokens = new TokenService(config.TOKEN_SECRET);
   const hasher = new PasswordHasher(config.peppers, config.PASSWORD_COST);
+  const resets = new PasswordResetsRepository(db);
   return {
     config,
     db,
@@ -38,6 +42,7 @@ export function createContext(config: Config, db: Db): AppContext {
     tables: new TablesRepository(db),
     files: new FilesRepository(db, config.FILES_DIR),
     tokens,
-    auth: new AuthService(db, users, sessions, worlds, hasher, tokens, config),
+    auth: new AuthService(db, users, sessions, worlds, hasher, tokens, config, resets),
+    mailer: createMailer(config),
   };
 }

@@ -70,6 +70,20 @@ const schema = z.object({
    * API, sem o `ng serve`. Vazio = só a API. Ex.: ../dist/zehenia/browser
    */
   FRONTEND_DIR: z.string().max(1000).default(''),
+  /**
+   * Endereço público do app, usado nos links enviados por e-mail. Vem da configuração, nunca do
+   * cabeçalho Host da requisição (quem pede o link poderia apontá-lo para outro site). Vazio = a
+   * primeira de ALLOWED_ORIGINS.
+   */
+  PUBLIC_URL: z.string().max(300).default(''),
+  /**
+   * Envio de e-mails: `none` (sem envio; recuperação por `npm run reset-link`), `log` (escreve no
+   * terminal; só desenvolvimento) ou `resend` (API HTTP do Resend, com MAIL_API_KEY e MAIL_FROM).
+   */
+  MAIL_PROVIDER: z.enum(['none', 'log', 'resend']).default('none'),
+  MAIL_API_KEY: z.string().max(500).default(''),
+  /** Remetente, ex.: Crônicas de Zehenia <nao-responda@exemplo.com> (domínio verificado no serviço). */
+  MAIL_FROM: z.string().max(300).default(''),
   /** Página de testes do WebSocket em /dev (só desenvolvimento). */
   DEV_TOOLS: bool(false),
   /** Limites de requisições (desligar só nos testes automatizados). */
@@ -80,8 +94,10 @@ export type Env = z.infer<typeof schema>;
 
 /** Configuração pronta para uso (origens, proxies e pimentas já interpretados). */
 export interface Config
-  extends Omit<Env, 'ALLOWED_ORIGINS' | 'TRUSTED_PROXIES' | 'PASSWORD_PEPPER' | 'PASSWORD_PEPPER_VERSION' | 'PASSWORD_PEPPERS_PREVIOUS'> {
+  extends Omit<Env, 'ALLOWED_ORIGINS' | 'TRUSTED_PROXIES' | 'PASSWORD_PEPPER' | 'PASSWORD_PEPPER_VERSION' | 'PASSWORD_PEPPERS_PREVIOUS' | 'PUBLIC_URL'> {
   allowedOrigins: ReadonlySet<string>;
+  /** Origem pública do app (sem barra no fim): sempre uma das origens autorizadas. */
+  publicUrl: string;
   trustedProxies: TrustedProxies;
   peppers: Peppers;
   isProduction: boolean;
@@ -100,10 +116,15 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
     const problems = parsed.error.issues.map((i) => `  - ${i.path.join('.')}: ${i.message}`).join('\n');
     throw new Error(`Configuração inválida (arquivo .env):\n${problems}`);
   }
-  const { ALLOWED_ORIGINS, TRUSTED_PROXIES, PASSWORD_PEPPER, PASSWORD_PEPPER_VERSION, PASSWORD_PEPPERS_PREVIOUS, ...env } = parsed.data;
+  const { ALLOWED_ORIGINS, TRUSTED_PROXIES, PASSWORD_PEPPER, PASSWORD_PEPPER_VERSION, PASSWORD_PEPPERS_PREVIOUS, PUBLIC_URL, ...env } = parsed.data;
+  const allowedOrigins = parseOrigins(ALLOWED_ORIGINS);
+  const publicUrl = PUBLIC_URL.replace(/\/$/, '') || [...allowedOrigins][0];
+  if (!allowedOrigins.has(publicUrl)) throw new Error('PUBLIC_URL precisa ser uma das origens de ALLOWED_ORIGINS.');
+  if (env.MAIL_PROVIDER === 'resend' && (env.MAIL_API_KEY.length < 10 || !env.MAIL_FROM)) throw new Error('MAIL_PROVIDER=resend precisa de MAIL_API_KEY e MAIL_FROM.');
   const config: Config = {
     ...env,
-    allowedOrigins: parseOrigins(ALLOWED_ORIGINS),
+    allowedOrigins,
+    publicUrl,
     trustedProxies: parseProxies(TRUSTED_PROXIES),
     peppers: { version: PASSWORD_PEPPER_VERSION, current: PASSWORD_PEPPER, previous: parsePeppers(PASSWORD_PEPPERS_PREVIOUS, PASSWORD_PEPPER_VERSION) },
     isProduction: env.NODE_ENV === 'production',
@@ -168,6 +189,8 @@ function assertSafeForProduction(config: Config): void {
   if (config.DEV_TOOLS) problems.push('DEV_TOOLS precisa ser false');
   if (!config.RATE_LIMIT) problems.push('RATE_LIMIT precisa ser true');
   if (config.PASSWORD_COST < 17) problems.push('PASSWORD_COST precisa ser 17 ou mais');
+  // O texto do e-mail leva o link de recuperação de senha, que não pode ir para o log
+  if (config.MAIL_PROVIDER === 'log') problems.push('MAIL_PROVIDER não pode ser log');
   const peppers = [config.peppers.current, ...(config.peppers.previous?.values() ?? [])];
   if (peppers.includes(config.TOKEN_SECRET)) problems.push('TOKEN_SECRET e as pimentas (PASSWORD_PEPPER*) precisam ser diferentes');
   for (const origin of config.allowedOrigins) {

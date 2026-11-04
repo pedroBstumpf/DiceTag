@@ -3,6 +3,8 @@ import { z } from 'zod';
 import type { AppContext } from '../../context';
 import type { RealtimeHub } from '../../realtime/hub';
 import { AccountService } from '../../services/account.service';
+import { PASSWORD_RESET_MINUTES } from '../../services/auth.service';
+import { passwordResetMail } from '../../services/mailer';
 import { audit } from '../../lib/audit';
 import { HttpError, parse } from '../../lib/errors';
 import { email, newPassword, passwordInput, text, withPasswordPolicy } from '../../lib/schemas';
@@ -14,12 +16,14 @@ const loginBody = z.strictObject({ email, password: passwordInput });
 const passwordBody = z.strictObject({ current: passwordInput, next: newPassword });
 const profileBody = z.strictObject({ name: text(1, 60) });
 const deleteBody = z.strictObject({ password: passwordInput });
+const forgotBody = z.strictObject({ email });
+const resetBody = z.strictObject({ token: z.string().min(20).max(100).regex(/^[A-Za-z0-9_-]+$/), password: newPassword });
 
 /**
  * /api/auth — cadastro, login, logout (desta sessão ou de todas), conta atual, perfil, troca de senha,
  * exportação dos dados e exclusão da conta (LGPD).
  * O token de sessão só existe no cookie HttpOnly: nunca aparece no corpo das respostas.
- * Públicas (sem sessão): cadastro, login e logout; as demais exigem login (hook de `plugins/auth.ts`).
+ * Públicas (sem sessão): cadastro, login, logout e recuperação de senha; as demais exigem login (hook de `plugins/auth.ts`).
  */
 export async function authRoutes(app: FastifyInstance, ctx: AppContext, hub: RealtimeHub): Promise<void> {
   const account = new AccountService(ctx, hub);
@@ -54,6 +58,37 @@ export async function authRoutes(app: FastifyInstance, ctx: AppContext, hub: Rea
       audit(req.log, 'sessao.encerrada', { userId: req.auth.user.id });
     }
     clearSessionCookie(reply, ctx);
+    return reply.code(204).send();
+  });
+
+  // --- Recuperação de senha ------------------------------------------------------
+
+  /**
+   * Pede o link por e-mail. A resposta é sempre a mesma, exista ou não a conta, e sai antes do envio
+   * (o tempo de resposta também não entrega se o e-mail tem conta).
+   */
+  app.post('/password/forgot', { config: { ...AUTH_RATE_LIMIT, ...PUBLIC } }, async (req, reply) => {
+    const body = parse(forgotBody, req.body);
+    const attempt = { emailRef: ctx.tokens.ref(body.email), ip: req.ip };
+    if (!ctx.mailer.enabled) {
+      audit(req.log, 'senha.recuperacao_sem_email', attempt);
+      return reply.code(202).send({ ok: true });
+    }
+    audit(req.log, 'senha.recuperacao_pedida', attempt);
+    const request = ctx.auth.createPasswordReset(body.email);
+    if (request) {
+      const mail = passwordResetMail(request.user.email, request.user.name, request.link, PASSWORD_RESET_MINUTES);
+      void ctx.mailer.send(mail).catch((err: unknown) => req.log.error({ motivo: err instanceof Error ? err.message : 'desconhecido', userId: request.user.id }, 'e-mail de recuperação não enviado'));
+    }
+    return reply.code(202).send({ ok: true });
+  });
+
+  /** Redefine a senha com o token do link. Não abre sessão: a pessoa entra de novo com a senha nova. */
+  app.post('/password/reset', { config: { ...AUTH_RATE_LIMIT, ...PUBLIC } }, async (req, reply) => {
+    const body = parse(resetBody, req.body);
+    const userId = await ctx.auth.resetPassword(body.token, body.password, req.ip);
+    hub.userSessionsEnded(userId);
+    audit(req.log, 'senha.redefinida', { userId, ip: req.ip });
     return reply.code(204).send();
   });
 
