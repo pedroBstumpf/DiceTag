@@ -300,6 +300,12 @@ export class MapStage {
   private readonly sceneId = computed(() => this.scene()?.id);
 
   constructor() {
+    // Ping de outra pessoa na mesa online
+    effect(() => {
+      const ping = this.session.remotePing();
+      if (ping) untracked(() => this.addPing(ping));
+    });
+
     // Carrega a imagem da cena ativa (ou usa o papel quadriculado)
     effect(async (onCleanup) => {
       const { sceneId, blobId } = this.mapKey();
@@ -424,6 +430,7 @@ export class MapStage {
       this.capture(event);
     } else if (tool === 'ping') {
       this.addPing(p);
+      this.session.sendPing(p);
     } else if (tool === 'fog') {
       this.onFogDown(event, p);
     } else if (tool === 'draw') {

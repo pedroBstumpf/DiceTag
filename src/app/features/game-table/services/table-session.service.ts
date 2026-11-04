@@ -3,7 +3,7 @@ import { Point } from '../../../core/models/geometry.model';
 import { WorldItem, npcSheetOf, npcTokenOf } from '../../../core/models/world-item.model';
 import { WorldbuildService } from '../../worldbuild/services/worldbuild.service';
 import {
-  BRUSH_COLORS,
+  FxKind, BRUSH_COLORS,
   BRUSH_WIDTHS,
   ChatMessage,
   DEFAULT_FX,
@@ -98,7 +98,7 @@ import {
   squashPending,
   startSync,
 } from '../state/sync';
-import { RoomIdentity, RoomMessage, RoomRoll, RoomStatus, TableRoom } from './table-room';
+import { RoomIdentity, RoomMessage, RoomRoll, RoomEvent, RoomStatus, TableRoom } from './table-room';
 import { RemovedStroke, strokesToErase } from '../state/drawings';
 import { findPlacement, levelOf, tokenSheetPlacement, uniqueName } from '../state/helpers';
 import { clampLevelIn, levelCountOf } from '../state/levels';
@@ -775,6 +775,8 @@ export class TableSessionService extends SheetStore {
   readonly armedFx = signal<ArmedFx | null>(null);
   /** Efeitos em exibição no mapa. */
   readonly effects = signal<FxInstance[]>([]);
+  /** Último ping de outra pessoa (o mapa mostra). */
+  readonly remotePing = signal<Point | null>(null);
   /** Ferramenta para a qual voltar depois de lançar o efeito de uma ação. */
   private fxReturnTool: TableTool = 'select';
 
@@ -805,15 +807,22 @@ export class TableSessionService extends SheetStore {
       if (armed) this.cancelArmedFx();
       return;
     }
-    const drawing = buildFx(kind, color, from, to, {
-      uid: `fx-${id}`,
-      scale,
-      grid: this.activeScene()?.gridSize ?? 70,
-      random: seededRandom(Math.floor(Math.random() * 2 ** 32)),
-    });
+    // Mesma semente nas outras máquinas: todos veem o mesmo desenho
+    const seed = Math.floor(Math.random() * 2 ** 32);
+    this.showFx(kind, color, from, to, scale, seed);
+    if (this.room && sceneId) {
+      const level = this.currentLevel();
+      this.room.sendEvent({ kind: 'fx', sceneId, fx: { kind, color, from, to, seed, scale, ...(level > 0 && { level }) } });
+    }
+    if (armed) this.cancelArmedFx();
+  }
+
+  /** Mostra um efeito na tela (transitório: sai sozinho ao terminar). */
+  private showFx(kind: FxKind, color: string, from: Point, to: Point, scale: number, seed: number): void {
+    const id = newId();
+    const drawing = buildFx(kind, color, from, to, { uid: `fx-${id}`, scale, grid: this.activeScene()?.gridSize ?? 70, random: seededRandom(seed) });
     this.effects.update((list) => [...list, { id, drawing }]);
     setTimeout(() => this.effects.update((list) => list.filter((f) => f.id !== id)), drawing.duration + 100);
-    if (armed) this.cancelArmedFx();
   }
 
   // --- Efeitos fixos no mapa (salvos na cena) ------------------------------
@@ -1001,7 +1010,27 @@ export class TableSessionService extends SheetStore {
       case 'world':
         this.worldbuild.refreshOnline();
         return;
+      case 'event':
+        this.onRoomEvent(message.event);
+        return;
     }
+  }
+
+  /** Ping ou efeito de outra pessoa: aparece aqui se for a cena aberta (efeito: na camada em foco). */
+  private onRoomEvent(event: RoomEvent): void {
+    if (event.sceneId !== this.activeSceneId()) return;
+    if (event.kind === 'ping') {
+      this.remotePing.set({ x: event.x, y: event.y });
+      return;
+    }
+    const { fx } = event;
+    if (levelOf(fx) === this.currentLevel()) this.showFx(fx.kind, fx.color, fx.from, fx.to, fx.scale, fx.seed);
+  }
+
+  /** Marca um ping para os outros na mesa online (na mesa local, só o próprio mapa mostra). */
+  sendPing(p: Point): void {
+    const sceneId = this.activeSceneId();
+    if (this.room && sceneId) this.room.sendEvent({ kind: 'ping', sceneId, x: p.x, y: p.y });
   }
 
   /** Envia as rajadas pendentes, cada uma como um comando só (troca os pendentes dela por ele). */

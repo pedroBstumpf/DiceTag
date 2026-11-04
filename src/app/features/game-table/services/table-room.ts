@@ -1,5 +1,5 @@
 import { Point } from '../../../core/models/geometry.model';
-import { RollConfig, TableRole, TableState } from '../../../core/models/table-session.model';
+import { FxKind, RollConfig, TableRole, TableState } from '../../../core/models/table-session.model';
 import { TableCommandType } from '../state/commands';
 
 /** Quem está conectado, segundo o servidor (o papel vem da conta: dono = mestre). */
@@ -22,9 +22,14 @@ export type RoomMessage =
   | { t: 'nack'; seq: number; reason: string }
   | { t: 'cmd'; version: number; type: TableCommandType; payload: unknown; by: string }
   | { t: 'state'; version: number; state: TableState; vision: Point[][] | null }
-  | { t: 'event'; event: unknown; by: string }
+  | { t: 'event'; event: RoomEvent; by: string }
   | { t: 'world' }
   | { t: 'error'; code: string; message: string };
+
+/** Evento efêmero: repassado a quem pode vê-lo, sem ser gravado (espelho de `eventSchema` do servidor). */
+export type RoomEvent =
+  | { kind: 'ping'; sceneId: string; x: number; y: number }
+  | { kind: 'fx'; sceneId: string; fx: { kind: FxKind; color: string; from: Point; to: Point; seed: number; scale: number; level?: number } };
 
 /** Pedido de rolagem: o servidor sorteia, recalcula as tags com a ficha atual e grava no chat. */
 export interface RoomRoll {
@@ -77,6 +82,10 @@ export class TableRoom {
 
   sendRoll(seq: number, roll: RoomRoll): boolean {
     return this.send({ t: 'roll', seq, ...roll });
+  }
+
+  sendEvent(event: RoomEvent): boolean {
+    return this.send({ t: 'event', event });
   }
 
   /** Pede o estado completo de novo (ex.: depois de um comando recusado). */
