@@ -342,7 +342,7 @@ export class TableSessionService extends SheetStore {
     return this.tokens().flatMap((p) => this.resolveToken(p, byId) ?? []);
   });
   /** Quem está olhando a mesa (papel + conta), para as regras de `state/permissions.ts`. */
-  private readonly viewer = computed<Viewer>(() => ({ role: this.role(), userId: this.me()?.id }));
+  private readonly viewer = computed<Viewer>(() => ({ role: this.role(), userId: this.me()?.id, shared: !!this.online() }));
 
   /** Desenhos da cena ativa. */
   readonly drawings = computed(() => this.activeScene()?.drawings ?? NO_STROKES);
