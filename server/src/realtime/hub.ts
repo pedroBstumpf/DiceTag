@@ -3,7 +3,7 @@ import type { Duplex } from 'node:stream';
 import type { FastifyBaseLogger } from 'fastify';
 import { WebSocketServer, type RawData } from 'ws';
 import type { AppContext } from '../context';
-import type { TableCommand, TableState, Viewer, WorldItem } from '../domain';
+import type { TableCommand, TableState, TokenSettings, Viewer, WorldItem } from '../domain';
 import { audit } from '../lib/audit';
 import { clientIp } from '../lib/client-ip';
 import { newId, isSafeId } from '../lib/ids';
@@ -15,7 +15,7 @@ import { MAX_MESSAGE_BYTES, budgetOf } from './budgets';
 import type { RuleContext } from './command-rules';
 import { CLOSE, clientMessage, type ClientMessage } from './protocol';
 import { Room, type Client, type ClientView } from './room';
-import { performRoll } from './rolls';
+import { cryptoRandom, performRoll } from './rolls';
 import { WorldView } from './world';
 
 /** Intervalo do ping de verificação (conexões mortas caem em até 2 intervalos). */
@@ -171,9 +171,10 @@ export class RealtimeHub {
         return room.handleCommand(client, msg.seq, msg.type, msg.payload);
       case 'roll': {
         const viewer = { role: client.role, userId: client.userId };
-        const result = performRoll(room.snapshot.state, msg, viewer, client.userName, Date.now(), newId());
+        const result = performRoll(room.snapshot.state, msg, viewer, client.userName, Date.now(), newId(), cryptoRandom, room.world);
         if (!result.ok) return room.send(client, { t: 'nack', seq: msg.seq, reason: result.reason });
         for (const command of result.commands) room.apply(command, client.userId);
+        if (result.world) this.saveWorldNpc(room, result.world.item, result.world.token);
         return room.send(client, { t: 'ack', seq: msg.seq, version: room.snapshot.version, type: 'roll', payload: result.message });
       }
       case 'event':
@@ -184,6 +185,14 @@ export class RealtimeHub {
       case 'sync':
         return room.sendState(client, 'state');
     }
+  }
+
+  /** Grava o token de um NPC do bestiário (gasto de Mana numa rolagem pela ficha base). */
+  private saveWorldNpc(room: Room, item: WorldItem, token: TokenSettings): void {
+    const table = this.ctx.tables.find(room.tableId);
+    if (!table) return;
+    this.ctx.worlds.upsertItem(room.worldId, table.ownerId, item.id, JSON.stringify({ ...item, token }), Date.now());
+    this.worldChanged(room.worldId);
   }
 
   private strike(room: Room, client: Client, code: string, message: string): void {

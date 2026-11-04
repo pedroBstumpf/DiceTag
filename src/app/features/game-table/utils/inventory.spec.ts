@@ -1,6 +1,6 @@
 import { InventoryEntry } from '../../../core/models/table-session.model';
 import { keepValidItemTags } from './dice';
-import { addOne, itemTagId, itemTagLevel, quantityOf, takeOne, unitOf } from './inventory';
+import { addOne, itemTagId, itemTagLevel, quantityOf, takeOne, unitOf, equippedTagLevels } from './inventory';
 
 let n = 0;
 const id = () => `novo-${++n}`;
@@ -82,5 +82,21 @@ describe('etiquetas de itens equipados nas rolagens', () => {
     const negated = '-' + itemTagId('escudo', 'b');
     expect(keepValidItemTags(['tema-1', negated], new Set())).toEqual(['tema-1']);
     expect(keepValidItemTags([negated], new Set([itemTagId('escudo', 'b')]))).toBeNull();
+  });
+});
+
+describe('equippedTagLevels', () => {
+  const sources = {
+    own: new Map([['espada', { id: 'espada', name: 'Espada', tags: [{ id: 'a', text: 'Afiada', color: '#fff', level: 2 }, { id: 'b', text: 'Leve', color: '#fff' }] }]]),
+    table: new Map(),
+  };
+
+  it('só itens equipados; sem nível vale 1; a personalização vale no lugar do original', () => {
+    expect(equippedTagLevels([{ id: 'l', itemId: 'espada', equipped: true }], sources)).toEqual([
+      ['item:l:a', 2],
+      ['item:l:b', 1],
+    ]);
+    expect(equippedTagLevels([{ id: 'l', itemId: 'espada' }], sources)).toEqual([]);
+    expect(equippedTagLevels([{ id: 'l', itemId: 'espada', equipped: true, tags: [{ id: 'c', text: 'Mágica', color: '#fff', level: 4 }] }], sources)).toEqual([['item:l:c', 4]]);
   });
 });

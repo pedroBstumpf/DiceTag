@@ -8,7 +8,7 @@ import { COMMAND_TYPES, fxKindSchema, rollConfig } from './command-schemas';
  *
  * Cliente → servidor
  * - `cmd`   { seq, type, payload }  comando da mesa (o servidor valida, aplica e repassa);
- * - `roll`  { seq, sheetId?, roll, label, icon }  rolagem feita NO SERVIDOR;
+ * - `roll`  { seq, sheetId?, roll, label, icon, studies? }  rolagem feita NO SERVIDOR;
  * - `event` { event }  evento efêmero (ping, efeito): repassado, não salvo;
  * - `sync`  {}  pede o estado completo de novo.
  *
@@ -59,6 +59,7 @@ export const clientMessage = z.discriminatedUnion('t', [
     roll: rollConfig,
     label: z.string().max(80),
     icon: z.string().max(40),
+    studies: z.array(id).max(10).optional(),
   }),
   z.strictObject({ t: z.literal('event'), event: eventSchema }),
   z.strictObject({ t: z.literal('sync') }),

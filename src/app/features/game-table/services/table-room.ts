@@ -37,6 +37,8 @@ export interface RoomRoll {
   roll: RollConfig;
   label: string;
   icon: string;
+  /** Estudos ligados só a esta rolagem (na ação, vêm em `roll.attributes`). */
+  studies?: string[];
 }
 
 /** Fechamentos definitivos (não adianta reconectar), com o motivo para a tela. */

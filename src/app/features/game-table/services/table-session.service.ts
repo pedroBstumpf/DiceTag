@@ -728,11 +728,14 @@ export class TableSessionService extends SheetStore {
     studies: readonly string[] = [],
     itemsAdded = false,
     mana = 0,
+    config?: RollConfig,
   ): { author: string; roll: RollResult; levelUps: string[] } | null {
-    // Mesa online: o servidor sorteia (o modificador já vem somado); null = enviado, o resultado vem no chat
+    // Mesa online: o servidor sorteia e soma as tags com a ficha atual (`config`: o que foi escolhido, sem
+    // os níveis); o modificador digitado já traz as etiquetas de status. null = enviado, o resultado vem no chat
     if (this.room) {
-      const roll: RollConfig = { dice, modifier: Math.max(-99, Math.min(99, Math.round(modifier))) };
-      if (!this.sendRoll({ sheetId: sheetId ?? undefined, roll, label: 'Rolagem', icon: 'casino' })) {
+      const base: RollConfig = config ?? { dice, modifier };
+      const roll: RollConfig = { ...base, modifier: Math.max(-99, Math.min(99, Math.round(base.modifier))) };
+      if (!this.sendRoll({ sheetId: sheetId ?? undefined, roll, label: 'Rolagem', icon: 'casino', ...(studies.length && { studies: [...studies] }) })) {
         this.roomNotice.set({ text: 'Sem conexão com o servidor.' });
       }
       return null;
@@ -1511,6 +1514,7 @@ export class TableSessionService extends SheetStore {
     const data = sheetId ? this.sheetData(sheetId) : null;
     if (!data) return [];
     const sources = { own: this.worldbuild.byId(), table: this.tableItemById() };
+    // Os valores vêm da mesma regra do servidor (`equippedTagLevels`); aqui entra o que a tela mostra
     return data.sheet.inventory
       .filter((i) => i.equipped)
       .flatMap((i) => {

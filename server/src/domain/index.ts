@@ -31,7 +31,7 @@ export { clampLevelIn } from '../../../src/app/features/game-table/state/levels'
 export { findDrop } from '../../../src/app/features/game-table/state/drops';
 export { inventoryHolder } from '../../../src/app/features/game-table/state/inventory';
 export { worldItemRefs } from '../../../src/app/features/game-table/state/lore';
-export { quantityOf } from '../../../src/app/features/game-table/utils/inventory';
+export { equippedTagLevels, quantityOf, type ItemSources } from '../../../src/app/features/game-table/utils/inventory';
 export { resolveToken, type ResolvedToken } from '../../../src/app/features/game-table/state/tokens';
 export {
   isPointVisible,
@@ -45,7 +45,7 @@ export {
   type FogView,
   type VisionSource,
 } from '../../../src/app/features/game-table/state/player-view';
-export { baseTagId, manaCost, withPowers, type TagLevels } from '../../../src/app/features/game-table/utils/dice';
+export { baseTagId, levelUpText, manaCost, studyGain, trainStudy, withPowers, type TagLevels } from '../../../src/app/features/game-table/utils/dice';
 export { movePathBlocked } from '../../../src/app/features/game-table/utils/walls';
 export { doorSeen, wallsToSegments, type Segment } from '../../../src/app/features/game-table/utils/visibility';
 export { decodeMask, type ExploredMask } from '../../../src/app/features/game-table/utils/fog-memory';
