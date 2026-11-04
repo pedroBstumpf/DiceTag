@@ -215,3 +215,13 @@ O back-end já existe ([`server/`](server/README.md)). A **mesa online** (seçã
 usa: conta do servidor, mesas, convites e a mesa de jogo em tempo real. O resto (contas locais, mesas locais e
 worldbuild) fica no **IndexedDB do navegador** (`core/services/storage.service.ts`). A ligação será feita
 com repositórios por domínio (SPEC.md §2), trocando a implementação do IndexedDB pela HTTP/WebSocket.
+
+## Versões e branches
+
+- **`main`** é sempre a última versão estável: só recebe merges (`--no-ff`) de branches com os testes passando.
+- **Uma branch por assunto**, criada a partir da `main`: `feat/…`, `fix/…`, `chore/…`, `docs/…`.
+- **Commits** no padrão Conventional Commits, em português: `feat(mesa): …`, `fix(servidor): …`, com o corpo explicando o que mudou.
+- **Versões** seguem o [SemVer](https://semver.org/lang/pt-BR/), com uma versão só para o projeto: `package.json` e
+  `server/package.json` andam juntos. Cada versão publicada ganha uma **tag anotada** (`v0.2.0`) e uma entrada no
+  [`CHANGELOG.md`](CHANGELOG.md).
+- **Antes de mesclar:** `npx ng test --watch=false` e `npm run build` na raiz; `npm run check` em `server/`.

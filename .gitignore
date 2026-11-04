@@ -42,3 +42,13 @@ __screenshots__/
 # System files
 .DS_Store
 Thumbs.db
+
+# Segredos e dados locais do servidor (protegem também as branches sem server/.gitignore)
+.env
+.env.*
+!.env.example
+*.db
+*.db-wal
+*.db-shm
+/server/data/
+/server/node_modules/
