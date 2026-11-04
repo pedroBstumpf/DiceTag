@@ -4,13 +4,13 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
-import { AuthDialog, AuthMode } from '../../features/auth/auth-dialog/auth-dialog';
-import { CreateTableDialog } from '../../features/tables/create-table-dialog/create-table-dialog';
+import type { AuthMode } from '../../features/auth/auth-dialog/auth-dialog';
 
 /**
  * Ações rápidas reutilizadas pela barra lateral e pela página inicial
  * (entrar, criar conta, criar mesa, abrir o worldbuild).
  * Centraliza a regra "precisa estar logado" num único lugar.
+ * Os diálogos são carregados só quando abertos: não pesam no carregamento inicial do app.
  */
 @Injectable({ providedIn: 'root' })
 export class QuickActionsService {
@@ -21,6 +21,7 @@ export class QuickActionsService {
 
   /** Abre o diálogo de login/cadastro. Retorna true se autenticou. */
   async openAuth(mode: AuthMode = 'login'): Promise<boolean> {
+    const { AuthDialog } = await import('../../features/auth/auth-dialog/auth-dialog');
     const ok = await firstValueFrom(AuthDialog.open(this.dialog, mode).afterClosed());
     if (ok) this.snackBar.open(`Olá, ${this.auth.user()?.name}! 🎲`);
     return !!ok;
@@ -35,6 +36,7 @@ export class QuickActionsService {
   async createTable(): Promise<void> {
     if (!(await this.ensureAuth())) return;
 
+    const { CreateTableDialog } = await import('../../features/tables/create-table-dialog/create-table-dialog');
     const table = await firstValueFrom(CreateTableDialog.open(this.dialog).afterClosed());
     if (!table) return;
 
