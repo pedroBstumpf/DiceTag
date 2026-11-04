@@ -1,6 +1,6 @@
 import { TableState } from '../../../core/models/table-session.model';
 import { addChatMessage, clearChat } from './chat';
-import { addEntry, removeEntry, setSoundMaster, updateEntry } from './entries';
+import { addEntry, removeEntry, setSoundMaster, setSoundPlaying, stopAllSounds, updateEntry } from './entries';
 import { addWall, removeWall, setExplored, setFog, setFogMemory, toggleDoor, updateWall } from './fog';
 import { addStroke, eraseStrokes, restoreStrokes } from './drawings';
 import { addDrop, moveDrop, removeDrop, setDropQuantity, updateDrop } from './drops';
@@ -51,6 +51,8 @@ export const TABLE_COMMANDS = {
   updateEntry,
   removeEntry,
   setSoundMaster,
+  setSoundPlaying,
+  stopAllSounds,
   // Tokens
   placeToken,
   updatePlacement,

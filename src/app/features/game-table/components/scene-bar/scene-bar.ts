@@ -7,6 +7,7 @@ import { RouterLink } from '@angular/router';
 import { GameTable } from '../../../../core/models/game-table.model';
 import { Scene, SceneFolder } from '../../../../core/models/table-session.model';
 import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
+import { SoundMixerService } from '../../services/sound-mixer.service';
 import { TableSessionService } from '../../services/table-session.service';
 
 /**
@@ -21,6 +22,7 @@ import { TableSessionService } from '../../services/table-session.service';
 })
 export class SceneBar {
   readonly session = inject(TableSessionService);
+  readonly mixer = inject(SoundMixerService);
   readonly table = input.required<GameTable>();
 
   readonly renamingId = signal<string | null>(null);

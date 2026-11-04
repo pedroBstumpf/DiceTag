@@ -36,7 +36,7 @@ const text = (max: number) => z.string().max(max);
 const size = z.number().min(MIN_TOKEN_SIZE).max(MAX_TOKEN_SIZE);
 const timestamp = z.number().int().min(0).max(8.64e15);
 const accountId = z.string().max(64);
-const fxKind = z.enum(FX_KINDS.map((f) => f.id) as [string, ...string[]]);
+export const fxKindSchema = z.enum(FX_KINDS.map((f) => f.id) as [string, ...string[]]);
 
 export const tagSchema = z.strictObject({ id, text: text(100), color, level: z.int().min(-99).max(99).optional() });
 export const barSchema = z.strictObject({
@@ -166,7 +166,7 @@ const drop = z.strictObject({ id, x: coord, y: coord, level: level.optional(), s
 
 const fixedFx = z.strictObject({
   id,
-  kind: fxKind,
+  kind: fxKindSchema,
   color,
   from: point,
   to: point,
@@ -186,7 +186,7 @@ export const rollConfig = z.strictObject({
   addItems: z.boolean().optional(),
   powers: z.record(text(200), z.int().min(0).max(99)).optional(),
 });
-const fxStyle = z.strictObject({ kind: fxKind, color });
+const fxStyle = z.strictObject({ kind: fxKindSchema, color });
 
 const entryFields = {
   name: text(100),
@@ -271,6 +271,8 @@ export const COMMAND_SCHEMAS = {
   updateEntry: z.strictObject({ entryId: id, patch: z.strictObject(entryFields).partial() }),
   removeEntry: z.strictObject({ entryId: id }),
   setSoundMaster: z.strictObject({ volume: z.number().min(0).max(1) }),
+  setSoundPlaying: z.strictObject({ entryId: id, playing: z.boolean(), startedAt: timestamp }),
+  stopAllSounds: z.strictObject({}),
   // Tokens
   placeToken: z.strictObject({ sceneId: id, placement }),
   updatePlacement: z.strictObject({ placementId: id, patch: z.strictObject(placementFields).partial() }),

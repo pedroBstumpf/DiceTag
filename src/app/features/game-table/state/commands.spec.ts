@@ -54,4 +54,32 @@ describe('normalizeState', () => {
     // Personagem ganha as três barras de status
     expect(s.entries[1].token?.bars.length).toBe(3);
   });
+
+  describe('sons tocando (mesa online)', () => {
+    const sound = { id: 'trilha', kind: 'sound' as const, name: 'Trilha', createdAt: 0 };
+    const start = (s: TableState, entryId: string, startedAt: number) => applyCommand(s, { type: 'setSoundPlaying', payload: { entryId, playing: true, startedAt } });
+
+    it('tocar de novo recomeça, sem duplicar a faixa', () => {
+      const twice = start(start(empty(), 'trilha', 1), 'trilha', 2);
+      expect(twice.playing).toEqual([{ entryId: 'trilha', startedAt: 2 }]);
+    });
+
+    it('parar tira só aquela faixa; parar o que não toca não muda nada', () => {
+      const both = start(start(empty(), 'a', 1), 'b', 2);
+      const stopped = applyCommand(both, { type: 'setSoundPlaying', payload: { entryId: 'a', playing: false, startedAt: 3 } });
+      expect(stopped.playing).toEqual([{ entryId: 'b', startedAt: 2 }]);
+      expect(applyCommand(stopped, { type: 'setSoundPlaying', payload: { entryId: 'a', playing: false, startedAt: 3 } })).toBe(stopped);
+    });
+
+    it('parar tudo esvazia; sem nada tocando, o estado não muda', () => {
+      const none = applyCommand(start(empty(), 'a', 1), { type: 'stopAllSounds', payload: {} });
+      expect(none.playing).toEqual([]);
+      expect(applyCommand(none, { type: 'stopAllSounds', payload: {} })).toBe(none);
+    });
+
+    it('excluir o som tira a faixa de quem está tocando', () => {
+      const s = start({ ...empty(), entries: [sound] }, 'trilha', 1);
+      expect(applyCommand(s, { type: 'removeEntry', payload: { entryId: 'trilha' } }).playing).toEqual([]);
+    });
+  });
 });

@@ -188,6 +188,32 @@ describe('comandos em tempo real', () => {
     a.ws.close();
   });
 
+  it('ping e efeito de um chegam ao outro, sem virar estado; efeito desconhecido é recusado', async () => {
+    const a = await openSocket(port, tableId, gm.cookie);
+    const b = await openSocket(port, tableId, player.cookie);
+    await a.next('welcome');
+    await b.next('welcome');
+    a.ws.send(JSON.stringify({ t: 'cmd', seq: 1, type: 'addScene', payload: { scene } }));
+    const { version } = await a.next('ack');
+    await b.next('state');
+
+    b.ws.send(JSON.stringify({ t: 'event', event: { kind: 'ping', sceneId: 's1', x: 5, y: 6 } }));
+    expect((await a.next('event')).event).toMatchObject({ kind: 'ping', x: 5, y: 6 });
+
+    const fx = { kind: 'explosion', color: '#ff0000', from: { x: 0, y: 0 }, to: { x: 1, y: 1 }, seed: 7, scale: 1 };
+    a.ws.send(JSON.stringify({ t: 'event', event: { kind: 'fx', sceneId: 's1', fx } }));
+    expect((await b.next('event')).event.fx).toEqual(fx);
+
+    a.ws.send(JSON.stringify({ t: 'event', event: { kind: 'fx', sceneId: 's1', fx: { ...fx, kind: 'naoExiste' } } }));
+    expect((await a.next('error')).code).toBe('invalid');
+    // Efêmero: a versão da mesa não muda
+    expect(server.app.hub.viewOf(tableId, server.ctx.tables.findForMember(tableId, gm.id)!.worldId, { role: 'gm', userId: gm.id }).state.scenes[0].drawings ?? []).toEqual([]);
+    a.ws.send(JSON.stringify({ t: 'sync' }));
+    expect((await a.next('state')).version).toBe(version);
+    a.ws.close();
+    b.ws.close();
+  });
+
   it('rolagem no servidor aparece no chat de todos', async () => {
     const a = await openSocket(port, tableId, gm.cookie);
     const b = await openSocket(port, tableId, player.cookie);

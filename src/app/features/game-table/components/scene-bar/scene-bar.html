@@ -164,6 +164,26 @@
 
   <!-- ===== Visibilidade das barras ===== -->
   <div class="flex shrink-0 items-center">
+    @if (session.online()) {
+      <button mat-icon-button matTooltip="Volume nesta máquina" aria-label="Volume nesta máquina" [matMenuTriggerFor]="volumeMenu">
+        <mat-icon>{{ mixer.localVolume() === 0 ? 'volume_off' : 'volume_up' }}</mat-icon>
+      </button>
+      <mat-menu #volumeMenu="matMenu">
+        <div class="flex w-52 items-center gap-2 px-4 py-2" (click)="$event.stopPropagation()">
+          <input
+            #localVolume
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            class="min-w-0 flex-1 accent-astral-400"
+            aria-label="Volume nesta máquina"
+            [value]="mixer.localVolume()"
+            (input)="mixer.setLocalVolume(localVolume.valueAsNumber)"
+          />
+        </div>
+      </mat-menu>
+    }
     <button
       mat-icon-button
       class="max-sm:!hidden"

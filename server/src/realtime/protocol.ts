@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { Point, TableRole, TableState } from '../domain';
 import { idSchema as id } from '../lib/ids';
-import { COMMAND_TYPES, rollConfig } from './command-schemas';
+import { COMMAND_TYPES, fxKindSchema, rollConfig } from './command-schemas';
 
 /**
  * Protocolo da sala da mesa (WebSocket em `/ws/tables/:id`). Mensagens JSON com o campo `t`.
@@ -38,7 +38,8 @@ const eventSchema = z.discriminatedUnion('kind', [
     kind: z.literal('fx'),
     sceneId: id,
     fx: z.strictObject({
-      kind: z.string().max(40),
+      // Só os efeitos que existem: quem recebe monta o desenho a partir deste nome
+      kind: fxKindSchema,
       color: z.string().regex(/^#[0-9a-fA-F]{3,8}$/),
       from: point,
       to: point,
