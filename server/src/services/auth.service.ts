@@ -2,6 +2,7 @@ import type { Config } from '../config/env';
 import { transaction, type Db } from '../db/database';
 import { HttpError, badRequest, conflict } from '../lib/errors';
 import { newId } from '../lib/ids';
+import type { PasswordResetsRepository } from '../repositories/password-resets';
 import type { SessionsRepository } from '../repositories/sessions';
 import type { PublicUser, UsersRepository } from '../repositories/users';
 import type { WorldsRepository } from '../repositories/worlds';
@@ -19,6 +20,11 @@ export interface AuthSession {
 const FIRST_WORLD_NAME = 'Meu mundo';
 /** Gravar "visto por último" no máximo a cada 5 minutos (evita uma escrita por requisição). */
 const TOUCH_EVERY_MS = 5 * 60_000;
+/** Validade do link de recuperação de senha (BACKEND_SECURITY.md §1: de 30 a 60 minutos). */
+export const PASSWORD_RESET_MINUTES = 30;
+/** Tempo mínimo entre dois e-mails de recuperação para a mesma conta (ninguém enche a caixa de outra pessoa). */
+const RESET_COOLDOWN_MS = 2 * 60_000;
+const RESET_INVALID = 'Este link é inválido ou já venceu. Peça outro em "Esqueci minha senha".';
 
 /**
  * Contas e sessões: cadastro, login, logout, troca de senha e validação do token de sessão.
@@ -30,6 +36,8 @@ const TOUCH_EVERY_MS = 5 * 60_000;
  * - Sessão nova a cada login (o token antigo não é reaproveitado: sem fixação de sessão).
  * - Trocar a senha encerra TODAS as sessões da conta e abre uma nova (id novo a cada mudança
  *   de credencial); "sair de todos os dispositivos" encerra todas.
+ * - Recuperação de senha: token de uso único e prazo curto, com só o HMAC no banco; quem pede não
+ *   descobre se o e-mail tem conta; redefinir encerra TODAS as sessões e não abre uma nova.
  * - Quem chama avisa o hub para derrubar na hora os WebSockets das sessões encerradas.
  */
 export class AuthService {
@@ -43,6 +51,7 @@ export class AuthService {
     private readonly hasher: PasswordHasher,
     private readonly tokens: TokenService,
     private readonly config: Config,
+    private readonly resets: PasswordResetsRepository,
     private readonly now: () => number = Date.now,
   ) {
     this.throttle = new LoginThrottle(now);
@@ -112,6 +121,49 @@ export class AuthService {
     });
   }
 
+  // --- Recuperação de senha ------------------------------------------------------
+
+  /**
+   * Cria o pedido e devolve o link (só para o e-mail da própria pessoa). null = não há o que enviar:
+   * e-mail sem conta, ou um pedido recente da mesma conta (quem pediu vê a mesma resposta nos dois casos).
+   * `ignoreCooldown`: quem administra o servidor gerando o link à mão.
+   */
+  createPasswordReset(email: string, options: { ignoreCooldown?: boolean } = {}): { user: PublicUser; link: string } | null {
+    const user = this.users.credentialsByEmail(email)?.user;
+    if (!user) return null;
+    const now = this.now();
+    const last = this.resets.lastRequestAt(user.id);
+    if (!options.ignoreCooldown && last !== null && now - last < RESET_COOLDOWN_MS) return null;
+    const token = this.tokens.generate();
+    this.resets.replace(this.tokens.hash(token, 'reset'), user.id, now, now + PASSWORD_RESET_MINUTES * 60_000);
+    // Fragmento (#): não vai ao servidor, a logs de proxy nem a outros sites pelo Referer
+    return { user, link: `${this.config.publicUrl}/redefinir-senha#token=${token}` };
+  }
+
+  /**
+   * Troca a senha com um link válido, gasta o link e encerra todas as sessões da conta. Devolve a
+   * conta (quem chama derruba os WebSockets dela). Quem redefine entra de novo com a senha nova.
+   */
+  async resetPassword(token: string, next: string, ip: string): Promise<string> {
+    const tokenHash = this.tokens.hash(token, 'reset');
+    const request = this.resets.find(tokenHash);
+    const user = request && request.expiresAt > this.now() ? this.users.findById(request.userId) : null;
+    if (!request || !user) throw badRequest(RESET_INVALID);
+    const problem = passwordProblem(next, user.email);
+    if (problem) throw badRequest(problem);
+    const hash = await this.hasher.hash(next);
+    transaction(this.db, () => {
+      // Conferido de novo aqui: o hash leva tempo, e o mesmo link pode ter sido usado nesse meio-tempo
+      if (!this.resets.consume(tokenHash, this.now())) throw badRequest(RESET_INVALID);
+      this.users.setPasswordHash(user.id, hash);
+      this.sessions.deleteAllForUser(user.id);
+      this.resets.deleteForUser(user.id);
+    });
+    // Quem provou ser dono do e-mail não fica preso ao atraso das tentativas de login anteriores
+    this.throttle.succeed(user.email, ip);
+    return user.id;
+  }
+
   // --- Sessão ------------------------------------------------------------------
 
   /** Conta dona do token, se a sessão existe e não venceu (absoluta e por inatividade). */
@@ -143,8 +195,9 @@ export class AuthService {
     return this.config.SESSION_TTL_HOURS * 3600;
   }
 
-  /** Apaga sessões vencidas (rodado periodicamente pelo servidor). */
+  /** Apaga sessões e pedidos de recuperação vencidos (rodado periodicamente pelo servidor). */
   sweep(): number {
+    this.resets.deleteExpired(this.now());
     return this.sessions.deleteExpired(this.now(), this.idleMs);
   }
 

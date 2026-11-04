@@ -55,6 +55,11 @@ export class AuthDialog {
   readonly loading = signal(false);
   readonly error = signal('');
   readonly showPassword = signal(false);
+  /** Conta do servidor: pedindo o link de recuperação de senha (só o e-mail). */
+  readonly forgot = signal(false);
+  /** Pedido enviado: mostra o aviso no lugar do formulário. */
+  readonly forgotSent = signal(false);
+  private readonly serverAccount = inject(ServerAccountService);
 
   // --- Formulário ----------------------------------------------------------
   readonly form = inject(FormBuilder).nonNullable.group({
@@ -86,7 +91,36 @@ export class AuthDialog {
     this.applyMode(mode);
   }
 
+  /** Abre ou fecha o pedido de recuperação de senha (a senha sai da validação enquanto isso). */
+  toggleForgot(on: boolean): void {
+    this.forgot.set(on);
+    this.forgotSent.set(false);
+    this.error.set('');
+    const { password } = this.form.controls;
+    if (on) password.disable();
+    else password.enable();
+  }
+
+  async sendForgot(): Promise<void> {
+    const { email } = this.form.controls;
+    if (email.invalid) {
+      email.markAsTouched();
+      return;
+    }
+    this.loading.set(true);
+    this.error.set('');
+    try {
+      await this.serverAccount.forgotPassword(email.value);
+      this.forgotSent.set(true);
+    } catch (e) {
+      this.error.set(e instanceof Error ? e.message : 'Algo deu errado. Tente novamente.');
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
   async submit(): Promise<void> {
+    if (this.forgot()) return this.sendForgot();
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       return;

@@ -2,6 +2,8 @@ import { readdirSync } from 'node:fs';
 import { Writable } from 'node:stream';
 import type { InjectOptions } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { loadConfig } from '../src/config/env';
+import type { MailMessage } from '../src/services/mailer';
 import { ORIGIN, PASSWORD, PNG_1X1, call, createTestServer, multipart, register, sessionCookie, type TestServer } from './helpers';
 
 let server: TestServer;
@@ -444,5 +446,131 @@ describe('arquivos', () => {
     const { file } = (await upload(cookie, `tableId=${table.id}`, PNG_1X1)).json();
     expect((await call(server, cookie, 'DELETE', `/api/tables/${table.id}`)).statusCode).toBe(204);
     expect((await call(server, cookie, 'GET', `/api/files/${file.id}`)).statusCode).toBe(404);
+  });
+});
+
+describe('recuperação de senha', () => {
+  let server: TestServer;
+  let sent: MailMessage[];
+  const account = 'pessoa@exemplo.com';
+  const forgot = (email: string) => server.app.http.inject({ method: 'POST', url: '/api/auth/password/forgot', headers: { origin: ORIGIN }, payload: { email } });
+  const reset = (token: string, password: string, origin = ORIGIN) => server.app.http.inject({ method: 'POST', url: '/api/auth/password/reset', headers: { origin }, payload: { token, password } });
+  const login = (password: string) => server.app.http.inject({ method: 'POST', url: '/api/auth/login', headers: { origin: ORIGIN }, payload: { email: account, password } });
+  const tokenOf = (mail: MailMessage) => /#token=([\w-]+)/.exec(mail.text)![1];
+  const NEW_PASSWORD = 'uma frase bem diferente';
+
+  beforeEach(async () => {
+    server = await createTestServer();
+    sent = [];
+    server.ctx.mailer = { enabled: true, send: async (m) => void sent.push(m) };
+    await register(server, account, 'Pessoa');
+  });
+  afterEach(() => server.close());
+
+  it('a resposta é a mesma para e-mail com e sem conta, e só quem tem conta recebe', async () => {
+    const yes = await forgot(account);
+    const no = await forgot('ninguem@exemplo.com');
+    expect(yes.statusCode).toBe(202);
+    expect(no.statusCode).toBe(202);
+    expect(yes.body).toBe(no.body);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].to).toBe(account);
+  });
+
+  it('o link usa o endereço da configuração, nunca o cabeçalho Host da requisição', async () => {
+    await server.app.http.inject({ method: 'POST', url: '/api/auth/password/forgot', headers: { origin: ORIGIN, host: 'site-malicioso.example' }, payload: { email: account } });
+    expect(sent[0].text).toContain(`${ORIGIN}/redefinir-senha#token=`);
+    expect(sent[0].text).not.toContain('site-malicioso');
+  });
+
+  it('o banco guarda só o hash do token', async () => {
+    await forgot(account);
+    const rows = server.ctx.db.prepare('SELECT token_hash FROM password_resets').all() as { token_hash: string }[];
+    expect(rows).toHaveLength(1);
+    expect(rows[0].token_hash).not.toBe(tokenOf(sent[0]));
+    expect(rows[0].token_hash).not.toContain(tokenOf(sent[0]));
+  });
+
+  it('redefine a senha: a antiga para de valer, a nova entra, e todas as sessões caem', async () => {
+    const { cookie } = await register(server, 'outra@exemplo.com');
+    void cookie;
+    const session = await login(PASSWORD);
+    const sid = sessionCookie(session);
+    await forgot(account);
+    expect((await reset(tokenOf(sent[0]), NEW_PASSWORD)).statusCode).toBe(204);
+    expect((await call(server, sid, 'GET', '/api/auth/me')).statusCode).toBe(401);
+    expect((await login(PASSWORD)).statusCode).toBe(401);
+    expect((await login(NEW_PASSWORD)).statusCode).toBe(200);
+  });
+
+  it('o link só vale uma vez', async () => {
+    await forgot(account);
+    expect((await reset(tokenOf(sent[0]), NEW_PASSWORD)).statusCode).toBe(204);
+    expect((await reset(tokenOf(sent[0]), 'outra frase qualquer')).statusCode).toBe(400);
+  });
+
+  it('o link vence, e token inventado não vale', async () => {
+    await forgot(account);
+    server.ctx.db.prepare('UPDATE password_resets SET expires_at = 1').run();
+    expect((await reset(tokenOf(sent[0]), NEW_PASSWORD)).statusCode).toBe(400);
+    expect((await reset('a'.repeat(43), NEW_PASSWORD)).statusCode).toBe(400);
+    expect((await login(PASSWORD)).statusCode).toBe(200);
+  });
+
+  it('senha fora da política é recusada sem gastar o link', async () => {
+    await forgot(account);
+    expect((await reset(tokenOf(sent[0]), '123')).statusCode).toBe(400);
+    expect((await reset(tokenOf(sent[0]), account)).statusCode).toBe(400);
+    expect((await reset(tokenOf(sent[0]), NEW_PASSWORD)).statusCode).toBe(204);
+  });
+
+  it('pedidos seguidos não enchem a caixa de e-mail de ninguém', async () => {
+    await forgot(account);
+    await forgot(account);
+    await forgot(account);
+    expect(sent).toHaveLength(1);
+  });
+
+  it('outra origem é recusada (CSRF), como nas demais alterações', async () => {
+    await forgot(account);
+    expect((await reset(tokenOf(sent[0]), NEW_PASSWORD, 'https://site-malicioso.example')).statusCode).toBe(403);
+  });
+
+  it('sem serviço de e-mail, a resposta é igual e nenhum token é criado; quem administra gera o link', async () => {
+    server.ctx.mailer = { enabled: false, send: async () => undefined };
+    expect((await forgot(account)).statusCode).toBe(202);
+    expect(server.ctx.db.prepare('SELECT COUNT(*) AS n FROM password_resets').get()).toEqual({ n: 0 });
+    const made = server.ctx.auth.createPasswordReset(account, { ignoreCooldown: true });
+    expect(made?.link).toContain('/redefinir-senha#token=');
+  });
+
+  it('o token não aparece no log', async () => {
+    const lines: string[] = [];
+    const logged = await createTestServer({ LOG_LEVEL: 'info' }, { logStream: { write: (l: string) => (lines.push(l), true) } as unknown as NodeJS.WritableStream });
+    const mails: MailMessage[] = [];
+    logged.ctx.mailer = { enabled: true, send: async (m) => void mails.push(m) };
+    await register(logged, account);
+    await logged.app.http.inject({ method: 'POST', url: '/api/auth/password/forgot', headers: { origin: ORIGIN }, payload: { email: account } });
+    const token = tokenOf(mails[0]);
+    await logged.app.http.inject({ method: 'POST', url: '/api/auth/password/reset', headers: { origin: ORIGIN }, payload: { token, password: NEW_PASSWORD } });
+    const log = lines.join('');
+    expect(log).toContain('senha.redefinida');
+    expect(log).not.toContain(token);
+    expect(log).not.toContain(account);
+    await logged.close();
+  });
+});
+
+describe('configuração do e-mail', () => {
+  const base = { TOKEN_SECRET: 'a'.repeat(40), PASSWORD_PEPPER: 'b'.repeat(40), ALLOWED_ORIGINS: 'https://zehenia.example' };
+
+  it('em produção, escrever e-mail no log é recusado (o link daria acesso à conta)', () => {
+    expect(() => loadConfig({ ...base, NODE_ENV: 'production', MAIL_PROVIDER: 'log' })).toThrow(/MAIL_PROVIDER/);
+  });
+
+  it('PUBLIC_URL precisa ser uma origem autorizada; resend precisa de chave e remetente', () => {
+    expect(() => loadConfig({ ...base, PUBLIC_URL: 'https://outro.example' })).toThrow(/PUBLIC_URL/);
+    expect(loadConfig({ ...base, PUBLIC_URL: 'https://zehenia.example/' }).publicUrl).toBe('https://zehenia.example');
+    expect(() => loadConfig({ ...base, MAIL_PROVIDER: 'resend' })).toThrow(/MAIL_API_KEY/);
   });
 });

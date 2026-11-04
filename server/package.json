@@ -13,6 +13,7 @@
     "start": "tsx --disable-warning=ExperimentalWarning src/main.ts",
     "seed": "tsx --disable-warning=ExperimentalWarning scripts/seed.ts",
     "smoke": "tsx scripts/smoke.ts",
+    "reset-link": "tsx --disable-warning=ExperimentalWarning scripts/reset-link.ts",
     "backup": "tsx --disable-warning=ExperimentalWarning scripts/backup.ts",
     "backup:check": "tsx --disable-warning=ExperimentalWarning scripts/backup-check.ts",
     "typecheck": "tsc -p tsconfig.json",

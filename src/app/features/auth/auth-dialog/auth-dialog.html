@@ -17,7 +17,7 @@
 </div>
 
 <!-- Alternador Entrar / Criar conta -->
-<div class="mx-6 mt-5 grid grid-cols-2 rounded-xl bg-ink-950 p-1 text-sm font-medium">
+<div [hidden]="forgot()" class="mx-6 mt-5 grid grid-cols-2 rounded-xl bg-ink-950 p-1 text-sm font-medium">
   @for (opt of modes; track opt.id) {
     <button
       type="button"
@@ -52,6 +52,15 @@
     }
   </mat-form-field>
 
+  @if (forgot()) {
+    <p class="mb-3 text-sm text-slate-400">Informe o e-mail da conta do servidor. Enviaremos um link para criar uma senha nova.</p>
+    @if (forgotSent()) {
+      <p class="mb-2 flex items-start gap-2 rounded-lg bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300">
+        <mat-icon class="!size-5 shrink-0 !text-xl">mail</mat-icon>
+        Se houver uma conta com esse e-mail, o link foi enviado e vale por 30 minutos. Se não chegar, confira o spam ou fale com quem administra o servidor.
+      </p>
+    }
+  } @else {
   <mat-form-field appearance="outline">
     <mat-label>Senha</mat-label>
     <input
@@ -74,6 +83,7 @@
       <mat-error>Mínimo de {{ minPassword }} caracteres.</mat-error>
     }
   </mat-form-field>
+  }
 
   <!-- Erro vindo do serviço (e-mail duplicado, senha errada…) -->
   @if (error()) {
@@ -87,7 +97,14 @@
     @if (loading()) {
       <mat-spinner diameter="20" />
     } @else {
-      {{ mode() === 'login' ? 'Entrar' : 'Criar conta' }}
+      {{ forgot() ? 'Enviar o link' : mode() === 'login' ? 'Entrar' : 'Criar conta' }}
     }
   </button>
+
+  <!-- Recuperação de senha: só a conta do servidor (a conta local não tem e-mail de verdade) -->
+  @if (server && mode() === 'login') {
+    <button mat-button type="button" class="mt-1" (click)="toggleForgot(!forgot())">
+      {{ forgot() ? 'Voltar para Entrar' : 'Esqueci minha senha' }}
+    </button>
+  }
 </form>

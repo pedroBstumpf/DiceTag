@@ -27,6 +27,12 @@ export const routes: Routes = [
         title: 'Zehenia — Worldbuild',
         loadComponent: () => import('./features/worldbuild/worldbuild').then((m) => m.Worldbuild),
       },
+      {
+        // Aberta pelo link de recuperação de senha da conta do servidor
+        path: 'redefinir-senha',
+        title: 'Zehenia — Redefinir a senha',
+        loadComponent: () => import('./features/auth/reset-password/reset-password').then((m) => m.ResetPassword),
+      },
     ],
   },
   {

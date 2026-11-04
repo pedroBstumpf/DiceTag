@@ -52,6 +52,17 @@ export class ServerAccountService {
     this.error.set('');
   }
 
+  /** Pede o link de recuperação por e-mail. A resposta não diz se o e-mail tem conta. */
+  async forgotPassword(email: string): Promise<void> {
+    await this.api.post('/auth/password/forgot', { email: email.trim() });
+  }
+
+  /** Troca a senha com o token do link (a pessoa entra de novo depois: as sessões caem). */
+  async resetPassword(token: string, password: string): Promise<void> {
+    await this.api.post('/auth/password/reset', { token, password });
+    this.user.set(null);
+  }
+
   async logout(): Promise<void> {
     await this.api.post('/auth/logout');
     this.user.set(null);

@@ -1,7 +1,7 @@
 import { createHmac, randomBytes } from 'node:crypto';
 
 /**
- * Tokens opacos (sessão, convite): 32 bytes aleatórios do gerador criptográfico do sistema.
+ * Tokens opacos (sessão, convite, recuperação de senha): 32 bytes aleatórios do gerador criptográfico do sistema.
  *
  * O banco guarda só o HMAC-SHA256 do token com TOKEN_SECRET. Assim:
  * - vazar o banco não entrega sessões nem convites válidos;
@@ -16,8 +16,8 @@ export class TokenService {
     return randomBytes(bytes).toString('base64url');
   }
 
-  /** HMAC do token para guardar/buscar no banco. `purpose` separa sessões, convites e o log. */
-  hash(token: string, purpose: 'session' | 'invite' | 'audit'): string {
+  /** HMAC do token para guardar/buscar no banco. `purpose` separa sessões, convites, recuperação de senha e o log. */
+  hash(token: string, purpose: 'session' | 'invite' | 'reset' | 'audit'): string {
     return createHmac('sha256', this.secret).update(`${purpose}:${token}`).digest('hex');
   }
 
