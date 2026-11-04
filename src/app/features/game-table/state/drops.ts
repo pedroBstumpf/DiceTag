@@ -3,7 +3,7 @@ import { mapScene } from './helpers';
 
 /**
  * Itens largados no mapa ("drops"): comandos puros para largar, mover, alterar e tirar.
- * Pegar um item = tirá-lo daqui (`removeDrop`) e pô-lo no inventário (`updateSheet`).
+ * Largar do inventário e pegar do chão são comandos únicos, em `state/inventory.ts`.
  */
 
 /** Item largado (em qualquer das cenas). */

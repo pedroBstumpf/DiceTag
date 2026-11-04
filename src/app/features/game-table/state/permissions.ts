@@ -12,6 +12,11 @@ import { FixedFx, TableEntry, TableItem, TableRole, TokenBar, TokenPlacement, is
 export interface Viewer {
   role: TableRole;
   userId: string | undefined;
+  /**
+   * Mesa online: várias contas de verdade, então o personagem de outro jogador é só leitura
+   * (a mesma regra do servidor). Na mesa local há uma pessoa só e os personagens ficam livres.
+   */
+  shared?: boolean;
 }
 
 /** O que a conta pode fazer com uma ficha. */
@@ -39,7 +44,8 @@ export function ownsCharacter(entry: TableEntry, viewer: Viewer): boolean {
 /** Pode editar a ficha: o mestre sempre; NPC só o jogador autorizado; personagens seguem livres. */
 export function canEdit(entry: TableEntry, viewer: Viewer): boolean {
   if (viewer.role === 'gm') return true;
-  return entry.kind === 'npc' ? controlsNpc(entry, viewer) : true;
+  if (entry.kind === 'npc') return controlsNpc(entry, viewer);
+  return !viewer.shared || entry.kind !== 'character' || ownsCharacter(entry, viewer);
 }
 
 /**
@@ -47,6 +53,7 @@ export function canEdit(entry: TableEntry, viewer: Viewer): boolean {
  * - quem edita (mestre; NPC: o jogador autorizado) vê e edita tudo;
  * - token de NPC (`placement`): os jogadores veem a ficha e/ou o inventário que o mestre deixou
  *   públicos naquele token — e o inventário de um token derrotado sempre;
+ * - personagem de outro jogador (mesa online): ficha e inventário em só leitura;
  * - NPC do painel (ficha base, sem `placement`): só quem edita.
  * `sheet`: a entrada dona da ficha (ausente fora da mesa) e as barras de status exibidas.
  */
@@ -57,6 +64,7 @@ export function sheetAccess(
 ): SheetAccess {
   if (!sheet) return NO_ACCESS;
   if (!sheet.entry || canEdit(sheet.entry, viewer)) return FULL_ACCESS;
+  if (sheet.entry.kind === 'character') return { edit: false, sheet: true, inventory: true };
   if (!placement) return NO_ACCESS;
   return { edit: false, sheet: !!placement.sheetPublic, inventory: !!placement.inventoryPublic || isDown(sheet.bars) };
 }

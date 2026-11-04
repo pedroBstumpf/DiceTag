@@ -104,7 +104,8 @@ const sheet = z
     themes: z.array(theme).max(SHEET_THEME_COUNT),
     inventory: z.array(inventoryEntry).max(500),
     notes: z.array(notePage).max(100),
-    eiros: z.int().min(0).max(1e9),
+    // Número, não inteiro: o preço de um item (abaixo) pode ter centavos e sai dos Eiros na compra
+    eiros: z.number().min(0).max(1e9),
     studies: z.array(study).max(SHEET_STUDY_COUNT),
   })
   .partial();
@@ -240,6 +241,8 @@ const scene = z.strictObject({
 });
 
 const move = z.strictObject({ placementId: id, x: coord, y: coord });
+/** Id de uma ficha: o da entrada ou o do token de NPC (`npc:<id>`). */
+const sheetRef = z.string().max(80).regex(/^(npc:)?[A-Za-z0-9_-]{1,64}$/);
 const levelIndex = z.int().min(0).max(10);
 
 // --- Payload de cada comando ---------------------------------------------------
@@ -281,6 +284,10 @@ export const COMMAND_SCHEMAS = {
   setDropQuantity: z.strictObject({ dropId: id, quantity: z.int().min(1).max(1e6) }),
   updateDrop: z.strictObject({ dropId: id, patch: z.strictObject({ size, color }).partial() }),
   removeDrop: z.strictObject({ dropId: id }),
+  // Itens que mudam de lugar
+  transferItem: z.strictObject({ fromId: sheetRef, inventoryId: id, toId: sheetRef, newEntryId: id, cost: z.number().min(0).max(1e9).optional(), blobId: id.optional() }),
+  dropFromInventory: z.strictObject({ sceneId: id, sheetId: sheetRef, inventoryId: id, dropId: id, itemEntryId: id, x: coord, y: coord, level: level.optional(), blobId: id.optional() }),
+  pickUpDrop: z.strictObject({ dropId: id, sheetId: sheetRef, newEntryId: id }),
   // Névoa e paredes
   setFog: z.strictObject({ sceneId: id, enabled: z.boolean() }),
   setFogMemory: z.strictObject({ sceneId: id, memory: z.boolean() }),

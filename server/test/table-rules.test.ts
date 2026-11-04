@@ -108,7 +108,7 @@ function run(type: (typeof COMMAND_TYPES)[number], payload: unknown, viewer = an
   const parsed = COMMAND_SCHEMAS[type].safeParse(payload);
   if (!parsed.success) return { ok: false as const, reason: 'formato' };
   const rule = COMMAND_RULES[type] as (p: unknown, c: RuleContext) => { ok: boolean; reason?: string; payload?: any };
-  return rule(parsed.data, { state, viewer, userName: viewer.role === 'gm' ? 'Mestre' : 'Ana', now: 42, full: false, world });
+  return rule(parsed.data, { state, viewer, userName: viewer.role === 'gm' ? 'Mestre' : 'Ana', now: 42, full: false, world, playerScene: () => sceneOf(state) });
 }
 
 // --- Formato -------------------------------------------------------------------------
@@ -250,11 +250,99 @@ describe('permissões no servidor', () => {
     const scene = { id: 's1', name: 'Dup', gridSize: 70, showGrid: true };
     expect(run('addScene', { scene }, gm).ok).toBe(false);
     const parsed = COMMAND_SCHEMAS.addScene.parse({ scene: { ...scene, id: 's9' } });
-    expect(COMMAND_RULES.addScene(parsed, { state: table(), viewer: gm, userName: 'Mestre', now: 0, full: true, world }).ok).toBe(false);
+    expect(COMMAND_RULES.addScene(parsed, { state: table(), viewer: gm, userName: 'Mestre', now: 0, full: true, world, playerScene: () => null }).ok).toBe(false);
   });
 });
 
 // --- Ficha ---------------------------------------------------------------------------------
+
+describe('itens que mudam de lugar (um comando só)', () => {
+  const adaga = { id: 'linha', itemId: 'espada', price: 4, quantity: 2 };
+  /** Mesa com o item na ficha da Ana e na cópia do token `t-orc2` (inventário liberado). */
+  function shop(mut: { public?: boolean; eiros?: number; drop?: boolean } = {}): TableState {
+    const state = table();
+    return {
+      ...state,
+      entries: state.entries.map((e) => (e.id === 'pc-ana' ? { ...e, sheet: { ...(e.sheet as object), inventory: [{ id: 'minha', itemId: 'espada' }], eiros: mut.eiros ?? 10 } as never } : e)),
+      scenes: state.scenes.map((s) =>
+        s.id !== 's1'
+          ? s
+          : {
+              ...s,
+              drops: mut.drop ? [{ id: 'chao', x: 100, y: 100, item: { id: 'x', itemId: 'espada' } }] : [],
+              tokens: s.tokens!.map((tk) =>
+                tk.id === 't-orc2' ? { ...tk, inventoryPublic: mut.public ?? true, sheet: { ...(tk.sheet as object), inventory: [adaga] } as never } : tk,
+              ),
+            },
+      ),
+    };
+  }
+  const buy = { fromId: 'npc:t-orc2', inventoryId: 'linha', toId: 'pc-ana', newEntryId: 'nova' };
+
+  it('comprar: o preço vem da loja, nunca do cliente', () => {
+    const verdict = run('transferItem', { ...buy, cost: 0 }, ana, shop());
+    expect(verdict.ok).toBe(true);
+    expect(verdict.payload.cost).toBe(4);
+  });
+
+  it('comprar: recusa sem Eiros, item fora de venda e loja que o mestre não liberou', () => {
+    expect(run('transferItem', buy, ana, shop({ eiros: 3 })).reason).toBe('Eiros insuficientes.');
+    expect(run('transferItem', buy, ana, shop({ public: false })).ok).toBe(false);
+    const notForSale = shop();
+    notForSale.scenes[0].tokens![2].sheet!.inventory = [{ id: 'linha', itemId: 'espada' }];
+    expect(run('transferItem', buy, ana, notForSale).reason).toBe('Este item não está à venda.');
+  });
+
+  it('comprar: só para ficha da própria conta', () => {
+    expect(run('transferItem', { ...buy, toId: 'pc-bia' }, ana, shop()).ok).toBe(false);
+  });
+
+  it('lootear: token derrotado sai de graça, mesmo com o inventário não liberado', () => {
+    const state = shop({ public: false });
+    state.scenes[0].tokens![2].bars = [{ id: 'status-body', label: 'Corpo', value: 0, max: 10, color: '#ff0000' }];
+    const verdict = run('transferItem', { ...buy, cost: 7 }, ana, state);
+    expect(verdict.ok).toBe(true);
+    expect(verdict.payload.cost).toBeUndefined();
+  });
+
+  it('"Dar para": da própria ficha para o personagem de outro, sem cobrar nada', () => {
+    const give = { fromId: 'pc-ana', inventoryId: 'minha', toId: 'pc-bia', newEntryId: 'nova', cost: 5 };
+    const verdict = run('transferItem', give, ana, shop());
+    expect(verdict.ok).toBe(true);
+    expect(verdict.payload.cost).toBeUndefined();
+  });
+
+  it('não dá para tirar item da ficha de outro jogador', () => {
+    const state = shop();
+    state.entries = state.entries.map((e) => (e.id === 'pc-bia' ? { ...e, sheet: { ...(e.sheet as object), inventory: [{ id: 'dela', itemId: 'espada' }] } as never } : e));
+    expect(run('transferItem', { fromId: 'pc-bia', inventoryId: 'dela', toId: 'pc-ana', newEntryId: 'nova' }, ana, state).ok).toBe(false);
+  });
+
+  it('largar: o jogador larga da própria ficha, na cena aberta e na camada dele', () => {
+    const drop = { sceneId: 's1', sheetId: 'pc-ana', inventoryId: 'minha', dropId: 'novo', itemEntryId: 'u', x: 1, y: 1, level: 3 };
+    const verdict = run('dropFromInventory', drop, ana, shop());
+    expect(verdict.ok).toBe(true);
+    expect(verdict.payload.level).toBe(0);
+    expect(run('dropFromInventory', { ...drop, sceneId: 's2' }, ana, shop()).ok).toBe(false);
+    expect(run('dropFromInventory', { ...drop, sheetId: 'pc-bia' }, ana, shop()).ok).toBe(false);
+    expect(run('dropFromInventory', { ...drop, inventoryId: 'nada' }, ana, shop()).reason).toBe('Este item acabou.');
+  });
+
+  it('pegar: precisa editar a ficha e enxergar o item; com névoa, o que está fora da visão não vale', () => {
+    const pick = { dropId: 'chao', sheetId: 'pc-ana', newEntryId: 'nova' };
+    expect(run('pickUpDrop', pick, ana, shop({ drop: true })).ok).toBe(true);
+    expect(run('pickUpDrop', { ...pick, sheetId: 'pc-bia' }, ana, shop({ drop: true })).ok).toBe(false);
+    const fogged = withScene(shop({ drop: true }), { fog: { enabled: true }, drops: [{ id: 'chao', x: 99_000, y: 99_000, item: { id: 'x', itemId: 'espada' } }] });
+    expect(run('pickUpDrop', pick, ana, fogged).ok).toBe(false);
+    expect(run('pickUpDrop', pick, gm, fogged).ok).toBe(true);
+  });
+
+  it('recusa ficha com id malformado e linha repetida', () => {
+    expect(run('transferItem', { ...buy, fromId: '../x' }, ana, shop()).ok).toBe(false);
+    expect(run('transferItem', { fromId: 'pc-ana', inventoryId: 'minha', toId: 'pc-ana', newEntryId: 'n' }, ana, shop()).ok).toBe(false);
+    expect(run('transferItem', { ...buy, newEntryId: 'minha' }, ana, shop()).reason).toBe('Item já existe.');
+  });
+});
 
 describe('ficha: regras do servidor para o jogador', () => {
   const updateSheet = (s: unknown, viewer = ana) => run('updateEntry', { entryId: 'pc-ana', patch: { sheet: s } }, viewer);

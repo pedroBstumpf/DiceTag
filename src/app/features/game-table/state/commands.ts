@@ -5,6 +5,7 @@ import { addWall, removeWall, setExplored, setFog, setFogMemory, toggleDoor, upd
 import { addStroke, eraseStrokes, restoreStrokes } from './drawings';
 import { addDrop, moveDrop, removeDrop, setDropQuantity, updateDrop } from './drops';
 import { addFixedFx, clearFixedFx, removeFixedFx } from './fixed-fx';
+import { dropFromInventory, pickUpDrop, transferItem } from './inventory';
 import { addLevel, removeLevel, renameLevel, setLevelImage, setPlayerLevel } from './levels';
 import { addTableItem, toggleLoreReveal, updateTableItem } from './lore';
 import { addNote, removeNote, updateNote } from './notes';
@@ -63,6 +64,10 @@ export const TABLE_COMMANDS = {
   setDropQuantity,
   updateDrop,
   removeDrop,
+  // Itens que mudam de lugar (um comando só: nunca valem pela metade)
+  transferItem,
+  dropFromInventory,
+  pickUpDrop,
   // Névoa e paredes
   setFog,
   setFogMemory,

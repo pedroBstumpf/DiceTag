@@ -65,7 +65,7 @@ import {
   trainStudy,
   withPowers,
 } from '../utils/dice';
-import { addOne, inventoryRow, itemTagId, itemTagLevel, quantityOf, takeOne, unitOf } from '../utils/inventory';
+import { inventoryRow, itemTagId, itemTagLevel, quantityOf } from '../utils/inventory';
 import { SheetData, SheetStore } from '../../../core/services/sheet-store';
 import { FxDrawing, buildFx, seededRandom } from '../utils/effects';
 import { createMask, decodeMask, encodeMask, markPolygons, maskFits } from '../utils/fog-memory';
@@ -82,6 +82,7 @@ import {
   visionSourcesOf,
 } from '../state/player-view';
 import { findDrop } from '../state/drops';
+import { inventoryHolder, unitNeedsImageCopy } from '../state/inventory';
 import { NO_SELECTION, TokenSelection, keepOnly, selectMany, selectOne, toggleInSelection, without } from '../utils/selection';
 import { TableCommand, TableCommandPayload, TableCommandType, applyCommand } from '../state/commands';
 import {
@@ -341,7 +342,7 @@ export class TableSessionService extends SheetStore {
     return this.tokens().flatMap((p) => this.resolveToken(p, byId) ?? []);
   });
   /** Quem está olhando a mesa (papel + conta), para as regras de `state/permissions.ts`. */
-  private readonly viewer = computed<Viewer>(() => ({ role: this.role(), userId: this.me()?.id }));
+  private readonly viewer = computed<Viewer>(() => ({ role: this.role(), userId: this.me()?.id, shared: !!this.online() }));
 
   /** Desenhos da cena ativa. */
   readonly drawings = computed(() => this.activeScene()?.drawings ?? NO_STROKES);
@@ -1607,40 +1608,26 @@ export class TableSessionService extends SheetStore {
    */
   async transferItem(fromId: string, inventoryId: string, toId: string, cost = 0): Promise<boolean> {
     const to = this.sheetData(toId);
-    if (!to || fromId === toId) return false;
+    if (!to || fromId === toId || !inventoryHolder(this.state(), toId)) return false;
     if (cost > 0 && to.sheet.eiros < cost) return false;
-
-    const unit = await this.takeUnit(fromId, inventoryId);
-    if (!unit) return false;
-    const receiver = this.sheetData(toId);
-    this.updateSheet(toId, {
-      inventory: addOne(this.inventoryOf(toId), unit, newId),
-      ...(cost > 0 && receiver && { eiros: receiver.sheet.eiros - cost }),
-    });
+    const blobId = await this.imageForUnit(fromId, inventoryId);
+    if (blobId === null) return false;
+    this.dispatch('transferItem', { fromId, inventoryId, toId, newEntryId: newId(), ...(cost > 0 && { cost }), ...(blobId && { blobId }) });
+    // Item que saiu da ficha deixa de valer nas ações dela
+    if (!tokenSheetPlacement(fromId) && this.sheetAccess(fromId).edit) this.pruneItemTags(fromId);
     return true;
   }
 
   /**
-   * Tira uma unidade de um item do inventário e a devolve (com a personalização), para ir a
-   * outro inventário ou ao chão do mapa. NPC (loja): a linha fica, mesmo em 0. Personagem: a
-   * linha some ao zerar e a imagem personalizada vai junto; enquanto sobrar unidade, a imagem
-   * é duplicada para cada lugar cuidar da sua. null = não há o que tirar.
+   * Imagem da unidade que vai sair do inventário: enquanto a linha ficar na origem, uma cópia
+   * (cada lugar cuida da sua). undefined = sem imagem a copiar; null = não há o que tirar.
    */
-  private async takeUnit(fromId: string, inventoryId: string): Promise<InventoryEntry | null> {
-    const from = this.sheetData(fromId);
-    const item = this.inventoryOf(fromId).find((i) => i.id === inventoryId);
-    if (!from || !item || quantityOf(item) < 1) return null;
-
-    const keepEmpty = from.kind === 'npc';
-    const leavesList = !keepEmpty && quantityOf(item) === 1;
-    let blobId = item.blobId;
-    if (blobId && !leavesList) blobId = await this.files.copy(blobId).catch(() => undefined);
-
-    // Relê o inventário depois do await (pode ter mudado no meio)
-    this.updateSheet(fromId, { inventory: takeOne(this.inventoryOf(fromId), inventoryId, keepEmpty).list });
-    const unit: InventoryEntry = { ...item, blobId };
-    if (!blobId) delete unit.blobId;
-    return unit;
+  private async imageForUnit(sheetId: string, inventoryId: string): Promise<string | undefined | null> {
+    const holder = inventoryHolder(this.state(), sheetId);
+    const item = holder?.sheet.inventory.find((i) => i.id === inventoryId);
+    if (!holder || !item || quantityOf(item) < 1) return null;
+    if (!unitNeedsImageCopy(holder, item)) return undefined;
+    return this.files.copy(item.blobId!).catch(() => undefined);
   }
 
   // --- Itens no mapa (largar e pegar) --------------------------------------
@@ -1666,19 +1653,36 @@ export class TableSessionService extends SheetStore {
   async dropItem(data: ItemDragData, p: Point): Promise<DroppedItem | null> {
     const sceneId = this.activeSceneId();
     if (!sceneId) return null;
-    let unit: InventoryEntry | null;
+    const level = this.currentLevel();
+    const dropId = newId();
     if (data.source === 'inventory') {
       if (!this.sheetAccess(data.sheetId).edit) return null;
-      unit = await this.takeUnit(data.sheetId, data.inventoryId);
-    } else {
-      const exists = data.source === 'table' ? this.tableItemById().has(data.itemId) : this.worldbuild.byId().get(data.itemId)?.type === 'item';
-      if (!this.canManageDrops() || !exists) return null;
-      unit = { id: '', itemId: data.itemId, ...(data.source === 'table' && { table: true }) };
+      const blobId = await this.imageForUnit(data.sheetId, data.inventoryId);
+      if (blobId === null) return null;
+      // A cena pode ter mudado durante o await: o item vai para a cena de onde foi largado
+      this.dispatch('dropFromInventory', {
+        sceneId,
+        sheetId: data.sheetId,
+        inventoryId: data.inventoryId,
+        dropId,
+        itemEntryId: newId(),
+        x: p.x,
+        y: p.y,
+        ...(level > 0 && { level }),
+        ...(blobId && { blobId }),
+      });
+      if (!tokenSheetPlacement(data.sheetId)) this.pruneItemTags(data.sheetId);
+      return this.dropById(dropId)?.drop ?? null;
     }
-    if (!unit) return null;
-    const level = this.currentLevel();
-    const drop: DroppedItem = { id: newId(), x: p.x, y: p.y, ...(level > 0 && { level }), item: { ...unitOf(unit), id: newId() } };
-    // A cena pode ter mudado durante o await: o item vai para a cena de onde foi largado
+    const exists = data.source === 'table' ? this.tableItemById().has(data.itemId) : this.worldbuild.byId().get(data.itemId)?.type === 'item';
+    if (!this.canManageDrops() || !exists) return null;
+    const drop: DroppedItem = {
+      id: dropId,
+      x: p.x,
+      y: p.y,
+      ...(level > 0 && { level }),
+      item: { id: newId(), itemId: data.itemId, ...(data.source === 'table' && { table: true }) },
+    };
     this.dispatch('addDrop', { sceneId, drop });
     return drop;
   }
@@ -1692,8 +1696,8 @@ export class TableSessionService extends SheetStore {
     const drop = this.dropById(dropId)?.drop;
     if (!drop || !this.canSeeDrop(dropId) || !this.sheetAccess(sheetId).edit || !this.sheetData(sheetId)) return null;
     const name = inventoryRow(drop.item, { own: this.worldbuild.byId(), table: this.tableItemById() }).name;
-    this.updateSheet(sheetId, { inventory: addOne(this.inventoryOf(sheetId), drop.item, newId, quantityOf(drop.item)) });
-    this.dispatch('removeDrop', { dropId });
+    if (!inventoryHolder(this.state(), sheetId)) return null;
+    this.dispatch('pickUpDrop', { dropId, sheetId, newEntryId: newId() });
     return name;
   }
 

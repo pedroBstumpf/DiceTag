@@ -104,4 +104,20 @@ describe('permissões: lore e itens da mesa', () => {
     expect(canEditTableItem(item, gm)).toBe(true);
     expect(canEditTableItem(undefined, gm)).toBe(false);
   });
+
+  describe('mesa online (várias contas)', () => {
+    const shared = { role: 'player' as const, userId: 'u1', shared: true };
+    const own = { id: 'a', kind: 'character' as const, name: 'A', createdAt: 0, ownerUserId: 'u1' };
+    const other = { ...own, id: 'b', ownerUserId: 'u2' };
+
+    it('o personagem de outro jogador é só leitura', () => {
+      expect(canEdit(own, shared)).toBe(true);
+      expect(canEdit(other, shared)).toBe(false);
+      expect(sheetAccess(shared, { entry: other, bars: [] })).toEqual({ edit: false, sheet: true, inventory: true });
+    });
+
+    it('na mesa local os personagens continuam livres', () => {
+      expect(canEdit(other, { role: 'player', userId: 'u1' })).toBe(true);
+    });
+  });
 });
