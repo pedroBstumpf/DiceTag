@@ -2,11 +2,11 @@ import { Component, computed, inject, output, signal } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { DICE_KINDS, DiceKind, ROLL_OUTCOMES } from '../../../../core/models/table-session.model';
+import { DICE_KINDS, DiceKind, ROLL_OUTCOMES, RollConfig } from '../../../../core/models/table-session.model';
 import { Tag } from '../../../../core/models/tag.model';
 import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
 import { SheetTagOption, TableSessionService } from '../../services/table-session.service';
-import { StatusPick, formatModifier, levelUpText, powerOf, quickModifier, rollUsesTags } from '../../utils/dice';
+import { NEGATED_TAG_PREFIX, StatusPick, formatModifier, levelUpText, powerOf, quickModifier, rollUsesTags } from '../../utils/dice';
 
 /** Tags e defeitos de um tema (ou etiquetas de um item equipado), para agrupar no painel. */
 interface ThemeGroup {
@@ -180,6 +180,27 @@ export class QuickRoll {
   }
   readonly formula = computed(() => this.dice() + formatModifier(this.modifier()));
 
+  /**
+   * O que foi escolhido, para o servidor somar com a ficha atual (mesa online): só o fixo e as
+   * etiquetas de status vão como número; temas, Poder e itens vão pelos ids.
+   */
+  private serverConfig(): RollConfig {
+    if (!this.usesTags()) return { dice: this.dice(), modifier: this.fixed() };
+    const themes = this.themeGroups().flatMap((g) => g.tags).filter((t) => this.themePicks().has(t.id)).map((t) => t.id);
+    const items = this.itemGroups().flatMap((g) => g.tags).flatMap((t) => {
+      const sign = this.statusPicks().get(t.id);
+      return sign ? [sign < 0 ? NEGATED_TAG_PREFIX + t.id : t.id] : [];
+    });
+    const powers = Object.fromEntries(this.pickedMagic().map((t) => [t.id, this.power(t)]));
+    return {
+      dice: this.dice(),
+      modifier: quickModifier(this.fixed(), [], this.signedPicks(this.statusTags())),
+      attributes: [...themes, ...items],
+      powers,
+      addItems: this.addItems(),
+    };
+  }
+
   // --- Modificador fixo ----------------------------------------------------
 
   step(delta: number): void {
@@ -215,6 +236,7 @@ export class QuickRoll {
       studies,
       itemsAdded,
       this.manaCost(),
+      this.serverConfig(),
     );
     // Mesa online: o servidor sorteia e o resultado aparece no chat e no aviso da página
     if (!result) {

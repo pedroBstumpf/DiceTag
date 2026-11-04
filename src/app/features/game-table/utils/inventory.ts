@@ -18,8 +18,8 @@ export type ItemSource = 'own' | 'table';
 
 /** Onde procurar os originais: itens do mundo aberto e itens da mesa. */
 export interface ItemSources {
-  own: ReadonlyMap<string, CardItem>;
-  table: ReadonlyMap<string, CardItem>;
+  own: Pick<ReadonlyMap<string, CardItem>, 'get'>;
+  table: Pick<ReadonlyMap<string, CardItem>, 'get'>;
 }
 
 /** Origem do item: da mesa (`table`) ou do mundo. */
@@ -80,6 +80,16 @@ export function itemTagId(inventoryId: string, tagId: string): string {
 /** Valor da etiqueta de item na rolagem: o nível dela (sem nível ou 0 = 1). */
 export function itemTagLevel(tag: Tag): number {
   return tag.level || 1;
+}
+
+/**
+ * Id e valor das etiquetas dos itens equipados (com a personalização do inventário): é o que as
+ * rolagens somam. A mesma conta na tela e no servidor.
+ */
+export function equippedTagLevels(inventory: readonly InventoryEntry[], sources: ItemSources): [string, number][] {
+  return inventory
+    .filter((i) => i.equipped)
+    .flatMap((i) => inventoryRow(i, sources).tags.map((tag): [string, number] => [itemTagId(i.id, tag.id), itemTagLevel(tag)]));
 }
 
 /**

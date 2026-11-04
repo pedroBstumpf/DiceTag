@@ -652,6 +652,78 @@ describe('rolagem no servidor', () => {
     expect(refused.ok).toBe(false);
   });
 
+  describe('itens, estudos e NPC do bestiário', () => {
+    const itemTag = 'item:linha:afiada';
+    /** Ana com a Espada (do mundo) equipada, personalizada com uma etiqueta de nível 2, e um estudo. */
+    function armed(): TableState {
+      const state = table();
+      state.entries[0] = {
+        ...state.entries[0],
+        sheet: {
+          ...(state.entries[0].sheet as object),
+          inventory: [{ id: 'linha', itemId: 'espada', equipped: true, tags: [{ id: 'afiada', text: 'Afiada', color: '#ff0000', level: 2 }] }],
+          studies: [{ id: 'esgrima', text: 'Esgrima', sa: 2, sn: 3 }],
+        } as never,
+      };
+      return state;
+    }
+    const go = (request: Parameters<typeof performRoll>[1], state = armed(), random = fixed) => performRoll(state, request, ana, 'Ana', 1, 'm', random, world);
+
+    it('etiqueta de item: fora do total por padrão, mas aparece; com addItems, soma', () => {
+      const out = go({ sheetId: 'pc-ana', roll: roll([itemTag]), label: '', icon: '' });
+      expect(out.ok && out.message.roll).toMatchObject({ modifier: 1, itemModifier: 2, itemsAdded: false, total: 15 });
+      const added = go({ sheetId: 'pc-ana', roll: roll([itemTag], { addItems: true }), label: '', icon: '' });
+      expect(added.ok && added.message.roll).toMatchObject({ modifier: 3, itemsAdded: true, total: 17 });
+    });
+
+    it('etiqueta de item ligada como penalidade subtrai', () => {
+      const out = go({ sheetId: 'pc-ana', roll: roll([`-${itemTag}`], { addItems: true }), label: '', icon: '' });
+      expect(out.ok && out.message.roll?.modifier).toBe(-1);
+    });
+
+    it('item não equipado não vale, mesmo que o cliente mande a etiqueta', () => {
+      const state = armed();
+      (state.entries[0].sheet as { inventory: { equipped: boolean }[] }).inventory[0].equipped = false;
+      const out = go({ sheetId: 'pc-ana', roll: roll([itemTag], { addItems: true }), label: '', icon: '' }, state);
+      expect(out.ok && out.message.roll).toMatchObject({ modifier: 1, itemModifier: 0 });
+    });
+
+    it('estudo ligado acumula SA, e quem alcança o SN é avisado no chat', () => {
+      const out = go({ sheetId: 'pc-ana', roll: roll(), label: '', icon: '', studies: ['esgrima'] });
+      expect(out.ok).toBe(true);
+      if (!out.ok) return;
+      const save = out.commands.find((c) => c.type === 'updateEntry');
+      expect((save?.payload as { patch: { sheet: { studies: { sa: number }[] } } }).patch.sheet.studies[0].sa).toBe(3);
+      const chat = out.commands.filter((c) => c.type === 'addChatMessage').map((c) => (c.payload as { message: { text?: string } }).message.text);
+      expect(chat).toContain('⭐ Esgrima subiu de nível!');
+    });
+
+    it('3d6 não treina estudo nem soma etiqueta', () => {
+      const out = go({ sheetId: 'pc-ana', roll: { dice: '3d6', modifier: 0, attributes: ['esgrima', itemTag], addItems: true }, label: '', icon: '', studies: ['esgrima'] });
+      expect(out.ok && out.commands.map((c) => c.type)).toEqual(['addChatMessage']);
+    });
+
+    it('NPC do bestiário usa a ficha do mundo, e o gasto de Mana vai para o mundo', () => {
+      const lobo: WorldItem = {
+        id: 'lobo',
+        type: 'npc',
+        name: 'Lobo',
+        parentId: null,
+        createdAt: 0,
+        updatedAt: 0,
+        sheet: { themes: [{ id: 't', name: 'Fera', tags: [{ id: 'garra', text: 'Garra', level: 2, magic: true }], flaws: [], goal: '', goalProgress: 0, goalAbandon: 0 }] } as never,
+      };
+      const state = table();
+      state.entries.push({ id: 'ref', kind: 'npc', name: 'Lobo', createdAt: 0, worldNpcId: 'lobo', controllerUserId: 'u-ana' });
+      const out = performRoll(state, { sheetId: 'ref', roll: roll(['garra']), label: '', icon: '' }, ana, 'Ana', 1, 'm', fixed, new WorldView((id) => (id === 'lobo' ? lobo : null)));
+      expect(out.ok).toBe(true);
+      if (!out.ok) return;
+      expect(out.message.roll).toMatchObject({ modifier: 3, mana: 2 });
+      expect(out.world?.item.id).toBe('lobo');
+      expect(out.world?.token.bars.find((b) => b.id === 'status-spirit')?.value).toBe(22);
+    });
+  });
+
   it('sem gerador de números aleatórios, a rolagem do servidor não acontece (nunca cai no Math.random)', () => {
     // @ts-expect-error o gerador é obrigatório no servidor
     expect(() => rollDice({ dice: '2d12', modifier: 0 })).toThrow(/gerador/);
