@@ -117,6 +117,7 @@ export class Room {
       now: this.now(),
       full: this.full,
       world: this.world,
+      playerScene: () => this.playerScene(),
     });
     if (!verdict.ok) return this.deny(client, seq, type, verdict.reason);
     const command = { type, payload: verdict.payload } as TableCommand;

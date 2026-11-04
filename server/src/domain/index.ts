@@ -29,6 +29,8 @@ export {
 export { findPlacement, levelOf, tokenSheetPlacement } from '../../../src/app/features/game-table/state/helpers';
 export { clampLevelIn } from '../../../src/app/features/game-table/state/levels';
 export { findDrop } from '../../../src/app/features/game-table/state/drops';
+export { inventoryHolder } from '../../../src/app/features/game-table/state/inventory';
+export { quantityOf } from '../../../src/app/features/game-table/utils/inventory';
 export { resolveToken, type ResolvedToken } from '../../../src/app/features/game-table/state/tokens';
 export {
   isPointVisible,

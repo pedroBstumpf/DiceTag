@@ -6,10 +6,16 @@ import {
   defaultToken,
   findDrop,
   findPlacement,
+  inventoryHolder,
+  isDown,
   levelOf,
   movePathBlocked,
   normalizeSheet,
   ownsCharacter,
+  quantityOf,
+  sheetAccess,
+  visibleDropsFor,
+  visibleTokensFor,
   wallsBlockMovement,
   wallsToSegments,
   type Scene,
@@ -20,6 +26,7 @@ import {
 } from '../domain';
 import type { ValidPayload } from './command-schemas';
 import { playerSheetChange } from './sheet-rules';
+import type { PlayerScene } from './vision';
 import type { WorldView } from './world';
 
 /**
@@ -45,6 +52,8 @@ export interface RuleContext {
   full: boolean;
   /** Mundo da mesa: Raças aplicadas na ficha e itens que entram no inventário. */
   world: WorldView;
+  /** Cena aberta como os jogadores a veem (calculada só se a regra precisar). */
+  playerScene: () => PlayerScene | null;
 }
 
 export type RuleResult<P> = { ok: true; payload: P } | { ok: false; reason: string };
@@ -72,6 +81,7 @@ const deny = <P>(reason: string): RuleResult<P> => ({ ok: false, reason });
 const NOT_ALLOWED = 'Você não tem permissão para isso.';
 const ONLY_GM = 'Só o mestre pode fazer isso.';
 const FULL = 'A mesa atingiu o tamanho máximo.';
+const NO_EIROS = 'Eiros insuficientes.';
 
 const isGm = (ctx: RuleContext) => ctx.viewer.role === 'gm';
 const gmOnly = <K extends TableCommandType>(): Rule<K> => (payload, ctx) => (isGm(ctx) ? allow(payload) : deny(ONLY_GM));
@@ -128,6 +138,19 @@ function playerMoveProblem(ctx: RuleContext, placementId: string, x: number, y: 
   return movePathBlocked(placement, { x, y }, wallsToSegments(walls)) ? 'Uma parede bloqueia o caminho.' : null;
 }
 
+/** O jogador enxerga este token agora? (cena aberta, camada dele, fora da névoa) */
+function tokenInView(ctx: RuleContext, placementId: string): boolean {
+  const view = ctx.playerScene();
+  return !!view && visibleTokensFor(view.tokens, 'player', view.fog).some((t) => t.placement.id === placementId);
+}
+
+/** O jogador enxerga este item no chão agora? */
+function dropInView(ctx: RuleContext, dropId: string): boolean {
+  const view = ctx.playerScene();
+  if (!view) return false;
+  const here = (view.scene.drops ?? []).filter((d) => levelOf(d) === view.level);
+  return visibleDropsFor(here, 'player', view.fog).some((d) => d.id === dropId);
+}
 
 // --- Regras --------------------------------------------------------------------
 
@@ -274,6 +297,48 @@ export const COMMAND_RULES: { [K in TableCommandType]: Rule<K> } = {
   setDropQuantity: gmOnly(),
   updateDrop: gmOnly(),
   removeDrop: gmOnly(),
+
+  // Itens que mudam de lugar: um comando só, com preço e estoque conferidos AQUI (o cliente não escolhe o valor)
+  transferItem: (p, ctx) => {
+    const from = inventoryHolder(ctx.state, p.fromId);
+    const to = inventoryHolder(ctx.state, p.toId);
+    if (!from || !to || p.fromId === p.toId) return deny('Ficha não encontrada.');
+    const item = from.sheet.inventory.find((i) => i.id === p.inventoryId);
+    if (!item || quantityOf(item) < 1) return deny('Este item acabou.');
+    if (to.sheet.inventory.some((i) => i.id === p.newEntryId)) return deny('Item já existe.');
+    if (isGm(ctx)) return (p.cost ?? 0) > to.sheet.eiros ? deny(NO_EIROS) : allow(p);
+    const { cost: _cost, ...free } = p;
+    // "Dar para": a origem é da conta; quem recebe é um personagem da mesa; nunca cobra nada
+    if (canEditEntry(ctx.state, from.entry, ctx.viewer)) {
+      return to.entry.kind === 'character' || canEditEntry(ctx.state, to.entry, ctx.viewer) ? allow(free) : deny(NOT_ALLOWED);
+    }
+    // Comprar ou lootear: de um token de NPC à vista, com o inventário liberado, para uma ficha da conta
+    if (!from.placement || !canEditEntry(ctx.state, to.entry, ctx.viewer) || !tokenInView(ctx, from.placement.id)) return deny(NOT_ALLOWED);
+    const bars = from.placement.bars ?? ctx.world.tokenOf(from.entry).bars;
+    if (!sheetAccess(ctx.viewer, { entry: from.entry, bars }, from.placement).inventory) return deny(NOT_ALLOWED);
+    if (isDown(bars)) return allow(free);
+    if (item.price === undefined) return deny('Este item não está à venda.');
+    return to.sheet.eiros < item.price ? deny(NO_EIROS) : allow({ ...free, cost: item.price });
+  },
+  dropFromInventory: (p, ctx) => {
+    const scene = sceneOf(ctx.state, p.sceneId);
+    const holder = inventoryHolder(ctx.state, p.sheetId);
+    if (!scene || !holder) return deny('Ficha não encontrada.');
+    if (!inActiveScene(ctx, p.sceneId) || !canEditEntry(ctx.state, holder.entry, ctx.viewer)) return deny(NOT_ALLOWED);
+    const item = holder.sheet.inventory.find((i) => i.id === p.inventoryId);
+    if (!item || quantityOf(item) < 1) return deny('Este item acabou.');
+    if (ctx.full || (scene.drops?.length ?? 0) >= LIMITS.dropsPerScene) return deny(FULL);
+    if (findDrop(ctx.state.scenes, p.dropId)) return deny('Item já existe.');
+    // O jogador só larga na camada dele
+    return allow(isGm(ctx) ? p : { ...p, level: clampLevelIn(scene, scene.playerLevel ?? 0) });
+  },
+  pickUpDrop: (p, ctx) => {
+    const holder = inventoryHolder(ctx.state, p.sheetId);
+    if (!holder || !findDrop(ctx.state.scenes, p.dropId)) return deny('Este item não está mais aqui.');
+    if (!canEditEntry(ctx.state, holder.entry, ctx.viewer)) return deny(NOT_ALLOWED);
+    if (!isGm(ctx) && !dropInView(ctx, p.dropId)) return deny(NOT_ALLOWED);
+    return holder.sheet.inventory.some((i) => i.id === p.newEntryId) ? deny('Item já existe.') : allow(p);
+  },
 
   // Névoa e paredes: do mestre; portas, qualquer um na cena aberta
   setFog: gmOnly(),
