@@ -38,7 +38,8 @@ import type { PlayerScene } from './vision';
  * - anotações públicas vistas ou exploradas; itens no chão e efeitos fixos visíveis, da camada dele.
  *
  * E, das fichas: personagens (sem as anotações pessoais dos outros), NPCs que controla ou cujo
- * token está à vista (sem a ficha base), e só as ações dele. Sons ficam com o mestre.
+ * token está à vista (sem a ficha base), e só as ações dele. Sons: só os que estão tocando, sem o
+ * nome (o nome da faixa pode entregar o que vem por aí); o resto da aba Sons é do mestre.
  */
 export function projectState(state: TableState, viewer: Viewer, view: PlayerScene | null): TableState {
   if (viewer.role === 'gm') return state;
@@ -105,13 +106,19 @@ function entryVisible(entry: TableEntry, state: TableState, viewer: Viewer, onMa
     case 'automation':
       // Só as ações dele (personagem ou NPC que controla); as gerais e as de NPCs são do mestre
       return !!entry.ownerEntryId && canEditEntry(state, entry, viewer);
+    case 'sound':
+      // A aba Sons é do mestre; o jogador recebe só o que precisa para ouvir o que está tocando
+      return (state.playing ?? []).some((p) => p.entryId === entry.id);
     default:
-      // Sons: só o mestre usa (aba Sons)
       return false;
   }
 }
 
 function projectEntry(entry: TableEntry, viewer: Viewer): TableEntry {
+  if (entry.kind === 'sound') {
+    const { id, kind, createdAt, blobId, volume, loop } = entry;
+    return { id, kind, createdAt, name: '', blobId, volume, loop };
+  }
   if (entry.kind === 'npc' && !controlsNpc(entry, viewer)) {
     const { sheet: _sheet, ...rest } = entry;
     return rest;

@@ -229,6 +229,12 @@ export const COMMAND_RULES: { [K in TableCommandType]: Rule<K> } = {
     return own && canEditEntry(ctx.state, entry, ctx.viewer) ? allow(p) : deny(NOT_ALLOWED);
   },
   setSoundMaster: gmOnly(),
+  // Quem chega depois entra no ponto certo da faixa: o horário vem do servidor, não do cliente
+  setSoundPlaying: (p, ctx) => {
+    if (!isGm(ctx)) return deny(ONLY_GM);
+    return entryOf(ctx.state, p.entryId)?.kind === 'sound' ? allow({ ...p, startedAt: ctx.now }) : deny('Som não encontrado.');
+  },
+  stopAllSounds: gmOnly(),
 
   // Tokens
   placeToken: (p, ctx) => {

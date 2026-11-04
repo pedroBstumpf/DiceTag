@@ -135,6 +135,7 @@ export class GameTablePage {
   private readonly worldbuild = inject(WorldbuildService);
   private readonly worlds = inject(WorldsService);
   private readonly snackBar = inject(MatSnackBar);
+  private readonly mixer = inject(SoundMixerService);
 
   /** Id da mesa (parâmetro da rota /mesa/:id ou /mesa-online/:id). */
   readonly id = input.required<string>();
@@ -190,6 +191,11 @@ export class GameTablePage {
       const table = this.table();
       if (!table || this.online() || !this.worlds.loaded()) return;
       untracked(() => this.worlds.select(table.worldId ?? DEFAULT_WORLD_ID));
+    });
+
+    // O navegador bloqueou os sons da mesa até a pessoa interagir com a página
+    effect(() => {
+      if (this.mixer.blocked()) untracked(() => this.snackBar.open('Clique em qualquer lugar para ouvir os sons da mesa.', undefined, { duration: 6000 }));
     });
 
     // Avisos do mundo do servidor: item não salvo, envio recusado

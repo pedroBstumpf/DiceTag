@@ -271,6 +271,8 @@ export const COMMAND_SCHEMAS = {
   updateEntry: z.strictObject({ entryId: id, patch: z.strictObject(entryFields).partial() }),
   removeEntry: z.strictObject({ entryId: id }),
   setSoundMaster: z.strictObject({ volume: z.number().min(0).max(1) }),
+  setSoundPlaying: z.strictObject({ entryId: id, playing: z.boolean(), startedAt: timestamp }),
+  stopAllSounds: z.strictObject({}),
   // Tokens
   placeToken: z.strictObject({ sceneId: id, placement }),
   updatePlacement: z.strictObject({ placementId: id, patch: z.strictObject(placementFields).partial() }),

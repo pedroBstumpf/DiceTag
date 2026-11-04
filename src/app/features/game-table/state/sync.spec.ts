@@ -120,4 +120,11 @@ describe('rajadas de comandos (arrastar, WASD, memória da névoa)', () => {
     const sync = localCommand(startSync(base(), 1), 1, move(10));
     expect(squashPending(sync, [7], 8, move(1))).toBe(sync);
   });
+
+  it('controles de volume vão em rajada; outras alterações da ficha, na hora', () => {
+    expect(burstKey({ type: 'setSoundMaster', payload: { volume: 0.5 } })).toBe('soundMaster');
+    expect(burstKey({ type: 'updateEntry', payload: { entryId: 'a', patch: { volume: 0.5 } } })).toBe('volume:a');
+    expect(burstKey({ type: 'updateEntry', payload: { entryId: 'a', patch: { name: 'x' } } })).toBeNull();
+    expect(burstKey({ type: 'updateEntry', payload: { entryId: 'a', patch: { volume: 0.5, name: 'x' } } })).toBeNull();
+  });
 });

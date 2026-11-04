@@ -676,12 +676,20 @@ export const FX_COLORS: { color: string; label: string }[] = [
 export const DEFAULT_FX: FxStyle = { kind: 'slash', color: '#e8eefc' };
 
 /** Estado salvo de uma mesa. */
+/** Som tocando na mesa online: quando começou, para quem chega depois entrar no mesmo ponto. */
+export interface SoundPlay {
+  entryId: string;
+  startedAt: number;
+}
+
 export interface TableState {
   scenes: Scene[];
   activeSceneId: string | null;
   entries: TableEntry[];
   /** Volume mestre dos sons da mesa (0–1). Padrão: 1. */
   soundMaster?: number;
+  /** Mesa online: sons tocando agora para todos. Mesa local: não usado (o mixer controla sozinho). */
+  playing?: SoundPlay[];
   /** Pastas do mundo reveladas aos jogadores nesta mesa. Padrão: nenhuma. */
   lore?: TableLore;
   /** Chat da mesa (mensagens e rolagens). Padrão: []. */

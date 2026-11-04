@@ -79,6 +79,13 @@ export function burstKey(command: TableCommand): string | null {
       return 'move';
     case 'setExplored':
       return `explored:${command.payload.sceneId}`;
+    // Controle deslizante: um comando por movimento estouraria o limite de mensagens do servidor
+    case 'setSoundMaster':
+      return 'soundMaster';
+    case 'updateEntry': {
+      const fields = Object.keys(command.payload.patch);
+      return fields.length === 1 && fields[0] === 'volume' ? `volume:${command.payload.entryId}` : null;
+    }
     default:
       return null;
   }

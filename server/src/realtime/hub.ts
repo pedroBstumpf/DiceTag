@@ -129,6 +129,8 @@ export class RealtimeHub {
     else this.socketsByUser.delete(client.userId);
     // Último a sair: grava e libera a memória da sala
     if (!room.clients.size) {
+      // Mesa vazia: a música não fica "tocando" até a próxima sessão
+      room.apply({ type: 'stopAllSounds', payload: {} }, SERVER_AUTHOR);
       room.close(true);
       if (this.rooms.get(room.tableId) === room) this.rooms.delete(room.tableId);
     }

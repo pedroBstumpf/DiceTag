@@ -257,6 +257,32 @@ describe('permissões no servidor', () => {
 
 // --- Ficha ---------------------------------------------------------------------------------
 
+describe('sons em tempo real', () => {
+  const withSound = (playing: boolean): TableState => {
+    const state = table();
+    state.entries = [...state.entries, { id: 'trilha', kind: 'sound', name: 'Emboscada no fim da ponte', createdAt: 1, blobId: 'arquivo', volume: 0.5, loop: true }];
+    state.playing = playing ? [{ entryId: 'trilha', startedAt: 1 }] : [];
+    return state;
+  };
+
+  it('só o mestre toca e para; o horário é o do servidor', () => {
+    const start = { entryId: 'trilha', playing: true, startedAt: 999 };
+    expect(run('setSoundPlaying', start, ana, withSound(false)).ok).toBe(false);
+    expect(run('stopAllSounds', {}, ana, withSound(true)).ok).toBe(false);
+    const verdict = run('setSoundPlaying', start, gm, withSound(false));
+    expect(verdict.ok).toBe(true);
+    expect(verdict.payload.startedAt).toBe(42);
+    expect(run('setSoundPlaying', { ...start, entryId: 'pc-ana' }, gm, withSound(false)).ok).toBe(false);
+  });
+
+  it('o jogador recebe só o som que está tocando, sem o nome da faixa', () => {
+    expect(viewOf(withSound(false)).entries.some((e) => e.kind === 'sound')).toBe(false);
+    const sound = viewOf(withSound(true)).entries.find((e) => e.kind === 'sound');
+    expect(sound).toMatchObject({ id: 'trilha', name: '', blobId: 'arquivo', volume: 0.5, loop: true });
+    expect(JSON.stringify(viewOf(withSound(true)))).not.toContain('Emboscada');
+  });
+});
+
 describe('itens que mudam de lugar (um comando só)', () => {
   const adaga = { id: 'linha', itemId: 'espada', price: 4, quantity: 2 };
   /** Mesa com o item na ficha da Ana e na cópia do token `t-orc2` (inventário liberado). */

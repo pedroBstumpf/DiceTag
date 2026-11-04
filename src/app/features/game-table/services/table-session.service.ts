@@ -3,7 +3,7 @@ import { Point } from '../../../core/models/geometry.model';
 import { WorldItem, npcSheetOf, npcTokenOf } from '../../../core/models/world-item.model';
 import { WorldbuildService } from '../../worldbuild/services/worldbuild.service';
 import {
-  FxKind, BRUSH_COLORS,
+  SoundPlay, FxKind, BRUSH_COLORS,
   BRUSH_WIDTHS,
   ChatMessage,
   DEFAULT_FX,
@@ -197,6 +197,7 @@ type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K>
 /** Intervalo mínimo entre envios de uma rajada (arrastar, WASD, memória da névoa) na mesa online. */
 const BURST_MS = 100;
 const NO_TOKENS: TokenPlacement[] = [];
+const NO_PLAYING: SoundPlay[] = [];
 const NO_WALLS: Wall[] = [];
 const NO_TABLE_ITEMS: TableItem[] = [];
 const NO_STROKES: Stroke[] = [];
@@ -308,6 +309,14 @@ export class TableSessionService extends SheetStore {
   readonly entryById = computed(() => new Map(this.entries().map((e) => [e.id, e])));
   /** Volume mestre dos sons (0–1). */
   readonly soundMaster = computed(() => this.state().soundMaster ?? 1);
+  /** Mesa online: sons tocando para todos (só muda quando a lista muda de verdade). */
+  readonly playingSounds = computed(
+    () => {
+      const entries = this.state().entries;
+      return this.online() ? (this.state().playing ?? []).filter((p) => entries.some((e) => e.id === p.entryId)) : NO_PLAYING;
+    },
+    { equal: (a, b) => a.length === b.length && a.every((p, i) => p.entryId === b[i].entryId && p.startedAt === b[i].startedAt) },
+  );
   /** Aba Lore nesta mesa: as pastas do mundo reveladas aos jogadores. */
   readonly lore = computed(() => this.state().lore ?? EMPTY_LORE);
 
@@ -1275,6 +1284,16 @@ export class TableSessionService extends SheetStore {
   /** Define o volume mestre dos sons da mesa (0–1). */
   setSoundMaster(volume: number): void {
     this.dispatch('setSoundMaster', { volume });
+  }
+
+  /** Mesa online (mestre): toca ou para um som para todos. */
+  setSoundPlaying(entryId: string, playing: boolean): void {
+    this.dispatch('setSoundPlaying', { entryId, playing, startedAt: Date.now() });
+  }
+
+  /** Mesa online (mestre): para todos os sons. */
+  stopAllSounds(): void {
+    this.dispatch('stopAllSounds', {});
   }
 
   /**
