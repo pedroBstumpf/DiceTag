@@ -9,7 +9,9 @@ rolagens…) estão no [`CLAUDE.md`](CLAUDE.md); este documento explica o **esqu
 ## 1. Visão geral
 
 Aplicação **Angular 21** de página única, **standalone** e **zoneless** (sem zone.js): toda a
-reatividade vem de **signals**. Não há backend — os dados vivem no **IndexedDB** do navegador.
+reatividade vem de **signals**. As telas locais guardam os dados no **IndexedDB** do navegador (diagrama abaixo). A
+**mesa online** e o mundo dela usam o servidor em `server/` (§11 e §12), pelo mesmo `TableSessionService` e pelo mesmo
+`WorldbuildService`, que trocam de origem sem as telas saberem.
 
 ```
 ┌──────────────────────────── Navegador ────────────────────────────┐
@@ -278,6 +280,7 @@ fica em `state/`:
 | `scenes.ts`, `levels.ts` | cenas, pastas de cenas e camadas do mapa |
 | `entries.ts` | arquivos da mesa e volume mestre |
 | `tokens.ts` | colocar/mover/alterar/remover tokens e a **regra de vínculo** (`resolveToken`, `splitTokenPatch`) |
+| `inventory.ts` | itens que mudam de lugar (`transferItem`, `dropFromInventory`, `pickUpDrop`): um comando só, para nunca valerem pela metade com várias pessoas na mesa |
 | `fog.ts`, `drawings.ts`, `notes.ts`, `chat.ts`, `lore.ts` | névoa e paredes, desenhos, anotações, chat, pastas da Lore reveladas e itens da mesa |
 | `npc-abilities.ts` | habilidades dos NPCs do bestiário: moram no NPC do mundo (`WorldItem.abilities`) e viram ações do NPC-referência na mesa (não é comando: o `TableSessionService` grava no `WorldbuildService`) |
 | `permissions.ts` | regras de acesso puras (`canEdit`, `sheetAccess`, `canSeeLoreItem`…), com quem olha (`Viewer`) como parâmetro |
@@ -288,7 +291,7 @@ Cada comando é `(estado, payload) → novo estado`, com payload serializável: 
 já vêm prontos do serviço. Comando que não muda nada devolve o mesmo objeto, e o `dispatch` não grava.
 
 Regras com dono único: vínculo dos tokens (`state/tokens.ts`), quem age (`actor`), permissões
-(`state/permissions.ts`) e transferência de itens (`transferItem`, ainda no serviço: envolve Blobs e duas fichas).
+(`state/permissions.ts`) e transferência de itens (`state/inventory.ts`; o serviço só duplica a imagem antes).
 
 ### 6.2 Composição da página
 
@@ -462,8 +465,11 @@ regras de segurança em [`BACKEND_SECURITY.md`](BACKEND_SECURITY.md) e operaçã
   dos NPCs do bestiário e as Raças/itens usados pelas regras; as rotas do Worldbuild avisam o hub.
 - **Papel vem da conta:** dono da mesa = mestre; quem entra por convite = jogador (`table_members`).
 - **Ligação com o front:** em desenvolvimento, `proxy.conf.json` repassa `/api` e `/ws` do `ng serve` para
-  `localhost:3000`, então o front usa URLs relativas e o cookie de sessão na mesma origem. A primeira parte ligada é
-  a **mesa online** (§12).
+  `localhost:3000`, então o front usa URLs relativas e o cookie de sessão na mesma origem. A parte ligada é a
+  **mesa online** e o mundo dela (§12).
+- **Recuperação de senha:** `AuthService.createPasswordReset`/`resetPassword`, tabela `password_resets` (só o HMAC do
+  token) e `services/mailer.ts` (`MAIL_PROVIDER`). O e-mail sai sem o cliente esperar: o tempo de resposta não entrega se a
+  conta existe.
 - **App entregue pelo servidor** (`http/routes/frontend.ts`, ligado por `FRONTEND_DIR`): o build do Angular na
   mesma origem da API, num processo só. A lista de arquivos é montada ao subir (nada da URL vira caminho no
   disco); rotas sem extensão caem no `index.html`; `/api`, `/ws` e `/dev` nunca caem no app. CSP própria
@@ -471,24 +477,29 @@ regras de segurança em [`BACKEND_SECURITY.md`](BACKEND_SECURITY.md) e operaçã
 
 ## 12. Rumo ao backend
 
-O servidor já existe (§11) e a **mesa online** já o usa; o resto do app ainda é local. O plano completo está no
-[`SPEC.md`](SPEC.md).
+O servidor já existe (§11) e a **mesa online** o usa por inteiro, com o mundo dela; contas, mesas e mundos locais continuam
+no navegador. O plano completo está no [`SPEC.md`](SPEC.md).
 
 ### 12.1 Mesa online (já ligada)
 
 ```
 Minhas mesas → OnlineTables ── OnlineTablesService / ServerAccountService ── ServerApiService ── /api
-/mesa-online/:id → GameTablePage ── session.connect(id) ── TableRoom ── /ws/tables/:id
-                                          │
-                     dispatch → state/sync.ts (confirmado + pendentes = tela) → envio (rajadas a cada 100 ms)
-                     welcome/state/cmd/ack/nack → state/sync.ts → state.set(view)
+/mesa-online/:id → GameTablePage ─┬─ session.connect(id) ── TableRoom ── /ws/tables/:id
+                                  │        │
+                                  │   dispatch → state/sync.ts (confirmado + pendentes = tela) → envio (rajadas a cada 100 ms)
+                                  │   welcome/state/cmd/ack/nack → state/sync.ts → state.set(view)
+                                  │   event (ping, efeito) → repassado, sem gravar · world → busca a Lore de novo
+                                  └─ worldbuild.openOnline(...) ── /worlds/:id/items (dono) · /tables/:id/lore (jogador)
 ```
 
 - O `TableSessionService` é o mesmo nas duas mesas: sem sala, grava no IndexedDB; com sala, nunca grava no
   navegador. O papel vem do `welcome`; as rolagens são pedidas ao servidor; o jogador com névoa usa a visão do servidor.
-- Arquivos da mesa online vão para o servidor (`ServerFileStore`, trocada no `connect`); a leitura tenta o navegador
-  antes (imagens do Worldbuild).
-- Ainda locais na mesa online: Worldbuild/bestiário e eventos efêmeros (ping, efeitos).
+- Arquivos da mesa online e do mundo vão para o servidor (`ServerFileStore`, único caminho de envio: é ela que tira os
+  metadados das imagens); a leitura tenta o navegador antes (mesas antigas).
+- **Mundo:** o `WorldbuildService` tem duas origens com a mesma interface. No servidor, o dono grava item a item (agrupado
+  em 1 s); o jogador recebe só o que `projectLore` libera. Quem controla um NPC do bestiário grava por uma rota própria.
+- **Sons:** `TableState.playing` é a fonte: o mixer de todas as máquinas segue essa lista e entra no ponto certo da faixa.
+- **Testes:** `npm run e2e` em `server/` abre o app em dois navegadores reais na mesma mesa.
 
 ### 12.2 Para o resto do app
 

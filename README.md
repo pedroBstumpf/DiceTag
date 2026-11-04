@@ -211,10 +211,10 @@ itens desse mundo.
 
 ## Dados (provisório)
 
-O back-end já existe ([`server/`](server/README.md)). A **mesa online** (seção "Mesas online" em Minhas mesas) já o
-usa: conta do servidor, mesas, convites e a mesa de jogo em tempo real. O resto (contas locais, mesas locais e
-worldbuild) fica no **IndexedDB do navegador** (`core/services/storage.service.ts`). A ligação será feita
-com repositórios por domínio (SPEC.md §2), trocando a implementação do IndexedDB pela HTTP/WebSocket.
+O back-end já existe ([`server/`](server/README.md)). A **mesa online** (seção "Mesas online" em Minhas mesas) o usa por
+inteiro: conta do servidor, convites, a mesa em tempo real, o mundo da mesa, sons, pings e efeitos. O resto (contas, mesas e
+mundos locais) fica no **IndexedDB do navegador** (`core/services/storage.service.ts`). Um mundo local pode ser enviado ao
+servidor pelo menu da mesa online.
 
 ## Versões e branches
 

@@ -1,6 +1,6 @@
 {
   "name": "cronicas-de-zehenia-server",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Back-end do Crônicas de Zehenia: API HTTP + sala da mesa por WebSocket.",
@@ -13,6 +13,7 @@
     "start": "tsx --disable-warning=ExperimentalWarning src/main.ts",
     "seed": "tsx --disable-warning=ExperimentalWarning scripts/seed.ts",
     "smoke": "tsx scripts/smoke.ts",
+    "e2e": "tsx scripts/e2e.ts",
     "reset-link": "tsx --disable-warning=ExperimentalWarning scripts/reset-link.ts",
     "backup": "tsx --disable-warning=ExperimentalWarning scripts/backup.ts",
     "backup:check": "tsx --disable-warning=ExperimentalWarning scripts/backup-check.ts",
