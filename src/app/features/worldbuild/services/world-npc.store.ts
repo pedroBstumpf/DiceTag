@@ -14,6 +14,12 @@ import { WorldbuildService } from './worldbuild.service';
 export class WorldNpcStore extends SheetStore {
   private readonly service = inject(WorldbuildService);
 
+  constructor() {
+    super();
+    // Imagens do inventário no mesmo lugar do mundo aberto (navegador ou servidor)
+    this.files = this.service.fileStore;
+  }
+
   sheetData(id: string): SheetData | null {
     const item = this.npc(id);
     if (!item) return null;

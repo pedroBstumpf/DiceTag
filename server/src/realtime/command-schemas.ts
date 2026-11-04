@@ -38,8 +38,8 @@ const timestamp = z.number().int().min(0).max(8.64e15);
 const accountId = z.string().max(64);
 const fxKind = z.enum(FX_KINDS.map((f) => f.id) as [string, ...string[]]);
 
-const tag = z.strictObject({ id, text: text(100), color, level: z.int().min(-99).max(99).optional() });
-const bar = z.strictObject({
+export const tagSchema = z.strictObject({ id, text: text(100), color, level: z.int().min(-99).max(99).optional() });
+export const barSchema = z.strictObject({
   id,
   label: text(60),
   value: z.number().min(-1e6).max(1e6),
@@ -52,8 +52,8 @@ const tokenSettings = z.strictObject({
   size,
   vision,
   speed: z.number().min(0.1).max(100).optional(),
-  bars: z.array(bar).max(20),
-  tags: z.array(tag).max(50),
+  bars: z.array(barSchema).max(20),
+  tags: z.array(tagSchema).max(50),
 });
 
 const inventoryEntry = z.strictObject({
@@ -61,7 +61,7 @@ const inventoryEntry = z.strictObject({
   itemId: id,
   table: z.boolean().optional(),
   name: text(200).optional(),
-  tags: z.array(tag).max(50).optional(),
+  tags: z.array(tagSchema).max(50).optional(),
   description: text(20_000).optional(),
   blobId: id.optional(),
   price: z.number().min(0).max(1e9).optional(),
@@ -92,7 +92,7 @@ const appliedRace = z.strictObject({ labels: z.array(text(100)).max(50), mods: s
 const raceRef = z.strictObject({ id });
 
 /** Ficha (personagem, NPC e cópia de token de NPC). Campos ausentes recebem o padrão em `normalizeSheet`. */
-const sheet = z
+export const sheetSchema = z
   .strictObject({
     race: text(100),
     subrace: text(100),
@@ -111,22 +111,22 @@ const sheet = z
   .partial();
 
 /** Ficha como chega do cliente (já validada; fichas antigas podem não ter todos os campos). */
-export type SheetInput = z.infer<typeof sheet>;
+export type SheetInput = z.infer<typeof sheetSchema>;
 
 /** Mesmas chaves nos dois tipos? */
 type SameKeys<A, B> = [Exclude<keyof A, keyof B> | Exclude<keyof B, keyof A>] extends [never] ? true : false;
 /** Só compila se o esquema tiver exatamente os campos de `CharacterSheet` (campo novo no front = servidor não compila). */
-export const SHEET_SCHEMA_IS_COMPLETE: SameKeys<z.infer<typeof sheet>, CharacterSheet> = true;
+export const SHEET_SCHEMA_IS_COMPLETE: SameKeys<z.infer<typeof sheetSchema>, CharacterSheet> = true;
 
 const placementFields = {
   x: coord,
   y: coord,
   level: level.optional(),
   size: size.optional(),
-  bars: z.array(bar).max(20).optional(),
-  tags: z.array(tag).max(50).optional(),
+  bars: z.array(barSchema).max(20).optional(),
+  tags: z.array(tagSchema).max(50).optional(),
   vision: vision.optional(),
-  sheet: sheet.optional(),
+  sheet: sheetSchema.optional(),
   name: text(100).optional(),
   sheetPublic: z.boolean().optional(),
   inventoryPublic: z.boolean().optional(),
@@ -203,9 +203,9 @@ const entryFields = {
   worldNpcId: id.optional(),
   controllerUserId: accountId.optional(),
   token: tokenSettings.optional(),
-  sheet: sheet.optional(),
+  sheet: sheetSchema.optional(),
 };
-const entry = z.strictObject({ id, kind: z.enum(['character', 'npc', 'sound', 'automation']), ...entryFields });
+export const entrySchema = z.strictObject({ id, kind: z.enum(['character', 'npc', 'sound', 'automation']), ...entryFields });
 
 /** Mensagem do chat vinda do cliente: só texto (rolagens são feitas pelo servidor). */
 const chatMessage = z.strictObject({
@@ -217,7 +217,7 @@ const chatMessage = z.strictObject({
   text: z.string().min(1).max(4000),
 });
 
-const tableItemFields = { name: text(200), tags: z.array(tag).max(50).optional(), description: text(20_000).optional(), blobId: id.optional() };
+const tableItemFields = { name: text(200), tags: z.array(tagSchema).max(50).optional(), description: text(20_000).optional(), blobId: id.optional() };
 const tableItem = z.strictObject({ id, ...tableItemFields, ownerUserId: accountId.optional(), createdAt: timestamp });
 
 const scene = z.strictObject({
@@ -267,7 +267,7 @@ export const COMMAND_SCHEMAS = {
   removeLevel: z.strictObject({ sceneId: id, index: levelIndex }),
   setPlayerLevel: z.strictObject({ sceneId: id, level: levelIndex }),
   // Arquivos da mesa
-  addEntry: z.strictObject({ entry }),
+  addEntry: z.strictObject({ entry: entrySchema }),
   updateEntry: z.strictObject({ entryId: id, patch: z.strictObject(entryFields).partial() }),
   removeEntry: z.strictObject({ entryId: id }),
   setSoundMaster: z.strictObject({ volume: z.number().min(0).max(1) }),

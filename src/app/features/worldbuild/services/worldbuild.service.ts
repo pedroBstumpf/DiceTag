@@ -3,6 +3,9 @@ import { defaultSheet, defaultToken } from '../../../core/models/table-session.m
 import { WORLD_ITEM_META, WorldItem, WorldItemType, worldItemBlobIds } from '../../../core/models/world-item.model';
 import { worldbuildKey } from '../../../core/models/world.model';
 import { AuthService } from '../../../core/services/auth.service';
+import { FileStore, LocalFileStore } from '../../../core/services/file-store';
+import { ServerApiService, ServerError } from '../../../core/services/server-api.service';
+import { ServerFileStore } from '../../../core/services/server-file-store';
 import { StorageService } from '../../../core/services/storage.service';
 import { WorldsService } from '../../../core/services/worlds.service';
 import { newId } from '../../../core/utils/id';
@@ -16,22 +19,62 @@ export function byTreeOrder(a: WorldItem, b: WorldItem): number {
   return a.name.localeCompare(b.name, 'pt-BR', { numeric: true });
 }
 
+/** Mundo do servidor aberto: o da mesa online ou o que o mestre prepara na página Worldbuild. */
+export interface OnlineWorld {
+  worldId: string;
+  /** Mesa online aberta (o jogador lê a Lore por ela; quem controla um NPC grava por ela). */
+  tableId?: string;
+  /** Dono do mundo: lê e grava tudo. Os demais recebem só o que o servidor libera. */
+  canEdit: boolean;
+}
+
+/** Espera para agrupar edições antes de gravar no servidor (no navegador: 300 ms). */
+const ONLINE_SAVE_MS = 1000;
+/** Espera antes de tentar de novo uma gravação que falhou por conexão ou limite de taxa. */
+const ONLINE_RETRY_MS = 5000;
+/** Acima disto, o navegador recusa gravações com `keepalive` (página fechando). */
+const KEEPALIVE_MAX_BYTES = 60_000;
+
 /**
- * Fonte única de dados do Worldbuild do mundo aberto (`WorldsService.activeId`) do usuário.
+ * Fonte única de dados do Worldbuild aberto. Duas origens, com a mesma interface para as telas:
  *
- * Os itens formam uma árvore (parentId). A lista de itens é salva como um
- * único registro por mundo; imagens são salvas como Blobs separados
- * (chave "blob:<id>") para não pesar a lista. Trocar de mundo ou de usuário
- * grava as pendências na chave antiga antes de carregar a nova.
+ * - **Navegador** (padrão): o mundo aberto do usuário (`WorldsService.activeId`), salvo no IndexedDB
+ *   como um único registro por mundo; trocar de mundo ou de usuário grava as pendências na chave
+ *   antiga antes de carregar a nova.
+ * - **Servidor** (`openOnline`): o mundo da mesa online. Cada item alterado é gravado sozinho
+ *   (agrupado por `ONLINE_SAVE_MS`). O jogador recebe só o que o servidor projeta para ele e busca
+ *   de novo quando o mundo muda (`refreshOnline`).
+ *
+ * Os itens formam uma árvore (parentId). Imagens ficam à parte (`FileStore`), para não pesar a lista.
  */
 @Injectable({ providedIn: 'root' })
 export class WorldbuildService {
   private readonly storage = inject(StorageService);
   private readonly auth = inject(AuthService);
   private readonly worlds = inject(WorldsService);
+  private readonly api = inject(ServerApiService);
+  private readonly localFiles = inject(LocalFileStore);
+
+  // --- Origem: navegador ou servidor ---------------------------------------
+  /** Mundo do servidor aberto (null = o mundo deste navegador). */
+  readonly online = signal<OnlineWorld | null>(null);
+  /** Nome do mundo do servidor (o jogador vê só "Lore"). */
+  private readonly onlineName = signal('');
+  /** Onde ficam as imagens do mundo aberto. */
+  private files: FileStore = this.localFiles;
+  /** Problema ao falar com o servidor, para a página mostrar. */
+  readonly notice = signal<{ text: string } | null>(null);
+  /** Itens alterados e excluídos ainda não enviados. */
+  private readonly dirty = new Set<string>();
+  private readonly deleted = new Set<string>();
+  /** Fila de gravações: uma de cada vez, na ordem. */
+  private writes: Promise<void> = Promise.resolve();
+  /** Número do último carregamento: resposta atrasada de um anterior é descartada. */
+  private loadSeq = 0;
+  private refreshTimer?: ReturnType<typeof setTimeout>;
 
   /** Nome exibido no cabeçalho do explorador: o do mundo aberto. */
-  readonly title = computed(() => this.worlds.active()?.name ?? 'Worldbuild');
+  readonly title = computed(() => (this.online() ? this.onlineName() : (this.worlds.active()?.name ?? 'Worldbuild')));
 
   // --- Estado --------------------------------------------------------------
   private readonly _items = signal<WorldItem[]>([]);
@@ -64,23 +107,141 @@ export class WorldbuildService {
 
   constructor() {
     // Garante que nada se perca ao fechar ou recarregar a aba
-    window.addEventListener('pagehide', () => this.flush());
+    window.addEventListener('pagehide', () => this.flush(true));
 
     // Recarrega os itens quando o usuário ou o mundo aberto mudam (depois de a lista de mundos carregar)
     effect(() => {
       const user = this.auth.user();
       const ready = this.worlds.loaded();
       const worldId = this.worlds.activeId();
+      const online = this.online();
       untracked(() => {
         // Grava as pendências do mundo/usuário anterior antes de trocar a chave
         this.flush();
         this.loaded.set(false);
         this._items.set([]);
         this.desk.set([]);
+        this.files = online ? new ServerFileStore(this.api, { worldId: online.worldId }) : this.localFiles;
+        if (online) {
+          this.storageKey = null;
+          // A mesa de trabalho é uma preferência deste navegador, mesmo com o mundo no servidor
+          this.deskKey = online.canEdit ? `desk:servidor:${online.worldId}` : null;
+          void this.loadOnline(online);
+          return;
+        }
         this.storageKey = user && ready ? worldbuildKey(user.id, worldId) : null;
         this.deskKey = user && ready ? `desk:${user.id}:${worldId}` : null;
         if (this.storageKey) void this.load(this.storageKey);
       });
+    });
+  }
+
+  // --- Mundo do servidor -----------------------------------------------------
+
+  /** Passa a usar um mundo do servidor. O mundo deste navegador fica guardado, sem mudança. */
+  openOnline(world: OnlineWorld): void {
+    const current = this.online();
+    if (current?.worldId === world.worldId && current.tableId === world.tableId && current.canEdit === world.canEdit) return;
+    this.flush();
+    this.loaded.set(false);
+    this._items.set([]);
+    this.online.set(world);
+  }
+
+  /** Volta ao mundo deste navegador, gravando antes o que falta enviar. */
+  closeOnline(): void {
+    if (!this.online()) return;
+    clearTimeout(this.refreshTimer);
+    this.flush();
+    this.loaded.set(false);
+    this._items.set([]);
+    this.online.set(null);
+  }
+
+  /** Jogador: busca de novo o que pode ver (o mundo mudou ou o mestre revelou algo). */
+  refreshOnline(): void {
+    const world = this.online();
+    if (!world || world.canEdit) return;
+    // Mudanças seguidas (revelar várias pastas) viram uma busca só
+    clearTimeout(this.refreshTimer);
+    this.refreshTimer = setTimeout(() => void this.loadOnline(world), 200);
+  }
+
+  /** Lê os itens do servidor: o dono, o mundo inteiro; os demais, a Lore projetada da mesa. */
+  private async loadOnline(world: OnlineWorld): Promise<void> {
+    const seq = ++this.loadSeq;
+    try {
+      const path = world.canEdit ? `/worlds/${encodeURIComponent(world.worldId)}/items` : `/tables/${encodeURIComponent(world.tableId ?? '')}/lore`;
+      const { items } = await this.api.get<{ items: WorldItem[] }>(path);
+      const name = world.canEdit ? (await this.api.get<{ worlds: { id: string; name: string }[] }>('/worlds')).worlds.find((w) => w.id === world.worldId)?.name : 'Lore';
+      const deskKey = this.deskKey;
+      const desk = deskKey ? ((await this.storage.get<OpenWindow[]>(deskKey)) ?? []) : [];
+      // Outro carregamento começou, ou o mundo mudou no meio: descarta
+      if (seq !== this.loadSeq || this.online() !== world) return;
+      this.onlineName.set(name ?? 'Mundo');
+      // Alterações ainda não enviadas continuam valendo sobre o que veio do servidor
+      const pending = new Map(this._items().filter((i) => this.dirty.has(i.id)).map((i) => [i.id, i]));
+      const fresh = items.map(migrateTimeline).map((i) => pending.get(i.id) ?? i);
+      this._items.set(fresh.filter((i) => !this.deleted.has(i.id)));
+      if (!this.loaded()) this.desk.set(desk);
+      this.loaded.set(true);
+    } catch (error) {
+      if (seq === this.loadSeq && this.online() === world) this.notice.set({ text: `Mundo não carregado: ${messageOf(error)}` });
+    }
+  }
+
+  /** Envia o que falta ao servidor. `closing`: a página está fechando, então vai tudo de uma vez. */
+  private flushOnline(world: OnlineWorld, closing = false): void {
+    const byId = this.byId();
+    const items = [...this.dirty].flatMap((id) => byId.get(id) ?? []);
+    const removed = [...this.deleted];
+    this.dirty.clear();
+    this.deleted.clear();
+    if (!items.length && !removed.length) return;
+    if (closing) {
+      for (const item of items) void this.saveOnline(world, item, true).catch(() => undefined);
+    }
+    // Uma gravação por vez: a ordem das edições de um mesmo item é a da fila
+    this.writes = this.writes.then(async () => {
+      if (!closing) for (const item of items) await this.sendItem(world, item);
+      if (removed.length) await this.sendRemoved(world, removed);
+    });
+  }
+
+  private async sendItem(world: OnlineWorld, item: WorldItem): Promise<void> {
+    try {
+      await this.saveOnline(world, item);
+    } catch (error) {
+      this.notice.set({ text: `"${item.name}" não foi salvo: ${messageOf(error)}` });
+      if (isTemporary(error) && this.online() === world) {
+        this.dirty.add(item.id);
+        clearTimeout(this.saveTimer);
+        this.saveTimer = setTimeout(() => this.flush(), ONLINE_RETRY_MS);
+      }
+    }
+  }
+
+  /** Dono: o item inteiro. Quem controla o NPC: só o que o servidor aceita dele (ficha, barras, ações). */
+  private saveOnline(world: OnlineWorld, item: WorldItem, closing = false): Promise<unknown> {
+    if (world.canEdit) {
+      const keepalive = closing && JSON.stringify(item).length < KEEPALIVE_MAX_BYTES;
+      return this.api.put(`/worlds/${encodeURIComponent(world.worldId)}/items/${encodeURIComponent(item.id)}`, item, keepalive);
+    }
+    if (item.type !== 'npc' || !world.tableId) return Promise.resolve();
+    const body = { sheet: item.sheet, bars: item.token?.bars, tags: item.token?.tags, abilities: item.abilities };
+    const keepalive = closing && JSON.stringify(body).length < KEEPALIVE_MAX_BYTES;
+    return this.api.patch(`/tables/${encodeURIComponent(world.tableId)}/npcs/${encodeURIComponent(item.id)}`, body, keepalive);
+  }
+
+  private async sendRemoved(world: OnlineWorld, ids: string[]): Promise<void> {
+    if (!world.canEdit) return;
+    await this.api.post(`/worlds/${encodeURIComponent(world.worldId)}/items/delete`, { ids }).catch((error: unknown) => {
+      this.notice.set({ text: `Exclusão não gravada: ${messageOf(error)}` });
+      if (isTemporary(error) && this.online() === world) {
+        for (const id of ids) this.deleted.add(id);
+        clearTimeout(this.saveTimer);
+        this.saveTimer = setTimeout(() => this.flush(), ONLINE_RETRY_MS);
+      }
     });
   }
 
@@ -105,7 +266,12 @@ export class WorldbuildService {
 
   /** Lê o arquivo de uma imagem. */
   getBlob(blobId: string): Promise<Blob | undefined> {
-    return this.storage.get<Blob>(`blob:${blobId}`);
+    return this.files.get(blobId);
+  }
+
+  /** Onde ficam as imagens do mundo aberto (para outra fonte de ficha gravar no mesmo lugar). */
+  get fileStore(): FileStore {
+    return this.files;
   }
 
   // --- Criação -------------------------------------------------------------
@@ -127,6 +293,7 @@ export class WorldbuildService {
       ...(type === 'npc' && { sheet: defaultSheet(), token: defaultToken('npc') }),
     };
     this._items.update((list) => [...list, item]);
+    this.dirty.add(item.id);
     this.persist();
     this.storage.requestPersistence();
     return item;
@@ -134,8 +301,7 @@ export class WorldbuildService {
 
   /** Envia uma imagem/mapa e cria o item correspondente. */
   async uploadImage(file: File, parentId: string | null = null): Promise<WorldItem> {
-    const blobId = newId();
-    await this.storage.set(`blob:${blobId}`, file);
+    const blobId = await this.storeBlob(file);
 
     const item = this.create('image', parentId, file.name.replace(/\.[^.]+$/, ''));
     this.update(item.id, { blobId });
@@ -145,10 +311,9 @@ export class WorldbuildService {
   /** Troca (ou define) a imagem de um item e apaga a anterior. */
   async setImage(id: string, file: File): Promise<void> {
     const old = this.byId().get(id)?.blobId;
-    const blobId = newId();
-    await this.storage.set(`blob:${blobId}`, file);
+    const blobId = await this.storeBlob(file);
     this.update(id, { blobId });
-    if (old) this.storage.delete(`blob:${old}`);
+    if (old) this.deleteBlob(old);
   }
 
   /** Troca (ou define) a imagem padrão masculina/feminina de uma Raça e apaga a anterior. */
@@ -174,6 +339,7 @@ export class WorldbuildService {
     this._items.update((list) =>
       list.map((i) => (i.id === id ? { ...i, ...patch, updatedAt: Date.now() } : i)),
     );
+    this.dirty.add(id);
     this.persist();
   }
 
@@ -197,24 +363,31 @@ export class WorldbuildService {
     const removed = this._items().filter((i) => ids.has(i.id));
 
     this._items.update((list) => list.filter((i) => !ids.has(i.id)));
+    for (const removedId of ids) {
+      this.dirty.delete(removedId);
+      this.deleted.add(removedId);
+    }
     this.persist();
 
     // Limpa os arquivos de imagem associados (inclui imagem e inventário dos NPCs e imagens das raças)
     for (const item of removed) {
-      for (const blobId of worldItemBlobIds(item)) this.storage.delete(`blob:${blobId}`);
+      for (const blobId of worldItemBlobIds(item)) this.deleteBlob(blobId);
     }
     return [...ids];
   }
 
   /** Grava um arquivo (imagem) e devolve o id dele. */
   async storeBlob(file: Blob): Promise<string> {
-    const blobId = newId();
-    await this.storage.set(`blob:${blobId}`, file);
-    return blobId;
+    try {
+      return await this.files.put(file);
+    } catch (error) {
+      this.notice.set({ text: `Arquivo não enviado: ${messageOf(error)}` });
+      throw error;
+    }
   }
 
   deleteBlob(blobId: string): void {
-    this.storage.delete(`blob:${blobId}`);
+    void this.files.remove(blobId);
   }
 
   // --- Internos ------------------------------------------------------------
@@ -290,15 +463,32 @@ export class WorldbuildService {
    */
   private persist(): void {
     clearTimeout(this.saveTimer);
-    this.saveTimer = setTimeout(() => this.flush(), 300);
+    this.saveTimer = setTimeout(() => this.flush(), this.online() ? ONLINE_SAVE_MS : 300);
   }
 
   /** Grava imediatamente o que estiver pendente (itens e mesa de trabalho). */
-  private flush(): void {
+  private flush(closing = false): void {
     clearTimeout(this.saveTimer);
-    if (this.loaded() && this.storageKey) this.storage.set(this.storageKey, this._items());
+    const world = this.online();
+    if (world) {
+      this.flushOnline(world, closing);
+    } else {
+      this.dirty.clear();
+      this.deleted.clear();
+      if (this.loaded() && this.storageKey) this.storage.set(this.storageKey, this._items());
+    }
     this.flushDesk();
   }
+}
+
+/** Mensagem pronta para a tela. */
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : 'erro desconhecido.';
+}
+
+/** Falha que pode passar sozinha (sem conexão, limite de taxa, servidor reiniciando): vale tentar de novo. */
+function isTemporary(error: unknown): boolean {
+  return error instanceof ServerError && (error.status === 0 || error.status === 429 || error.status >= 500);
 }
 
 // --- Migração de dados antigos ----------------------------------------------

@@ -140,6 +140,54 @@ describe('comandos em tempo real', () => {
     again.ws.close();
   });
 
+  it('o mestre muda o mundo: o jogador é avisado e lê a Lore de novo, sem ver o que não foi revelado', async () => {
+    const worldId = server.ctx.tables.findForMember(tableId, gm.id)!.worldId;
+    const item = (id: string, type: string, parentId: string | null, name: string) => ({ id, type, parentId, name, createdAt: 1, updatedAt: 1 });
+    const put = (it: ReturnType<typeof item>) => call(server, gm.cookie, 'PUT', `/api/worlds/${worldId}/items/${it.id}`, it);
+    expect((await put(item('pasta', 'folder', null, 'Pública'))).statusCode).toBe(200);
+    await put(item('segredo', 'document', null, 'Plano'));
+
+    const a = await openSocket(port, tableId, gm.cookie);
+    const b = await openSocket(port, tableId, player.cookie);
+    await a.next('welcome');
+    await b.next('welcome');
+    a.ws.send(JSON.stringify({ t: 'cmd', seq: 1, type: 'toggleLoreReveal', payload: { folderId: 'pasta' } }));
+    await a.next('ack');
+
+    await put(item('doc', 'document', 'pasta', 'Crônica'));
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('sem aviso do mundo')), 3000);
+      b.ws.on('message', (data) => {
+        if (JSON.parse(data.toString()).t === 'world') (clearTimeout(timer), resolve());
+      });
+    });
+    const lore = (await call(server, player.cookie, 'GET', `/api/tables/${tableId}/lore`)).json().items;
+    expect(lore.map((i: { id: string }) => i.id).sort()).toEqual(['doc', 'pasta']);
+    a.ws.close();
+    b.ws.close();
+  });
+
+  it('rota do NPC controlado: jogador sem controle recebe 403; o mundo de outra pessoa continua fechado', async () => {
+    const worldId = server.ctx.tables.findForMember(tableId, gm.id)!.worldId;
+    const npc = { id: 'lobo', type: 'npc', parentId: null, name: 'Lobo', createdAt: 1, updatedAt: 1 };
+    await call(server, gm.cookie, 'PUT', `/api/worlds/${worldId}/items/lobo`, npc);
+    const url = `/api/tables/${tableId}/npcs/lobo`;
+    expect((await call(server, player.cookie, 'PATCH', url, { tags: [] })).statusCode).toBe(403);
+    expect((await call(server, player.cookie, 'PUT', `/api/worlds/${worldId}/items/lobo`, { ...npc, name: 'Hackeado' })).statusCode).toBe(404);
+
+    const a = await openSocket(port, tableId, gm.cookie);
+    await a.next('welcome');
+    a.ws.send(JSON.stringify({ t: 'cmd', seq: 1, type: 'addEntry', payload: { entry: { id: 'ref', kind: 'npc', name: 'Lobo', createdAt: 1, worldNpcId: 'lobo', controllerUserId: player.id } } }));
+    await a.next('ack');
+    const tag = { id: 't1', text: 'Feroz', color: '#ff0000' };
+    const saved = await call(server, player.cookie, 'PATCH', url, { tags: [tag] });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json().item.token.tags).toEqual([tag]);
+    expect(saved.json().item.name).toBe('Lobo');
+    expect((await call(server, player.cookie, 'PATCH', url, { name: 'Outro' })).statusCode).toBe(400);
+    a.ws.close();
+  });
+
   it('rolagem no servidor aparece no chat de todos', async () => {
     const a = await openSocket(port, tableId, gm.cookie);
     const b = await openSocket(port, tableId, player.cookie);

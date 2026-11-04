@@ -8,7 +8,9 @@ import { idSchema, newId } from '../../lib/ids';
 import { multilineText, text } from '../../lib/schemas';
 import type { MemberTable, TableRecord } from '../../repositories/tables';
 import type { RealtimeHub } from '../../realtime/hub';
+import { barSchema, entrySchema, sheetSchema, tagSchema } from '../../realtime/command-schemas';
 import { projectLore } from '../../realtime/projection';
+import { controlledNpcChange, type ControlledNpcPatch } from '../../realtime/sheet-rules';
 import { requireAuth } from '../plugins/auth';
 import { AUTH_RATE_LIMIT } from '../plugins/security';
 
@@ -24,8 +26,18 @@ const updateBody = z.strictObject(tableFields).partial();
 // Parâmetros vêm do roteador (rotas aninhadas trazem outros): valida só os usados
 const idParams = z.object({ id: idSchema });
 const memberParams = z.object({ id: idSchema, userId: idSchema });
+const npcParams = z.object({ id: idSchema, itemId: idSchema });
+/** O que quem controla um NPC do bestiário pode gravar nele (ver `controlledNpcChange`). */
+const npcBody = z.strictObject({
+  sheet: sheetSchema.optional(),
+  bars: z.array(barSchema).max(20).optional(),
+  tags: z.array(tagSchema).max(50).optional(),
+  abilities: z.array(entrySchema).max(200).optional(),
+});
 const acceptBody = z.strictObject({ code: z.string().min(10).max(100).regex(/^[A-Za-z0-9_-]+$/) });
 
+/** Tamanho máximo de um NPC gravado por quem o controla (o mesmo dos itens do mundo). */
+const MAX_NPC_BYTES = 2 * 1024 * 1024;
 /** Validade dos convites. */
 const INVITE_TTL_MS = 7 * 24 * 3_600_000;
 
@@ -155,5 +167,25 @@ export async function tableRoutes(app: FastifyInstance, ctx: AppContext, hub: Re
     const viewer = { role, userId };
     // Estado já projetado: só os NPCs que a conta vê na mesa (ou controla) entram na Lore
     return { items: projectLore(items, hub.viewOf(table.id, table.worldId, viewer).state, viewer) };
+  });
+
+  /**
+   * Jogador que controla um NPC do bestiário grava a ficha base dele (o mundo é do mestre: a rota
+   * de itens do mundo só aceita o dono). O item continua no mundo do mestre.
+   */
+  app.patch('/tables/:id/npcs/:itemId', { bodyLimit: MAX_NPC_BYTES }, async (req) => {
+    const { table, role, userId } = access(req);
+    const { itemId } = parse(npcParams, req.params);
+    const body = parse(npcBody, req.body);
+    const npc = ctx.worlds.findItem(table.worldId, itemId) as WorldItem | null;
+    if (npc?.type !== 'npc') throw notFound('NPC não encontrado.');
+    const rules = hub.ruleContextOf(table.id, table.worldId, { role, userId }, requireAuth(req).user.name);
+    const change = controlledNpcChange(rules, npc, body as ControlledNpcPatch);
+    if (!change.ok) throw forbidden(change.reason);
+    const json = JSON.stringify(change.payload);
+    if (json.length > MAX_NPC_BYTES) throw new HttpError(413, 'NPC grande demais.');
+    ctx.worlds.upsertItem(table.worldId, table.ownerId, itemId, json, Date.now());
+    hub.worldChanged(table.worldId);
+    return { item: change.payload };
   });
 }

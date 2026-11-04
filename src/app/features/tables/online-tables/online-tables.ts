@@ -13,7 +13,10 @@ import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { TABLE_ACCENTS } from '../../../core/models/game-table.model';
 import { OnlineTable, OnlineTablesService, TableInvite } from '../../../core/services/online-tables.service';
+import { World } from '../../../core/models/world.model';
 import { ServerAccountService } from '../../../core/services/server-account.service';
+import { WorldImportService } from '../../../core/services/world-import.service';
+import { WorldsService } from '../../../core/services/worlds.service';
 import { EmptyState } from '../../../shared/components/empty-state/empty-state';
 import { AuthDialog, AuthMode } from '../../auth/auth-dialog/auth-dialog';
 
@@ -30,6 +33,8 @@ import { AuthDialog, AuthMode } from '../../auth/auth-dialog/auth-dialog';
 export class OnlineTables {
   readonly account = inject(ServerAccountService);
   readonly service = inject(OnlineTablesService);
+  readonly worlds = inject(WorldsService);
+  readonly importer = inject(WorldImportService);
   private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
 
@@ -88,6 +93,17 @@ export class OnlineTables {
     } catch {
       this.snackBar.open('Não foi possível copiar: selecione o código e copie à mão.');
     }
+  }
+
+  /** Envia um mundo deste navegador para o mundo da mesa no servidor (o local continua aqui). */
+  async importWorld(table: OnlineTable, world: World): Promise<void> {
+    if (!confirm(`Enviar "${world.name}" para o mundo da mesa "${table.name}"? As imagens contam na sua cota do servidor. O mundo deste navegador não muda.`)) return;
+    await this.run(async () => {
+      const done = await this.importer.run(world.id, table.worldId);
+      const failed = done.failedItems + done.failedFiles;
+      const text = `Enviados ${done.items} itens e ${done.files} imagens${failed ? `; ${failed} não foram (tipo não aceito, tamanho ou cota).` : '.'}`;
+      this.snackBar.open(text, 'OK', { duration: 8000 });
+    });
   }
 
   async remove(table: OnlineTable): Promise<void> {

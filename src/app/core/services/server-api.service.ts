@@ -31,6 +31,15 @@ export class ServerApiService {
     return this.request<T>('POST', path, body);
   }
 
+  /** `keepalive`: a gravação continua mesmo se a página estiver fechando (corpos pequenos). */
+  put<T = unknown>(path: string, body: unknown, keepalive = false): Promise<T> {
+    return this.request<T>('PUT', path, body, keepalive);
+  }
+
+  patch<T = unknown>(path: string, body: unknown, keepalive = false): Promise<T> {
+    return this.request<T>('PATCH', path, body, keepalive);
+  }
+
   delete<T = void>(path: string, body?: unknown): Promise<T> {
     return this.request<T>('DELETE', path, body);
   }
@@ -54,12 +63,13 @@ export class ServerApiService {
 
   // --- Internos ------------------------------------------------------------
 
-  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  private async request<T>(method: string, path: string, body?: unknown, keepalive = false): Promise<T> {
     let res: Response;
     try {
       res = await fetch(`/api${path}`, {
         method,
         credentials: 'same-origin',
+        keepalive,
         // FormData (envio de arquivo) leva o próprio Content-Type, com o separador das partes
         headers: body === undefined || body instanceof FormData ? undefined : { 'Content-Type': 'application/json' },
         body: body === undefined ? undefined : body instanceof FormData ? body : JSON.stringify(body),

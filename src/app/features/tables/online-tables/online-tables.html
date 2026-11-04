@@ -104,6 +104,14 @@
       </form>
     </div>
 
+    <!-- Envio de um mundo em andamento -->
+    @if (importer.progress(); as progress) {
+      <div class="flex items-center gap-3 rounded-xl border border-astral-500/30 bg-astral-500/10 p-3 text-sm text-astral-300 animate-fade-in">
+        <mat-spinner diameter="20" />
+        {{ progress }}
+      </div>
+    }
+
     <!-- Lista de mesas da conta do servidor -->
     @if (service.loading() && !service.tables().length) {
       <div class="flex justify-center py-10"><mat-spinner diameter="32" /></div>
@@ -146,6 +154,16 @@
                       <mat-icon>person_add</mat-icon>
                       <span>Gerar convite</span>
                     </button>
+                    <a mat-menu-item routerLink="/worldbuild" [queryParams]="{ servidor: table.worldId }">
+                      <mat-icon>public</mat-icon>
+                      <span>Preparar o mundo da mesa</span>
+                    </a>
+                    @for (world of worlds.worlds(); track world.id) {
+                      <button mat-menu-item [disabled]="!!importer.progress()" (click)="importWorld(table, world)">
+                        <mat-icon>cloud_upload</mat-icon>
+                        <span>Enviar "{{ world.name }}" deste navegador</span>
+                      </button>
+                    }
                     <button mat-menu-item (click)="remove(table)">
                       <mat-icon class="!text-red-400">delete</mat-icon>
                       <span>Excluir mesa</span>

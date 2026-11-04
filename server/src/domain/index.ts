@@ -30,6 +30,7 @@ export { findPlacement, levelOf, tokenSheetPlacement } from '../../../src/app/fe
 export { clampLevelIn } from '../../../src/app/features/game-table/state/levels';
 export { findDrop } from '../../../src/app/features/game-table/state/drops';
 export { inventoryHolder } from '../../../src/app/features/game-table/state/inventory';
+export { worldItemRefs } from '../../../src/app/features/game-table/state/lore';
 export { quantityOf } from '../../../src/app/features/game-table/utils/inventory';
 export { resolveToken, type ResolvedToken } from '../../../src/app/features/game-table/state/tokens';
 export {
@@ -88,7 +89,7 @@ export {
 } from '../../../src/app/core/models/table-session.model';
 export { MAX_WORLDS } from '../../../src/app/core/models/world.model';
 export { TABLE_ACCENTS } from '../../../src/app/core/models/game-table.model';
-export { npcTokenOf, raceTraitsOf, type WorldItem } from '../../../src/app/core/models/world-item.model';
+export { npcSheetOf, npcTokenOf, raceTraitsOf, type WorldItem } from '../../../src/app/core/models/world-item.model';
 
 // --- Adaptações do servidor ------------------------------------------------------
 

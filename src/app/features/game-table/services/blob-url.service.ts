@@ -1,5 +1,5 @@
 import { DestroyRef, Injectable, WritableSignal, inject, signal } from '@angular/core';
-import { LocalFileStore } from '../../../core/services/file-store';
+import { WorldbuildService } from '../../worldbuild/services/worldbuild.service';
 import { TableSessionService } from './table-session.service';
 
 /**
@@ -8,12 +8,12 @@ import { TableSessionService } from './table-session.service';
  * a mesma URL, e o arquivo é lido só uma vez.
  *
  * Na mesa, lê pela sessão (`getBlob`: no navegador ou, na mesa online, no servidor); no
- * Worldbuild (sem sessão), só do navegador.
+ * Worldbuild (sem sessão), de onde o mundo aberto guarda as imagens.
  * Fornecido na página da mesa: ao sair dela, todas as URLs são liberadas.
  */
 @Injectable()
 export class BlobUrlService {
-  private readonly local = inject(LocalFileStore);
+  private readonly worldbuild = inject(WorldbuildService);
   private readonly session = inject(TableSessionService, { optional: true });
   private readonly cache = new Map<string, WritableSignal<string | null>>();
 
@@ -33,7 +33,7 @@ export class BlobUrlService {
     if (!url) {
       const created = signal<string | null>(null);
       this.cache.set(blobId, created);
-      const read = this.session ? this.session.getBlob(blobId) : this.local.get(blobId);
+      const read = this.session ? this.session.getBlob(blobId) : this.worldbuild.getBlob(blobId);
       read.then((blob) => {
         if (blob) created.set(URL.createObjectURL(blob));
       });

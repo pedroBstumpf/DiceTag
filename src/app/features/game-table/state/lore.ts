@@ -27,3 +27,22 @@ export function updateTableItem(
 ): TableState {
   return { ...state, items: (state.items ?? []).map((i) => (i.id === p.itemId ? { ...i, ...p.patch } : i)) };
 }
+
+/**
+ * Itens do mundo citados no estado da mesa: inventários (das fichas e dos tokens) e itens no chão.
+ * Quem recebe esse estado precisa do cartão deles, mesmo fora das pastas reveladas: o item do
+ * inventário de um jogador não pode aparecer como "excluído" só porque a pasta dele é secreta.
+ * Itens criados na mesa (`table`) não são do mundo.
+ */
+export function worldItemRefs(state: TableState): string[] {
+  const refs = new Set<string>();
+  const add = (list: readonly { itemId: string; table?: boolean }[] | undefined) => {
+    for (const item of list ?? []) if (!item.table) refs.add(item.itemId);
+  };
+  for (const entry of state.entries) add(entry.sheet?.inventory);
+  for (const scene of state.scenes) {
+    for (const token of scene.tokens ?? []) add(token.sheet?.inventory);
+    add((scene.drops ?? []).map((d) => d.item));
+  }
+  return [...refs];
+}
