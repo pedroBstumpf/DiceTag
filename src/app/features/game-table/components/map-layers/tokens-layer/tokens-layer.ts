@@ -1,6 +1,7 @@
 import { Component, inject, input, output } from '@angular/core';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { TokenBar, isDown } from '../../../../../core/models/table-session.model';
+import { readableTextOn } from '../../../../../shared/utils/color';
 import { BlobUrlService } from '../../../services/blob-url.service';
 import { ResolvedToken } from '../../../services/table-session.service';
 
@@ -68,6 +69,9 @@ export class TokensLayer {
   isDefeated(token: ResolvedToken): boolean {
     return token.entry.kind === 'npc' && isDown(token.bars);
   }
+
+  /** Texto legível sobre a cor da etiqueta (branco em cores escuras, como o preto). */
+  readonly textOn = readableTextOn;
 
   initialBg(token: ResolvedToken): string {
     return INITIAL_BG[token.entry.kind] ?? '#3462d6';

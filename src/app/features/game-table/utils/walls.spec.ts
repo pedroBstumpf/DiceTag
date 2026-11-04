@@ -1,5 +1,6 @@
 import { Wall } from '../../../core/models/table-session.model';
-import { distanceToWall, handleAt, moveWallHandle, translateWall, wallHandles } from './walls';
+import { wallsToSegments } from './visibility';
+import { distanceToWall, handleAt, movePathBlocked, moveWallHandle, translateWall, wallHandles } from './walls';
 
 const line: Wall = { id: 'l', kind: 'line', points: [{ x: 0, y: 0 }, { x: 100, y: 0 }] };
 const circle: Wall = { id: 'c', kind: 'circle', cx: 50, cy: 50, r: 10 };
@@ -28,6 +29,23 @@ describe('walls', () => {
   it('distanceToWall mede até a linha ou a borda do círculo', () => {
     expect(distanceToWall(line, { x: 50, y: 4 })).toBe(4);
     expect(distanceToWall(circle, { x: 50, y: 50 })).toBe(10);
+  });
+
+  it('movePathBlocked: atravessar parede ou porta fechada bloqueia; porta aberta e caminho livre não', () => {
+    const door = (open: boolean): Wall => ({ id: 'p', kind: 'door', points: [{ x: 0, y: 50 }, { x: 100, y: 50 }], open });
+    const segs = wallsToSegments([line]);
+    expect(movePathBlocked({ x: 50, y: -20 }, { x: 50, y: 20 }, segs)).toBe(true);
+    expect(movePathBlocked({ x: 50, y: 10 }, { x: 60, y: 30 }, segs)).toBe(false);
+    // Passa ao lado da ponta da parede
+    expect(movePathBlocked({ x: 150, y: -20 }, { x: 150, y: 20 }, segs)).toBe(false);
+    expect(movePathBlocked({ x: 50, y: 20 }, { x: 50, y: 80 }, wallsToSegments([door(false)]))).toBe(true);
+    expect(movePathBlocked({ x: 50, y: 20 }, { x: 50, y: 80 }, wallsToSegments([door(true)]))).toBe(false);
+    // Parede circular (pilar)
+    expect(movePathBlocked({ x: 20, y: 50 }, { x: 50, y: 50 }, wallsToSegments([circle]))).toBe(true);
+  });
+
+  it('movePathBlocked: quem está sobre a parede pode sair dela', () => {
+    expect(movePathBlocked({ x: 50, y: 0 }, { x: 50, y: 30 }, wallsToSegments([line]))).toBe(false);
   });
 
   it('handleAt encontra a alça dentro da tolerância', () => {

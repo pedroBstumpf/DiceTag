@@ -5,7 +5,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { WorldItem } from '../../../../core/models/world-item.model';
-import { TABLE_ENTRY_META, TableEntry, TableEntryKind, hasSheet } from '../../../../core/models/table-session.model';
+import { ITEM_DRAG_TYPE, ItemDragData, TABLE_ENTRY_META, TableEntry, TableEntryKind, hasSheet } from '../../../../core/models/table-session.model';
 import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
 import { Explorer } from '../../../worldbuild/components/explorer/explorer';
 import { BlobUrlService } from '../../services/blob-url.service';
@@ -95,6 +95,14 @@ export class SidePanel {
   );
   /** Lista "Itens da mesa" aberta. */
   readonly tableItemsOpen = signal(true);
+
+  /** Mestre: arrastar um item da mesa até o mapa o larga no chão (itens do mundo vêm do explorador). */
+  onTableItemDragStart(event: DragEvent, itemId: string): void {
+    if (!event.dataTransfer || !this.isGm()) return;
+    const data: ItemDragData = { source: 'table', itemId };
+    event.dataTransfer.setData(ITEM_DRAG_TYPE, JSON.stringify(data));
+    event.dataTransfer.effectAllowed = 'move';
+  }
 
   // --- Ações ---------------------------------------------------------------
 

@@ -77,7 +77,7 @@ export class GameTablesService {
     const state = await this.storage.get<TableState>(key);
     if (state) {
       const blobIds = [
-        ...state.scenes.map((s) => s.blobId),
+        ...state.scenes.flatMap((s) => [s.blobId, ...(s.drops ?? []).map((d) => d.item.blobId)]),
         ...state.entries.flatMap((e) => [e.blobId, e.token?.blobId]),
         ...(state.items ?? []).map((i) => i.blobId),
       ].filter((b): b is string => !!b);

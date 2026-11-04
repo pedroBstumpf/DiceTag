@@ -6,7 +6,7 @@ import { DICE_KINDS, DiceKind, ROLL_OUTCOMES } from '../../../../core/models/tab
 import { Tag } from '../../../../core/models/tag.model';
 import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
 import { SheetTagOption, TableSessionService } from '../../services/table-session.service';
-import { StatusPick, formatModifier, levelUpText, quickModifier, rollUsesTags } from '../../utils/dice';
+import { StatusPick, formatModifier, levelUpText, powerOf, quickModifier, rollUsesTags } from '../../utils/dice';
 
 /** Tags e defeitos de um tema (ou etiquetas de um item equipado), para agrupar no painel. */
 interface ThemeGroup {
@@ -26,7 +26,8 @@ function groupByTheme(tags: SheetTagOption[]): ThemeGroup[] {
  * escolhido na hora, sem automação. No 2d12, pode somar as tags e defeitos dos temas, as etiquetas
  * dos itens equipados e as etiquetas de status da ficha de quem age (`session.actorSheetId`): cada etiqueta (de status ou
  * de item) vira bônus ou penalidade (clique alterna desligada → + → −). Os itens aparecem no chat, mas só
- * somam ao total com "Somar itens ao total" ligado (padrão: não). O 3d6 usa só o modificador fixo.
+ * somam ao total com "Somar itens ao total" ligado (padrão: não). Tags mágicas valem o Poder escolhido
+ * (1 até o nível) e gastam essa Mana do Espírito. O 3d6 usa só o modificador fixo.
  * Nada é salvo: ao abrir de novo, começa do zero.
  */
 @Component({
@@ -136,13 +137,37 @@ export class QuickRoll {
   /** Somar os itens ao total? Padrão: não (só aparecem na rolagem). */
   readonly addItems = signal(false);
 
-  /** Modificador somado aos dados: fixo + temas + etiquetas de status (+ itens, se ligado). 3d6: só o fixo. */
+  // --- Tags mágicas: Poder desta rolagem e Mana (Espírito) -----------------
+
+  /** Poder escolhido para cada tag mágica (ausente = o nível atual). */
+  private readonly powers = signal(new Map<string, number>());
+  /** Tags mágicas escolhidas nesta rolagem (2d12). */
+  readonly pickedMagic = computed(() =>
+    this.usesTags() ? this.themeGroups().flatMap((g) => g.tags).filter((t) => t.magic && this.themePicks().has(t.id)) : [],
+  );
+  /** Mana (Espírito) que a rolagem gasta: a soma do Poder das tags mágicas escolhidas. */
+  readonly manaCost = computed(() => this.pickedMagic().reduce((sum, t) => sum + this.power(t), 0));
+  /** Espírito atual de quem rola (null = sem ficha). */
+  readonly mana = computed(() => this.session.manaOf(this.sheetId()));
+  /** Falta Espírito para o Poder escolhido (a rolagem é recusada). */
+  readonly manaShort = computed(() => !!this.session.manaShortfall(this.sheetId(), this.manaCost()));
+
+  /** Poder da tag mágica nesta rolagem (1 até o nível). */
+  power(tag: SheetTagOption): number {
+    return powerOf(tag.level, this.powers().get(tag.id));
+  }
+
+  stepPower(tag: SheetTagOption, delta: number): void {
+    this.powers.update((map) => new Map(map).set(tag.id, powerOf(tag.level, this.power(tag) + delta)));
+  }
+
+  /** Modificador somado aos dados: fixo + temas (mágicas: o Poder) + etiquetas de status (+ itens, se ligado). 3d6: só o fixo. */
   readonly modifier = computed(() => {
     if (!this.usesTags()) return this.fixed();
     const levels = this.themeGroups()
       .flatMap((g) => g.tags)
       .filter((t) => this.themePicks().has(t.id))
-      .map((t) => t.level);
+      .map((t) => (t.magic ? this.power(t) : t.level));
     return quickModifier(this.fixed(), levels, this.signedPicks(this.statusTags())) + (this.addItems() ? this.itemModifier() : 0);
   });
 
@@ -174,10 +199,31 @@ export class QuickRoll {
   // --- Rolar ---------------------------------------------------------------
 
   roll(): void {
+    // Sem Espírito para o Poder das tags mágicas: não rola (o painel continua aberto para ajustar)
+    const shortfall = this.session.manaShortfall(this.sheetId(), this.manaCost());
+    if (shortfall) {
+      this.snackBar.open(shortfall, undefined, { duration: 4000 });
+      return;
+    }
     const studies = this.usesTags() ? this.studies().filter((s) => this.studyPicks().has(s.id)).map((s) => s.id) : [];
     const itemsAdded = this.usesTags() && this.addItems();
-    const { author, roll, levelUps } = this.session.quickRoll(this.dice(), this.modifier(), this.sheetId(), this.itemModifier(), studies, itemsAdded);
-    const text = `${author} · ${roll.dice}${formatModifier(roll.modifier)} = ${roll.total} — ${ROLL_OUTCOMES[roll.outcome].label}`;
+    const result = this.session.quickRoll(
+      this.dice(),
+      this.modifier(),
+      this.sheetId(),
+      this.itemModifier(),
+      studies,
+      itemsAdded,
+      this.manaCost(),
+    );
+    // Mesa online: o servidor sorteia e o resultado aparece no chat e no aviso da página
+    if (!result) {
+      this.done.emit();
+      return;
+    }
+    const { author, roll, levelUps } = result;
+    const mana = roll.mana ? ` · −${roll.mana} Espírito` : '';
+    const text = `${author} · ${roll.dice}${formatModifier(roll.modifier)} = ${roll.total} — ${ROLL_OUTCOMES[roll.outcome].label}${mana}`;
     this.snackBar.open(text, undefined, { duration: 3500 });
     // Estudo que alcançou o SN: notificação em destaque (também vai para o chat)
     if (levelUps.length) this.snackBar.open(levelUpText(levelUps), 'OK', { duration: 8000 });

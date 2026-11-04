@@ -1,6 +1,13 @@
 @if (table(); as t) {
   <!-- ===== Camada 0: mapa (ocupa a tela inteira) ===== -->
-  <app-map-stage #map class="absolute inset-0" [insets]="insets()" (tokenOpened)="openToken($event)" />
+  <app-map-stage
+    #map
+    class="absolute inset-0"
+    [insets]="insets()"
+    (tokenOpened)="openToken($event)"
+    (dropOpened)="openDrop($event)"
+    (dropNotice)="notify($event)"
+  />
 
   <!-- ===== Camada 1: barras sobrepostas (todas escondíveis) ===== -->
   @let panels = session.panels();
@@ -86,6 +93,9 @@
             @case ('table-item') {
               <app-table-item-window [itemId]="win.id" />
             }
+            @case ('drop') {
+              <app-drop-window [dropId]="dropOf(win.id)" (closed)="windows.close(win.id)" />
+            }
           }
           <!-- Lore: itens do mundo da mesa, com os mesmos componentes do Worldbuild. Jogador: só leitura -->
           @switch (c.type) {
@@ -115,6 +125,19 @@
   </div>
 
   <!-- ===== Camada 3: abas para reabrir barras escondidas ===== -->
+  @if (session.immersive()) {
+    <!-- Modo imersivo: reabre todas as barras de uma vez (o mesmo que a tecla "\") -->
+    <button
+      type="button"
+      class="glass absolute right-3 top-3 z-30 flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs text-slate-300 opacity-60 transition-opacity hover:text-white hover:opacity-100"
+      matTooltip="Mostrar todas as barras (tecla \)"
+      matTooltipPosition="left"
+      (click)="session.toggleImmersive()"
+    >
+      <mat-icon class="!size-4 !text-[16px]">fullscreen_exit</mat-icon>
+      Sair do modo imersivo
+    </button>
+  }
   @if (!panels.scenes) {
     <button
       type="button"
@@ -159,12 +182,12 @@
     </button>
   }
 } @else if (tablesLoaded()) {
-  <!-- ===== Mesa não encontrada ===== -->
+  <!-- ===== Mesa não encontrada (online: o motivo vem do servidor) ===== -->
   <div class="grid h-full place-items-center p-6 text-center">
     <div class="flex flex-col items-center gap-3">
-      <mat-icon class="!size-10 !text-[40px] text-slate-600">travel_explore</mat-icon>
+      <mat-icon class="!size-10 !text-[40px] text-slate-600">{{ online() ? 'cloud_off' : 'travel_explore' }}</mat-icon>
       <h1 class="font-display text-xl text-star-300">Mesa não encontrada</h1>
-      <p class="max-w-sm text-sm text-slate-400">Ela pode ter sido excluída ou pertencer a outra conta.</p>
+      <p class="max-w-sm text-sm text-slate-400">{{ onlineError() || 'Ela pode ter sido excluída ou pertencer a outra conta.' }}</p>
       <a mat-flat-button routerLink="/mesas">Voltar para Minhas mesas</a>
     </div>
   </div>

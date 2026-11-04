@@ -39,7 +39,70 @@ export interface Scene {
   levels?: MapLevel[];
   /** Camada que os jogadores veem (0 = térreo). Padrão: 0. */
   playerLevel?: number;
+  /** Itens largados no chão do mapa. Padrão: []. */
+  drops?: DroppedItem[];
+  /** Efeitos especiais fixos (repetem a animação até serem removidos). Padrão: []. */
+  effects?: FixedFx[];
 }
+
+/**
+ * Efeito especial fixo no mapa: guardado na cena e desenhado em repetição até alguém removê-lo.
+ * O desenho é remontado sempre igual a partir destes dados (`buildFx` com a mesma semente).
+ */
+export interface FixedFx {
+  id: string;
+  kind: FxKind;
+  color: string;
+  /** Origem e alvo do arraste (radiais: centro e borda), em coordenadas do mapa. */
+  from: Point;
+  to: Point;
+  /** Semente do sorteio das partículas (o mesmo desenho sempre). */
+  seed: number;
+  /** Zoom no lançamento (tamanhos mínimos legíveis do desenho). */
+  scale: number;
+  /** Camada do mapa (0 = térreo). Padrão: 0. */
+  level?: number;
+  /** Conta de quem lançou (ela e o mestre removem). */
+  ownerUserId?: string;
+}
+
+// --- Itens no mapa -----------------------------------------------------------
+
+/**
+ * Item largado no mapa ("drop"): uma pilha de um item do mundo ou da mesa, com a
+ * personalização de quem largou (como uma linha de inventário). Qualquer personagem ou
+ * NPC pode pegá-lo: a pilha inteira vai para o inventário e o item sai do mapa.
+ */
+export interface DroppedItem {
+  id: string;
+  /** Centro, em coordenadas do mapa. */
+  x: number;
+  y: number;
+  /** Camada do mapa (0 = térreo). Padrão: 0. */
+  level?: number;
+  /** Tamanho no mapa, em quadrados (MIN_TOKEN_SIZE a MAX_TOKEN_SIZE). Padrão: DROP_SIZE. */
+  size?: number;
+  /** Cor da borda do losango. Padrão: DROP_COLOR. */
+  color?: string;
+  /** O item: referência ao original + personalização + quantidade (sem preço nem "equipado"). */
+  item: InventoryEntry;
+}
+
+/** Tamanho inicial do item no mapa, em quadrados da grade. */
+export const DROP_SIZE = 0.8;
+/** Cor inicial da borda do item no mapa (âmbar: destaca do mapa e dos tokens). */
+export const DROP_COLOR = '#fcd34d';
+
+/** Tipo de dado arrastado até o mapa para largar um item (JSON de `ItemDragData`). */
+export const ITEM_DRAG_TYPE = 'application/x-dicetag-item';
+
+/**
+ * De onde vem o item arrastado até o mapa: um item do mundo (aba Lore), um item da mesa
+ * ou uma linha do inventário de uma ficha (larga uma unidade).
+ */
+export type ItemDragData =
+  | { source: 'world' | 'table'; itemId: string }
+  | { source: 'inventory'; sheetId: string; inventoryId: string };
 
 /** Camada do mapa acima do térreo. Sem imagem = "ar": mostra a camada de baixo (tokens voando). */
 export interface MapLevel {
@@ -73,7 +136,7 @@ export interface MapNote {
 }
 
 /** Cores dos marcadores de anotação. */
-export const NOTE_COLORS = ['#facc15', '#7aa7ff', '#ef4444', '#22c55e', '#b18cff', '#e8eefc'] as const;
+export const NOTE_COLORS = ['#facc15', '#7aa7ff', '#ef4444', '#22c55e', '#b18cff', '#e8eefc', '#000000'] as const;
 
 // --- Desenho -----------------------------------------------------------------
 
@@ -88,8 +151,8 @@ export interface Stroke {
   opacity: number;
 }
 
-/** Paleta do pincel: tokens do projeto + branco, vermelho, amarelo e verde. */
-export const BRUSH_COLORS = ['#7aa7ff', '#3462d6', '#b6c8f2', '#ffffff', '#ef4444', '#facc15', '#22c55e', '#04060c'] as const;
+/** Paleta do pincel: tokens do projeto + branco, vermelho, amarelo, verde e preto. */
+export const BRUSH_COLORS = ['#7aa7ff', '#3462d6', '#b6c8f2', '#ffffff', '#ef4444', '#facc15', '#22c55e', '#000000'] as const;
 /** Espessuras do pincel (px do mapa). */
 export const BRUSH_WIDTHS = [4, 8, 16, 32] as const;
 /** Opacidades do pincel. */
@@ -204,7 +267,15 @@ export interface ThemeTag {
   id: string;
   text: string;
   level: number;
+  /**
+   * Tag mágica (só tags, não defeitos): numa rolagem vale o Poder escolhido (1 até o nível) e
+   * gasta essa mesma quantidade de Mana (a barra Espírito). Padrão: false.
+   */
+  magic?: boolean;
 }
+
+/** Barra de status que serve de Mana para as tags mágicas. */
+export const MANA_BAR = 'status-spirit';
 
 /** Card de tema: nome + tags e defeitos com nível. */
 export interface CharacterTheme {
@@ -218,6 +289,11 @@ export interface CharacterTheme {
   goal: string;
   /** Personagem: avanço do objetivo, de 0 a GOAL_STEPS marcadores. Padrão: 0. */
   goalProgress: number;
+  /**
+   * Personagem: abandono do objetivo, de 0 a GOAL_STEPS marcadores vermelhos (à esquerda dos de
+   * avanço). Todos acesos = objetivo abandonado. Padrão: 0.
+   */
+  goalAbandon: number;
 }
 
 /** Marcadores de avanço do objetivo de cada tema. */
@@ -360,6 +436,7 @@ export function defaultSheet(): CharacterSheet {
       flaws: [],
       goal: '',
       goalProgress: 0,
+      goalAbandon: 0,
     })),
     inventory: [],
     notes: withFixedNotePages([]),
@@ -378,7 +455,14 @@ export function normalizeSheet(raw: Partial<CharacterSheet> | undefined): Charac
   const sheet = { ...empty, ...raw };
   const themes = empty.themes.map((theme, i) => {
     const saved = sheet.themes[i];
-    return { ...theme, ...saved, flaws: saved?.flaws ?? [], goal: saved?.goal ?? '', goalProgress: saved?.goalProgress ?? 0 };
+    return {
+      ...theme,
+      ...saved,
+      flaws: saved?.flaws ?? [],
+      goal: saved?.goal ?? '',
+      goalProgress: saved?.goalProgress ?? 0,
+      goalAbandon: saved?.goalAbandon ?? 0,
+    };
   });
   const studies = empty.studies.map((study, i) => ({ ...study, ...sheet.studies?.[i] }));
   return { ...sheet, themes, studies, notes: withFixedNotePages(sheet.notes) };
@@ -444,6 +528,11 @@ export interface RollConfig {
    * na rolagem (cartão do chat), mas não entram no total nem no resultado.
    */
   addItems?: boolean;
+  /**
+   * Poder de cada tag mágica ligada (id da tag → Poder). Vale no lugar do nível e é a Mana
+   * gasta ao usar a ação; limitado ao nível atual da tag. Ausente = o nível atual.
+   */
+  powers?: Record<string, number>;
 }
 
 export const DEFAULT_ROLL: RollConfig = { dice: '2d12', modifier: 0 };
@@ -482,6 +571,8 @@ export interface RollResult {
    * sim, como era antes de os itens deixarem de somar por padrão.
    */
   itemsAdded?: boolean;
+  /** Mana (Espírito) gasta pelas tags mágicas desta rolagem. Padrão: 0. */
+  mana?: number;
   total: number;
   outcome: RollOutcome;
 }
@@ -579,6 +670,7 @@ export const FX_COLORS: { color: string; label: string }[] = [
   { color: '#ff3355', label: 'Sangue' },
   { color: '#7aa7ff', label: 'Arcano' },
   { color: '#e8eefc', label: 'Físico' },
+  { color: '#000000', label: 'Trevas' },
 ];
 
 export const DEFAULT_FX: FxStyle = { kind: 'slash', color: '#e8eefc' };

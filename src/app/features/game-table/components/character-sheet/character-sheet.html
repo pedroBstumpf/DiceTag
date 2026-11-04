@@ -334,8 +334,18 @@
                       [value]="theme.goal"
                       (input)="updateTheme(theme.id, { goal: goalInput.value })"
                     ></textarea>
-                    <div class="mt-1 flex items-center justify-between gap-2">
-                      <span class="text-[11px] text-slate-500">Avanço</span>
+                    <!-- Abandono (vermelhos, crescem para a esquerda) | Avanço (azuis) -->
+                    <div class="mt-1 flex flex-wrap items-center justify-center gap-x-1 gap-y-0.5">
+                      <app-level-pips
+                        [value]="theme.goalAbandon"
+                        [max]="goalSteps"
+                        [negative]="true"
+                        [reverse]="true"
+                        label="Abandono do objetivo"
+                        title="Abandono: todos acesos = objetivo abandonado"
+                        (picked)="setGoalAbandon(theme, $event)"
+                      />
+                      <span class="h-4 w-px bg-white/15"></span>
                       <app-level-pips
                         [value]="theme.goalProgress"
                         [max]="goalSteps"
@@ -343,6 +353,16 @@
                         (picked)="setGoalProgress(theme, $event)"
                       />
                     </div>
+                    <div class="mt-0.5 flex justify-between px-1 text-[10px] uppercase tracking-wider">
+                      <span class="text-red-300/70">Abandono</span>
+                      <span class="text-slate-500">Avanço</span>
+                    </div>
+                    @if (theme.goalAbandon >= goalSteps) {
+                      <p class="mt-1 flex items-center gap-1 text-[11px] font-semibold text-red-300">
+                        <mat-icon class="!size-3.5 !text-[14px]">flag</mat-icon>
+                        Objetivo abandonado
+                      </p>
+                    }
                   </div>
                 }
               </section>
@@ -380,7 +400,7 @@
                     @if (row.tags.length) {
                       <span class="flex max-h-[1.125rem] flex-wrap gap-1 overflow-hidden">
                         @for (tag of row.tags; track tag.id) {
-                          <span class="whitespace-nowrap rounded-sm px-1 text-[10px] font-semibold leading-[1.125rem] text-ink-950" [style.background]="tag.color">
+                          <span class="whitespace-nowrap rounded-sm px-1 text-[10px] font-semibold leading-[1.125rem]" [style.background]="tag.color" [style.color]="textOn(tag.color)">
                             {{ tag.text }}{{ tag.level ? ' ' + tag.level : '' }}
                           </span>
                         }
@@ -619,6 +639,19 @@
             [value]="tag.text"
             (input)="updateThemeTag(theme, list, tag.id, { text: tagText.value })"
           />
+          @if (!flaw) {
+            <!-- Tag mágica: na rolagem vale o Poder escolhido e gasta essa Mana (Espírito) -->
+            <button
+              type="button"
+              class="grid size-6 shrink-0 place-items-center rounded-md transition-colors"
+              [class]="tag.magic ? 'bg-violet-500/20 text-violet-300 ring-1 ring-violet-400/40' : 'text-slate-600 hover:bg-white/10 hover:text-violet-300'"
+              [attr.aria-pressed]="!!tag.magic"
+              [matTooltip]="tag.magic ? 'Mágica: na rolagem, escolha o Poder (até o nível); gasta essa quantidade de Espírito. Clique para tornar comum.' : 'Tornar mágica'"
+              (click)="updateThemeTag(theme, list, tag.id, { magic: !tag.magic || undefined })"
+            >
+              <mat-icon class="!text-[14px]" [class.icon-filled]="tag.magic">auto_awesome</mat-icon>
+            </button>
+          }
           <button type="button" class="grid size-6 shrink-0 place-items-center rounded-md text-slate-500 hover:bg-red-500/15 hover:text-red-300" aria-label="Remover" (click)="removeThemeTag(theme, list, tag.id)">
             <mat-icon class="!text-[14px]">close</mat-icon>
           </button>

@@ -59,6 +59,77 @@ describe('TableSessionService (fachada)', () => {
     expect(session.selectedTokenId()).toBeNull();
   });
 
+  it('itens no mapa: largar uma unidade do inventário e outro personagem pegar a pilha', async () => {
+    await session.addScene();
+    const a = session.addEntry('character');
+    const b = session.addEntry('character');
+    session.updateSheet(a.id, { inventory: [{ id: 'linha', itemId: 'espada', name: 'Espada velha', quantity: 2, equipped: true }] });
+
+    const drop = await session.dropItem({ source: 'inventory', sheetId: a.id, inventoryId: 'linha' }, { x: 35, y: 35 });
+    expect(drop?.item).toMatchObject({ itemId: 'espada', name: 'Espada velha' });
+    expect(drop?.item.equipped).toBeUndefined();
+    expect(session.inventoryOf(a.id)[0].quantity).toBe(1);
+    expect(session.visibleDrops()).toHaveLength(1);
+
+    session.setDropQuantity(drop!.id, 3);
+    expect(session.pickUpDrop(drop!.id, b.id)).toBe('Espada velha');
+    expect(session.inventoryOf(b.id)).toEqual([expect.objectContaining({ itemId: 'espada', name: 'Espada velha', quantity: 3 })]);
+    expect(session.visibleDrops()).toEqual([]);
+  });
+
+  it('itens no mapa: só o mestre larga itens do mundo; o jogador não pega com NPC que não controla', async () => {
+    await session.addScene();
+    session.createTableItem('Tocha');
+    const itemId = session.tableItems()[0].id;
+    session.setRole('player');
+    expect(await session.dropItem({ source: 'table', itemId }, { x: 0, y: 0 })).toBeNull();
+
+    session.setRole('gm');
+    const drop = (await session.dropItem({ source: 'table', itemId }, { x: 0, y: 0 }))!;
+    const npc = session.addEntry('npc');
+    const token = session.placeToken(npc.id, { x: 70, y: 0 })!;
+    session.setRole('player');
+    expect(session.pickupCandidates(drop).some((c) => c.sheetId === `npc:${token.id}`)).toBe(false);
+    expect(session.pickUpDrop(drop.id, `npc:${token.id}`)).toBeNull();
+  });
+
+  it('tags mágicas: a ação vale o Poder salvo, gasta Espírito e é recusada sem Espírito', async () => {
+    const pc = session.addEntry('character');
+    const theme = session.sheetOf(pc).themes[0];
+    session.updateSheet(pc.id, { themes: [{ ...theme, tags: [{ id: 'fogo', text: 'Fogo', level: 5, magic: true }] }, ...session.sheetOf(pc).themes.slice(1)] });
+    const action = session.addEntry('automation', { ownerEntryId: pc.id, roll: { dice: '2d12', modifier: 0, attributes: ['fogo'], powers: { fogo: 3 } } });
+
+    expect(session.formulaOf(action)).toBe('2d12+3');
+    expect(session.manaCostOf(action)).toBe(3);
+    const use = session.useAction(action, pc.id);
+    expect('refused' in use).toBe(false);
+    expect(session.manaOf(pc.id)).toBe(24 - 3);
+
+    // Espírito em 2: não rola nem gasta
+    const bars = session.sheetData(pc.id)!.bars.map((b) => (b.id === 'status-spirit' ? { ...b, value: 2 } : b));
+    session.updateStatus(pc.id, { bars });
+    const refused = session.useAction(action, pc.id);
+    expect('refused' in refused).toBe(true);
+    expect(session.manaOf(pc.id)).toBe(2);
+  });
+
+  it('paredes: o jogador não atravessa paredes nem portas fechadas; o mestre passa', async () => {
+    await session.addScene();
+    const pc = session.addEntry('character');
+    const token = session.placeToken(pc.id, { x: 35, y: 35 })!;
+    session.addWall({ kind: 'line', points: [{ x: 70, y: 0 }, { x: 70, y: 700 }] });
+
+    session.setRole('player');
+    session.moveToken(token.id, { x: 105, y: 35 });
+    expect(session.placementById(token.id)).toMatchObject({ x: 35, y: 35 });
+    session.moveTokens([{ placementId: token.id, x: 35, y: 105 }]);
+    expect(session.placementById(token.id)).toMatchObject({ x: 35, y: 105 });
+
+    session.setRole('gm');
+    session.moveToken(token.id, { x: 105, y: 105 });
+    expect(session.placementById(token.id)).toMatchObject({ x: 105, y: 105 });
+  });
+
   it('regra de vínculo: alterar o token do personagem altera a ficha', async () => {
     await session.addScene();
     const pc = session.addEntry('character');
@@ -201,7 +272,8 @@ describe('TableSessionService (fachada)', () => {
     const saOf = () => session.sheetData(pc.id)?.sheet.studies.find((s) => s.id === 's1')?.sa;
 
     // −30 garante total < 0 no 2d12 (falha crítica)
-    const { roll } = session.quickRoll('2d12', -30, pc.id, 0, ['s1']);
+    // Mesa local: a rolagem é feita aqui (só a mesa online devolve null)
+    const { roll } = session.quickRoll('2d12', -30, pc.id, 0, ['s1'])!;
     expect(roll.outcome).toBe('critical-failure');
     expect(saOf()).toBe(1);
 

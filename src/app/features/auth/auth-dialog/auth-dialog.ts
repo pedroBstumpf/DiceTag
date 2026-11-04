@@ -7,11 +7,22 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { AuthService } from '../../../core/services/auth.service';
+import { ServerAccountService } from '../../../core/services/server-account.service';
 
 export type AuthMode = 'login' | 'register';
 
+/** Dados do diálogo: modo inicial e se a conta é a do servidor (mesas online). */
+export interface AuthDialogData {
+  mode: AuthMode;
+  server: boolean;
+}
+
+/** Tamanho mínimo da senha: a conta local aceita 6; o servidor exige 8 (BACKEND_SECURITY.md). */
+const MIN_PASSWORD = { local: 6, server: 8 };
+
 /**
- * Diálogo único para entrar ou criar conta.
+ * Diálogo único para entrar ou criar conta — local (`AuthService`) ou do servidor
+ * (`ServerAccountService`, usada pelas mesas online).
  * Fecha com `true` quando o usuário termina autenticado.
  */
 @Component({
@@ -28,7 +39,9 @@ export type AuthMode = 'login' | 'register';
   templateUrl: './auth-dialog.html',
 })
 export class AuthDialog {
-  private readonly auth = inject(AuthService);
+  private readonly data = inject<AuthDialogData>(MAT_DIALOG_DATA);
+  /** Onde a conta vive: as duas fontes têm `login` e `register` com a mesma assinatura. */
+  private readonly accounts: Pick<AuthService, 'login' | 'register'> = this.data.server ? inject(ServerAccountService) : inject(AuthService);
   private readonly dialogRef = inject(MatDialogRef<AuthDialog, boolean>);
 
   // --- Estado --------------------------------------------------------------
@@ -36,7 +49,9 @@ export class AuthDialog {
     { id: 'login', label: 'Entrar' },
     { id: 'register', label: 'Criar conta' },
   ];
-  readonly mode = signal<AuthMode>(inject<AuthMode>(MAT_DIALOG_DATA) ?? 'login');
+  readonly server = this.data.server;
+  readonly minPassword = this.server ? MIN_PASSWORD.server : MIN_PASSWORD.local;
+  readonly mode = signal<AuthMode>(this.data.mode);
   readonly loading = signal(false);
   readonly error = signal('');
   readonly showPassword = signal(false);
@@ -45,17 +60,17 @@ export class AuthDialog {
   readonly form = inject(FormBuilder).nonNullable.group({
     name: ['', [Validators.required, Validators.maxLength(40)]],
     email: ['', [Validators.required, Validators.email]],
-    password: ['', [Validators.required, Validators.minLength(6)]],
+    password: ['', [Validators.required, Validators.minLength(this.minPassword)]],
   });
 
   constructor() {
     this.applyMode(this.mode());
   }
 
-  /** Abre o diálogo e retorna se o usuário terminou autenticado. */
-  static open(dialog: MatDialog, mode: AuthMode = 'login') {
-    return dialog.open<AuthDialog, AuthMode, boolean>(AuthDialog, {
-      data: mode,
+  /** Abre o diálogo e retorna se o usuário terminou autenticado. `server`: conta do servidor. */
+  static open(dialog: MatDialog, mode: AuthMode = 'login', server = false) {
+    return dialog.open<AuthDialog, AuthDialogData, boolean>(AuthDialog, {
+      data: { mode, server },
       width: '420px',
       maxWidth: '94vw',
       autoFocus: 'first-tabbable',
@@ -82,8 +97,8 @@ export class AuthDialog {
     this.error.set('');
 
     try {
-      if (this.mode() === 'register') await this.auth.register(name, email, password);
-      else await this.auth.login(email, password);
+      if (this.mode() === 'register') await this.accounts.register(name, email, password);
+      else await this.accounts.login(email, password);
       this.dialogRef.close(true);
     } catch (e) {
       this.error.set(e instanceof Error ? e.message : 'Algo deu errado. Tente novamente.');

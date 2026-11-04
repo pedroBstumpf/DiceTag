@@ -7,6 +7,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { WORLD_ITEM_META, WorldItem, WorldItemType } from '../../../../core/models/world-item.model';
 import { MAX_WORLDS } from '../../../../core/models/world.model';
+import { ITEM_DRAG_TYPE, ItemDragData } from '../../../../core/models/table-session.model';
 import { WorldsService } from '../../../../core/services/worlds.service';
 import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
 import { WorldbuildService, byTreeOrder } from '../../services/worldbuild.service';
@@ -258,7 +259,13 @@ export class Explorer {
     if (this.readonly()) return;
     this.draggedId = item.id;
     event.dataTransfer?.setData('text/plain', item.name);
-    if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+    if (!event.dataTransfer) return;
+    event.dataTransfer.effectAllowed = 'move';
+    // Na mesa, itens (cartões) também podem ser largados no mapa
+    if (item.type === 'item') {
+      const data: ItemDragData = { source: 'world', itemId: item.id };
+      event.dataTransfer.setData(ITEM_DRAG_TYPE, JSON.stringify(data));
+    }
   }
 
   onDragEnd(): void {

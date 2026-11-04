@@ -92,6 +92,12 @@ export function isRadialFx(kind: FxKind): boolean {
   return FX_KINDS.find((k) => k.id === kind)?.radial ?? false;
 }
 
+/**
+ * Quanto as animações dos efeitos são esticadas no tempo (1 = os tempos escritos nos
+ * construtores). Acima de 1, os efeitos ficam mais lentos e duram mais na tela.
+ */
+export const FX_TIME_SCALE = 1.8;
+
 /** Monta o desenho de um efeito lançado de `from` até `to`. */
 export function buildFx(kind: FxKind, color: string, from: Point, to: Point, ctx: FxContext): FxDrawing {
   const { length, angle } = fxFrame(from, to);
@@ -99,14 +105,26 @@ export function buildFx(kind: FxKind, color: string, from: Point, to: Point, ctx
   const L = Math.max(length, b.ui(12));
   const radial = isRadialFx(kind);
   const built = BUILDERS[kind](b, L);
+  const parts = stretchParts(built.parts, FX_TIME_SCALE);
   return {
     transform: `translate(${r2(from.x)} ${r2(from.y)})` + (radial ? '' : ` rotate(${r2(angle)})`),
     gradients: b.gradients,
-    parts: built.parts,
+    parts,
     // Nunca antes de a última parte terminar (senão ela seria cortada ao remover o efeito)
-    duration: Math.ceil(Math.max(built.duration, lastEnd(built.parts))),
+    duration: Math.ceil(Math.max(built.duration * FX_TIME_SCALE, lastEnd(parts))),
     upright: UPRIGHT_FX.has(kind),
   };
+}
+
+/** Estica no tempo todas as animações (duração e atraso, inclusive dos filhos) por `k`. */
+function stretchParts(parts: FxPart[], k: number): FxPart[] {
+  return parts.map((p) => ({
+    ...p,
+    ...(p.anim && {
+      anim: { ...p.anim, duration: Math.round(p.anim.duration * k), ...(p.anim.delay !== undefined && { delay: Math.round(p.anim.delay * k) }) },
+    }),
+    ...(p.children && { children: stretchParts(p.children, k) }),
+  }));
 }
 
 /** CSS final de uma parte. `offset` adianta a animação (ms) e `paused` congela — usados para capturas. */

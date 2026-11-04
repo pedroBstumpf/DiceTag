@@ -3,6 +3,7 @@
 Contexto do projeto para o Claude Code. Leia antes de qualquer alteração.
 Idioma de trabalho: **português do Brasil** (respostas, comentários no código e textos da interface).
 Visão da arquitetura (camadas, fluxos de dados, onde fica o estado): [`ARCHITECTURE.md`](ARCHITECTURE.md).
+Regras obrigatórias de segurança para qualquer código em `server/`: [`BACKEND_SECURITY.md`](BACKEND_SECURITY.md).
 
 ---
 
@@ -13,7 +14,7 @@ online com amigos, no mundo de Zehenia.
 A meta final inclui simular eventos, calcular rolagens, manter fichas, criar mapas, tocar sons e
 organizar toda a atmosfera de uma campanha.
 
-**Estado atual (MVP de interface, sem backend):**
+**Estado atual (MVP de interface; servidor pronto e com a primeira ligação às telas: a mesa online):**
 
 | Área | Status |
 |---|---|
@@ -29,14 +30,18 @@ organizar toda a atmosfera de uma campanha.
 | **Tokens** (imagem, tamanho, visão, barras e etiquetas com cor/nível; vínculo personagem/NPC; WASD com velocidade configurável) | Pronto |
 | **Névoa de guerra + paredes + portas** (visão por ray casting, por papel, memória de áreas exploradas) | Pronto |
 | **Pincel** (desenho livre, borracha, Ctrl+Z) e **anotações** no mapa | Pronto |
+| **Itens no mapa** (largar da Lore ou do inventário; abrir o cartão; pegar com personagem ou NPC) | Pronto |
 | **Ficha de personagem** (abas Ficha, Inventário, Anotações, Habilidades; cards Básico, Status, Relações, 3 Temas) | Pronto |
 | **Ficha de NPC** (igual à de personagem, sem Anotações nem Relações; controle por jogador; ficha/inventário públicos; **loja em Eiros**) | Pronto |
 | **Automações** (dono personagem/NPC/geral, ícone, rolagem 2d12/3d6 + modificador, efeito especial) | Pronto |
 | **Rolagem de dados** (2d12: falha crítica…sucesso crítico; 3d6: azar/neutro/sorte) + **chat** da mesa | Pronto |
 | **Efeitos especiais** no mapa (20 efeitos em 4 grupos; 13 cores por elemento) | Pronto |
-| Backend, multiplayer em tempo real | Não iniciado |
+| **Servidor** (`server/`: API HTTP + sala da mesa por WebSocket, SQLite, contas/convites reais, visão no servidor, LGPD, backup) | Pronto, testado, auditado contra o `BACKEND_SECURITY.md` |
+| **Mesa online**: conta do servidor, mesas online com convites e a mesa de jogo ligada à sala (WebSocket) | Pronto (primeira versão) |
+| Front-end usando o servidor em tudo (repositórios HTTP no lugar do IndexedDB, arquivos e Worldbuild no servidor) | Não iniciado |
 
-Todos os dados ficam **no navegador (IndexedDB)**. Não há API.
+As telas ainda guardam tudo **no navegador (IndexedDB)**, exceto a **mesa online** (seção "Mesas online" em Minhas mesas):
+ela usa a conta, as mesas, os convites e a sala do servidor.
 
 ---
 
@@ -63,16 +68,30 @@ Todos os dados ficam **no navegador (IndexedDB)**. Não há API.
 - Node 20.19+ ou 22.12+
 
 ```bash
+# Front-end (raiz)
 npm install                  # .npmrc usa legacy-peer-deps=true (contorna erro de peer deps do npm com vitest)
 npm start                    # http://localhost:4200
 npm run build                # SEMPRE rodar após alterações para validar (deve terminar sem erros)
-npx ng test --watch=false    # testes Vitest (*.spec.ts), uma execução
+npx ng test --watch=false    # testes Vitest (*.spec.ts), uma execução (usa bastante memória: vários processos)
+
+# Servidor (pasta server/) — guia completo em server/README.md
+npm install && npm run setup # dependências + .env com segredos aleatórios (nunca versionar o .env)
+npm run seed                 # contas de exemplo (senha = SEED_PASSWORD do .env) e uma mesa
+npm run dev                  # http://localhost:3000 (o ng serve repassa /api e /ws: proxy.conf.json)
+                             # jeito leve: `npm run build` na raiz + `npm start` aqui = app inteiro em :3000
+                             # (FRONTEND_DIR no .env; sem o ng serve)
+npm test                     # 127 testes, um arquivo por vez; npm run smoke = ponta a ponta com o servidor aberto
+npm run backup               # cópia do banco e dos arquivos + conferência (operação: server/OPERATIONS.md)
 ```
+
+**Antes de iniciar servidores ou testes, pergunte ao dono do projeto** (a máquina tem pouca memória livre).
 
 Configuração relevante do `angular.json` (produção):
 - `optimization.fonts: false` → não tenta embutir Google Fonts no build (evita travar em redes restritas).
+- `optimization.styles.inlineCritical: false` → nenhum CSS/`onload` inline no `index.html` (a CSP do servidor, que
+  entrega o app no jeito leve, só aceita scripts de arquivo).
 - Budgets: inicial 800kB aviso / 1.5MB erro; estilo por componente 6kB / 12kB.
-  O aviso subiu para **850kB** porque o CSS global do Tailwind cresce com cada tela nova (inicial hoje ~801kB,
+  O aviso subiu para **850kB** porque o CSS global do Tailwind cresce com cada tela nova (inicial hoje ~841kB,
   dos quais ~88kB de CSS). Evite importar coisas pesadas fora das rotas lazy.
 
 ---
@@ -102,15 +121,22 @@ src/
     │   │   ├── storage.service.ts      # wrapper chave/valor do IndexedDB (get/set/delete)
     │   │   ├── auth.service.ts         # contas locais + visitante
     │   │   ├── sheet-store.ts          # SheetStore: contrato da fonte de dados da ficha + inventário em comum
+    │   │   ├── file-store.ts           # FileStore (put/get/remove/copy por id) + LocalFileStore (IndexedDB, blob:<id>)
+    │   │   ├── server-file-store.ts    # ServerFileStore: arquivos da mesa online em /api/files
     │   │   ├── game-tables.service.ts  # CRUD de mesas (excluir apaga table-state e blobs)
+    │   │   ├── server-api.service.ts   # cliente HTTP da API do servidor (/api, ServerError, SERVER_OFFLINE)
+    │   │   ├── server-account.service.ts # conta do servidor (cookie HttpOnly): entrar, sair, exportar, excluir
+    │   │   ├── online-tables.service.ts  # mesas online: listar, criar, excluir, convidar, entrar, sair
     │   │   ├── worlds.service.ts       # mundos do usuário (lista, aberto, criar/renomear/excluir) + spec
     │   │   ├── layout.service.ts       # barra lateral (recolhida/mobile)
     │   │   └── news.service.ts         # notícias (vazio por enquanto)
     │   └── utils/id.ts                 # newId() com fallback fora de HTTPS
+    │       utils/file-name.ts          # uploadName: nome com extensão coerente para o servidor + spec
     ├── shared/                 # reutilizável entre features
     │   ├── components/floating-window/ # JANELA FLUTUANTE (peça central da UX)
     │   ├── components/empty-state/
     │   ├── components/color-picker/    # bolinha de cor + paleta (mat-menu) + cor livre
+    │   ├── utils/color.ts              # readableTextOn: texto claro/escuro sobre uma cor (etiquetas pretas) + spec
     │   ├── components/tag-editor/      # lista editável de etiquetas (cor, texto, nível): token, ficha, item
     │   ├── components/rich-text-editor/ # Tiptap + barra de formatação (documentos e anotações da ficha)
     │   ├── directives/auto-focus.directive.ts
@@ -124,7 +150,7 @@ src/
     └── features/
         ├── home/               # landing
         ├── auth/auth-dialog/   # diálogo único Entrar/Criar conta
-        ├── tables/             # "Minhas mesas" + create-table-dialog
+        ├── tables/             # "Minhas mesas" + create-table-dialog + online-tables (seção "Mesas online")
         ├── worldbuild/
         │   ├── worldbuild.ts           # página: explorador (com seletor de mundo) + área de janelas
         │   ├── services/worldbuild.service.ts   # itens e mesa de trabalho do mundo aberto; migração de timelines antigas
@@ -135,17 +161,19 @@ src/
         │   └── components/ explorer (abas Arquivos/Itens/NPCs/Raças/Linhas do tempo/Documentos/Mapas), race-card,
         │                   document-editor, timeline-editor, image-viewer,
         │                   item-card (ItemCard + ItemCardView)
-        └── game-table/         # MESA DE JOGO (rota /mesa/:id, tela cheia, fora do Shell)
+        └── game-table/         # MESA DE JOGO (rotas /mesa/:id e /mesa-online/:id, tela cheia, fora do Shell)
             ├── game-table.ts           # página: orquestra barras, janelas e atalhos
             ├── services/
             │   ├── table-session.service.ts  # FACHADA da mesa: signals, Blobs, sessão; toda mutação via dispatch + spec
+            │   ├── table-room.ts             # conexão WebSocket com a sala da mesa online (seq, reconexão)
             │   ├── sound-mixer.service.ts    # um HTMLAudioElement por som
             │   └── blob-url.service.ts       # object URLs com cache (imagens de token)
             ├── state/                  # puro + specs: comandos (estado, payload) → estado, permissões, visão
             │   ├── commands.ts         # TABLE_COMMANDS, TableCommand, applyCommand (catálogo de comandos)
-            │   ├── scenes.ts levels.ts entries.ts tokens.ts fog.ts drawings.ts notes.ts chat.ts lore.ts
+            │   ├── scenes.ts levels.ts entries.ts tokens.ts drops.ts fog.ts drawings.ts notes.ts chat.ts lore.ts
             │   ├── permissions.ts      # canEdit, sheetAccess, canSeeLoreItem… com Viewer { role, userId }
             │   ├── player-view.ts      # o que o jogador vê sob a névoa (tokens, anotações, portas)
+            │   ├── sync.ts             # reconciliação da mesa online (confirmado + pendentes) e rajadas + spec
             │   └── table-state.ts helpers.ts  # EMPTY_STATE, normalizeState, mapScene/mapPlacement…
             ├── utils/                  # funções puras + specs Vitest
             │   ├── geometry.ts         # snap de token/canto, alça de tamanho, distâncias
@@ -161,7 +189,7 @@ src/
             │   └── effects.ts          # buildFx: os 20 efeitos descritos como dados (partes SVG + animações)
             └── components/
                 ├── map-stage/          # ORQUESTRADOR do mapa: zoom, pan, tela↔mundo, roteamento por ferramenta, WASD
-                ├── map-layers/         # camadas dentro do "mundo": drawings, notes, fog, tokens, doors, walls, fx
+                ├── map-layers/         # camadas dentro do "mundo": drawings, notes, drops, fog, tokens, doors, walls, fx
                 ├── scene-bar/          # barra superior: pastas e abas de cenas, vista isométrica (mestre)
                 ├── levels-menu/        # painel de camadas do mapa (mestre, isométrica)
                 ├── tool-bar/           # barra esquerda: ferramentas (TABLE_TOOLS) + submenus
@@ -177,6 +205,7 @@ src/
                 ├── sheet-inventory/    # aba Inventário: lista de itens + cartão; equipado; no NPC, preços e compra (loja)
                 ├── equipped-item-window/ # janela do cartão de um item equipado (lista "Equipados" da aba Ficha)
                 ├── table-item-window/  # janela do cartão de um item criado na mesa (aba Lore)
+                ├── drop-window/        # janela de um item largado no mapa: cartão + "Pegar com"
                 ├── sheet-notes/        # aba Anotações: caderno com páginas (RichTextEditor)
                 ├── level-pips/         # seletor de nível 1–6 em losangos (relações e tags de tema)
                 ├── token-editor/       # editor de tamanho, visão, barras e etiquetas
@@ -184,9 +213,20 @@ src/
                 └── note-popover/       # edição de anotação junto ao marcador
 ```
 
+Servidor (`server/`, pacote Node separado; detalhes em `ARCHITECTURE.md` §11 e `server/README.md`):
+```
+server/src/  main.ts · app.ts · context.ts · config/env.ts · db/ (SQLite + migrações + backup antes de migrar)
+             domain/index.ts   # importa de src/app as regras puras (comandos, permissões, visão, dados, paredes, raça)
+             repositories/ services/ security/ lib/ http/ (plugins + rotas) realtime/ (sala da mesa) ops/ (backup)
+server/scripts/ (setup, seed, smoke, backup) · server/dev/ (página /dev/) · server/test/ · server/OPERATIONS.md
+http/routes/frontend.ts   # entrega o app compilado (FRONTEND_DIR): lista fixa de arquivos, rotas do app → index.html, CSP
+```
+`proxy.conf.json` (raiz) liga o `ng serve` ao servidor em desenvolvimento.
+
 Rotas (`app.routes.ts`, todas lazy):
 - `''` (Shell) → `''` Home · `mesas` Tables · `worldbuild` Worldbuild do mundo aberto (aceita `?novo=<tipo>` e `?abrir=<id>`).
 - `mesa/:id` → GameTablePage (tela cheia, **fora** do Shell)
+- `mesa-online/:id` → a mesma GameTablePage com `data: { online: true }` (mesa do servidor)
 - `**` → redireciona para `''`
 
 ---
@@ -219,6 +259,15 @@ Rotas (`app.routes.ts`, todas lazy):
   Blobs e o Worldbuild continuam no serviço. Comando sem efeito devolve o mesmo objeto.
 - **Permissões e visibilidade novas** entram em `state/permissions.ts` ou `state/player-view.ts` (puras, com
   `Viewer`), nunca só no template: o servidor vai reaplicá-las.
+- **Front ↔ servidor:** arquivos de `state/`, `utils/` e `core/models/` usados por `server/src/domain` não podem
+  importar Angular. Novo comando em `TABLE_COMMANDS` exige esquema em `server/src/realtime/command-schemas.ts` e
+  regra em `command-rules.ts` (o servidor não compila sem eles); campo novo em `CharacterSheet` também exige
+  esquema (`SHEET_SCHEMA_IS_COMPLETE`) e, se for regra do mestre, a conferência em `realtime/sheet-rules.ts`;
+  nova regra de visibilidade vai também para `server/src/realtime/projection.ts`. A visão (origens e polígonos)
+  é calculada por `visionSourcesOf`/`visionPolygonsOf` em `state/player-view.ts`, usadas pelos dois lados.
+- **Código em `server/`** segue o [`BACKEND_SECURITY.md`](BACKEND_SECURITY.md): rota nova nasce protegida (só
+  `config: PUBLIC` a abre), consultas com o dono/participação no SQL, todo payload com `strictObject` e limites,
+  eventos de segurança por `audit()`.
 - **Commits:** um por feature/fase, em branch separada da `main`, no formato Conventional Commits em PT-BR
   (`feat(mesa): …`, `fix(mesas): …`), com corpo explicando o que mudou.
 
@@ -289,7 +338,8 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - `APP_SETTINGS.requireAuth` (`core/config/app-settings.ts`), hoje **`false` = modo de teste**:
   `AuthService.user()` devolve um visitante fixo (`id: 'guest'`) quando ninguém está logado.
 - `isLoggedIn()` = há usuário (real ou visitante). `isGuest()` = é o visitante.
-- Contas reais: e-mail único (normalizado em minúsculas), senha com mínimo de 6 caracteres, hash SHA-256 (`dicetag:` + senha).
+- **No servidor** (`server/`), contas usam senha de 8 a 128 caracteres (sem as mais comuns), scrypt com pimenta e sessão por cookie HttpOnly; o papel na mesa vem da conta (dono = mestre, convite = jogador).
+- Contas locais (provisórias): e-mail único (normalizado em minúsculas), senha com mínimo de 6 caracteres, hash SHA-256 (`dicetag:` + senha).
   Sessão = id do usuário em `localStorage['dicetag.session']`. **É provisório** — não é segurança real.
 - Todos os dados são separados por usuário (o visitante tem os próprios dados).
 
@@ -363,6 +413,40 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   pasta é um botão que abre a lista das cenas dela (a cena aberta aparece como "Pasta › Cena"); cenas fora de
   pastas são abas. Excluir a pasta mantém as cenas (saem da pasta). Renomear cena de pasta: campo no botão da pasta.
 
+### Mesa online (servidor) — `OnlineTables`, rota `mesa-online/:id`
+- **Conta do servidor** (`ServerAccountService`, `core/`): separada da conta local (`AuthService`), sessão por cookie
+  HttpOnly (o token nunca chega ao JavaScript). Entrar/criar conta pelo mesmo `AuthDialog` em modo servidor (senha ≥ 8).
+  `ServerApiService` chama `/api` com URLs relativas (proxy do `ng serve`); erros do servidor viram `ServerError` em
+  PT-BR e servidor desligado vira o aviso `SERVER_OFFLINE`.
+- **Minhas mesas → "Mesas online"** (`features/tables/online-tables`): menu da conta (Baixar meus dados, Excluir conta
+  do servidor com a senha, Sair), criar mesa pelo nome, entrar com código de convite e, por mesa, o papel da conta
+  (dono = Mestre, convidado = Jogador), "Gerar convite" (código mostrado uma vez, com copiar), "Excluir mesa" ou
+  "Sair da mesa" e "Abrir mesa online". Chamadas em `OnlineTablesService`.
+- **A mesa online é a mesma `GameTablePage`** (input `online` = dado da rota): busca a mesa (`OnlineTablesService.get`,
+  com o motivo na tela se não abrir) e chama `session.connect(id)`. A conexão é a `TableRoom`
+  (`services/table-room.ts`: WebSocket, `seq`, reconexão até 5 vezes; fechamentos 4401/4403/4404 são definitivos).
+- **Na sessão** (`TableSessionService`): com sala, `dispatch` aplica pela reconciliação pura de `state/sync.ts`
+  (confirmado + pendentes = tela; `ack` confirma com o payload final, `nack` desfaz e avisa, `cmd` de outra pessoa entra
+  no confirmado, `state` do jogador substitui) e envia; `flush` não grava nada (o estado online nunca vai para o
+  IndexedDB). **Rajadas** (`burstKey`: mover tokens e memória da névoa) vão agrupadas a cada `BURST_MS` = 100 ms, só com
+  o último valor (`mergeBurst`/`squashPending`), por causa do limite de mensagens do servidor.
+- **Papel da conta:** `welcome.you.role`; `setRole` não faz nada online e a barra de ações mostra só o rótulo. A conta
+  usada nas regras (`viewer`, chat, dono de personagem/item/efeito) é `me` = a do servidor.
+- **Rolagens no servidor:** `useAction` devolve `RollSent` e `quickRoll` devolve `null`; o resultado chega no chat e em
+  `session.serverRoll` (aviso da página). Estudos/Treinos e etiquetas de itens/status ainda não entram (o servidor
+  ainda não os calcula).
+- **Névoa do jogador:** usa os polígonos `vision` do servidor (`serverVision`), que não envia as paredes; só o mestre
+  grava a memória da névoa.
+- **Barra superior:** situação da conexão (Online, Reconectando…, Desconectado com o motivo na dica).
+- **Arquivos** (`FileStore`, SPEC §2): `SheetStore.files` é a `LocalFileStore` (IndexedDB) e o `connect` troca por
+  uma `ServerFileStore` da mesa (mapas, camadas, tokens/fichas, sons, itens da mesa, imagens personalizadas do
+  inventário vão para `/api/files`; o servidor confere tipo, cotas e quem baixa). Gravar arquivo = `uploadFile`
+  (null + aviso `uploadFailed` se o servidor recusar; nada muda). Ler = `session.getBlob` / `BlobUrlService`: primeiro
+  o navegador (imagens do Worldbuild, ainda locais), depois o servidor. Nunca gravar `blob:` direto no `StorageService`.
+- **Limites:** o Worldbuild e o bestiário continuam locais (o mundo aberto não muda ao abrir a mesa online; imagens
+  de itens e raças do mundo só aparecem para quem as tem no navegador); pings e efeitos não são repassados; o EXIF das
+  imagens ainda não é removido antes do envio.
+
 ### Vista isométrica e camadas do mapa
 - `Scene.isometric` (mestre, botão na barra superior): a vista vira `matrix(...)` = escala × `isoMatrix()` (gira 45° e
   achata, `ISO_SQUASH`) — puro em `utils/projection.ts`. **Toda conversão tela↔mundo usa `project`/`unproject`**
@@ -407,6 +491,23 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - **Itens criados na mesa** (`TableState.items`) ficam na seção "Itens da mesa", abaixo do explorador, **visíveis a
   todos** (registro dos feitos dos jogadores). Abrem na janela `TableItemWindow` (tipo `table-item`): editável por
   quem criou e pelo mestre.
+- **Itens no mapa ("drops", `Scene.drops: DroppedItem { x, y, level?, size?, color?, item: InventoryEntry }`):** pilha de um item com a
+  personalização de quem largou (sem preço nem "equipado"; `unitOf` em `utils/inventory.ts`). Comandos em `state/drops.ts`
+  (`addDrop`, `moveDrop`, `setDropQuantity`, `updateDrop` — tamanho e cor —, `removeDrop`) + spec. **Largar** = arrastar até o mapa (`ITEM_DRAG_TYPE`, JSON
+  `ItemDragData`): do explorador da aba Lore (itens do tipo `item`) e de "Itens da mesa" só o **mestre**; do inventário,
+  quem edita a ficha (fichas da mesa, não a base do bestiário), **uma unidade** por arraste (`session.takeUnit`, o mesmo de
+  `transferItem`: imagem duplicada enquanto sobra unidade). Alinha ao centro do quadrado com a grade visível; vai para a
+  camada em foco. Camada `drops-layer` (losango com imagem e "×N", borda na cor `color` — padrão `DROP_COLOR` —, lado
+  `size` em quadrados — padrão `DROP_SIZE` = 0,8; Selecionar). **Clique** seleciona (`session.selectedDropId`,
+  exclusivo com a seleção de tokens: `selectDrop` limpa os tokens e `selectToken` limpa o item); o mestre arrasta,
+  usa a **alça** (passos de 0,5, como os tokens) e **Delete** tira do mapa; Esc desmarca. **Duplo clique** abre a
+  janela `DropWindow` (`drop:<id>`, fecha sozinha quando o item sai do mapa): cartão só leitura, cor da borda
+  (`ColorPicker`, mestre) e **"Pegar com"** (`pickupCandidates`:
+  personagens — mestre: todos; jogador: os dele — e tokens de NPC que a conta edita, na cena ativa; quem age primeiro,
+  depois os mais próximos). `pickUpDrop` leva a **pilha inteira** (`addOne` com `count`) e a imagem; exige editar a ficha
+  e ver o item. Mestre (`canManageDrops`): arrasta, muda a quantidade e "Tirar do mapa" (apaga a imagem). Jogador com
+  névoa só vê os que algum token enxerga agora (`visibleDropsFor`). Excluir cena/mesa apaga as imagens; excluir camada
+  desce os itens dela.
 - **Grade:** escondida (menu da cena: "Remover grade") = tokens e paredes se movem livres; visível = alinham (Shift = livre).
   Não há botão nem atalho de grade na barra de ferramentas.
 - **Papel (`role`)**: alternado manualmente na barra de ações (Mestre/Jogador, `session.setRole`) — não há permissões
@@ -439,9 +540,11 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
     campo desabilitado na ficha e na janela "Token", `TokenEditor.lockStatusMax`). O jogador muda o valor atual, e o
     máximo dele só muda pela raça. Fora da mesa (bestiário no Worldbuild) quem edita a ficha edita o máximo.
   - **Relações:** nome, nível **1–6** (`LevelPips`) e descrição.
-  - **Temas (3):** nome + tags com nível **1–6** e, embaixo, **Defeitos** (`flaws`) com nível **-1 a -6**
+  - **Temas (3):** nome + tags com nível **1–6** (cada tag pode ser **mágica**, ver "Tags mágicas") e, embaixo, **Defeitos** (`flaws`) com nível **-1 a -6**
     (`LevelPips` com `negative`). Fichas antigas ganham `flaws: []` em `sheetOf`. Só personagem: **Objetivo** abaixo dos
-    defeitos (`goal`, texto, + `goalProgress` de 0 a `GOAL_STEPS` = 5 marcadores; clicar no último aceso desmarca).
+    defeitos (`goal`, texto, + `goalProgress` de 0 a `GOAL_STEPS` = 5 marcadores azuis; clicar no último aceso desmarca)
+    e, à esquerda dos azuis, 5 marcadores vermelhos de **abandono** (`goalAbandon`, crescem para a esquerda:
+    `LevelPips` com `negative` + `reverse`); todos acesos = "Objetivo abandonado".
   - **Equipados** (personagem e NPC, abaixo dos temas, fora do `fieldset` para quem só lê também abrir): itens com
     `InventoryEntry.equipped` (caixa à esquerda de cada item na aba Inventário, `canEquip`). Clique (só na mesa) abre a
     janela `equip:<id da ficha>:<id no inventário>` (`EquippedItemWindow`: o mesmo `ItemCardView` do inventário,
@@ -476,6 +579,16 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   (`RollConfig.attributes` = ids das tags). O **nível atual** é lido na hora (`tagLevelsOf` → `effectiveModifier`),
   então subir a tag na ficha atualiza todas as ações que a usam. Fórmulas exibidas usam `session.formulaOf(action)`.
   Tag apagada vale 0; trocar o dono da ação limpa as tags ligadas.
+- **Tags mágicas** (`ThemeTag.magic`, só tags, não defeitos; botão `auto_awesome` em cada tag do tema na ficha): numa
+  rolagem de 2d12 valem o **Poder** escolhido (1 até o nível atual, `powerOf`) no lugar do nível e gastam essa Mana da
+  barra **Espírito** (`MANA_BAR` = `status-spirit`). Na ação, o Poder fica salvo em `RollConfig.powers` (id → Poder;
+  ausente = o nível; se a tag descer, é limitado ao nível) e é editado na `EntryWindow`; no "Rolar", é escolhido na hora.
+  Regras puras em `utils/dice.ts` (`withPowers` troca nível por Poder; `manaCost` soma o Poder das mágicas ligadas; 3d6
+  não gasta) + spec. Na sessão: `actionLevels` (usado por `useAction` e `formulaOf`), `manaCostOf`, `manaOf`,
+  `manaShortfall` e `spendMana` (via `updateStatus`; nunca abaixo de 0). **Sem Espírito suficiente, não rola**:
+  `useAction` devolve `RollRefused { refused }` (a página mostra o aviso) e o `QuickRoll` não chama `quickRoll`.
+  `RollResult.mana` guarda o gasto (cartão do chat: ícone `auto_awesome`, "−N"). Ação de NPC usada sem o token dele
+  selecionado gasta do Espírito da ficha do NPC (no bestiário, se for referência).
 - **Etiquetas de itens equipados na rolagem** (ações e botão "Rolar"): `session.itemTagsOf` (id `itemTagId` =
   `item:<linha do inventário>:<etiqueta>`, valor = nível, sem nível 1); `rollTagsOf` = temas + itens, usado por
   `tagLevelsOf`. Ao mudar o inventário de uma ficha de entrada (`updateSheet` com `inventory`), `pruneItemTags` tira das
@@ -578,7 +691,7 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 ### Efeitos especiais (ferramenta `fx`, tecla E)
 - 20 formas em `FX_KINDS` (grupos `FX_GROUPS`): **Golpes** corte, garras, estocada, impacto · **Disparos** flecha,
   orbe, bola de fogo, raio, feixe, jato · **Área** explosão, onda, fumaça, meteoros, erupção, vórtice ·
-  **Magia** cura, escudo, runa, teleporte. 13 cores por elemento (`FX_COLORS`).
+  **Magia** cura, escudo, runa, teleporte. 14 cores por elemento (`FX_COLORS`, com "Trevas" = preto).
 - `radial: true` = arrastar do centro até a borda (não gira; "para cima" é para cima na tela; clique simples
   usa raio de 1,5 quadrado); os demais vão da origem ao alvo e giram na direção do arraste.
 - **Arquitetura orientada a dados:** `buildFx(kind, color, from, to, ctx)` (puro, `utils/effects.ts`) devolve um
@@ -586,6 +699,15 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   `appFxPart` + template recursivo com prefixo `svg:`). Novo efeito = nova função no `BUILDERS`.
 - Montado **uma vez** no lançamento (`castFx`, semente aleatória própria — `seededRandom`); a duração é calculada
   pelas partes (`lastEnd`) e o efeito sai da tela ao terminar. **Transitórios**, não são salvos.
+- **Mais lentos:** `buildFx` estica todas as durações e atrasos por `FX_TIME_SCALE` (1,8; `stretchParts`). Para
+  acelerar ou desacelerar todos os efeitos, mude só essa constante.
+- **Fixos no mapa:** chave "Fixar no mapa" no menu da ferramenta (`session.fxFixed`, sessão). Com ela, `castFx` grava
+  um `FixedFx { kind, color, from, to, seed, scale, level?, ownerUserId }` em `Scene.effects` (comandos `addFixedFx`,
+  `removeFixedFx`, `clearFixedFx` em `state/fixed-fx.ts` + spec). `session.fixedEffects` remonta o desenho igual
+  (mesma semente e zoom); a `FxLayer` (input `fixed`) o recria a cada ciclo (`fixedCycles`: duração + 300ms de pausa,
+  contados de quando cada efeito apareceu), reiniciando as animações juntas. O relógio (`now`, `Date.now()` a cada
+  200ms) é lido pelo `computed` que o template usa: lê-lo só na expressão `track` do `@for` não redesenha no zoneless. O menu lista os fixos da camada em foco; remove quem lançou e o mestre
+  (`canRemoveFixedFx`). Excluir a camada apaga os efeitos dela.
 - Animações genéricas `@keyframes fx-*` em `tailwind.css`, parametrizadas por variáveis CSS (`--dx/--dy`,
   `--s0/--s1`, `--o0`, `--rot`, `--sy`). **Todas começam invisíveis** (partes com atraso usam fill-mode `both`).
   `opacity` é da animação: translucidez fixa vai em `fill-opacity`/`stroke-opacity`.
@@ -617,7 +739,11 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - Selecionar: clique seleciona, arrastar move com snap (Shift livre), alça redimensiona em passos de 0,5,
   Delete remove do mapa. **WASD/setas** com token selecionado: desliza na velocidade da ficha
   (`TokenSettings.speed`, padrão 2 quadrados/s, 0,5–12, editada na janela "Token"; vem sempre da ficha, inclusive no NPC; Shift ×2,5);
-  ao soltar, alinha à grade se ela estiver visível. Movimento não colide com paredes.
+  ao soltar, alinha à grade se ela estiver visível. **Paredes bloqueiam o jogador:** no papel de jogador, mover
+  (arrastar, WASD, alinhar à grade) não atravessa paredes nem portas fechadas da camada do token
+  (`rules.wallsBlockMovement` + `movePathBlocked` em `utils/walls.ts`, pelo centro do token; aplicado em
+  `session.moveToken`/`moveTokens` via `canMoveTokenTo`). No WASD, encostado numa parede, o token desliza pelo eixo
+  livre. O mestre move livre.
 - **Seleção de vários tokens** (regras puras em `utils/selection.ts`; na sessão, `selectedTokenIds` + o **principal**
   `selectedTokenId`, alterados só por `selectToken` / `toggleTokenSelection` / `selectTokens`):
   - arrastar no **fundo** com Selecionar desenha a **caixa de seleção** (pega os tokens da camada em foco que a conta pode
@@ -662,8 +788,8 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 
 ### Atalhos da mesa (ignorados ao digitar)
 `V` selecionar · `M` mover mapa · `R` régua · `P` ping · `D` desenhar · `F` névoa · `W` parede (névoa em modo linha) ·
-`N` anotação · `E` efeitos especiais · `+`/`-` zoom · `1`–`0` ações · `\` modo imersivo · `Delete` remove os tokens selecionados (ou a parede
-selecionada, no modo editar) · `Esc` cancela parede/fecha anotação/desarma efeito de ação/limpa seleção · `Enter` finaliza parede ·
+`N` anotação · `E` efeitos especiais · `+`/`-` zoom · `1`–`0` ações · `\` modo imersivo · `Delete` remove os tokens selecionados (ou o
+item no chão selecionado, ou a parede selecionada, no modo editar) · `Esc` cancela parede/fecha anotação/desarma efeito de ação/limpa seleção · `Enter` finaliza parede ·
 `Ctrl+Z` desfaz desenho · **`Ctrl+C`/`Ctrl+V`** copia os tokens selecionados / cola sob o mouse · **`WASD`/setas** movem os tokens selecionados (nesse caso W/D não trocam de ferramenta) ·
 **Shift + clique** soma/tira um token da seleção · arrastar no fundo (Selecionar) = caixa de seleção ·
 **`PageUp`/`PageDown`** (mestre, isométrica) sobem/descem o token selecionado ou a camada em foco.
@@ -690,14 +816,15 @@ Na mesa, janelas "Token" usam o id `token:<id da colocação>` e fecham sozinhas
 0. `MapStage` ocupa a tela inteira.
 1. Barras sobrepostas com `.glass`: topo (cenas), esquerda (ferramentas + submenus), direita (painel 320px), baixo (ações).
 2. Camada de janelas (`pointer-events-none`; janelas com `pointer-events-auto`) acima das barras.
-3. Abas nas bordas para reabrir barras escondidas.
+3. Abas nas bordas para reabrir barras escondidas e, no modo imersivo (`session.immersive()`), o botão
+   "Sair do modo imersivo" no canto superior direito (`toggleImmersive`: reabre todas de uma vez).
 O `MapStage` recebe `insets` para enquadrar o mapa só na área livre entre as barras.
 
 ### Mapa (`map-stage` + `map-layers/`)
 - `map-stage` é o **orquestrador**: vista (`Viewport` + matriz 2D/isométrica), zoom/pan, conversão tela↔mundo,
   pilha de camadas do mapa e roteamento do ponteiro conforme a ferramenta. Camadas só desenham e emitem eventos
-  (`tokenDown`, `noteDown`).
-- Ordem no "mundo", de baixo para cima: **1** mapa · **2** grade · **3** desenhos · **4** notas · **5** névoa ·
+  (`tokenDown`, `noteDown`, `dropDown`).
+- Ordem no "mundo", de baixo para cima: **1** mapa · **2** grade · **3** desenhos · **4** notas · **4b** itens no chão · **5** névoa ·
   **6** tokens visíveis · **7** portas e paredes · **8** efeitos, régua e ping · **9** interface (popover, avisos — fora do mundo).
 - Na ferramenta Selecionar, token ou anotação sob o cursor tem prioridade; o fundo desenha a caixa de seleção
   (o mapa se move com o botão do meio ou a ferramenta Mover).
@@ -718,8 +845,8 @@ O `MapStage` recebe `insets` para enquadrar o mapa só na área livre entre as b
 | `worlds:<userId>` | `World[]` (mundos do usuário; ausente = só o primeiro) |
 | `worldbuild:<userId>` | `WorldItem[]` do primeiro mundo (`DEFAULT_WORLD_ID`; itens, NPCs do bestiário, raças…) |
 | `worldbuild:<userId>:<worldId>` | `WorldItem[]` dos outros mundos |
-| `table-state:<tableId>` | `TableState` (cenas com tokens/névoa/memória/paredes/portas/desenhos/anotações/camadas/vista, pastas de cenas, cena ativa, arquivos — com a ficha do personagem em `sheet` e os NPCs como referência ao bestiário —, tokens de NPC com ficha própria, volume mestre, chat, organização da Lore, itens criados na mesa por jogadores) |
-| `blob:<id>` | `Blob` de imagem/mapa/áudio/imagem de token |
+| `table-state:<tableId>` | `TableState` (cenas com tokens/névoa/memória/paredes/portas/desenhos/anotações/itens no chão/camadas/vista, pastas de cenas, cena ativa, arquivos — com a ficha do personagem em `sheet` e os NPCs como referência ao bestiário —, tokens de NPC com ficha própria, volume mestre, chat, organização da Lore, itens criados na mesa por jogadores) |
+| `blob:<id>` | `Blob` de imagem/mapa/áudio/imagem de token (via `LocalFileStore`; na mesa online, no servidor) |
 | `desk:<userId>:<worldId>` | `OpenWindow[]`: janelas da mesa de trabalho do Worldbuild daquele mundo (posição, tamanho, estado) |
 | `localStorage: dicetag.session` | id do usuário logado |
 | `localStorage: dicetag.world.<userId>` | último mundo aberto pelo usuário |
@@ -751,9 +878,11 @@ repositórios por domínio, servidor autoritativo (névoa, rolagens, permissões
 - Persistir janelas abertas, visibilidade das barras e pincel por mesa.
 - Imagens de token substituídas durante a sessão só liberam a URL antiga ao sair da mesa (`BlobUrlService`).
 - Névoa: visão só por token; portas sem tranca nem permissão (qualquer papel abre/fecha).
-- Movimento de tokens (arrastar ou WASD) não colide com paredes.
+- Paredes bloqueiam o movimento só pelo centro do token (o corpo do token pode encostar/sobrepor a parede).
 - Ctrl+Z cobre só desenhos (não tokens, paredes ou anotações).
-- Backend + multiplayer em tempo real; permissões reais de mestre/jogador; convite de jogadores.
+- **Terminar de ligar o front ao servidor:** a mesa online já usa a sala (reconciliação em `state/sync.ts`); faltam os
+  repositórios por domínio (SPEC §2) para arquivos (imagens/sons online), Worldbuild/bestiário e contas, os eventos
+  efêmeros (ping, efeitos) e, no servidor, comandos atômicos de compra/loot/drop e estudos/itens nas rolagens.
 - Mundos: limite fixo de 2 por usuário; trocar o mundo de uma mesa já criada ainda não é possível.
 - Mural de notícias alimentado por API/CMS (`NewsService.posts`).
 - Testes de componentes (hoje têm testes as funções puras de `utils/` e `state/`, as regras da ficha no modelo, a

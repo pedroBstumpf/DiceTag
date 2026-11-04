@@ -1,0 +1,41 @@
+{
+  "name": "cronicas-de-zehenia-server",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Back-end do Crônicas de Zehenia: API HTTP + sala da mesa por WebSocket.",
+  "engines": {
+    "node": "^22.13.0 || ^24.0.0"
+  },
+  "scripts": {
+    "setup": "tsx scripts/setup.ts",
+    "dev": "tsx watch --disable-warning=ExperimentalWarning --clear-screen=false src/main.ts",
+    "start": "tsx --disable-warning=ExperimentalWarning src/main.ts",
+    "seed": "tsx --disable-warning=ExperimentalWarning scripts/seed.ts",
+    "smoke": "tsx scripts/smoke.ts",
+    "backup": "tsx --disable-warning=ExperimentalWarning scripts/backup.ts",
+    "backup:check": "tsx --disable-warning=ExperimentalWarning scripts/backup-check.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "audit:prod": "npm audit --omit=dev",
+    "check": "npm run typecheck && npm test && npm audit --audit-level=high"
+  },
+  "dependencies": {
+    "@fastify/cookie": "11.1.3",
+    "@fastify/cors": "11.3.1",
+    "@fastify/helmet": "13.2.0",
+    "@fastify/multipart": "10.1.3",
+    "@fastify/rate-limit": "11.2.1",
+    "fastify": "5.12.7",
+    "tsx": "4.23.15",
+    "ws": "8.22.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "@types/ws": "8.18.2",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  }
+}

@@ -1,8 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { Tag } from '../models/tag.model';
 import { CharacterSheet, InventoryEntry, TableEntry, TokenBar } from '../models/table-session.model';
-import { StorageService } from './storage.service';
-import { newId } from '../utils/id';
+import { FileStore, LocalFileStore } from './file-store';
 
 /**
  * Onde a ficha exibida mora:
@@ -40,7 +39,8 @@ export interface SheetData {
  */
 @Injectable()
 export abstract class SheetStore {
-  protected readonly storage = inject(StorageService);
+  /** Onde ficam as imagens (do inventário e da ficha): o navegador; a mesa online troca pelo servidor. */
+  protected files: FileStore = inject(LocalFileStore);
 
   /** Dados da ficha `id` (null se não existir). Lê signals: use dentro de computed. */
   abstract sheetData(id: string): SheetData | null;
@@ -70,10 +70,10 @@ export abstract class SheetStore {
   /** Troca a imagem do item só neste inventário (apaga a personalizada anterior). */
   async setInventoryImage(id: string, inventoryId: string, file: File): Promise<void> {
     const old = this.inventoryOf(id).find((i) => i.id === inventoryId)?.blobId;
-    const blobId = newId();
-    await this.storage.set(`blob:${blobId}`, file);
+    const blobId = await this.uploadFile(file);
+    if (!blobId) return;
     this.updateSheet(id, { inventory: this.inventoryOf(id).map((i) => (i.id === inventoryId ? { ...i, blobId } : i)) });
-    if (old) this.storage.delete(`blob:${old}`);
+    if (old) void this.files.remove(old);
   }
 
   /** Volta o item ao original (descarta nome, etiquetas, descrição e imagem personalizados; mantém preço e quantidade). */
@@ -82,14 +82,14 @@ export abstract class SheetStore {
     if (!item) return;
     const { name: _name, tags: _tags, blobId: _blobId, description: _description, ...kept } = item;
     this.updateSheet(id, { inventory: this.inventoryOf(id).map((i) => (i.id === inventoryId ? kept : i)) });
-    if (item.blobId) this.storage.delete(`blob:${item.blobId}`);
+    if (item.blobId) void this.files.remove(item.blobId);
   }
 
   /** Tira o item do inventário (e apaga a imagem personalizada, se houver). */
   removeInventoryItem(id: string, inventoryId: string): void {
     const item = this.inventoryOf(id).find((i) => i.id === inventoryId);
     this.updateSheet(id, { inventory: this.inventoryOf(id).filter((i) => i.id !== inventoryId) });
-    if (item?.blobId) this.storage.delete(`blob:${item.blobId}`);
+    if (item?.blobId) void this.files.remove(item.blobId);
   }
 
   /** Duplica as imagens personalizadas de um inventário (para uma cópia não apagar as da outra). */
@@ -97,10 +97,7 @@ export abstract class SheetStore {
     return Promise.all(
       inventory.map(async (item) => {
         if (!item.blobId) return item;
-        const blob = await this.storage.get<Blob>(`blob:${item.blobId}`);
-        if (!blob) return { ...item, blobId: undefined };
-        const blobId = newId();
-        await this.storage.set(`blob:${blobId}`, blob);
+        const blobId = await this.files.copy(item.blobId).catch(() => undefined);
         return { ...item, blobId };
       }),
     );
@@ -109,7 +106,24 @@ export abstract class SheetStore {
   /** Apaga as imagens personalizadas de um inventário (ficha excluída). */
   protected deleteInventoryBlobs(inventory: InventoryEntry[] | undefined): void {
     for (const item of inventory ?? []) {
-      if (item.blobId) this.storage.delete(`blob:${item.blobId}`);
+      if (item.blobId) void this.files.remove(item.blobId);
     }
+  }
+
+  // --- Arquivos --------------------------------------------------------------
+
+  /** Guarda um arquivo enviado pelo usuário; null = não deu (o motivo vai para `uploadFailed`). */
+  protected async uploadFile(file: Blob): Promise<string | null> {
+    try {
+      return await this.files.put(file);
+    } catch (error) {
+      this.uploadFailed(error);
+      return null;
+    }
+  }
+
+  /** Envio recusado (ex.: servidor sem espaço ou tipo de arquivo não aceito). Quem exibe pode avisar. */
+  protected uploadFailed(error: unknown): void {
+    console.error('Arquivo não guardado:', error);
   }
 }

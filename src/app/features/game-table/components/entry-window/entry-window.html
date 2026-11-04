@@ -122,7 +122,7 @@
               [matTooltip]="tagHint(tag)"
               (click)="toggleTag(tag)"
             >
-              <mat-icon class="!size-4 !text-[16px]">{{ on ? (signOf(tag) < 0 ? 'remove' : 'check') : tag.study ? 'school' : tag.item ? 'shield' : 'add' }}</mat-icon>
+              <mat-icon class="!size-4 !text-[16px]">{{ on ? (signOf(tag) < 0 ? 'remove' : 'check') : tag.study ? 'school' : tag.item ? 'shield' : tag.magic ? 'auto_awesome' : 'add' }}</mat-icon>
               {{ tag.text }}
               <span class="font-semibold tabular-nums">{{ tag.study ? 'treino' : modifierText(tagValue(tag)) }}</span>
             </button>
@@ -130,6 +130,28 @@
             <p class="text-xs text-slate-600">A ficha ainda não tem tags nos temas nem itens equipados.</p>
           }
         </div>
+        @if (linkedMagic().length) {
+          <!-- Poder das tags mágicas ligadas (até o nível atual; é a Mana gasta ao usar) -->
+          <div class="mt-3 flex flex-col gap-1.5 rounded-lg bg-violet-500/[0.07] p-2.5 ring-1 ring-violet-400/20">
+            @for (tag of linkedMagic(); track tag.id) {
+              <div class="flex items-center gap-2 text-xs text-violet-100">
+                <mat-icon class="icon-filled !size-4 !text-[16px] text-violet-300">auto_awesome</mat-icon>
+                <span class="min-w-0 flex-1 truncate">{{ tag.text }}</span>
+                <span class="text-slate-400">Poder</span>
+                <div class="flex items-center rounded-md bg-ink-950 ring-1 ring-white/10">
+                  <button type="button" class="grid size-7 place-items-center rounded-l-md text-slate-400 hover:bg-white/10 disabled:opacity-30" aria-label="Diminuir Poder" [disabled]="power(tag) <= 1" (click)="stepPower(tag, -1)">
+                    <mat-icon class="!text-[14px]">remove</mat-icon>
+                  </button>
+                  <span class="w-10 text-center font-semibold tabular-nums">{{ power(tag) }}/{{ tag.level }}</span>
+                  <button type="button" class="grid size-7 place-items-center rounded-r-md text-slate-400 hover:bg-white/10 disabled:opacity-30" aria-label="Aumentar Poder" [disabled]="power(tag) >= tag.level" (click)="stepPower(tag, 1)">
+                    <mat-icon class="!text-[14px]">add</mat-icon>
+                  </button>
+                </div>
+              </div>
+            }
+            <p class="text-[11px] text-violet-200/80">Ao usar, gasta <strong class="tabular-nums">{{ manaCost() }}</strong> de Espírito.</p>
+          </div>
+        }
         @if (hasItemTags()) {
           <!-- Itens aparecem na rolagem; só entram no total se ligado (padrão: não) -->
           <button

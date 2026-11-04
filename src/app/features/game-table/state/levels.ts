@@ -35,7 +35,7 @@ export function setLevelImage(state: TableState, p: { sceneId: string; index: nu
   return patchLevel(state, p.sceneId, p.index, { blobId: p.blobId });
 }
 
-/** Exclui uma camada de cima: os tokens dela e de cima descem uma; as paredes dela são apagadas. */
+/** Exclui uma camada de cima: os tokens e itens dela e de cima descem uma; as paredes dela são apagadas. */
 export function removeLevel(state: TableState, p: { sceneId: string; index: number }): TableState {
   const { index } = p;
   return mapScene(state, p.sceneId, (sc) => {
@@ -46,6 +46,11 @@ export function removeLevel(state: TableState, p: { sceneId: string; index: numb
       ...sc,
       levels: (sc.levels ?? []).filter((l) => l.id !== level.id),
       tokens: (sc.tokens ?? []).map((t) => (levelOf(t) >= index ? { ...t, level: levelOf(t) - 1 } : t)),
+      ...(sc.drops && { drops: sc.drops.map((d) => (levelOf(d) >= index ? { ...d, level: levelOf(d) - 1 } : d)) }),
+      // Efeitos fixos: os da camada excluída somem; os de cima descem
+      ...(sc.effects && {
+        effects: sc.effects.filter((f) => levelOf(f) !== index).map((f) => (levelOf(f) > index ? { ...f, level: levelOf(f) - 1 } : f)),
+      }),
       walls: (sc.walls ?? [])
         .filter((w) => levelOf(w) !== index)
         .map((w) => (levelOf(w) > index ? { ...w, level: levelOf(w) - 1 } : w)),

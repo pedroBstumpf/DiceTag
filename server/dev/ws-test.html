@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Zehenia · Testes do servidor</title>
+  <link rel="stylesheet" href="/dev/ws-test.css">
+  <script type="module" src="/dev/ws-test.js"></script>
+</head>
+<body>
+  <header>
+    <h1>Crônicas de Zehenia <span>· testes do servidor</span></h1>
+    <p id="who">Não logado</p>
+  </header>
+
+  <main>
+    <section>
+      <h2>1. Conta</h2>
+      <label>Nome (só para cadastro) <input id="name" autocomplete="name"></label>
+      <label>E-mail <input id="email" type="email" autocomplete="username" value="mestre@zehenia.local"></label>
+      <label>Senha <input id="password" type="password" autocomplete="current-password"></label>
+      <div class="row">
+        <button id="login">Entrar</button>
+        <button id="register" class="ghost">Criar conta</button>
+        <button id="logout" class="ghost">Sair</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>2. Mesas</h2>
+      <div class="row">
+        <button id="list-tables">Atualizar lista</button>
+        <button id="create-table" class="ghost">Criar mesa</button>
+      </div>
+      <ul id="tables"></ul>
+      <div class="row">
+        <button id="invite" class="ghost">Gerar convite (mestre)</button>
+        <input id="invite-code" placeholder="código do convite">
+        <button id="accept" class="ghost">Entrar com convite</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>3. Sala (WebSocket)</h2>
+      <div class="row">
+        <button id="connect">Conectar na mesa selecionada</button>
+        <button id="disconnect" class="ghost">Desconectar</button>
+        <span id="ws-status" class="pill">desconectado</span>
+      </div>
+      <div class="row">
+        <button id="send-sync" class="ghost">sync</button>
+        <button id="send-chat" class="ghost">mensagem no chat</button>
+        <button id="send-roll" class="ghost">rolar 2d12</button>
+        <button id="send-move" class="ghost">mover 1º token</button>
+      </div>
+      <label>Mensagem livre (JSON)
+        <textarea id="raw" rows="4">{"t":"cmd","seq":100,"type":"addNote","payload":{"sceneId":"cena-taverna","note":{"id":"nota-teste","x":100,"y":100,"title":"Teste","text":"Criada pela página de testes","color":"#22c55e","gmOnly":false}}}</textarea>
+      </label>
+      <button id="send-raw">Enviar</button>
+    </section>
+
+    <section class="wide">
+      <h2>Mensagens recebidas <button id="clear-log" class="ghost small">limpar</button></h2>
+      <ol id="log"></ol>
+    </section>
+
+    <section class="wide">
+      <h2>Estado recebido (o que ESTA conta enxerga)</h2>
+      <pre id="state">—</pre>
+    </section>
+  </main>
+</body>
+</html>

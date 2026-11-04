@@ -1,0 +1,197 @@
+<section class="flex flex-col gap-4 border-t border-white/5 pt-6">
+  <!-- ===== Cabeçalho: título + conta do servidor ===== -->
+  <header class="flex flex-wrap items-end justify-between gap-4">
+    <div>
+      <h2 class="flex items-center gap-2 font-display text-2xl text-slate-100">
+        Mesas online
+        <span class="rounded-full bg-astral-500/15 px-2 py-0.5 font-sans text-xs font-medium text-astral-300">servidor</span>
+      </h2>
+      <p class="mt-1 text-sm text-slate-400">Mesas guardadas no servidor, para jogar com amigos em tempo real.</p>
+    </div>
+
+    @if (account.user(); as user) {
+      <button
+        type="button"
+        [matMenuTriggerFor]="accountMenu"
+        class="flex items-center gap-3 rounded-xl border border-white/5 bg-ink-900 py-1.5 pl-1.5 pr-3 text-left transition-colors hover:bg-ink-800"
+      >
+        <span class="grid size-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-astral-500 to-star-500 text-sm font-semibold text-ink-950">
+          {{ user.name.charAt(0).toUpperCase() }}
+        </span>
+        <span class="min-w-0">
+          <span class="flex items-center gap-1.5 text-sm font-medium text-slate-100">
+            <span class="size-2 rounded-full bg-emerald-400"></span>
+            {{ user.name }}
+          </span>
+          <span class="block truncate text-xs text-slate-500">{{ user.email }}</span>
+        </span>
+        <mat-icon class="text-slate-500">unfold_more</mat-icon>
+      </button>
+      <mat-menu #accountMenu="matMenu" xPosition="before">
+        <a mat-menu-item [href]="account.exportUrl" download>
+          <mat-icon>download</mat-icon>
+          <span>Baixar meus dados</span>
+        </a>
+        <button mat-menu-item (click)="deleting.set(true)">
+          <mat-icon class="!text-red-400">person_remove</mat-icon>
+          <span>Excluir conta do servidor</span>
+        </button>
+        <button mat-menu-item (click)="logout()">
+          <mat-icon>logout</mat-icon>
+          <span>Sair do servidor</span>
+        </button>
+      </mat-menu>
+    }
+  </header>
+
+  <!-- ===== Excluir a conta: confirma com a senha ===== -->
+  @if (deleting() && account.user()) {
+    <form class="flex flex-wrap items-center gap-3 rounded-2xl border border-red-500/30 bg-red-500/5 p-4 animate-fade-in" (submit)="$event.preventDefault(); deleteAccount()">
+      <mat-icon class="text-red-400">warning</mat-icon>
+      <p class="min-w-48 flex-1 text-sm text-slate-300">
+        Excluir a conta apaga, no servidor, as mesas e os mundos dela. Digite a senha para confirmar.
+      </p>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="w-56">
+        <mat-label>Senha</mat-label>
+        <input #pwd matInput type="password" autocomplete="current-password" [value]="deletePassword()" (input)="deletePassword.set(pwd.value)" />
+      </mat-form-field>
+      <button mat-flat-button type="submit" class="!bg-red-500 !text-white" [disabled]="!deletePassword() || busy()">Excluir</button>
+      <button mat-button type="button" (click)="cancelDelete()">Cancelar</button>
+    </form>
+  }
+
+  <!-- ===== Conteúdo ===== -->
+  @if (!account.checked()) {
+    <div class="flex justify-center py-10"><mat-spinner diameter="32" /></div>
+  } @else if (account.error()) {
+    <app-empty-state icon="cloud_off" title="Sem conexão com o servidor" [message]="account.error()">
+      <button mat-stroked-button (click)="account.refresh()">
+        <mat-icon>refresh</mat-icon>
+        Tentar de novo
+      </button>
+    </app-empty-state>
+  } @else if (!account.user()) {
+    <app-empty-state
+      icon="cloud"
+      title="Entre no servidor"
+      message="A conta do servidor é separada da conta deste navegador. Use uma das contas de exemplo (npm run seed) ou crie a sua."
+    >
+      <button mat-flat-button (click)="openAuth('login')">Entrar no servidor</button>
+      <button mat-stroked-button (click)="openAuth('register')">Criar conta</button>
+    </app-empty-state>
+  } @else {
+    <!-- Criar mesa / entrar com convite -->
+    <div class="grid gap-3 md:grid-cols-2">
+      <form class="flex items-center gap-2 rounded-2xl border border-white/5 bg-ink-900 p-3" (submit)="$event.preventDefault(); create()">
+        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="flex-1">
+          <mat-label>Nome da nova mesa online</mat-label>
+          <input #nameInput matInput maxlength="60" [value]="newName()" (input)="newName.set(nameInput.value)" />
+        </mat-form-field>
+        <button mat-flat-button type="submit" class="!h-12" [disabled]="!newName().trim() || busy()">
+          <mat-icon>add</mat-icon>
+          Criar
+        </button>
+      </form>
+      <form class="flex items-center gap-2 rounded-2xl border border-white/5 bg-ink-900 p-3" (submit)="$event.preventDefault(); accept()">
+        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="flex-1">
+          <mat-label>Código de convite</mat-label>
+          <input #codeInput matInput maxlength="100" autocomplete="off" [value]="inviteCode()" (input)="inviteCode.set(codeInput.value)" />
+        </mat-form-field>
+        <button mat-stroked-button type="submit" class="!h-12" [disabled]="!inviteCode().trim() || busy()">
+          <mat-icon>login</mat-icon>
+          Entrar
+        </button>
+      </form>
+    </div>
+
+    <!-- Lista de mesas da conta do servidor -->
+    @if (service.loading() && !service.tables().length) {
+      <div class="flex justify-center py-10"><mat-spinner diameter="32" /></div>
+    } @else if (!service.tables().length) {
+      <app-empty-state
+        icon="cloud_queue"
+        title="Nenhuma mesa online"
+        message="Crie uma mesa acima ou entre numa mesa com o código de convite que o mestre te passou."
+      />
+    } @else {
+      <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        @for (table of service.tables(); track table.id) {
+          @let gm = table.role === 'gm';
+          <article class="flex flex-col overflow-hidden rounded-2xl border border-white/5 bg-ink-900 animate-fade-in">
+            <div class="h-1.5" [style.background]="table.accent"></div>
+
+            <div class="flex flex-1 flex-col gap-3 p-5">
+              <div class="flex items-start gap-2">
+                <div class="min-w-0 flex-1">
+                  <h3 class="truncate font-display text-lg text-slate-100">{{ table.name }}</h3>
+                  <div class="mt-1 flex flex-wrap gap-1.5">
+                    <span
+                      class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
+                      [class]="gm ? 'bg-star-500/15 text-star-300' : 'bg-astral-500/15 text-astral-300'"
+                    >
+                      <mat-icon class="!size-3.5 !text-sm">{{ gm ? 'shield_person' : 'person' }}</mat-icon>
+                      {{ gm ? 'Mestre' : 'Jogador' }}
+                    </span>
+                    @if (table.system) {
+                      <span class="rounded-full bg-white/5 px-2 py-0.5 text-xs text-slate-300">{{ table.system }}</span>
+                    }
+                  </div>
+                </div>
+                <button mat-icon-button [matMenuTriggerFor]="tableMenu" aria-label="Opções da mesa online">
+                  <mat-icon>more_vert</mat-icon>
+                </button>
+                <mat-menu #tableMenu="matMenu" xPosition="before">
+                  @if (gm) {
+                    <button mat-menu-item (click)="invite(table)">
+                      <mat-icon>person_add</mat-icon>
+                      <span>Gerar convite</span>
+                    </button>
+                    <button mat-menu-item (click)="remove(table)">
+                      <mat-icon class="!text-red-400">delete</mat-icon>
+                      <span>Excluir mesa</span>
+                    </button>
+                  } @else {
+                    <button mat-menu-item (click)="leave(table)">
+                      <mat-icon>logout</mat-icon>
+                      <span>Sair da mesa</span>
+                    </button>
+                  }
+                </mat-menu>
+              </div>
+
+              <!-- Convite recém-gerado: o código só aparece agora -->
+              @if (inviteOf(table); as invite) {
+                <div class="flex flex-col gap-1.5 rounded-xl border border-astral-500/30 bg-astral-500/10 p-3 animate-fade-in">
+                  <span class="text-xs text-astral-300">Convite (válido até {{ invite.expiresAt | date: 'dd/MM HH:mm' }}) — envie ao jogador:</span>
+                  <div class="flex items-center gap-2">
+                    <code class="min-w-0 flex-1 select-all truncate rounded-lg bg-ink-950 px-2 py-1 text-sm text-slate-100">{{ invite.code }}</code>
+                    <button mat-icon-button matTooltip="Copiar código" aria-label="Copiar código" (click)="copyInvite(table)">
+                      <mat-icon>content_copy</mat-icon>
+                    </button>
+                  </div>
+                </div>
+              }
+
+              <p class="line-clamp-3 flex-1 text-sm leading-relaxed text-slate-400">
+                {{ table.description || 'Sem descrição.' }}
+              </p>
+
+              <footer class="flex items-center justify-between gap-2 border-t border-white/5 pt-3 text-xs text-slate-500">
+                <span class="flex items-center gap-1">
+                  <mat-icon class="!size-4 !text-base">group</mat-icon>
+                  até {{ table.maxPlayers }} jogadores
+                </span>
+                <span>{{ table.createdAt | date: 'dd/MM/yyyy' }}</span>
+              </footer>
+
+              <a mat-flat-button class="w-full" [routerLink]="['/mesa-online', table.id]">
+                <mat-icon>play_arrow</mat-icon>
+                Abrir mesa online
+              </a>
+            </div>
+          </article>
+        }
+      </div>
+    }
+  }
+</section>

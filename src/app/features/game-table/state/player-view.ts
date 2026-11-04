@@ -1,16 +1,48 @@
 import { Point } from '../../../core/models/geometry.model';
-import { DoorWall, MapNote, TableRole } from '../../../core/models/table-session.model';
+import { DoorWall, DroppedItem, METERS_PER_SQUARE, MapNote, TableRole } from '../../../core/models/table-session.model';
 import { ExploredMask, isExploredAt } from '../utils/fog-memory';
-import { pointInPolygon } from '../utils/visibility';
+import { Segment, computeVisibilityPolygon, pointInPolygon } from '../utils/visibility';
+import { levelOf } from './helpers';
 import { ResolvedToken } from './tokens';
 
 /**
  * O que cada papel enxerga no mapa, em funções puras.
  *
- * Hoje a tela usa estas funções para esconder o que está sob a névoa. No multiplayer, o
- * servidor deve usar as MESMAS regras para montar o estado que envia a cada jogador:
+ * A tela usa estas funções para esconder o que está sob a névoa, e o servidor usa as MESMAS
+ * para montar o estado que envia a cada jogador (`server/src/realtime/projection.ts`):
  * esconder só na tela não basta, porque o jogador pode ler os dados recebidos.
  */
+
+// --- Origens de visão ----------------------------------------------------------
+
+/** Origem de visão: centro do token e alcance em px do mapa. */
+export interface VisionSource {
+  x: number;
+  y: number;
+  range: number;
+}
+
+/**
+ * Origens de visão da camada: os tokens dela com visão ligada (alcance convertido de metros
+ * para px do mapa). A visão é do grupo: todo token com visão ligada revela o mapa a todos.
+ */
+export function visionSourcesOf(tokens: readonly ResolvedToken[], level: number, gridSize: number): VisionSource[] {
+  return tokens
+    .filter((t) => t.vision.enabled && levelOf(t.placement) === level)
+    .map((t) => ({ x: t.placement.x, y: t.placement.y, range: (t.vision.range / METERS_PER_SQUARE) * gridSize }));
+}
+
+/** Mesmas origens? (igualdade por valor: evita recalcular a visão quando nada que a afeta mudou) */
+export function sameVisionSources(a: readonly VisionSource[], b: readonly VisionSource[]): boolean {
+  return a.length === b.length && a.every((s, i) => s.x === b[i].x && s.y === b[i].y && s.range === b[i].range);
+}
+
+/** Polígonos de visão de cada origem, bloqueados pelos segmentos de parede. */
+export function visionPolygonsOf(sources: readonly VisionSource[], segments: Segment[]): Point[][] {
+  return sources.map((s) => computeVisibilityPolygon(s, s.range, segments));
+}
+
+// --- Visibilidade --------------------------------------------------------------
 
 /** Áreas que os tokens enxergam agora e a memória do que já foi visto. */
 export interface FogView {
@@ -37,6 +69,12 @@ function seenOrExplored(p: Point, fog: FogView): boolean {
 export function visibleTokensFor(tokens: ResolvedToken[], role: TableRole, fog: FogView): ResolvedToken[] {
   if (role !== 'player' || !fog.enabled) return tokens;
   return tokens.filter((t) => t.entry.kind === 'character' || isPointVisible(t.placement, fog));
+}
+
+/** Itens no chão que o papel vê: o jogador, com névoa, só os que algum token enxerga agora. */
+export function visibleDropsFor(drops: DroppedItem[], role: TableRole, fog: FogView): DroppedItem[] {
+  if (role !== 'player' || !fog.enabled) return drops;
+  return drops.filter((d) => isPointVisible(d, fog));
 }
 
 /** Anotações que o papel vê: o jogador não vê as "só mestre" nem as fora da visão e da memória. */

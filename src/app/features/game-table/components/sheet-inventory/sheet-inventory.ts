@@ -4,7 +4,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { Tag } from '../../../../core/models/tag.model';
-import { CURRENCY, InventoryEntry, TableEntry } from '../../../../core/models/table-session.model';
+import { CURRENCY, ITEM_DRAG_TYPE, InventoryEntry, ItemDragData, TableEntry } from '../../../../core/models/table-session.model';
 import { newId } from '../../../../core/utils/id';
 import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
 import { ItemCardView } from '../../../worldbuild/components/item-card/item-card-view';
@@ -137,6 +137,24 @@ export class SheetInventory {
 
   reset(row: InventoryRow): void {
     this.store.resetInventoryItem(this.sheetId(), row.entry.id);
+  }
+
+  // --- Largar no mapa ------------------------------------------------------
+
+  /**
+   * Itens podem ser arrastados até o mapa (larga uma unidade no chão): só na mesa, por quem
+   * edita a ficha, em fichas que moram na mesa (a ficha base do bestiário é o "molde" das cópias).
+   */
+  readonly canDrop = computed(() => !this.readonly() && this.tableItemsAllowed());
+
+  onDragStart(event: DragEvent, row: InventoryRow): void {
+    if (!this.canDrop() || row.missing || row.quantity < 1 || !event.dataTransfer) {
+      event.preventDefault();
+      return;
+    }
+    const data: ItemDragData = { source: 'inventory', sheetId: this.sheetId(), inventoryId: row.entry.id };
+    event.dataTransfer.setData(ITEM_DRAG_TYPE, JSON.stringify(data));
+    event.dataTransfer.effectAllowed = 'move';
   }
 
   // --- Equipados (personagens e NPCs) --------------------------------------

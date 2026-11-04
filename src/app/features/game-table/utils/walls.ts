@@ -1,6 +1,7 @@
 import { Point } from '../../../core/models/geometry.model';
 import { Wall } from '../../../core/models/table-session.model';
 import { distanceToPolyline } from './geometry';
+import { Segment } from './visibility';
 
 /**
  * Edição de paredes — funções puras, sem Angular.
@@ -29,6 +30,30 @@ export function moveWallHandle(wall: Wall, index: number, p: Point): Wall {
 export function distanceToWall(wall: Wall, p: Point): number {
   if (wall.kind === 'circle') return Math.abs(Math.hypot(p.x - wall.cx, p.y - wall.cy) - wall.r);
   return distanceToPolyline(p, wall.points);
+}
+
+// --- Colisão do movimento ------------------------------------------------------
+
+/**
+ * O caminho de `from` até `to` atravessa algum segmento de parede? (paredes e portas fechadas,
+ * de `wallsToSegments`). Sair de cima de uma parede (início exatamente sobre ela) não conta,
+ * para o token nunca ficar preso; chegar até ela conta.
+ */
+export function movePathBlocked(from: Point, to: Point, segments: readonly Segment[]): boolean {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  if (!dx && !dy) return false;
+  return segments.some((s) => {
+    const sx = s.b.x - s.a.x;
+    const sy = s.b.y - s.a.y;
+    const denom = dx * sy - dy * sx;
+    if (Math.abs(denom) < 1e-12) return false; // paralelos
+    const qx = s.a.x - from.x;
+    const qy = s.a.y - from.y;
+    const t = (qx * sy - qy * sx) / denom; // ao longo do caminho
+    const u = (qx * dy - qy * dx) / denom; // ao longo da parede
+    return t > 1e-9 && t <= 1 && u >= 0 && u <= 1;
+  });
 }
 
 /** Índice da alça sob o ponto (ou -1). */

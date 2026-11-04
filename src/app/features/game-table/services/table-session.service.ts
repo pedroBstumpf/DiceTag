@@ -11,12 +11,16 @@ import {
   DiceKind,
   DEFAULT_SOUND_VOLUME,
   DoorWall,
+  DroppedItem,
+  FixedFx,
   FxStyle,
+  ItemDragData,
+  MANA_BAR,
   MAX_MAP_LEVELS,
+  RollConfig,
   MapLevel,
   SceneFolder,
   RollResult,
-  METERS_PER_SQUARE,
   MapNote,
   NOTE_COLORS,
   Scene,
@@ -43,16 +47,56 @@ import {
   withStatusBars,
 } from '../../../core/models/table-session.model';
 import { AuthService } from '../../../core/services/auth.service';
+import { LocalFileStore } from '../../../core/services/file-store';
+import { ServerApiService } from '../../../core/services/server-api.service';
+import { ServerFileStore } from '../../../core/services/server-file-store';
+import { StorageService } from '../../../core/services/storage.service';
 import { newId } from '../../../core/utils/id';
-import { TagLevels, baseTagId, formatRoll, keepValidItemTags, levelUpText, rollDice, studyGain, trainStudy } from '../utils/dice';
-import { addOne, inventoryRow, itemTagId, itemTagLevel, quantityOf, takeOne } from '../utils/inventory';
+import {
+  TagLevels,
+  baseTagId,
+  formatRoll,
+  keepValidItemTags,
+  levelUpText,
+  manaCost,
+  rollDice,
+  rollUsesTags,
+  studyGain,
+  trainStudy,
+  withPowers,
+} from '../utils/dice';
+import { addOne, inventoryRow, itemTagId, itemTagLevel, quantityOf, takeOne, unitOf } from '../utils/inventory';
 import { SheetData, SheetStore } from '../../../core/services/sheet-store';
 import { FxDrawing, buildFx, seededRandom } from '../utils/effects';
 import { createMask, decodeMask, encodeMask, markPolygons, maskFits } from '../utils/fog-memory';
-import { computeVisibilityPolygon, doorSeen, wallsToSegments } from '../utils/visibility';
-import { FogView, visibleDoorsFor, visibleNotesFor, visibleTokensFor } from '../state/player-view';
+import { Segment, doorSeen, wallsToSegments } from '../utils/visibility';
+import { movePathBlocked } from '../utils/walls';
+import {
+  FogView,
+  sameVisionSources,
+  visibleDoorsFor,
+  visibleDropsFor,
+  visibleNotesFor,
+  visibleTokensFor,
+  visionPolygonsOf,
+  visionSourcesOf,
+} from '../state/player-view';
+import { findDrop } from '../state/drops';
 import { NO_SELECTION, TokenSelection, keepOnly, selectMany, selectOne, toggleInSelection, without } from '../utils/selection';
-import { TableCommandPayload, TableCommandType, applyCommand } from '../state/commands';
+import { TableCommand, TableCommandPayload, TableCommandType, applyCommand } from '../state/commands';
+import {
+  SyncState,
+  ackCommand,
+  burstKey,
+  localCommand,
+  mergeBurst,
+  rejectCommand,
+  remoteCommand,
+  replaceState,
+  squashPending,
+  startSync,
+} from '../state/sync';
+import { RoomIdentity, RoomMessage, RoomRoll, RoomStatus, TableRoom } from './table-room';
 import { RemovedStroke, strokesToErase } from '../state/drawings';
 import { findPlacement, levelOf, tokenSheetPlacement, uniqueName } from '../state/helpers';
 import { clampLevelIn, levelCountOf } from '../state/levels';
@@ -97,6 +141,18 @@ export interface ActionUse {
   levelUps: string[];
 }
 
+/** Rolagem recusada antes de rolar (ex.: falta Mana para as tags mágicas). */
+export interface RollRefused {
+  refused: string;
+}
+
+/** Mesa online: a rolagem foi enviada ao servidor; o resultado chega no chat (e em `serverRoll`). */
+export interface RollSent {
+  sent: true;
+  /** A ação tinha efeito especial (agora armado no mouse). */
+  armed: boolean;
+}
+
 /** Mestre agindo como "o token selecionado" (muda a cada seleção). */
 export const ACT_SELECTION = 'selection';
 
@@ -114,6 +170,8 @@ export interface SheetTagOption {
   item?: boolean;
   /** Estudo ou treino: não muda o modificador (nível 0); só acumula SA ao rolar. */
   study?: boolean;
+  /** Tag mágica: vale o Poder escolhido (1 até o nível) e gasta essa Mana (Espírito). */
+  magic?: boolean;
 }
 
 /** Modo da ferramenta Névoa. */
@@ -134,6 +192,8 @@ type DrawAction = { kind: 'add'; strokeId: string } | { kind: 'erase'; removed: 
 /** Omit que preserva cada membro de uma união (ex.: Wall sem o id). */
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
+/** Intervalo mínimo entre envios de uma rajada (arrastar, WASD, memória da névoa) na mesa online. */
+const BURST_MS = 100;
 const NO_TOKENS: TokenPlacement[] = [];
 const NO_WALLS: Wall[] = [];
 const NO_TABLE_ITEMS: TableItem[] = [];
@@ -142,6 +202,18 @@ const NO_NOTES: MapNote[] = [];
 const NO_MESSAGES: ChatMessage[] = [];
 const NO_RESOLVED: ResolvedToken[] = [];
 const NO_FOLDERS: SceneFolder[] = [];
+const NO_DROPS: DroppedItem[] = [];
+const NO_FIXED_FX: FixedFx[] = [];
+
+/** Personagem ou token de NPC que pode pegar um item do chão. */
+export interface PickupCandidate {
+  /** Id da ficha que recebe o item (personagem: id da entrada; token de NPC: "npc:<id do token>"). */
+  sheetId: string;
+  name: string;
+  blobId?: string;
+  /** Distância do token até o item, em quadrados (ausente = sem token na cena/camada). */
+  distance?: number;
+}
 
 /** Camada do mapa como a interface a exibe (0 = térreo, com o mapa da cena). */
 export interface LevelView {
@@ -172,6 +244,10 @@ function sameItems<T>(a: readonly T[], b: readonly T[]): boolean {
 @Injectable()
 export class TableSessionService extends SheetStore {
   private readonly auth = inject(AuthService);
+  private readonly storage = inject(StorageService);
+  private readonly api = inject(ServerApiService);
+  /** Arquivos no navegador (mesa local e Worldbuild); na mesa online, `files` passa a ser o servidor. */
+  private readonly localFiles = inject(LocalFileStore);
   /** Mundo da mesa: bestiário (fichas base dos NPCs-referência), itens e raças. */
   private readonly worldbuild = inject(WorldbuildService);
 
@@ -182,6 +258,31 @@ export class TableSessionService extends SheetStore {
 
   readonly loaded = signal(false);
   readonly scenes = computed(() => this.state().scenes);
+
+  // --- Mesa online (servidor) ---------------------------------------------
+  // Sem sala = mesa local (IndexedDB). Com sala, o estado vem do servidor e cada comando vai para
+  // ele (reconciliação pura em state/sync.ts); o papel vem da conta (dono = mestre).
+  private room: TableRoom | null = null;
+  private sync: SyncState | null = null;
+  /** Rajadas ainda não enviadas (por `burstKey`): vão juntas, só com o último valor, a cada `BURST_MS`. */
+  private readonly bursts = new Map<string, { seqs: number[]; commands: TableCommand[] }>();
+  private burstTimer?: ReturnType<typeof setTimeout>;
+  /** Conta conectada e papel dela, segundo o servidor (null = mesa local). */
+  readonly online = signal<RoomIdentity | null>(null);
+  readonly roomStatus = signal<RoomStatus>('offline');
+  /** Motivo de a conexão ter caído de vez (sessão encerrada, mesa excluída…). */
+  readonly roomProblem = signal('');
+  /** Polígonos de visão calculados pelo servidor (jogador com névoa: ele não recebe as paredes). */
+  private readonly serverVision = signal<Point[][] | null>(null);
+  /** Aviso do servidor para a página mostrar (comando recusado, erro). */
+  readonly roomNotice = signal<{ text: string } | null>(null);
+  /** Última rolagem feita pelo servidor a pedido desta conta (a página mostra o resultado). */
+  readonly serverRoll = signal<ChatMessage | null>(null);
+  /** Conta atual: a do servidor na mesa online; a local, fora dela. */
+  private readonly me = computed(() => {
+    const online = this.online();
+    return online ? { id: online.userId, name: online.name } : this.auth.user();
+  });
   /**
    * Habilidades dos NPCs-referência: moram no NPC do mundo e aparecem aqui como ações
    * do NPC (valem em todas as mesas do mundo).
@@ -240,7 +341,7 @@ export class TableSessionService extends SheetStore {
     return this.tokens().flatMap((p) => this.resolveToken(p, byId) ?? []);
   });
   /** Quem está olhando a mesa (papel + conta), para as regras de `state/permissions.ts`. */
-  private readonly viewer = computed<Viewer>(() => ({ role: this.role(), userId: this.auth.user()?.id }));
+  private readonly viewer = computed<Viewer>(() => ({ role: this.role(), userId: this.me()?.id }));
 
   /** Desenhos da cena ativa. */
   readonly drawings = computed(() => this.activeScene()?.drawings ?? NO_STROKES);
@@ -272,22 +373,19 @@ export class TableSessionService extends SheetStore {
    * não dispara novo cálculo.
    */
   private readonly visionSources = computed(
-    () => {
-      const grid = this.activeScene()?.gridSize ?? 70;
-      const level = this.currentLevel();
-      // A névoa fica na camada em foco: enxergam os tokens dela
-      return this.resolvedTokens()
-        .filter((t) => t.vision.enabled && levelOf(t.placement) === level)
-        .map((t) => ({ x: t.placement.x, y: t.placement.y, range: (t.vision.range / METERS_PER_SQUARE) * grid }));
-    },
-    { equal: (a, b) => a.length === b.length && a.every((s, i) => s.x === b[i].x && s.y === b[i].y && s.range === b[i].range) },
+    // A névoa fica na camada em foco: enxergam os tokens dela
+    () => visionSourcesOf(this.resolvedTokens(), this.currentLevel(), this.activeScene()?.gridSize ?? 70),
+    { equal: sameVisionSources },
   );
 
-  /** Áreas visíveis dos tokens (recalculadas só quando token, parede ou cena mudam). */
+  /**
+   * Áreas visíveis dos tokens (recalculadas só quando token, parede ou cena mudam). Jogador
+   * na mesa online: vêm prontas do servidor, que não envia as paredes a ele.
+   */
   readonly visionPolygons = computed(() => {
     if (!this.fogEnabled()) return [];
-    const segments = this.wallSegments();
-    return this.visionSources().map((s) => computeVisibilityPolygon(s, s.range, segments));
+    if (this.online() && this.role() === 'player') return this.serverVision() ?? [];
+    return visionPolygonsOf(this.visionSources(), this.wallSegments());
   });
 
   // --- Memória da névoa (áreas exploradas) ---------------------------------
@@ -344,12 +442,28 @@ export class TableSessionService extends SheetStore {
   /** Tokens exibidos na camada em foco (interativos). */
   readonly visibleTokens = computed(() => this.tokensByLevel().get(this.currentLevel()) ?? NO_RESOLVED);
 
+  /** Itens no chão da camada em foco (mesma referência enquanto não mudam). */
+  private readonly drops = computed(
+    () => {
+      const level = this.currentLevel();
+      return (this.activeScene()?.drops ?? NO_DROPS).filter((d) => levelOf(d) === level);
+    },
+    { equal: sameItems },
+  );
+  /** Itens no chão exibidos: na visão de jogador com névoa, só os que algum token enxerga. */
+  readonly visibleDrops = computed(() => visibleDropsFor(this.drops(), this.role(), this.fogView()));
+
   // --- Estado da sessão (não persistido) -----------------------------------
   readonly tool = signal<TableTool>('select');
   readonly role = signal<TableRole>('gm');
 
-  /** Troca o papel; no de jogador, sai da ferramenta Névoa (que é só do mestre). */
+  /** Troca o papel; no de jogador, sai da ferramenta Névoa (que é só do mestre). Online, o papel é da conta. */
   setRole(role: TableRole): void {
+    if (this.online()) return;
+    this.applyRole(role);
+  }
+
+  private applyRole(role: TableRole): void {
     this.role.set(role);
     if (role === 'player' && this.tool() === 'fog') this.tool.set('select');
   }
@@ -361,19 +475,31 @@ export class TableSessionService extends SheetStore {
   /** Todos os tokens selecionados (o grupo se move, é removido e copiado junto). */
   readonly selectedTokenIds = computed(() => this.selection().ids);
 
-  /** Seleciona só este token (null = nenhum). */
+  /** Seleciona só este token (null = nenhum; também tira a seleção do item no chão). */
   selectToken(id: string | null): void {
     this.selection.set(selectOne(id));
+    this.selectedDropId.set(null);
   }
 
   /** Shift+clique: põe ou tira o token da seleção. */
   toggleTokenSelection(id: string): void {
     this.selection.update((sel) => toggleInSelection(sel, id));
+    this.selectedDropId.set(null);
   }
 
   /** Caixa de seleção: estes tokens (`additive` = somados aos já selecionados). */
   selectTokens(ids: readonly string[], additive: boolean): void {
     this.selection.update((sel) => selectMany(sel, ids, additive));
+    if (ids.length) this.selectedDropId.set(null);
+  }
+
+  /** Item no chão selecionado (alça de tamanho; Delete o tira do mapa). Exclusivo com os tokens. */
+  readonly selectedDropId = signal<string | null>(null);
+
+  /** Seleciona um item no chão (tira a seleção dos tokens). */
+  selectDrop(id: string | null): void {
+    this.selection.set(NO_SELECTION);
+    this.selectedDropId.set(id);
   }
 
   /** Tokens selecionados da camada em foco que a conta pode mover (o principal primeiro). */
@@ -533,24 +659,45 @@ export class TableSessionService extends SheetStore {
    * `sheetId`: ficha que agiu (ex.: "Usar" na ficha de um token); padrão = quem age na barra,
    * se for o dono da ação, ou o próprio dono.
    */
-  useAction(entry: TableEntry, sheetId?: string): ActionUse {
+  useAction(entry: TableEntry, sheetId?: string): ActionUse | RollRefused | RollSent {
     const config = entry.roll ?? DEFAULT_ROLL;
     const actorSheet = this.actor()?.id === entry.ownerEntryId ? this.actorSheetId() : null;
     const sheet = sheetId ?? actorSheet ?? entry.ownerEntryId;
-    // O nível atual das tags da ficha que agiu entra no modificador
-    const levels = this.tagLevelsOf(sheet);
-    const roll: RollResult = { action: entry.name, icon: entry.icon ?? 'bolt', dice: config.dice, ...rollDice(config, Math.random, levels) };
+    // O nível atual das tags da ficha que agiu entra no modificador (tags mágicas: o Poder da ação)
+    const levels = this.actionLevels(config, sheet);
+    const mana = manaCost(config, levels, this.magicTagIds(sheet));
+    const shortfall = this.manaShortfall(sheet, mana);
+    if (shortfall) return { refused: shortfall };
+    // Mesa online: quem sorteia é o servidor (com as tags atuais da ficha); o resultado vem no chat
+    if (this.room) {
+      if (!this.sendRoll({ sheetId: sheet ?? undefined, roll: config, label: entry.name, icon: entry.icon ?? 'bolt' })) {
+        return { refused: 'Sem conexão com o servidor.' };
+      }
+      this.armEffect(entry);
+      return { sent: true, armed: !!entry.effect };
+    }
+    const roll: RollResult = {
+      action: entry.name,
+      icon: entry.icon ?? 'bolt',
+      dice: config.dice,
+      ...rollDice(config, Math.random, levels),
+      ...(mana > 0 && { mana }),
+    };
     const author = (sheet && this.sheetData(sheet)?.name) ?? this.actor()?.name ?? this.userName();
+    this.spendMana(sheet, mana);
     this.pushChat({ author, roll });
     // Estudos ligados à ação acumulam SA conforme o resultado
     const levelUps = this.trainStudies(sheet, (config.attributes ?? []).map(baseTagId), roll);
-
-    if (entry.effect) {
-      if (this.tool() !== 'fx') this.fxReturnTool = this.tool();
-      this.armedFx.set({ ...entry.effect, action: entry.name });
-      this.tool.set('fx');
-    }
+    this.armEffect(entry);
     return { author, roll, armed: !!entry.effect, levelUps };
+  }
+
+  /** Ação com efeito especial: deixa o efeito "na mão" (ferramenta Efeitos) até o próximo arraste. */
+  private armEffect(entry: TableEntry): void {
+    if (!entry.effect) return;
+    if (this.tool() !== 'fx') this.fxReturnTool = this.tool();
+    this.armedFx.set({ ...entry.effect, action: entry.name });
+    this.tool.set('fx');
   }
 
   /**
@@ -559,6 +706,8 @@ export class TableSessionService extends SheetStore {
    * nome da ficha `sheetId` (ou do mestre/conta, sem ficha). `studies`: estudos ligados a esta
    * rolagem (sem modificador; acumulam SA conforme o resultado). `itemModifier`: valor das
    * etiquetas de itens escolhidas (exibido à parte no chat); `itemsAdded`: ele já está em `modifier`.
+   * `mana`: Poder somado das tags mágicas escolhidas, gasto do Espírito (quem chama confere antes
+   * com `manaShortfall`; aqui o gasto nunca deixa a barra abaixo de 0).
    */
   quickRoll(
     dice: DiceKind,
@@ -567,9 +716,28 @@ export class TableSessionService extends SheetStore {
     itemModifier = 0,
     studies: readonly string[] = [],
     itemsAdded = false,
-  ): { author: string; roll: RollResult; levelUps: string[] } {
-    const roll: RollResult = { action: 'Rolagem', icon: 'casino', dice, ...rollDice({ dice, modifier }), itemModifier, itemsAdded };
+    mana = 0,
+  ): { author: string; roll: RollResult; levelUps: string[] } | null {
+    // Mesa online: o servidor sorteia (o modificador já vem somado); null = enviado, o resultado vem no chat
+    if (this.room) {
+      const roll: RollConfig = { dice, modifier: Math.max(-99, Math.min(99, Math.round(modifier))) };
+      if (!this.sendRoll({ sheetId: sheetId ?? undefined, roll, label: 'Rolagem', icon: 'casino' })) {
+        this.roomNotice.set({ text: 'Sem conexão com o servidor.' });
+      }
+      return null;
+    }
+    const spent = rollUsesTags(dice) ? mana : 0;
+    const roll: RollResult = {
+      action: 'Rolagem',
+      icon: 'casino',
+      dice,
+      ...rollDice({ dice, modifier }),
+      itemModifier,
+      itemsAdded,
+      ...(spent > 0 && { mana: spent }),
+    };
     const author = (sheetId && this.sheetData(sheetId)?.name) || this.userName();
+    this.spendMana(sheetId, spent);
     this.pushChat({ author, roll });
     return { author, roll, levelUps: this.trainStudies(sheetId, studies, roll) };
   }
@@ -589,12 +757,12 @@ export class TableSessionService extends SheetStore {
   }
 
   private pushChat(message: Pick<ChatMessage, 'author' | 'text' | 'roll'>): void {
-    const full: ChatMessage = { id: newId(), at: Date.now(), userId: this.auth.user()?.id ?? '', role: this.role(), ...message };
+    const full: ChatMessage = { id: newId(), at: Date.now(), userId: this.me()?.id ?? '', role: this.role(), ...message };
     this.dispatch('addChatMessage', { message: full });
   }
 
   private userName(): string {
-    return this.role() === 'gm' ? 'Mestre' : (this.auth.user()?.name ?? 'Jogador');
+    return this.role() === 'gm' ? 'Mestre' : (this.me()?.name ?? 'Jogador');
   }
 
   // --- Efeitos especiais (transitórios) ------------------------------------
@@ -616,6 +784,25 @@ export class TableSessionService extends SheetStore {
     const armed = this.armedFx();
     const { kind, color } = armed ?? this.fxStyle();
     const id = newId();
+    // "Fixar no mapa": vai para a cena (salvo) e fica repetindo até ser removido
+    const sceneId = this.activeSceneId();
+    if (this.fxFixed() && sceneId) {
+      const level = this.currentLevel();
+      const fx: FixedFx = {
+        id,
+        kind,
+        color,
+        from,
+        to,
+        seed: Math.floor(Math.random() * 2 ** 32),
+        scale,
+        ...(level > 0 && { level }),
+        ownerUserId: this.me()?.id,
+      };
+      this.dispatch('addFixedFx', { sceneId, fx });
+      if (armed) this.cancelArmedFx();
+      return;
+    }
     const drawing = buildFx(kind, color, from, to, {
       uid: `fx-${id}`,
       scale,
@@ -625,6 +812,47 @@ export class TableSessionService extends SheetStore {
     this.effects.update((list) => [...list, { id, drawing }]);
     setTimeout(() => this.effects.update((list) => list.filter((f) => f.id !== id)), drawing.duration + 100);
     if (armed) this.cancelArmedFx();
+  }
+
+  // --- Efeitos fixos no mapa (salvos na cena) ------------------------------
+
+  /** Lançar os próximos efeitos fixos no mapa (sessão; opção do menu da ferramenta Efeitos). */
+  readonly fxFixed = signal(false);
+
+  /** Efeitos fixos da camada em foco (mesma referência enquanto não mudam). */
+  readonly fixedFxList = computed(
+    () => {
+      const level = this.currentLevel();
+      return (this.activeScene()?.effects ?? NO_FIXED_FX).filter((f) => levelOf(f) === level);
+    },
+    { equal: sameItems },
+  );
+
+  /** Desenhos dos efeitos fixos, remontados sempre iguais (mesma semente e zoom do lançamento). */
+  readonly fixedEffects = computed<FxInstance[]>(() => {
+    const grid = this.activeScene()?.gridSize ?? 70;
+    return this.fixedFxList().map((f) => ({
+      id: f.id,
+      drawing: buildFx(f.kind, f.color, f.from, f.to, { uid: `fx-${f.id}`, scale: f.scale, grid, random: seededRandom(f.seed) }),
+    }));
+  });
+
+  /** Pode tirar este efeito fixo? (quem lançou e o mestre) */
+  canRemoveFixedFx(fx: FixedFx): boolean {
+    return rules.canRemoveFixedFx(fx, this.viewer());
+  }
+
+  removeFixedFx(fxId: string): void {
+    const sceneId = this.activeSceneId();
+    const fx = this.fixedFxList().find((f) => f.id === fxId);
+    if (sceneId && fx && this.canRemoveFixedFx(fx)) this.dispatch('removeFixedFx', { sceneId, fxId });
+  }
+
+  /** Tira os efeitos fixos da camada em foco que a conta pode remover. */
+  clearFixedFx(): void {
+    const sceneId = this.activeSceneId();
+    const fxIds = this.fixedFxList().filter((f) => this.canRemoveFixedFx(f)).map((f) => f.id);
+    if (sceneId && fxIds.length) this.dispatch('clearFixedFx', { sceneId, fxIds });
   }
 
   /** Desarma o efeito da ação e volta à ferramenta anterior. */
@@ -673,22 +901,123 @@ export class TableSessionService extends SheetStore {
   // --- Carregamento --------------------------------------------------------
 
   async load(tableId: string): Promise<void> {
+    // Nessa ordem: com a sala aberta, o flush não grava nada (o estado online nunca vai para o IndexedDB)
     this.flush();
+    this.disconnect();
     this.tableId = tableId;
     this.loaded.set(false);
     this.state.set(normalizeState(await this.storage.get<TableState>(this.key())));
     this.loaded.set(true);
   }
 
+  /**
+   * Abre uma mesa online: conecta na sala do servidor e espera o estado inicial (`welcome`).
+   * Até lá, nenhum comando é aplicado (nem gravado no navegador).
+   */
+  connect(tableId: string): void {
+    this.flush();
+    this.disconnect();
+    this.tableId = tableId;
+    this.loaded.set(false);
+    // Arquivos da mesa online (mapas, tokens, sons, itens) vão para o servidor
+    this.files = new ServerFileStore(this.api, tableId);
+    this.room = new TableRoom(
+      tableId,
+      (message) => this.onRoomMessage(message),
+      (status, reason) => {
+        this.roomStatus.set(status);
+        this.roomProblem.set(reason ?? '');
+      },
+    );
+  }
+
+  /** Sai da sala (ao sair da mesa ou abrir outra). Sem mesa carregada, nada é gravado no navegador. */
+  disconnect(): void {
+    if (!this.room) return;
+    this.loaded.set(false);
+    clearTimeout(this.burstTimer);
+    this.burstTimer = undefined;
+    this.bursts.clear();
+    this.room?.close();
+    this.room = null;
+    this.sync = null;
+    this.files = this.localFiles;
+    this.online.set(null);
+    this.serverVision.set(null);
+    this.roomStatus.set('offline');
+  }
+
+  /** Mensagem da sala: estado inicial, confirmações, comandos dos outros e estados projetados. */
+  private onRoomMessage(message: RoomMessage): void {
+    switch (message.t) {
+      case 'welcome':
+        this.online.set(message.you);
+        this.applyRole(message.you.role);
+        this.serverVision.set(message.vision);
+        // Reconexão também chega aqui: o que estava pendente é descartado (o servidor manda tudo de novo)
+        clearTimeout(this.burstTimer);
+        this.burstTimer = undefined;
+        this.bursts.clear();
+        this.applySync(startSync(normalizeState(message.state), message.version));
+        this.loaded.set(true);
+        return;
+      case 'state':
+        this.serverVision.set(message.vision);
+        if (this.sync) this.applySync(replaceState(this.sync, normalizeState(message.state), message.version));
+        return;
+      case 'cmd':
+        if (this.sync) this.applySync(remoteCommand(this.sync, { type: message.type, payload: message.payload } as TableCommand, message.version));
+        return;
+      case 'ack':
+        if (message.type === 'roll') this.serverRoll.set(message.payload as ChatMessage);
+        else if (this.sync) this.applySync(ackCommand(this.sync, message.seq, { type: message.type, payload: message.payload } as TableCommand, message.version));
+        return;
+      case 'nack':
+        if (this.sync) this.applySync(rejectCommand(this.sync, message.seq));
+        this.roomNotice.set({ text: `O servidor recusou: ${message.reason}` });
+        return;
+      case 'error':
+        this.roomNotice.set({ text: message.message });
+        return;
+    }
+  }
+
+  /** Envia as rajadas pendentes, cada uma como um comando só (troca os pendentes dela por ele). */
+  private sendBursts(): void {
+    clearTimeout(this.burstTimer);
+    this.burstTimer = undefined;
+    if (!this.room || !this.sync) return this.bursts.clear();
+    for (const { seqs, commands } of this.bursts.values()) {
+      const command = mergeBurst(commands);
+      const seq = this.room.nextSeq();
+      this.applySync(squashPending(this.sync, seqs, seq, command));
+      this.sendToRoom(seq, command);
+    }
+    this.bursts.clear();
+  }
+
+  /** Envia um comando já aplicado na tela; sem conexão, desfaz (ao reconectar, o servidor manda tudo de novo). */
+  private sendToRoom(seq: number, command: TableCommand): void {
+    if (this.room?.sendCommand(seq, command.type, command.payload) || !this.sync) return;
+    this.applySync(rejectCommand(this.sync, seq));
+    this.roomNotice.set({ text: 'Sem conexão com o servidor: a alteração não foi feita.' });
+  }
+
+  private applySync(sync: SyncState): void {
+    this.sync = sync;
+    this.state.set(sync.view);
+  }
+
+  private sendRoll(roll: RoomRoll): boolean {
+    return !!this.room?.sendRoll(this.room.nextSeq(), roll);
+  }
+
   // --- Cenas ---------------------------------------------------------------
 
   /** Cria uma cena (com mapa opcional) e a torna ativa. */
   async addScene(file?: File): Promise<Scene> {
-    let blobId: string | undefined;
-    if (file) {
-      blobId = newId();
-      await this.storage.set(`blob:${blobId}`, file);
-    }
+    // Envio recusado: a cena é criada sem mapa (o aviso explica o motivo)
+    const blobId = (file && (await this.uploadFile(file))) || undefined;
     const scene: Scene = {
       id: newId(),
       name: file?.name.replace(/\.[^.]+$/, '') ?? `Cena ${this.scenes().length + 1}`,
@@ -709,10 +1038,10 @@ export class TableSessionService extends SheetStore {
   /** Troca (ou define) o mapa de uma cena. */
   async setSceneMap(sceneId: string, file: File): Promise<void> {
     const old = this.scenes().find((s) => s.id === sceneId)?.blobId;
-    const blobId = newId();
-    await this.storage.set(`blob:${blobId}`, file);
+    const blobId = await this.uploadFile(file);
+    if (!blobId) return;
     this.updateScene(sceneId, { blobId });
-    if (old) this.storage.delete(`blob:${old}`);
+    if (old) void this.files.remove(old);
   }
 
   updateScene(id: string, patch: Partial<Omit<Scene, 'id'>>): void {
@@ -729,10 +1058,11 @@ export class TableSessionService extends SheetStore {
     const scene = this.scenes().find((s) => s.id === id);
     this.dispatch('removeScene', { sceneId: id });
     for (const blobId of [scene?.blobId, ...(scene?.levels ?? []).map((l) => l.blobId)]) {
-      if (blobId) this.storage.delete(`blob:${blobId}`);
+      if (blobId) void this.files.remove(blobId);
     }
-    // Imagens personalizadas dos inventários dos tokens de NPC da cena
+    // Imagens personalizadas dos inventários dos tokens de NPC da cena e dos itens no chão
     for (const token of scene?.tokens ?? []) this.deleteInventoryBlobs(token.sheet?.inventory);
+    this.deleteInventoryBlobs(scene?.drops?.map((d) => d.item));
   }
 
   /** Liga/desliga a vista isométrica da cena ativa. */
@@ -802,10 +1132,10 @@ export class TableSessionService extends SheetStore {
     if (!scene) return;
     if (index === 0) return this.setSceneMap(scene.id, file);
     const old = scene.levels?.[index - 1]?.blobId;
-    const blobId = newId();
-    await this.storage.set(`blob:${blobId}`, file);
+    const blobId = await this.uploadFile(file);
+    if (!blobId) return;
     this.dispatch('setLevelImage', { sceneId: scene.id, index, blobId });
-    if (old) this.storage.delete(`blob:${old}`);
+    if (old) void this.files.remove(old);
   }
 
   /** Tira a imagem de uma camada de cima: ela vira "ar" (mostra a de baixo). */
@@ -814,7 +1144,7 @@ export class TableSessionService extends SheetStore {
     const old = scene?.levels?.[index - 1]?.blobId;
     if (!scene || index < 1 || !old) return;
     this.dispatch('setLevelImage', { sceneId: scene.id, index });
-    this.storage.delete(`blob:${old}`);
+    void this.files.remove(old);
   }
 
   /** Exclui uma camada de cima; os tokens dela descem uma camada e as paredes dela são apagadas. */
@@ -824,7 +1154,7 @@ export class TableSessionService extends SheetStore {
     if (!scene || index < 1 || !level) return;
     this.dispatch('removeLevel', { sceneId: scene.id, index });
     this.gmLevel.update((n) => (n >= index ? n - 1 : n));
-    if (level.blobId) this.storage.delete(`blob:${level.blobId}`);
+    if (level.blobId) void this.files.remove(level.blobId);
   }
 
   /** Libera uma camada para os jogadores (é a que eles passam a ver). */
@@ -859,7 +1189,7 @@ export class TableSessionService extends SheetStore {
       createdAt: Date.now(),
       ...(kind === 'automation' && { icon: 'bolt', roll: { ...DEFAULT_ROLL } }),
       // O personagem pertence à conta de quem o criou
-      ...(kind === 'character' && { ownerUserId: this.auth.user()?.id }),
+      ...(kind === 'character' && { ownerUserId: this.me()?.id }),
       ...extra,
     };
     this.placeEntry(entry);
@@ -879,10 +1209,10 @@ export class TableSessionService extends SheetStore {
     return owner ? this.worldNpcOf(owner) : undefined;
   }
 
-  /** Envia um arquivo de áudio e cria o som correspondente. */
-  async uploadSound(file: File): Promise<TableEntry> {
-    const blobId = newId();
-    await this.storage.set(`blob:${blobId}`, file);
+  /** Envia um arquivo de áudio e cria o som correspondente (null = envio recusado; o aviso explica). */
+  async uploadSound(file: File): Promise<TableEntry | null> {
+    const blobId = await this.uploadFile(file);
+    if (!blobId) return null;
     return this.addEntry('sound', {
       name: file.name.replace(/\.[^.]+$/, ''),
       blobId,
@@ -934,14 +1264,24 @@ export class TableSessionService extends SheetStore {
       for (const token of sc.tokens ?? []) if (token.entryId === id) this.deleteInventoryBlobs(token.sheet?.inventory);
     }
     this.dispatch('removeEntry', { entryId: id });
-    if (entry?.blobId) this.storage.delete(`blob:${entry.blobId}`);
-    if (entry?.token?.blobId) this.storage.delete(`blob:${entry.token.blobId}`);
+    if (entry?.blobId) void this.files.remove(entry.blobId);
+    if (entry?.token?.blobId) void this.files.remove(entry.token.blobId);
     // Imagens personalizadas dos itens do inventário
     this.deleteInventoryBlobs(entry?.sheet?.inventory);
   }
 
-  getBlob(blobId: string): Promise<Blob | undefined> {
-    return this.storage.get<Blob>(`blob:${blobId}`);
+  /**
+   * Lê um arquivo. Na mesa online, os da mesa vêm do servidor; os do Worldbuild (imagens de itens
+   * e raças do mundo, ainda locais) continuam no navegador: procura primeiro no navegador.
+   */
+  async getBlob(blobId: string): Promise<Blob | undefined> {
+    const local = await this.localFiles.get(blobId);
+    return local ?? (this.files === this.localFiles ? undefined : this.files.get(blobId));
+  }
+
+  /** Envio recusado (mesa online: cota do servidor, tipo não aceito, sem conexão): aviso na tela. */
+  protected override uploadFailed(error: unknown): void {
+    this.roomNotice.set({ text: `Arquivo não enviado: ${error instanceof Error ? error.message : 'erro desconhecido.'}` });
   }
 
   // --- NPCs do bestiário (referências) -------------------------------------
@@ -1080,7 +1420,14 @@ export class TableSessionService extends SheetStore {
     return data.sheet.themes.flatMap((theme, i) => {
       const themeName = theme.name.trim() || `Tema ${i + 1}`;
       return [
-        ...theme.tags.map((t) => ({ id: t.id, text: t.text.trim() || 'Tag sem nome', level: t.level, theme: themeName, flaw: false })),
+        ...theme.tags.map((t) => ({
+          id: t.id,
+          text: t.text.trim() || 'Tag sem nome',
+          level: t.level,
+          theme: themeName,
+          flaw: false,
+          ...(t.magic && { magic: true }),
+        })),
         ...theme.flaws.map((t) => ({ id: t.id, text: t.text.trim() || 'Defeito sem nome', level: t.level, theme: themeName, flaw: true })),
       ];
     });
@@ -1169,7 +1516,49 @@ export class TableSessionService extends SheetStore {
    * `sheetId`: ficha cujas tags valem (padrão: a do dono da ação).
    */
   formulaOf(action: TableEntry, sheetId = action.ownerEntryId): string {
-    return formatRoll(action.roll ?? DEFAULT_ROLL, this.tagLevelsOf(sheetId));
+    const roll = action.roll ?? DEFAULT_ROLL;
+    return formatRoll(roll, this.actionLevels(roll, sheetId));
+  }
+
+  // --- Tags mágicas: Poder e Mana (barra Espírito) -------------------------
+
+  /** Ids das tags mágicas da ficha. */
+  magicTagIds(sheetId: string | null | undefined): ReadonlySet<string> {
+    return new Set(this.themeTagsOf(sheetId ?? undefined).filter((t) => t.magic).map((t) => t.id));
+  }
+
+  /** Níveis das tags da ficha para uma ação: as mágicas valem o Poder salvo nela (até o nível atual). */
+  private actionLevels(roll: RollConfig, sheetId: string | null | undefined): TagLevels {
+    return withPowers(roll, this.tagLevelsOf(sheetId ?? undefined), this.magicTagIds(sheetId));
+  }
+
+  /** Mana (Espírito) gasta ao usar a ação, com o Poder salvo nela. */
+  manaCostOf(action: TableEntry, sheetId = action.ownerEntryId): number {
+    const roll = action.roll ?? DEFAULT_ROLL;
+    return manaCost(roll, this.actionLevels(roll, sheetId), this.magicTagIds(sheetId));
+  }
+
+  /** Mana disponível (valor atual do Espírito) da ficha; null = sem ficha. */
+  manaOf(sheetId: string | null | undefined): number | null {
+    const data = sheetId ? this.sheetData(sheetId) : null;
+    return data ? (data.bars.find((b) => b.id === MANA_BAR)?.value ?? 0) : null;
+  }
+
+  /** Motivo para não rolar: a ficha não tem Espírito suficiente para o Poder das tags mágicas (null = pode). */
+  manaShortfall(sheetId: string | null | undefined, cost: number): string | null {
+    if (cost <= 0) return null;
+    const mana = this.manaOf(sheetId);
+    if (mana === null || mana >= cost) return null;
+    const name = this.sheetData(sheetId!)?.name ?? 'O personagem';
+    return `${name} não tem Espírito suficiente: precisa de ${cost}, tem ${mana}.`;
+  }
+
+  /** Gasta Mana do Espírito da ficha (nunca abaixo de 0). */
+  private spendMana(sheetId: string | null | undefined, cost: number): void {
+    const data = cost > 0 && sheetId ? this.sheetData(sheetId) : null;
+    if (!data || !sheetId) return;
+    const bars = data.bars.map((b) => (b.id === MANA_BAR ? { ...b, value: Math.max(0, b.value - cost) } : b));
+    this.updateStatus(sheetId, { bars });
   }
 
   // --- Lojas (inventário de NPC com preços em Eiros) -----------------------
@@ -1217,32 +1606,143 @@ export class TableSessionService extends SheetStore {
    *   enquanto sobrar unidade, a imagem é duplicada para cada inventário cuidar da sua.
    */
   async transferItem(fromId: string, inventoryId: string, toId: string, cost = 0): Promise<boolean> {
-    const from = this.sheetData(fromId);
-    const item = this.inventoryOf(fromId).find((i) => i.id === inventoryId);
     const to = this.sheetData(toId);
-    if (!from || !to || !item || fromId === toId || quantityOf(item) < 1) return false;
+    if (!to || fromId === toId) return false;
     if (cost > 0 && to.sheet.eiros < cost) return false;
 
-    const keepEmpty = from.kind === 'npc';
-    const leavesList = !keepEmpty && quantityOf(item) === 1;
-    let blobId = item.blobId;
-    if (blobId && !leavesList) {
-      const blob = await this.storage.get<Blob>(`blob:${blobId}`);
-      blobId = blob ? newId() : undefined;
-      if (blob && blobId) await this.storage.set(`blob:${blobId}`, blob);
-    }
-
-    // Relê os inventários depois do await (podem ter mudado no meio)
-    const taken = takeOne(this.inventoryOf(fromId), inventoryId, keepEmpty);
-    const unit: InventoryEntry = { ...item, blobId };
-    if (!blobId) delete unit.blobId;
-    this.updateSheet(fromId, { inventory: taken.list });
+    const unit = await this.takeUnit(fromId, inventoryId);
+    if (!unit) return false;
     const receiver = this.sheetData(toId);
     this.updateSheet(toId, {
       inventory: addOne(this.inventoryOf(toId), unit, newId),
       ...(cost > 0 && receiver && { eiros: receiver.sheet.eiros - cost }),
     });
     return true;
+  }
+
+  /**
+   * Tira uma unidade de um item do inventário e a devolve (com a personalização), para ir a
+   * outro inventário ou ao chão do mapa. NPC (loja): a linha fica, mesmo em 0. Personagem: a
+   * linha some ao zerar e a imagem personalizada vai junto; enquanto sobrar unidade, a imagem
+   * é duplicada para cada lugar cuidar da sua. null = não há o que tirar.
+   */
+  private async takeUnit(fromId: string, inventoryId: string): Promise<InventoryEntry | null> {
+    const from = this.sheetData(fromId);
+    const item = this.inventoryOf(fromId).find((i) => i.id === inventoryId);
+    if (!from || !item || quantityOf(item) < 1) return null;
+
+    const keepEmpty = from.kind === 'npc';
+    const leavesList = !keepEmpty && quantityOf(item) === 1;
+    let blobId = item.blobId;
+    if (blobId && !leavesList) blobId = await this.files.copy(blobId).catch(() => undefined);
+
+    // Relê o inventário depois do await (pode ter mudado no meio)
+    this.updateSheet(fromId, { inventory: takeOne(this.inventoryOf(fromId), inventoryId, keepEmpty).list });
+    const unit: InventoryEntry = { ...item, blobId };
+    if (!blobId) delete unit.blobId;
+    return unit;
+  }
+
+  // --- Itens no mapa (largar e pegar) --------------------------------------
+
+  /** Mestre: larga itens do mundo/da mesa, move, muda a quantidade e tira itens do mapa. */
+  readonly canManageDrops = computed(() => rules.canManageDrops(this.viewer()));
+
+  /** Item no chão (em qualquer cena), com a cena dele. */
+  dropById(dropId: string): { scene: Scene; drop: DroppedItem } | undefined {
+    return findDrop(this.scenes(), dropId);
+  }
+
+  /** A conta vê este item? (jogador com névoa: só os que algum token enxerga agora) */
+  canSeeDrop(dropId: string): boolean {
+    return this.role() === 'gm' || this.visibleDrops().some((d) => d.id === dropId);
+  }
+
+  /**
+   * Larga um item no mapa, na cena ativa e na camada em foco (centro em `p`):
+   * - do mundo (aba Lore) ou da mesa: só o mestre — um item novo, sem personalização;
+   * - do inventário: quem edita a ficha — uma unidade sai dela (com nome, etiquetas e imagem próprios).
+   */
+  async dropItem(data: ItemDragData, p: Point): Promise<DroppedItem | null> {
+    const sceneId = this.activeSceneId();
+    if (!sceneId) return null;
+    let unit: InventoryEntry | null;
+    if (data.source === 'inventory') {
+      if (!this.sheetAccess(data.sheetId).edit) return null;
+      unit = await this.takeUnit(data.sheetId, data.inventoryId);
+    } else {
+      const exists = data.source === 'table' ? this.tableItemById().has(data.itemId) : this.worldbuild.byId().get(data.itemId)?.type === 'item';
+      if (!this.canManageDrops() || !exists) return null;
+      unit = { id: '', itemId: data.itemId, ...(data.source === 'table' && { table: true }) };
+    }
+    if (!unit) return null;
+    const level = this.currentLevel();
+    const drop: DroppedItem = { id: newId(), x: p.x, y: p.y, ...(level > 0 && { level }), item: { ...unitOf(unit), id: newId() } };
+    // A cena pode ter mudado durante o await: o item vai para a cena de onde foi largado
+    this.dispatch('addDrop', { sceneId, drop });
+    return drop;
+  }
+
+  /**
+   * Pega o item do chão com a ficha `sheetId` (personagem ou token de NPC): a pilha inteira vai
+   * para o inventário (empilha num item idêntico) e o item sai do mapa. A imagem personalizada
+   * vai junto. Precisa editar a ficha e ver o item. Retorna o nome do item (null = não pegou).
+   */
+  pickUpDrop(dropId: string, sheetId: string): string | null {
+    const drop = this.dropById(dropId)?.drop;
+    if (!drop || !this.canSeeDrop(dropId) || !this.sheetAccess(sheetId).edit || !this.sheetData(sheetId)) return null;
+    const name = inventoryRow(drop.item, { own: this.worldbuild.byId(), table: this.tableItemById() }).name;
+    this.updateSheet(sheetId, { inventory: addOne(this.inventoryOf(sheetId), drop.item, newId, quantityOf(drop.item)) });
+    this.dispatch('removeDrop', { dropId });
+    return name;
+  }
+
+  /** Mestre: move o item no mapa. */
+  moveDrop(dropId: string, p: Point): void {
+    if (this.canManageDrops()) this.dispatch('moveDrop', { dropId, x: p.x, y: p.y });
+  }
+
+  /** Mestre: quantidade da pilha no chão. */
+  setDropQuantity(dropId: string, quantity: number): void {
+    if (this.canManageDrops()) this.dispatch('setDropQuantity', { dropId, quantity });
+  }
+
+  /** Mestre: tamanho (quadrados) e cor da borda do item no mapa. */
+  updateDrop(dropId: string, patch: Partial<Pick<DroppedItem, 'size' | 'color'>>): void {
+    if (this.canManageDrops()) this.dispatch('updateDrop', { dropId, patch });
+  }
+
+  /** Mestre: tira o item do mapa (sem ir para inventário nenhum; a imagem personalizada é apagada). */
+  removeDrop(dropId: string): void {
+    const drop = this.dropById(dropId)?.drop;
+    if (!drop || !this.canManageDrops()) return;
+    if (this.selectedDropId() === dropId) this.selectedDropId.set(null);
+    this.dispatch('removeDrop', { dropId });
+    this.deleteInventoryBlobs([drop.item]);
+  }
+
+  /**
+   * Quem pode pegar um item: personagens (mestre: todos; jogador: os dele) e tokens de NPC que a
+   * conta controla, na cena ativa. Ordem: quem age primeiro, depois os mais próximos do item.
+   */
+  pickupCandidates(drop: DroppedItem): PickupCandidate[] {
+    const grid = this.activeScene()?.gridSize ?? 70;
+    const level = levelOf(drop);
+    const near = (t: ResolvedToken) =>
+      levelOf(t.placement) === level ? Math.hypot(t.placement.x - drop.x, t.placement.y - drop.y) / grid : undefined;
+    const tokens = this.resolvedTokens();
+    const characters = (this.role() === 'gm' ? this.entries().filter((e) => e.kind === 'character') : this.myCharacters()).map((e) => {
+      const distances = tokens.filter((t) => t.entry.id === e.id).flatMap((t) => near(t) ?? []);
+      return { sheetId: e.id, name: e.name, blobId: this.tokenOf(e).blobId, distance: distances.length ? Math.min(...distances) : undefined };
+    });
+    const npcTokens = tokens
+      .filter((t) => t.entry.kind === 'npc' && this.canEdit(t.entry))
+      .map((t) => ({ sheetId: NPC_TOKEN_SHEET + t.placement.id, name: t.name, blobId: t.blobId, distance: near(t) }));
+    const actor = this.actorSheetId();
+    const far = Number.POSITIVE_INFINITY;
+    return [...characters, ...npcTokens].sort(
+      (a, b) => Number(b.sheetId === actor) - Number(a.sheetId === actor) || (a.distance ?? far) - (b.distance ?? far),
+    );
   }
 
   // --- Lore da mesa (pastas do mundo reveladas) ----------------------------
@@ -1280,7 +1780,7 @@ export class TableSessionService extends SheetStore {
       id: newId(),
       name: name.trim() || 'Novo item',
       tags: [],
-      ownerUserId: this.auth.user()?.id,
+      ownerUserId: this.me()?.id,
       createdAt: Date.now(),
     };
     this.dispatch('addTableItem', { item });
@@ -1299,10 +1799,10 @@ export class TableSessionService extends SheetStore {
   /** Troca a imagem do item da mesa (apaga a anterior). */
   async setTableItemImage(itemId: string, file: File): Promise<void> {
     const old = this.tableItemById().get(itemId)?.blobId;
-    const blobId = newId();
-    await this.storage.set(`blob:${blobId}`, file);
+    const blobId = await this.uploadFile(file);
+    if (!blobId) return;
     this.dispatch('updateTableItem', { itemId, patch: { blobId } });
-    if (old) this.storage.delete(`blob:${old}`);
+    if (old) void this.files.remove(old);
   }
 
   // --- Tokens: regra de vínculo --------------------------------------------
@@ -1371,11 +1871,11 @@ export class TableSessionService extends SheetStore {
   async setTokenImage(entryId: string, file: File): Promise<void> {
     const entry = this.entryById().get(entryId);
     if (!entry) return;
-    const blobId = newId();
-    await this.storage.set(`blob:${blobId}`, file);
+    const blobId = await this.uploadFile(file);
+    if (!blobId) return;
     const old = this.tokenOf(entry).blobId;
     this.updateEntryToken(entryId, { blobId });
-    if (old) this.storage.delete(`blob:${old}`);
+    if (old) void this.files.remove(old);
   }
 
   // --- Tokens no mapa ------------------------------------------------------
@@ -1426,12 +1926,32 @@ export class TableSessionService extends SheetStore {
   }
 
   moveToken(placementId: string, p: Point): void {
-    this.dispatch('moveToken', { placementId, x: p.x, y: p.y });
+    if (this.canMoveTokenTo(placementId, p)) this.dispatch('moveToken', { placementId, x: p.x, y: p.y });
   }
 
-  /** Move vários tokens de uma vez (grupo selecionado), num comando só. */
+  /**
+   * Move vários tokens de uma vez (grupo selecionado), num comando só. No papel de jogador,
+   * os que atravessariam uma parede ou porta fechada ficam onde estão.
+   */
   moveTokens(moves: { placementId: string; x: number; y: number }[]): void {
-    if (moves.length) this.dispatch('moveTokens', { moves });
+    const allowed = moves.filter((m) => this.canMoveTokenTo(m.placementId, m));
+    if (allowed.length) this.dispatch('moveTokens', { moves: allowed });
+  }
+
+  /**
+   * O token pode ir da posição atual até `to`? Jogador: não atravessa paredes nem portas
+   * fechadas da camada dele (regra em `rules.wallsBlockMovement` + `movePathBlocked`).
+   */
+  canMoveTokenTo(placementId: string, to: Point): boolean {
+    const placement = this.findPlacement(placementId);
+    if (!placement || !rules.wallsBlockMovement(this.viewer())) return true;
+    return !movePathBlocked(placement, to, this.segmentsAt(levelOf(placement)));
+  }
+
+  /** Segmentos de parede de uma camada da cena ativa (a em foco já vem calculada). */
+  private segmentsAt(level: number): Segment[] {
+    if (level === this.currentLevel()) return this.wallSegments();
+    return wallsToSegments((this.activeScene()?.walls ?? NO_WALLS).filter((w) => levelOf(w) === level));
   }
 
   /** Remove o token do mapa (a ficha continua; a cópia do NPC, com o inventário dela, some). */
@@ -1520,6 +2040,8 @@ export class TableSessionService extends SheetStore {
 
   /** Soma as áreas visíveis à memória da cena (só grava se algo novo foi visto). */
   private markExplored(polygons: Point[][], size: { sceneId: string; w: number; h: number }): void {
+    // Mesa online: a memória é gravada pelo mestre (o jogador não pode alterá-la no servidor)
+    if (this.online() && this.role() !== 'gm') return;
     const scene = this.activeScene();
     if (!scene || scene.id !== size.sceneId) return;
     const current = scene.explored ? decodeMask(scene.explored) : null;
@@ -1621,10 +2143,32 @@ export class TableSessionService extends SheetStore {
 
   /**
    * Único ponto de alteração do estado salvo: aplica o comando puro (state/commands.ts)
-   * e agenda a gravação (alterações seguidas viram uma só). No multiplayer, é aqui que
-   * o comando também será enviado ao servidor.
+   * e agenda a gravação (alterações seguidas viram uma só). Na mesa online, o comando aparece
+   * na tela na hora e vai para o servidor, que o confirma (`ack`) ou recusa (`nack`).
    */
   private dispatch<K extends TableCommandType>(type: K, payload: TableCommandPayload<K>): void {
+    if (this.room) {
+      // Antes do estado inicial chegar não há o que alterar
+      if (!this.sync) return;
+      const command = { type, payload } as TableCommand;
+      const seq = this.room.nextSeq();
+      const next = localCommand(this.sync, seq, command);
+      if (next === this.sync) return;
+      this.applySync(next);
+      // Rajada (um comando por quadro): vai agrupada; os demais vão na hora, depois das rajadas, na ordem
+      const key = burstKey(command);
+      if (key) {
+        const burst = this.bursts.get(key) ?? { seqs: [], commands: [] };
+        burst.seqs.push(seq);
+        burst.commands.push(command);
+        this.bursts.set(key, burst);
+        this.burstTimer ??= setTimeout(() => this.sendBursts(), BURST_MS);
+        return;
+      }
+      this.sendBursts();
+      this.sendToRoom(seq, command);
+      return;
+    }
     const next = applyCommand(this.state(), { type, payload } as Parameters<typeof applyCommand>[1]);
     if (next === this.state()) return;
     this.state.set(next);
@@ -1632,9 +2176,10 @@ export class TableSessionService extends SheetStore {
     this.saveTimer = setTimeout(() => this.flush(), 300);
   }
 
-  /** Grava imediatamente o que estiver pendente. */
+  /** Grava imediatamente o que estiver pendente (mesa online: quem grava é o servidor). */
   flush(): void {
     clearTimeout(this.saveTimer);
+    if (this.room) return;
     if (this.loaded() && this.tableId) this.storage.set(this.key(), this.state());
   }
 }

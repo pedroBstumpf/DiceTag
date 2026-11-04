@@ -4,13 +4,39 @@ import {
   formatModifier,
   formatRoll,
   itemModifier,
+  manaCost,
+  powerOf,
   quickModifier,
   rollDice,
   rollOutcome,
   rollUsesTags,
   studyGain,
   trainStudy,
+  withPowers,
 } from './dice';
+
+describe('tags mágicas: Poder e Mana', () => {
+  it('o Poder fica entre 1 e o nível atual (sem escolha = o nível)', () => {
+    expect(powerOf(4)).toBe(4);
+    expect(powerOf(4, 2)).toBe(2);
+    expect(powerOf(4, 9)).toBe(4);
+    expect(powerOf(4, 0)).toBe(1);
+    // A tag desceu de nível: o Poder salvo na ação acompanha
+    expect(powerOf(2, 5)).toBe(2);
+  });
+
+  it('a rolagem usa o Poder no lugar do nível e gasta essa Mana', () => {
+    const magic = new Set(['fogo']);
+    const levels = new Map([['fogo', 5], ['esgrima', 3]]);
+    const roll = { dice: '2d12' as const, modifier: 1, attributes: ['fogo', 'esgrima'], powers: { fogo: 2 } };
+    const powered = withPowers(roll, levels, magic);
+    expect(effectiveModifier(roll, powered)).toBe(1 + 2 + 3);
+    expect(manaCost(roll, powered, magic)).toBe(2);
+    // Tag mágica não ligada não gasta; 3d6 não usa tags
+    expect(manaCost({ ...roll, attributes: ['esgrima'] }, powered, magic)).toBe(0);
+    expect(manaCost({ ...roll, dice: '3d6' }, powered, magic)).toBe(0);
+  });
+});
 
 /** Random que devolve os valores na ordem (para dados previsíveis). */
 function sequence(...values: number[]) {

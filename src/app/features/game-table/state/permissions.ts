@@ -1,4 +1,4 @@
-import { TableEntry, TableItem, TableRole, TokenBar, TokenPlacement, isDown } from '../../../core/models/table-session.model';
+import { FixedFx, TableEntry, TableItem, TableRole, TokenBar, TokenPlacement, isDown } from '../../../core/models/table-session.model';
 
 /**
  * Regras de permissão da mesa em funções puras: quem vê e quem edita o quê.
@@ -88,6 +88,28 @@ export function canSeeLoreItem(
  */
 export function canEditStatusMax(viewer: Viewer): boolean {
   return viewer.role === 'gm';
+}
+
+/**
+ * Paredes e portas fechadas impedem o movimento dos tokens do jogador (arrastar, WASD, alinhar à
+ * grade). O mestre move livre (para posicionar a cena). Teste do caminho: `movePathBlocked`.
+ */
+export function wallsBlockMovement(viewer: Viewer): boolean {
+  return viewer.role === 'player';
+}
+
+/**
+ * Itens no mapa: largar itens do mundo/da mesa (aba Lore), mover, mudar a quantidade e tirar
+ * do mapa é do mestre. Largar do próprio inventário e pegar um item dependem de editar a ficha
+ * (`sheetAccess(...).edit`) e, para pegar, de ver o item (`visibleDropsFor`).
+ */
+export function canManageDrops(viewer: Viewer): boolean {
+  return viewer.role === 'gm';
+}
+
+/** Tirar um efeito fixo do mapa: quem o lançou e o mestre. */
+export function canRemoveFixedFx(fx: FixedFx, viewer: Viewer): boolean {
+  return viewer.role === 'gm' || (!!fx.ownerUserId && fx.ownerUserId === viewer.userId);
 }
 
 /** Quem criou o item da mesa (e o mestre) edita o original; os demais só a cópia do inventário. */

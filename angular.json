@@ -53,7 +53,7 @@
                 "scripts": true,
                 "styles": {
                   "minify": true,
-                  "inlineCritical": true
+                  "inlineCritical": false
                 },
                 "fonts": false
               }
@@ -73,7 +73,8 @@
               "buildTarget": "zehenia:build:production"
             },
             "development": {
-              "buildTarget": "zehenia:build:development"
+              "buildTarget": "zehenia:build:development",
+              "proxyConfig": "proxy.conf.json"
             }
           },
           "defaultConfiguration": "development"

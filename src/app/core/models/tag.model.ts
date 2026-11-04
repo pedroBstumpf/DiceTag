@@ -14,4 +14,5 @@ export interface Tag {
 export const TAG_COLORS = [
   '#ef4444', '#f97316', '#eab308', '#22c55e', '#2dd4bf',
   '#4f86f7', '#b18cff', '#f472b6', '#e8eefc', '#64748b',
+  '#000000',
 ] as const;

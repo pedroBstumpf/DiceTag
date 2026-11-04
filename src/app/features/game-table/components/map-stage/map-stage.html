@@ -103,6 +103,18 @@
           (noteDown)="onNoteDown($event)"
         />
 
+        <!-- 4b. Itens no chão (largados; o jogador só vê os que algum token enxerga) -->
+        <app-drops-layer
+          [drops]="session.visibleDrops()"
+          [scale]="scale()"
+          [gridSize]="gridSize()"
+          [interactive]="selecting()"
+          [editable]="session.canManageDrops()"
+          [selectedId]="session.selectedDropId()"
+          [upright]="upright()"
+          (dropDown)="onDropDown($event)"
+        />
+
         <!-- 5. Névoa de guerra -->
         @if (session.fogEnabled()) {
           <app-fog-layer
@@ -148,9 +160,10 @@
         }
 
         <!-- 8. Efeitos especiais (e a mira em andamento) -->
-        @if (session.effects().length || fxDraft()) {
+        @if (session.effects().length || session.fixedEffects().length || fxDraft()) {
           <app-fx-layer
             [effects]="session.effects()"
+            [fixed]="session.fixedEffects()"
             [draft]="fxDraft()"
             [current]="fxCurrent()"
             [scale]="scale()"

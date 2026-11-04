@@ -120,4 +120,4 @@ export const WORLD_ITEM_META: Record<WorldItemType, { icon: string; label: strin
 };
 
 /** Cores disponíveis para eventos da linha do tempo. */
-export const TIMELINE_COLORS = ['#7aa7ff', '#e8eefc', '#b18cff', '#5fd4e0', '#ff8fb1', '#ffc66d'] as const;
+export const TIMELINE_COLORS = ['#7aa7ff', '#e8eefc', '#b18cff', '#5fd4e0', '#ff8fb1', '#ffc66d', '#000000'] as const;

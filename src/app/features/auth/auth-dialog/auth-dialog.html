@@ -1,12 +1,19 @@
 <!-- Cabeçalho: emblema + título -->
 <div class="flex flex-col items-center gap-3 px-6 pt-6 text-center">
   <img src="images/zehenia-emblem.png" alt="" class="size-14 rounded-2xl ring-1 ring-white/10" />
-  <h2 class="font-display text-2xl text-star-300">
-    {{ mode() === 'login' ? 'Bem-vindo de volta' : 'Crie sua conta' }}
-  </h2>
-  <p class="text-sm text-slate-400">
-    {{ mode() === 'login' ? 'Entre para acessar suas mesas e mundos.' : 'Comece a criar mesas e mundos em segundos.' }}
-  </p>
+  @if (server) {
+    <h2 class="font-display text-2xl text-star-300">
+      {{ mode() === 'login' ? 'Entrar no servidor' : 'Conta no servidor' }}
+    </h2>
+    <p class="text-sm text-slate-400">Para jogar as mesas online com seus amigos.</p>
+  } @else {
+    <h2 class="font-display text-2xl text-star-300">
+      {{ mode() === 'login' ? 'Bem-vindo de volta' : 'Crie sua conta' }}
+    </h2>
+    <p class="text-sm text-slate-400">
+      {{ mode() === 'login' ? 'Entre para acessar suas mesas e mundos.' : 'Comece a criar mesas e mundos em segundos.' }}
+    </p>
+  }
 </div>
 
 <!-- Alternador Entrar / Criar conta -->
@@ -64,7 +71,7 @@
       <mat-icon>{{ showPassword() ? 'visibility_off' : 'visibility' }}</mat-icon>
     </button>
     @if (form.controls.password.invalid) {
-      <mat-error>Mínimo de 6 caracteres.</mat-error>
+      <mat-error>Mínimo de {{ minPassword }} caracteres.</mat-error>
     }
   </mat-form-field>
 

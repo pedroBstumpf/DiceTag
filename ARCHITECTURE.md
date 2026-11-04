@@ -112,9 +112,11 @@ Definidas em [`app.routes.ts`](src/app/app.routes.ts); **todas as páginas são 
 | `mesas` | `Tables` | `Shell` |
 | `worldbuild` | `Worldbuild` (aceita `?novo=<tipo>` e `?abrir=<id>`) | `Shell` |
 | `mesa/:id` | `GameTablePage` | tela cheia, **fora** do `Shell` |
+| `mesa-online/:id` | `GameTablePage` com `data: { online: true }` (mesa do servidor) | tela cheia, **fora** do `Shell` |
 | `**` | redireciona para `''` | — |
 
-`withComponentInputBinding()` entrega os parâmetros de rota como `input()` (ex.: `GameTablePage.id`).
+`withComponentInputBinding()` entrega os parâmetros e os dados da rota como `input()` (ex.: `GameTablePage.id` e
+`GameTablePage.online`).
 A mesa fica fora do `Shell` para ocupar a tela inteira; o chunk dela (`game-table`) só é baixado ao
 abrir uma mesa.
 
@@ -142,14 +144,18 @@ preferência de interface (`dicetag.sidebarCollapsed`).
 | `StorageService` | conexão com o banco (wrapper chave/valor `get`/`set`/`delete`) e pedido de armazenamento persistente (`requestPersistence`) | — |
 | `AuthService` | `user` (conta logada ou visitante), `isLoggedIn`, `isGuest` | `users` + `localStorage dicetag.session` |
 | `GameTablesService` | lista de mesas, filtrada pelo usuário atual | `tables` |
+| `ServerApiService` | cliente HTTP da API do servidor (`/api`, URLs relativas, erros em `ServerError`) | — (servidor) |
+| `ServerAccountService` | conta do servidor (`user`, `checked`): entrar, criar conta, sair, exportar, excluir | — (cookie HttpOnly do servidor) |
+| `OnlineTablesService` | mesas online da conta do servidor (`tables`) e convites | — (servidor) |
 | `WorldsService` | mundos do usuário (até 2) e o mundo aberto (`activeId`); criar, renomear, excluir | `worlds:<userId>` + `localStorage dicetag.world.<userId>` |
 | `WorldbuildService` | árvore de `WorldItem` do **mundo aberto** (`items`, `byId`, `worldItems`, `worldNpcs`, `worldRaces`) | `worldbuild:<userId>` (1º mundo) ou `worldbuild:<userId>:<worldId>` |
 | `LayoutService` | barra lateral recolhida / modo mobile | `localStorage dicetag.sidebarCollapsed` |
 | `NewsService` | notícias do mural (vazio por enquanto) | — |
 | `QuickActionsService` | atalhos globais (login, criar mesa, abrir worldbuild) — sem estado próprio | — |
 
-Arquivos binários (mapas, imagens, áudios, imagens de token) são gravados à parte como
-`blob:<id>`; os objetos de domínio guardam só o `blobId`.
+Arquivos binários (mapas, imagens, áudios, imagens de token) são gravados à parte pela `FileStore`
+(`core/services/file-store.ts`): `LocalFileStore` = IndexedDB, chaves `blob:<id>`; `ServerFileStore` = `/api/files`
+(mesa online). Os objetos de domínio guardam só o `blobId`; a mesa grava por `SheetStore.files`.
 
 ### 4.2 Serviços por página (fornecidos no componente)
 
@@ -431,9 +437,60 @@ Também têm specs:
 
 ---
 
-## 11. Rumo ao backend
+## 11. Servidor (`server/`)
 
-O plano completo, com as decisões e a ordem de execução, está no [`SPEC.md`](SPEC.md). Em resumo:
+Pacote Node separado (Fastify + `ws` + `node:sqlite` + zod), com guia em [`server/README.md`](server/README.md),
+regras de segurança em [`BACKEND_SECURITY.md`](BACKEND_SECURITY.md) e operação em [`server/OPERATIONS.md`](server/OPERATIONS.md).
+
+- **Camadas:** `http/routes` e `realtime/` → `services/` → `repositories/` (único lugar com SQL) → SQLite.
+  `context.ts` monta as dependências (injeção manual); `app.ts` monta HTTP + WebSocket sem escutar (os
+  testes usam o mesmo app com banco em memória). Toda rota exige sessão, menos as marcadas como públicas
+  (`PUBLIC`), e os repositórios conferem dono e participação dentro das consultas.
+- **Regras compartilhadas:** `server/src/domain/index.ts` importa direto de `src/app` os comandos
+  (`applyCommand`), as permissões, a rolagem e as paredes. Esses arquivos precisam continuar **sem Angular**:
+  o servidor os executa. Novo comando no front exige esquema em `realtime/command-schemas.ts` e regra em
+  `realtime/command-rules.ts` (o tipo obriga; sem isso o servidor não compila). O mesmo vale para um campo
+  novo na ficha (`SHEET_SCHEMA_IS_COMPLETE`); as regras da ficha para jogadores ficam em
+  `realtime/sheet-rules.ts` (raça aplicada pelo servidor, máximo das barras, itens revelados).
+- **Sala da mesa:** `Room` guarda o estado oficial e a versão. Cada comando passa por formato →
+  autorização → `applyCommand` → gravação agrupada (500 ms). Quem enviou recebe `ack`, o mestre recebe o
+  comando e os jogadores recebem o estado **projetado** (`realtime/projection.ts`), só quando ele muda.
+- **Visão no servidor:** `realtime/vision.ts` calcula a névoa da cena aberta com as funções de
+  `state/player-view.ts` (`visionSourcesOf`, `visionPolygonsOf`), uma vez por versão para todos os
+  jogadores. Com névoa, o jogador recebe os polígonos (`vision`) e só o que está à vista, sem as paredes.
+- **Mundo da mesa na sala:** `realtime/world.ts` (`WorldView`) lê do banco, com cache, o token padrão
+  dos NPCs do bestiário e as Raças/itens usados pelas regras; as rotas do Worldbuild avisam o hub.
+- **Papel vem da conta:** dono da mesa = mestre; quem entra por convite = jogador (`table_members`).
+- **Ligação com o front:** em desenvolvimento, `proxy.conf.json` repassa `/api` e `/ws` do `ng serve` para
+  `localhost:3000`, então o front usa URLs relativas e o cookie de sessão na mesma origem. A primeira parte ligada é
+  a **mesa online** (§12).
+- **App entregue pelo servidor** (`http/routes/frontend.ts`, ligado por `FRONTEND_DIR`): o build do Angular na
+  mesma origem da API, num processo só. A lista de arquivos é montada ao subir (nada da URL vira caminho no
+  disco); rotas sem extensão caem no `index.html`; `/api`, `/ws` e `/dev` nunca caem no app. CSP própria
+  (`frontendCsp`): scripts só do servidor, estilos inline permitidos (Angular/Material/Tiptap), Google Fonts.
+
+## 12. Rumo ao backend
+
+O servidor já existe (§11) e a **mesa online** já o usa; o resto do app ainda é local. O plano completo está no
+[`SPEC.md`](SPEC.md).
+
+### 12.1 Mesa online (já ligada)
+
+```
+Minhas mesas → OnlineTables ── OnlineTablesService / ServerAccountService ── ServerApiService ── /api
+/mesa-online/:id → GameTablePage ── session.connect(id) ── TableRoom ── /ws/tables/:id
+                                          │
+                     dispatch → state/sync.ts (confirmado + pendentes = tela) → envio (rajadas a cada 100 ms)
+                     welcome/state/cmd/ack/nack → state/sync.ts → state.set(view)
+```
+
+- O `TableSessionService` é o mesmo nas duas mesas: sem sala, grava no IndexedDB; com sala, nunca grava no
+  navegador. O papel vem do `welcome`; as rolagens são pedidas ao servidor; o jogador com névoa usa a visão do servidor.
+- Arquivos da mesa online vão para o servidor (`ServerFileStore`, trocada no `connect`); a leitura tenta o navegador
+  antes (imagens do Worldbuild).
+- Ainda locais na mesa online: Worldbuild/bestiário e eventos efêmeros (ping, efeitos).
+
+### 12.2 Para o resto do app
 
 - **O que já ajuda:**
   - toda mutação da mesa é um comando puro e serializável, aplicado por um único `dispatch`: é o que
@@ -446,5 +503,5 @@ O plano completo, com as decisões e a ordem de execução, está no [`SPEC.md`]
 
   Ambos serão trocados por **repositórios por domínio** fornecidos por injeção de dependência (SPEC §2).
 - **O que só o servidor pode garantir:** a projeção do estado por jogador (névoa, segredos do mestre),
-  as rolagens e a validação de cada comando (SPEC §3). Hoje o papel é escolhido na mesa; no futuro virá
-  da conta e do convite.
+  as rolagens e a validação de cada comando (SPEC §3). Na mesa local o papel é escolhido na mesa; na online,
+  já vem da conta e do convite.

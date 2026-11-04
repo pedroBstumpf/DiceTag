@@ -1,0 +1,108 @@
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { migrate, openDatabase, transaction } from '../src/db/database';
+import { MIGRATIONS } from '../src/db/migrations';
+import { checkBackup, createBackup } from '../src/ops/backup';
+
+/**
+ * Banco: migrações registradas e só para frente, backup antes de migrar, adoção de bancos da
+ * versão anterior, chaves estrangeiras ligadas e transações aninhadas.
+ */
+
+let dir: string;
+beforeEach(() => {
+  dir = mkdtempSync(join(tmpdir(), 'zehenia-db-'));
+});
+afterEach(() => {
+  rmSync(dir, { recursive: true, force: true });
+});
+
+const versions = (db: DatabaseSync) => (db.prepare('SELECT version FROM schema_migrations ORDER BY version').all() as { version: number }[]).map((r) => r.version);
+
+describe('migrações', () => {
+  it('banco novo: aplica todas e registra cada uma em schema_migrations', () => {
+    const db = openDatabase(':memory:');
+    expect(versions(db)).toEqual(MIGRATIONS.map((_, i) => i + 1));
+    db.close();
+  });
+
+  it('banco da versão anterior (user_version) é adotado sem reaplicar nada', () => {
+    const path = join(dir, 'antigo.db');
+    const legacy = new DatabaseSync(path);
+    legacy.exec(MIGRATIONS[0]);
+    legacy.exec('PRAGMA user_version = 1');
+    legacy.close();
+    const db = openDatabase(path);
+    expect(versions(db)).toEqual([1]);
+    db.close();
+  });
+
+  it('com o banco em uso, faz backup antes de aplicar as pendentes (e só então)', () => {
+    const path = join(dir, 'zehenia.db');
+    const db = openDatabase(path);
+    db.prepare("INSERT INTO users (id, email, name, password_hash, created_at) VALUES ('u', 'a@b.co', 'A', 'h', 0)").run();
+    expect(readdirSync(dir)).not.toContain('backups');
+
+    migrate(db, path, [...MIGRATIONS, 'CREATE TABLE nova (id TEXT PRIMARY KEY) STRICT']);
+    const [backup] = readdirSync(join(dir, 'backups'));
+    expect(backup).toMatch(/^zehenia-.*-antes-v2\.db$/);
+    const copy = new DatabaseSync(join(dir, 'backups', backup));
+    expect(copy.prepare('SELECT COUNT(*) AS n FROM users').get()).toEqual({ n: 1 });
+    expect(copy.prepare("SELECT name FROM sqlite_master WHERE name = 'nova'").get()).toBeUndefined();
+    copy.close();
+    db.close();
+  });
+});
+
+describe('backup e teste de restauração', () => {
+  it('copia banco e arquivos com o servidor no ar e a cópia passa na conferência', async () => {
+    const db = openDatabase(join(dir, 'zehenia.db'));
+    const files = join(dir, 'files');
+    mkdirSync(files);
+    db.prepare("INSERT INTO users (id, email, name, password_hash, created_at) VALUES ('u', 'a@b.co', 'A', 'h', 0)").run();
+    db.prepare("INSERT INTO files (id, owner_id, mime, size, sha256, created_at) VALUES ('f1', 'u', 'image/png', 3, 'x', 0)").run();
+    writeFileSync(join(files, 'f1'), 'png');
+    writeFileSync(join(files, 'f2.part'), 'envio interrompido');
+
+    const backup = await createBackup(db, files, join(dir, 'backups'));
+    expect(readdirSync(join(backup, 'files'))).toEqual(['f1']);
+    const report = checkBackup(backup);
+    expect(report).toMatchObject({ ok: true, problems: [], counts: { users: 1, files: 1 } });
+
+    // Arquivo registrado sem o conteúdo: a conferência acusa
+    rmSync(join(backup, 'files', 'f1'));
+    expect(checkBackup(backup).problems).toEqual([expect.stringMatching(/sem o conteúdo/)]);
+    db.close();
+  });
+});
+
+describe('configuração e transações', () => {
+  it('chaves estrangeiras ligadas: apagar a conta apaga o que é dela', () => {
+    const db = openDatabase(':memory:');
+    expect(db.prepare('PRAGMA foreign_keys').get()).toEqual({ foreign_keys: 1 });
+    db.prepare("INSERT INTO users (id, email, name, password_hash, created_at) VALUES ('u', 'a@b.co', 'A', 'h', 0)").run();
+    db.prepare("INSERT INTO worlds (id, owner_id, name, created_at) VALUES ('w', 'u', 'Mundo', 0)").run();
+    db.prepare("DELETE FROM users WHERE id = 'u'").run();
+    expect(db.prepare('SELECT COUNT(*) AS n FROM worlds').get()).toEqual({ n: 0 });
+    db.close();
+  });
+
+  it('transação aninhada: a interna desfaz só a parte dela', () => {
+    const db = openDatabase(':memory:');
+    const add = (id: string) => db.prepare("INSERT INTO users (id, email, name, password_hash, created_at) VALUES (?, ?, 'A', 'h', 0)").run(id, `${id}@b.co`);
+    transaction(db, () => {
+      add('fora');
+      expect(() =>
+        transaction(db, () => {
+          add('dentro');
+          throw new Error('falhou');
+        }),
+      ).toThrow('falhou');
+    });
+    expect((db.prepare('SELECT id FROM users').all() as { id: string }[]).map((r) => r.id)).toEqual(['fora']);
+    db.close();
+  });
+});

@@ -16,6 +16,13 @@ Complementa o [`ARCHITECTURE.md`](ARCHITECTURE.md) (como o app é hoje) e o [`CL
 | **O que o jogador vê** sob a névoa (tokens, anotações, portas) | `state/player-view.ts` | Base do filtro do estado enviado a cada jogador |
 | Rolagem com sorteio injetável (`rollDice(config, random, levels)`) | `utils/dice.ts` | O servidor rola com o próprio gerador |
 | `navigator.storage.persist()` ao criar dados | `StorageService.requestPersistence` | Reduz o risco de perder dados enquanto tudo é local |
+| **Servidor** (HTTP + WebSocket, SQLite) com contas e sessões reais, mesas, membros, convites, mundos e arquivos | `server/` ([guia](server/README.md)) | Base dos repositórios do §2 (falta o front usá-lo) |
+| Sala da mesa com snapshot + versão, comandos validados (formato e permissão) e aplicados com `applyCommand` | `server/src/realtime/` | §1 itens 1–3 e 5; falta a reconciliação no cliente (item 4) |
+| Projeção por jogador (cena aberta, sem notas secretas, fichas de NPC liberadas, sem ações do mestre) com **visão calculada no servidor**: com névoa, só tokens, anotações, itens, efeitos e portas à vista, sem as paredes; os polígonos vão no campo `vision` | `realtime/projection.ts`, `realtime/vision.ts` | §3.1 (a memória da névoa ainda é gravada pelo cliente do mestre) |
+| Ficha validada no servidor (esquema estrito com os limites das regras; raça aplicada pelo servidor; máximo das barras só do mestre; itens revelados) | `realtime/sheet-rules.ts` | §1 "ficha gravada inteira": protegida até virar comandos por campo |
+| Rolagem no servidor (`crypto.randomInt`, níveis dos temas da ficha atual, gasto de Espírito) | `realtime/rolls.ts` | §3.2 (etiquetas de itens, status e estudos ainda valem 0) |
+| Papel vindo da conta (dono = mestre, convite = jogador) e permissões por comando | `realtime/command-rules.ts` | §3.3 |
+| **Mesa online no front**: conta do servidor, mesas e convites (`core/services/server-*.ts`, `online-tables.service.ts`) e a mesa de jogo ligada à sala (`TableRoom`), com reconciliação no cliente | `features/game-table/state/sync.ts`, `services/table-room.ts` | §1 item 4 (feito); arquivos da mesa online no servidor (`FileStore`/`ServerFileStore`, primeiro repositório do §2); faltam Worldbuild e os eventos efêmeros |
 
 ---
 
@@ -106,7 +113,7 @@ abstract class WorldRepository {         // mundos do usuário e o Worldbuild de
   abstract remove(worldId: string, ids: string[]): Promise<void>;
 }
 
-abstract class FilesRepository {         // mapas, imagens, áudios (hoje "blob:<id>")
+abstract class FilesRepository {         // mapas, imagens, áudios — feito como FileStore (core/services/file-store.ts)
   abstract upload(file: Blob): Promise<string>;      // devolve o id
   abstract url(id: string): Promise<string>;         // object URL hoje; URL assinada no servidor
   abstract remove(id: string): Promise<void>;

@@ -17,6 +17,13 @@ npx ng test --watch=false    # testes das funções puras (utils/)
 
 > Requer Node.js 20.19+ ou 22.12+.
 
+### Servidor (back-end)
+
+O back-end fica em [`server/`](server/README.md), com instruções completas para preparar, abrir e testar.
+Resumo: `cd server && npm install && npm run setup && npm run seed`, depois `npm run dev` (porta 3000).
+O `npm start` do front repassa `/api` e `/ws` para ele (`proxy.conf.json`). As telas ainda usam o
+IndexedDB: a ligação com o servidor é a próxima etapa.
+
 ## Estrutura
 
 Arquitetura detalhada (camadas, fluxos de dados e onde fica o estado) em [`ARCHITECTURE.md`](ARCHITECTURE.md).
@@ -88,17 +95,21 @@ O mapa ocupa a tela inteira e as barras flutuam por cima — todas escondíveis:
   estreita), maximizada e fixada.
 - **Visão de Jogador:** sem a ferramenta Névoa, sem as cenas da barra superior e sem as abas Sons e Ações; move
   tokens de personagens, mas de NPCs só os que o mestre liberou, e cria ações na aba Habilidades da ficha.
-- **Modo imersivo:** tecla `\` esconde/mostra todas as barras.
+- **Modo imersivo:** tecla `\` esconde/mostra todas as barras; no modo imersivo, o botão "Sair do modo imersivo"
+  (canto superior direito) reabre todas de uma vez.
 
 ### Ficha de personagem
 Clicar num personagem no painel abre a ficha, com quatro abas:
 - **Ficha:** cards de tamanhos diferentes — **Básico** (imagem, nome, raça, sub-raça e rótulos), **Status**
   (barras Corpo, Mente e Espírito, começando em 24, e as etiquetas do personagem, que também aparecem no token), **Relações**
   (personagens com nível de 1 a 6 e descrição) e três **Temas** (nome, tags com nível de 1 a 6, **Defeitos**
-  com nível de -1 a -6 e um **Objetivo** com 5 marcadores de avanço) e, abaixo deles, os itens **Equipados** (clique
+  com nível de -1 a -6 e um **Objetivo** com 5 marcadores azuis de avanço e, à esquerda, 5 vermelhos de abandono) e, abaixo deles, os itens **Equipados** (clique
   abre o cartão do item numa janela) e os **Estudos e Treinos**: três etiquetas com SA (Sucessos Acumulados) e SN
   (Sucessos Necessários, definido pelo mestre). Ligado a uma rolagem, sem modificador, o estudo ganha 1 SA com 12+ e 2
   com sucesso crítico; ao alcançar o SN, mestre e jogador são avisados de que ele subiu de nível.
+- **Tags mágicas:** qualquer tag de tema pode ser marcada como mágica (✦). Numa rolagem de 2d12, ela vale o **Poder**
+  escolhido (de 1 até o nível dela) e gasta essa quantidade de **Espírito** (a Mana do personagem). Nas ações, o Poder
+  fica salvo na configuração; no botão "Rolar", é escolhido na hora. Sem Espírito suficiente, a rolagem não acontece.
 - **Inventário:** lista dos itens do personagem e, ao lado, o cartão do item selecionado (imagem, nome, descrição e etiquetas).
   Editar o cartão aqui vale só para aquele personagem (o item do Worldbuild não muda). A caixa à esquerda de cada
   item marca se ele está **equipado**. Itens que um jogador cria no inventário ficam só naquela mesa (não vão para o
@@ -156,10 +167,12 @@ eletricidade, sombra…):
 - **Área:** explosão, onda de choque, fumaça, chuva de meteoros, erupção de estacas, vórtice
 - **Magia:** cura, escudo, círculo de runas, teleporte
 
-Uma ação pode ter efeito: ao usá-la, ele fica no mouse até você arrastar.
+Uma ação pode ter efeito: ao usá-la, ele fica no mouse até você arrastar. Com **"Fixar no mapa"** ligado no menu da
+ferramenta, o efeito fica na cena, repetindo, até ser removido pela lista do mesmo menu (por quem lançou ou pelo mestre).
 
 ### Névoa de guerra
-Paredes em linha ou círculo e **portas** (abrem e fecham com um clique) bloqueiam a visão dos tokens.
+Paredes em linha ou círculo e **portas** (abrem e fecham com um clique) bloqueiam a visão dos tokens — e também o
+movimento dos tokens dos jogadores, que não atravessam paredes nem portas fechadas (o mestre move livre).
 Paredes podem ser movidas e editadas ponto a ponto. Na visão de **Jogador** a névoa é opaca e só se abre
 onde os tokens enxergam — e as áreas já exploradas continuam reveladas, escurecidas (memória da névoa).
 Na de **Mestre** fica semitransparente, com o contorno das áreas visíveis.
@@ -167,6 +180,14 @@ Na de **Mestre** fica semitransparente, com o contorno das áreas visíveis.
 ### Desenho e anotações
 Pincel com cores, espessuras, opacidade, borracha e Ctrl+Z. Anotações são marcadores no mapa com título,
 texto, cor e opção "só o mestre vê".
+
+### Itens no mapa
+Itens podem ser **largados no chão**: o mestre arrasta um item da aba Lore (ou de "Itens da mesa") até o mapa, e
+quem edita uma ficha arrasta um item do inventário (larga uma unidade, com a personalização). No mapa, o item é um
+losango com a imagem e a quantidade. Um clique seleciona o item; o duplo clique abre o cartão completo e a lista de
+quem pode **pegá-lo** — personagens e tokens de NPC, quem age primeiro e depois os mais próximos. A pilha inteira vai
+para o inventário. O mestre move, redimensiona pela alça, escolhe a cor da borda, muda a quantidade e tira itens do
+mapa (Delete no item selecionado). Com névoa, o jogador só vê os itens que algum token enxerga.
 
 ### Sons
 Várias faixas tocando juntas, cada uma com volume e repetição, mais volume mestre e "Parar tudo".
@@ -190,7 +211,17 @@ itens desse mundo.
 
 ## Dados (provisório)
 
-Ainda não há backend. Contas, mesas e worldbuild ficam no **IndexedDB do navegador**
-(`core/services/storage.service.ts`). Para conectar uma API, basta trocar a
-implementação desse serviço e do `AuthService` — a interface usada pelas telas
-continua a mesma.
+O back-end já existe ([`server/`](server/README.md)). A **mesa online** (seção "Mesas online" em Minhas mesas) já o
+usa: conta do servidor, mesas, convites e a mesa de jogo em tempo real. O resto (contas locais, mesas locais e
+worldbuild) fica no **IndexedDB do navegador** (`core/services/storage.service.ts`). A ligação será feita
+com repositórios por domínio (SPEC.md §2), trocando a implementação do IndexedDB pela HTTP/WebSocket.
+
+## Versões e branches
+
+- **`main`** é sempre a última versão estável: só recebe merges (`--no-ff`) de branches com os testes passando.
+- **Uma branch por assunto**, criada a partir da `main`: `feat/…`, `fix/…`, `chore/…`, `docs/…`.
+- **Commits** no padrão Conventional Commits, em português: `feat(mesa): …`, `fix(servidor): …`, com o corpo explicando o que mudou.
+- **Versões** seguem o [SemVer](https://semver.org/lang/pt-BR/), com uma versão só para o projeto: `package.json` e
+  `server/package.json` andam juntos. Cada versão publicada ganha uma **tag anotada** (`v0.2.0`) e uma entrada no
+  [`CHANGELOG.md`](CHANGELOG.md).
+- **Antes de mesclar:** `npx ng test --watch=false` e `npm run build` na raiz; `npm run check` em `server/`.

@@ -5,11 +5,18 @@ import { SHEET_MAX_LEVEL } from '../../../../core/models/table-session.model';
  * Seletor de nível em losangos (padrão: 1 a 6), usado nas relações e nas tags
  * de tema da ficha. Clicar num losango define o nível; os anteriores acendem.
  * `negative` (defeitos): os mesmos losangos, em vermelho, valendo -1 a -6.
+ * `reverse`: o primeiro losango fica à direita e o número à esquerda (ex.: abandono do objetivo,
+ * que cresce do centro para a esquerda); o número aparece sem sinal.
  */
 @Component({
   selector: 'app-level-pips',
   host: { class: 'inline-flex shrink-0 items-center gap-0.5', role: 'radiogroup', '[attr.aria-label]': 'label()' },
   template: `
+    @if (reverse()) {
+      <span class="mr-1 w-5 text-center text-xs font-semibold tabular-nums" [class]="negative() ? 'text-red-300' : 'text-star-300'">
+        {{ size() }}
+      </span>
+    }
     @for (n of levels(); track n) {
       <button
         type="button"
@@ -23,9 +30,11 @@ import { SHEET_MAX_LEVEL } from '../../../../core/models/table-session.model';
         <span class="size-2.5 rotate-45 transition-colors" [class]="pipClass(n)"></span>
       </button>
     }
-    <span class="ml-1 w-5 text-center text-xs font-semibold tabular-nums" [class]="negative() ? 'text-red-300' : 'text-star-300'">
-      {{ value() }}
-    </span>
+    @if (!reverse()) {
+      <span class="ml-1 w-5 text-center text-xs font-semibold tabular-nums" [class]="negative() ? 'text-red-300' : 'text-star-300'">
+        {{ value() }}
+      </span>
+    }
   `,
 })
 export class LevelPips {
@@ -35,9 +44,14 @@ export class LevelPips {
   /** Níveis negativos (defeitos): -1 a -max. */
   readonly negative = input(false);
   readonly label = input('Nível');
+  /** Losangos da direita para a esquerda, com o número à esquerda. */
+  readonly reverse = input(false);
   readonly picked = output<number>();
 
-  readonly levels = computed(() => Array.from({ length: this.max() }, (_, i) => i + 1));
+  readonly levels = computed(() => {
+    const list = Array.from({ length: this.max() }, (_, i) => i + 1);
+    return this.reverse() ? list.reverse() : list;
+  });
   /** Quantos losangos acesos. */
   readonly size = computed(() => Math.abs(this.value()));
 
