@@ -1,9 +1,11 @@
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { parseFunnelOutput, parseTailscaleStatus, type HostStatus } from '../../src/ops/tailscale';
 
 /** Tempo esperando o túnel responder antes de devolver a situação à tela. */
 const OPEN_TIMEOUT_MS = 20_000;
+/** Desliga o túnel na porta pública padrão (https://tailscale.com/kb/1311/tailscale-funnel). */
+const TURN_OFF = ['funnel', '--https=443', 'off'];
 
 /** Como chamar o programa: o instalado ou, nos testes, o de TAILSCALE_ARGV (JSON com os argumentos). */
 function command(): string[] | null {
@@ -99,8 +101,18 @@ export class Funnel {
 
   /** Encerra o túnel (ao fechar a mesa e ao sair do programa). */
   stop(): void {
+    const argv = command();
+    const wasOpen = !!this.child;
     this.child?.kill();
     this.child = null;
     this.output = '';
+    // Encerrar o programa deveria bastar; pedir para desligar garante que nada fique aberto
+    if (argv && wasOpen) spawnSync(argv[0], [...argv.slice(1), ...TURN_OFF], { stdio: 'ignore', windowsHide: true, timeout: 5000 });
+  }
+
+  /** Desliga um túnel que tenha sobrado de uma queda brusca do app. */
+  async clearLeftover(): Promise<void> {
+    const argv = command();
+    if (argv) await run(argv, TURN_OFF);
   }
 }
