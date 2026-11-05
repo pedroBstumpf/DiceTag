@@ -9,6 +9,7 @@ import { WorldsRepository } from './repositories/worlds';
 import { PasswordHasher } from './security/password';
 import { TokenService } from './security/tokens';
 import { AuthService } from './services/auth.service';
+import { NO_HOST_CONTROL, ipcHostControl, type HostControl } from './services/host-control';
 import { LibraryService } from './services/library.service';
 import { createMailer, type Mailer } from './services/mailer';
 
@@ -27,6 +28,8 @@ export interface AppContext {
   auth: AuthService;
   mailer: Mailer;
   library: LibraryService;
+  /** Abrir a mesa aos jogadores: só existe com `npm run mesa`. */
+  host: HostControl;
 }
 
 export function createContext(config: Config, db: Db): AppContext {
@@ -47,5 +50,6 @@ export function createContext(config: Config, db: Db): AppContext {
     auth: new AuthService(db, users, sessions, worlds, hasher, tokens, config, resets),
     mailer: createMailer(config),
     library: new LibraryService(config.LIBRARY_DIR),
+    host: process.send && process.env['ZEHENIA_MESA'] ? ipcHostControl(process.send.bind(process)) : NO_HOST_CONTROL,
   };
 }

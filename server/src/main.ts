@@ -30,6 +30,8 @@ async function main(): Promise<void> {
     db.close();
     process.exit(0);
   };
+  // Iniciado por `npm run mesa`: se aquele processo morrer, este não fica aberto sozinho
+  if (process.send && process.env['ZEHENIA_MESA']) process.on('disconnect', () => void shutdown('disconnect'));
   process.on('SIGINT', () => void shutdown('SIGINT'));
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
 

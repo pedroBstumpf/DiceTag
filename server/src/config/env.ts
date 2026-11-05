@@ -103,7 +103,7 @@ export type Env = z.infer<typeof schema>;
 /** Configuração pronta para uso (origens, proxies e pimentas já interpretados). */
 export interface Config
   extends Omit<Env, 'ALLOWED_ORIGINS' | 'TRUSTED_PROXIES' | 'PASSWORD_PEPPER' | 'PASSWORD_PEPPER_VERSION' | 'PASSWORD_PEPPERS_PREVIOUS' | 'PUBLIC_URL'> {
-  allowedOrigins: ReadonlySet<string>;
+  allowedOrigins: Set<string>;
   /** Origem pública do app (sem barra no fim): sempre uma das origens autorizadas. */
   publicUrl: string;
   trustedProxies: TrustedProxies;
@@ -171,7 +171,7 @@ function parsePeppers(raw: string, currentVersion: number): ReadonlyMap<number, 
 }
 
 /** "http://a:1, https://b" → conjunto de origens normalizadas (rejeita caminhos e curingas). */
-function parseOrigins(raw: string): ReadonlySet<string> {
+function parseOrigins(raw: string): Set<string> {
   const origins = new Set<string>();
   for (const item of raw.split(',').map((s) => s.trim()).filter(Boolean)) {
     if (item === '*' || item.includes('*')) throw new Error('ALLOWED_ORIGINS não aceita curinga (*).');
@@ -189,6 +189,22 @@ function parseOrigins(raw: string): ReadonlySet<string> {
   return origins;
 }
 
+function isLoopbackOrigin(origin: string): boolean {
+  const { hostname } = new URL(origin);
+  return hostname === 'localhost' || hostname === '127.0.0.1';
+}
+
+/**
+ * Passa a aceitar o endereço público do app, descoberto com o servidor já no ar (a conta do
+ * Tailscale pode ser conectada depois de iniciar a mesa). Só HTTPS, e só a origem, sem caminho.
+ */
+export function allowPublicOrigin(config: Config, url: string): void {
+  const { origin, protocol } = new URL(url);
+  if (protocol !== 'https:') return;
+  config.allowedOrigins.add(origin);
+  config.publicUrl = origin;
+}
+
 /** Em produção, recusa configurações que só fazem sentido localmente. */
 function assertSafeForProduction(config: Config): void {
   if (!config.isProduction) return;
@@ -201,8 +217,9 @@ function assertSafeForProduction(config: Config): void {
   if (config.MAIL_PROVIDER === 'log') problems.push('MAIL_PROVIDER não pode ser log');
   const peppers = [config.peppers.current, ...(config.peppers.previous?.values() ?? [])];
   if (peppers.includes(config.TOKEN_SECRET)) problems.push('TOKEN_SECRET e as pimentas (PASSWORD_PEPPER*) precisam ser diferentes');
+  // Sem HTTPS, só o próprio computador: `npm run mesa` abre o app em http://localhost para o dono
   for (const origin of config.allowedOrigins) {
-    if (!origin.startsWith('https://')) problems.push(`origem sem HTTPS: ${origin}`);
+    if (!origin.startsWith('https://') && !isLoopbackOrigin(origin)) problems.push(`origem sem HTTPS: ${origin}`);
   }
   if (problems.length) throw new Error(`Configuração insegura para produção:\n  - ${problems.join('\n  - ')}`);
 }

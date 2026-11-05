@@ -2,6 +2,7 @@
   "name": "cronicas-de-zehenia",
   "version": "0.3.0",
   "scripts": {
+    "mesa": "npm --prefix server run mesa --",
     "ng": "ng",
     "start": "ng serve",
     "build": "ng build",
