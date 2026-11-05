@@ -4,7 +4,9 @@
    "static" garante que as variáveis existam sempre, pois também são usadas
    no styles.scss (tema do Angular Material).
    ========================================================================== */
-@import "tailwindcss";
+/* source(): procura as classes em src/, relativo a este arquivo. Sem isso, o Tailwind parte da pasta
+   em que o comando foi executado, e um `ng serve` dentro de server/ gera o app sem estilos. */
+@import "tailwindcss" source("..");
 
 @theme static {
   /* --- Tipografia: letras angulares, inspiradas em runas ---
