@@ -1,7 +1,6 @@
 import { DatePipe } from '@angular/common';
 import { Component, effect, inject, signal, untracked } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
-import { MatDialog } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
@@ -9,21 +8,19 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { RouterLink } from '@angular/router';
-import { firstValueFrom } from 'rxjs';
+import { Router, RouterLink } from '@angular/router';
 import { TABLE_ACCENTS } from '../../../core/models/game-table.model';
-import { OnlineTable, OnlineTablesService, TableInvite } from '../../../core/services/online-tables.service';
+import { OnlineTable, OnlineTablesService, TableInvite, TableMember } from '../../../core/services/online-tables.service';
 import { World } from '../../../core/models/world.model';
-import { ServerAccountService } from '../../../core/services/server-account.service';
+import { ServerAccountService, shortAccountId } from '../../../core/services/server-account.service';
 import { WorldImportService } from '../../../core/services/world-import.service';
 import { WorldsService } from '../../../core/services/worlds.service';
 import { EmptyState } from '../../../shared/components/empty-state/empty-state';
-import { AuthDialog, AuthMode } from '../../auth/auth-dialog/auth-dialog';
 
 /**
- * Seção "Mesas online" da página Minhas mesas: a conta do servidor (entrar, criar conta, sair,
- * baixar os dados e excluir a conta — LGPD) e as mesas dela (criar, convidar, entrar com
- * convite, sair, excluir). As mesas locais continuam acima, sem mudança.
+ * Seção "Mesas online" da página Minhas mesas: a conta (sair, baixar os dados e excluir: LGPD) e as
+ * mesas dela. O dono cria mesas, gera convites de uso único, vê quem participa, gera links de retorno
+ * e tira jogadores; o convidado vê as mesas dele e pode sair delas.
  */
 @Component({
   selector: 'app-online-tables',
@@ -35,8 +32,8 @@ export class OnlineTables {
   readonly service = inject(OnlineTablesService);
   readonly worlds = inject(WorldsService);
   readonly importer = inject(WorldImportService);
-  private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
+  private readonly router = inject(Router);
 
   // --- Excluir a conta (pede a senha) --------------------------------------
   readonly deleting = signal(false);
@@ -45,12 +42,19 @@ export class OnlineTables {
 
   // --- Formulários rápidos -------------------------------------------------
   readonly newName = signal('');
-  readonly inviteCode = signal('');
   /** Convites gerados nesta visita (id da mesa → código): o código só é mostrado uma vez. */
   readonly invites = signal<Record<string, TableInvite>>({});
+  /** Mesa com a lista de jogadores aberta, e quem participa dela. */
+  readonly membersOf = signal<string | null>(null);
+  readonly members = signal<TableMember[]>([]);
+  readonly shortId = shortAccountId;
+  /** O link aponta só para este computador: a mesa ainda não está na internet. */
+  localOnly(invite: TableInvite): boolean {
+    return /\/\/(localhost|127\.0\.0\.1)[:/]/.test(invite.link);
+  }
 
   constructor() {
-    void this.account.refresh();
+    void this.account.ensureChecked();
     // Conta do servidor mudou (entrou, saiu, excluiu): recarrega ou esquece a lista
     effect(() => {
       const user = this.account.user();
@@ -65,12 +69,6 @@ export class OnlineTables {
     if (!name) return;
     const created = { name, system: 'Sistema próprio', description: '', maxPlayers: 5, accent: TABLE_ACCENTS[0] };
     if (await this.run(() => this.service.create(created), `Mesa online "${name}" criada.`)) this.newName.set('');
-  }
-
-  async accept(): Promise<void> {
-    const code = this.inviteCode().trim();
-    if (!code) return;
-    if (await this.run(() => this.service.accept(code), 'Você entrou na mesa!')) this.inviteCode.set('');
   }
 
   async invite(table: OnlineTable): Promise<void> {
@@ -88,11 +86,38 @@ export class OnlineTables {
     const invite = this.inviteOf(table);
     if (!invite) return;
     try {
-      await navigator.clipboard.writeText(invite.code);
-      this.snackBar.open('Código copiado.');
+      await navigator.clipboard.writeText(invite.link);
+      this.snackBar.open('Link copiado. Envie só a quem você convidou: ele vale uma vez.');
     } catch {
       this.snackBar.open('Não foi possível copiar: selecione o código e copie à mão.');
     }
+  }
+
+  /** Abre ou fecha a lista de jogadores da mesa. */
+  async toggleMembers(table: OnlineTable): Promise<void> {
+    if (this.membersOf() === table.id) {
+      this.membersOf.set(null);
+      return;
+    }
+    await this.run(async () => {
+      this.members.set(await this.service.members(table.id));
+      this.membersOf.set(table.id);
+    });
+  }
+
+  /** Link de retorno: o convidado trocou de aparelho ou limpou o navegador. Fica no lugar do convite. */
+  async accessLink(table: OnlineTable, member: TableMember): Promise<void> {
+    await this.run(async () => {
+      const invite = await this.service.accessLink(table.id, member.userId);
+      this.invites.update((all) => ({ ...all, [table.id]: invite }));
+      this.snackBar.open(`Link de retorno de ${member.name} gerado.`);
+    });
+  }
+
+  async removeMember(table: OnlineTable, member: TableMember): Promise<void> {
+    if (!confirm(`Tirar ${member.name} da mesa "${table.name}"? A pessoa perde o acesso. As fichas dela continuam na mesa.`)) return;
+    const done = await this.run(() => this.service.removeMember(table.id, member.userId), `${member.name} saiu da mesa.`);
+    if (done) this.members.update((list) => list.filter((m) => m.userId !== member.userId));
   }
 
   /** Envia um mundo deste navegador para o mundo da mesa no servidor (o local continua aqui). */
@@ -119,20 +144,22 @@ export class OnlineTables {
 
   // --- Conta ---------------------------------------------------------------
 
-  async openAuth(mode: AuthMode): Promise<void> {
-    const ok = await firstValueFrom(AuthDialog.open(this.dialog, mode, true).afterClosed());
-    if (ok) this.snackBar.open(`Conectado ao servidor como ${this.account.user()?.name}.`);
-  }
-
   async logout(): Promise<void> {
-    await this.run(() => this.account.logout(), 'Você saiu do servidor.');
+    if (await this.run(() => this.account.logout())) await this.router.navigate(['/entrar']);
   }
 
+  /** O dono confirma com a senha; o convidado não tem senha. */
   async deleteAccount(): Promise<void> {
+    const owner = this.account.isOwner();
     const password = this.deletePassword();
-    if (!password || !confirm('Excluir a conta do servidor e todas as mesas dela? Esta ação não pode ser desfeita.')) return;
-    const done = await this.run(() => this.account.deleteAccount(password), 'Conta do servidor excluída.');
-    if (done) this.cancelDelete();
+    if (owner && !password) return;
+    const question = owner ? 'Excluir a sua conta e todas as mesas dela? Esta ação não pode ser desfeita.' : 'Excluir a sua conta? As suas fichas saem das mesas. Para voltar, será preciso um novo convite.';
+    if (!confirm(question)) return;
+    const done = await this.run(() => this.account.deleteAccount(owner ? password : undefined), 'Conta excluída.');
+    if (done) {
+      this.cancelDelete();
+      await this.router.navigate(['/entrar']);
+    }
   }
 
   cancelDelete(): void {

@@ -1,0 +1,53 @@
+<h2 mat-dialog-title class="!font-display">{{ data.section === 'imagens' ? 'Escolher imagem' : 'Escolher sons' }}</h2>
+
+<mat-dialog-content class="!flex !flex-col gap-3">
+  <div class="flex items-center gap-2">
+    @if (parent(); as up) {
+      <button mat-icon-button aria-label="Subir uma pasta" (click)="folder.set(up)">
+        <mat-icon>arrow_upward</mat-icon>
+      </button>
+    }
+    <code class="min-w-0 flex-1 truncate text-xs text-slate-400">{{ folder() }}</code>
+    <input #searchInput class="h-9 w-48 rounded-lg bg-ink-950 px-3 text-sm text-slate-100 outline-none ring-1 ring-white/10" placeholder="Buscar" aria-label="Buscar arquivos" [value]="search()" (input)="search.set(searchInput.value)" />
+  </div>
+
+  @if (error()) {
+    <p class="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">{{ error() }}</p>
+  }
+
+  @if (!library.loaded() && !error()) {
+    <div class="flex justify-center py-10"><mat-spinner diameter="28" /></div>
+  } @else if (!visible().length) {
+    <p class="py-10 text-center text-sm text-slate-400">Nada aqui. Envie arquivos na página Arquivos.</p>
+  } @else {
+    <ul class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      @for (entry of visible(); track entry.path) {
+        <li>
+          <button
+            type="button"
+            class="flex w-full flex-col overflow-hidden rounded-lg border bg-ink-900 text-left transition-colors hover:border-astral-400/60"
+            [class]="selected().has(entry.path) ? 'border-astral-400' : 'border-white/5'"
+            [disabled]="busy()"
+            (click)="choose(entry)"
+          >
+            @if (entry.type === 'file' && entry.section === 'imagens') {
+              <img [src]="fileUrl(entry)" [alt]="entry.name" loading="lazy" class="aspect-[4/3] w-full bg-ink-950 object-cover" />
+            } @else {
+              <span class="grid aspect-[4/3] w-full place-items-center bg-ink-850">
+                <mat-icon [class]="entry.type === 'folder' ? 'text-star-300' : 'text-astral-300'">{{ entry.type === 'folder' ? 'folder' : 'music_note' }}</mat-icon>
+              </span>
+            }
+            <span class="truncate p-1.5 text-xs text-slate-200">{{ entry.name }}</span>
+          </button>
+        </li>
+      }
+    </ul>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button mat-dialog-close>Cancelar</button>
+  @if (data.multiple) {
+    <button mat-flat-button [disabled]="!selected().size || busy()" (click)="confirm()">Usar {{ selected().size || '' }}</button>
+  }
+</mat-dialog-actions>

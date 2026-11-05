@@ -9,10 +9,20 @@ export interface OnlineTable extends GameTable {
   role: TableRole;
 }
 
-/** Convite gerado pelo mestre: o código aparece uma vez só (o servidor guarda só o hash). */
+/** Convite gerado pelo mestre, de uso único: aparece uma vez só (o servidor guarda só o hash). */
 export interface TableInvite {
   code: string;
+  /** Link pronto para enviar: leva o código no fragmento (depois do #). */
+  link: string;
   expiresAt: number;
+}
+
+/** Quem participa da mesa. */
+export interface TableMember {
+  userId: string;
+  name: string;
+  role: TableRole;
+  joinedAt: number;
 }
 
 /**
@@ -64,9 +74,24 @@ export class OnlineTablesService {
     this.tables.update((list) => list.filter((t) => t.id !== id));
   }
 
-  /** Gera um código de convite (mestre), válido por 7 dias. */
+  /** Gera um convite (mestre), de uso único, válido por 7 dias. */
   invite(id: string): Promise<TableInvite> {
     return this.api.post<TableInvite>(`/tables/${encodeURIComponent(id)}/invites`);
+  }
+
+  /** Quem participa da mesa. */
+  async members(id: string): Promise<TableMember[]> {
+    return (await this.api.get<{ members: TableMember[] }>(`/tables/${encodeURIComponent(id)}/members`)).members;
+  }
+
+  /** Mestre tira um jogador da mesa. */
+  async removeMember(id: string, userId: string): Promise<void> {
+    await this.api.delete(`/tables/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}`);
+  }
+
+  /** Link de retorno: o convidado que trocou de aparelho volta à mesma conta (uso único). */
+  accessLink(id: string, userId: string): Promise<TableInvite> {
+    return this.api.post<TableInvite>(`/tables/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}/access-link`);
   }
 
   /** Entra numa mesa com o código (como jogador) e a põe na lista. */

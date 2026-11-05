@@ -113,6 +113,11 @@
                   </span>
                 </button>
                 <input #imageInput type="file" accept="image/*" hidden (change)="onImagePicked(imageInput)" />
+                @if (canUseLibrary()) {
+                  <button type="button" class="-ml-3 self-end rounded p-1 text-slate-400 hover:bg-white/5 hover:text-astral-300" matTooltip="Imagem da biblioteca" aria-label="Imagem da biblioteca" (click)="pickImageFromLibrary()">
+                    <mat-icon class="!size-5 !text-xl">perm_media</mat-icon>
+                  </button>
+                }
 
                 <div class="flex min-w-0 flex-1 flex-col gap-2">
                   <label class="sheet-label">

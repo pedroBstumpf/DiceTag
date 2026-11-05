@@ -1,10 +1,13 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
+import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { DEFAULT_SOUND_VOLUME, TableEntry } from '../../../../core/models/table-session.model';
+import { ServerAccountService } from '../../../../core/services/server-account.service';
+import { LibraryPicker } from '../../../../shared/components/library-picker/library-picker';
 import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
 import { SoundMixerService } from '../../services/sound-mixer.service';
 import { TableSessionService } from '../../services/table-session.service';
@@ -32,6 +35,10 @@ export class SoundList {
   readonly session = inject(TableSessionService);
   readonly mixer = inject(SoundMixerService);
   private readonly snackBar = inject(MatSnackBar);
+  private readonly dialog = inject(MatDialog);
+  private readonly account = inject(ServerAccountService);
+  /** Mesa online, e quem olha é o dono do app: a biblioteca de arquivos está disponível. */
+  readonly canUseLibrary = computed(() => !!this.session.online() && this.account.isOwner());
 
   readonly sounds = computed(() => this.session.entries().filter((e) => e.kind === 'sound'));
   readonly renamingId = signal<string | null>(null);
@@ -69,6 +76,11 @@ export class SoundList {
   }
 
   // --- Envio de arquivos ---------------------------------------------------
+
+  /** Sons da biblioteca: viram sons da mesa, como um envio qualquer. */
+  async pickFromLibrary(): Promise<void> {
+    await this.upload(await LibraryPicker.pick(this.dialog, 'sons', true));
+  }
 
   async onPicked(input: HTMLInputElement): Promise<void> {
     await this.upload(Array.from(input.files ?? []));

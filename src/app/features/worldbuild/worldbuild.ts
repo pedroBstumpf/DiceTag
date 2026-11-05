@@ -5,11 +5,9 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { Router } from '@angular/router';
 import { WORLD_ITEM_META, WorldItemType } from '../../core/models/world-item.model';
-import { AuthService } from '../../core/services/auth.service';
 import { LayoutService } from '../../core/services/layout.service';
 import { EmptyState } from '../../shared/components/empty-state/empty-state';
 import { FloatingWindow } from '../../shared/components/floating-window/floating-window';
-import { QuickActionsService } from '../../shared/services/quick-actions.service';
 import { WindowManagerService } from '../../shared/services/window-manager.service';
 import { DocumentEditor } from './components/document-editor/document-editor';
 import { Explorer } from './components/explorer/explorer';
@@ -61,10 +59,8 @@ const URL_CREATABLE_TYPES: readonly WorldItemType[] = ['document', 'timeline', '
   host: { class: 'block h-full' },
 })
 export class Worldbuild {
-  readonly auth = inject(AuthService);
   readonly service = inject(WorldbuildService);
   readonly windows = inject(WindowManagerService);
-  readonly actions = inject(QuickActionsService);
   private readonly layout = inject(LayoutService);
   private readonly router = inject(Router);
   private readonly snackBar = inject(MatSnackBar);

@@ -1,15 +1,3 @@
-@if (!auth.isLoggedIn()) {
-  <!-- ===== Visitante: pede login ===== -->
-  <app-empty-state
-    class="h-full"
-    icon="public"
-    title="Construa seu mundo"
-    message="Entre ou crie uma conta para criar linhas do tempo, enviar mapas e escrever a história do seu mundo."
-  >
-    <button mat-flat-button (click)="actions.openAuth('register')">Criar conta</button>
-    <button mat-stroked-button (click)="actions.openAuth('login')">Entrar</button>
-  </app-empty-state>
-} @else {
   <div class="relative flex h-full">
     <!-- ===== Explorador (escondível) ===== -->
     @if (explorerOpen()) {
@@ -122,4 +110,3 @@
       }
     </section>
   </div>
-}

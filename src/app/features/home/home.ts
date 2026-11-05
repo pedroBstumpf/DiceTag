@@ -3,7 +3,7 @@ import { Component, computed, inject } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { RouterLink } from '@angular/router';
-import { AuthService } from '../../core/services/auth.service';
+import { ServerAccountService } from '../../core/services/server-account.service';
 import { MAX_WORLDS } from '../../core/models/world.model';
 import { GameTablesService } from '../../core/services/game-tables.service';
 import { WorldsService } from '../../core/services/worlds.service';
@@ -30,7 +30,7 @@ interface FeatureCard {
   templateUrl: './home.html',
 })
 export class Home {
-  readonly auth = inject(AuthService);
+  private readonly account = inject(ServerAccountService);
   readonly actions = inject(QuickActionsService);
   readonly news = inject(NewsService);
   private readonly tables = inject(GameTablesService);
@@ -38,7 +38,7 @@ export class Home {
 
   /** Saudação personalizada quando logado. */
   readonly greeting = computed(() => {
-    const name = this.auth.isGuest() ? null : this.auth.user()?.name;
+    const name = this.account.user()?.name;
     return name ? `Bem-vindo de volta, ${name}.` : 'Sua mesa de RPG online, do mundo à rolagem.';
   });
 
@@ -47,9 +47,7 @@ export class Home {
     {
       icon: 'groups',
       title: 'Mesas de jogo',
-      text: this.auth.isLoggedIn()
-        ? `Você tem ${this.tables.tables().length} mesa(s). Crie uma nova e chame seus amigos.`
-        : 'Crie mesas para suas campanhas e reúna seu grupo em um só lugar.',
+      text: `Você tem ${this.tables.tables().length} mesa(s). Crie uma nova e chame seus amigos.`,
       cta: 'Criar mesa',
       run: () => this.actions.createTable(),
     },
@@ -63,9 +61,7 @@ export class Home {
     {
       icon: 'travel_explore',
       title: 'Mundos',
-      text: this.auth.isLoggedIn()
-        ? `Você tem ${this.worlds.worlds().length} de ${MAX_WORLDS} mundos. Cada mesa se passa em um deles.`
-        : 'Cada mundo é um worldbuild próprio; cada mesa se passa em um deles.',
+      text: `Você tem ${this.worlds.worlds().length} de ${MAX_WORLDS} mundos. Cada mesa se passa em um deles.`,
       cta: 'Ver mundos',
       run: () => this.actions.openWorldbuild(),
     },

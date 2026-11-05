@@ -213,6 +213,12 @@
     <mat-icon>add_photo_alternate</mat-icon>
     <span>Cena com mapa (imagem)</span>
   </button>
+  @if (canUseLibrary()) {
+    <button mat-menu-item (click)="pickMapFromLibrary()">
+      <mat-icon>perm_media</mat-icon>
+      <span>Cena com mapa da biblioteca</span>
+    </button>
+  }
   <button mat-menu-item (click)="session.addScene()">
     <mat-icon>grid_on</mat-icon>
     <span>Cena vazia (só grade)</span>
@@ -278,6 +284,12 @@
       <mat-icon>image</mat-icon>
       <span>{{ scene.blobId ? 'Trocar mapa' : 'Adicionar mapa' }}</span>
     </button>
+    @if (canUseLibrary()) {
+      <button mat-menu-item (click)="pickMapFromLibrary(scene.id)">
+        <mat-icon>perm_media</mat-icon>
+        <span>Mapa da biblioteca</span>
+      </button>
+    }
     @if (isGm()) {
       <button mat-menu-item [matMenuTriggerFor]="moveMenu" [matMenuTriggerData]="{ scene: scene }">
         <mat-icon>drive_file_move</mat-icon>

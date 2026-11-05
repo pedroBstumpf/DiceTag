@@ -7,7 +7,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/router';
-import { AuthService } from '../../core/services/auth.service';
+import { ServerAccountService, shortAccountId } from '../../core/services/server-account.service';
 import { GameTablesService } from '../../core/services/game-tables.service';
 import { WorldsService } from '../../core/services/worlds.service';
 import { LayoutService } from '../../core/services/layout.service';
@@ -35,18 +35,25 @@ interface NavLink {
 })
 export class Sidebar {
   readonly layout = inject(LayoutService);
-  readonly auth = inject(AuthService);
+  readonly account = inject(ServerAccountService);
   private readonly actions = inject(QuickActionsService);
   private readonly tables = inject(GameTablesService);
   private readonly router = inject(Router);
   private readonly snackBar = inject(MatSnackBar);
 
   // --- Páginas -------------------------------------------------------------
-  readonly links: NavLink[] = [
-    { label: 'Início', icon: 'home', route: '/' },
-    { label: 'Minhas mesas', icon: 'groups', route: '/mesas' },
-    { label: 'Worldbuild', icon: 'public', route: '/worldbuild' },
-  ];
+  /** O convidado vê só as mesas dele; o resto é do dono do app. */
+  readonly links = computed<NavLink[]>(() => {
+    const tables: NavLink = { label: 'Minhas mesas', icon: 'groups', route: '/mesas' };
+    if (!this.account.isOwner()) return [tables];
+    return [
+      { label: 'Início', icon: 'home', route: '/' },
+      tables,
+      { label: 'Arquivos', icon: 'perm_media', route: '/arquivos' },
+      { label: 'Worldbuild', icon: 'public', route: '/worldbuild' },
+    ];
+  });
+  readonly shortId = shortAccountId;
 
   // --- Mesas do usuário (atalhos) ------------------------------------------
   /** Mesas exibidas na barra: as mais recentes primeiro. */
@@ -82,14 +89,9 @@ export class Sidebar {
 
   // --- Ações ---------------------------------------------------------------
 
-  openAuth(mode: 'login' | 'register'): void {
-    this.layout.closeMobile();
-    this.actions.openAuth(mode);
-  }
-
-  logout(): void {
-    this.auth.logout();
-    this.router.navigate(['/']);
+  async logout(): Promise<void> {
+    await this.account.logout();
+    await this.router.navigate(['/entrar']);
     this.snackBar.open('Você saiu da sua conta.');
   }
 }

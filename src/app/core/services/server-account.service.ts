@@ -1,12 +1,14 @@
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, computed, inject, signal } from '@angular/core';
 import { User } from '../models/user.model';
+import type { OnlineTable } from './online-tables.service';
 import { ServerApiService, ServerError } from './server-api.service';
 
 /**
- * Conta no servidor (sessão real, cookie HttpOnly), separada da conta local do `AuthService`.
+ * A conta do app (sessão real, cookie HttpOnly): o dono, que entra com senha, ou um convidado, que
+ * entra por um link de convite só com o nome. Não há cadastro. O token de sessão nunca chega ao
+ * JavaScript: aqui só há os dados públicos da conta (`User`).
  *
- * As telas continuam usando a conta local; esta só vale para as **mesas online**. O token de
- * sessão nunca chega ao JavaScript: aqui só há os dados públicos da conta (`User`).
+ * A conta local do `AuthService` continua existindo só como dona dos dados guardados neste navegador.
  */
 @Injectable({ providedIn: 'root' })
 export class ServerAccountService {
@@ -19,13 +21,24 @@ export class ServerAccountService {
   readonly checked = signal(false);
   /** Erro da última conferência (ex.: servidor fora do ar). */
   readonly error = signal('');
+  /** É o dono do app? */
+  readonly isOwner = computed(() => this.user()?.kind === 'owner');
+  /** Id curto, para diferenciar pessoas de mesmo nome na tela. */
+  readonly shortId = computed(() => shortAccountId(this.user()?.id ?? ''));
+  private checking: Promise<void> | null = null;
 
   /** Endereço que baixa os dados da conta (LGPD): o navegador baixa o arquivo com o cookie. */
   readonly exportUrl = '/api/auth/me/export';
 
   // --- Ações ---------------------------------------------------------------
 
-  /** Confere se o cookie ainda vale (ao abrir a página de mesas). */
+  /** Confere a sessão uma vez só por carregamento do app (as proteções de rota esperam por isto). */
+  ensureChecked(): Promise<void> {
+    this.checking ??= this.refresh();
+    return this.checking;
+  }
+
+  /** Confere se o cookie ainda vale. */
   async refresh(): Promise<void> {
     try {
       const { user } = await this.api.get<{ user: User }>('/auth/me');
@@ -46,15 +59,12 @@ export class ServerAccountService {
     this.error.set('');
   }
 
-  async register(name: string, email: string, password: string): Promise<void> {
-    const { user } = await this.api.post<{ user: User }>('/auth/register', { name: name.trim(), email: email.trim(), password });
+  /** Entra por um convite (só com o nome ou, no link de retorno, na conta que já existe). */
+  async redeem(code: string, name?: string): Promise<OnlineTable> {
+    const { user, table } = await this.api.post<{ user: User; table: OnlineTable }>('/invites/redeem', { code, ...(name && { name }) });
     this.user.set(user);
     this.error.set('');
-  }
-
-  /** Pede o link de recuperação por e-mail. A resposta não diz se o e-mail tem conta. */
-  async forgotPassword(email: string): Promise<void> {
-    await this.api.post('/auth/password/forgot', { email: email.trim() });
+    return table;
   }
 
   /** Troca a senha com o token do link (a pessoa entra de novo depois: as sessões caem). */
@@ -68,9 +78,14 @@ export class ServerAccountService {
     this.user.set(null);
   }
 
-  /** Exclui a conta do servidor e tudo o que é dela (pede a senha de novo). */
-  async deleteAccount(password: string): Promise<void> {
-    await this.api.delete('/auth/me', { password });
+  /** Exclui a conta e tudo o que é dela (o dono confirma com a senha; o convidado não tem senha). */
+  async deleteAccount(password?: string): Promise<void> {
+    await this.api.delete('/auth/me', password ? { password } : {});
     this.user.set(null);
   }
+}
+
+/** Id curto de uma conta (`#a1b2c3`): aparece ao lado do nome. */
+export function shortAccountId(id: string): string {
+  return id ? `#${id.replace(/-/g, '').slice(0, 6)}` : '';
 }

@@ -286,6 +286,8 @@ export class TableSessionService extends SheetStore {
     const online = this.online();
     return online ? { id: online.userId, name: online.name } : this.auth.user();
   });
+  /** Id da conta atual (a do servidor, na mesa online). */
+  readonly accountId = computed(() => this.me()?.id);
   /**
    * Habilidades dos NPCs-referência: moram no NPC do mundo e aparecem aqui como ações
    * do NPC (valem em todas as mesas do mundo).

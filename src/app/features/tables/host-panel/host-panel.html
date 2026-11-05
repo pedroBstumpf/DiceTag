@@ -1,0 +1,73 @@
+@if (status(); as s) {
+  <section class="flex flex-wrap items-center gap-4 rounded-2xl border border-white/5 bg-ink-900 p-4 animate-fade-in" [class.!border-emerald-500/30]="s.state === 'open'">
+    <span class="grid size-11 shrink-0 place-items-center rounded-xl" [class]="s.state === 'open' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-white/5 text-slate-400'">
+      <mat-icon>{{ s.state === 'open' ? 'public' : 'public_off' }}</mat-icon>
+    </span>
+
+    <div class="min-w-48 flex-1">
+      @switch (s.state) {
+        @case ('open') {
+          <h2 class="font-display text-lg text-emerald-300">Mesa aberta para os jogadores</h2>
+          <p class="text-sm text-slate-400">Só entra quem tem um convite. Ao fechar a janela do app, a mesa sai da internet.</p>
+          <div class="mt-2 flex items-center gap-2">
+            <code class="min-w-0 truncate rounded-lg bg-ink-950 px-2 py-1 text-sm text-slate-100">{{ s.url }}</code>
+            <button mat-icon-button matTooltip="Copiar endereço" aria-label="Copiar endereço" (click)="copy(s.url!)">
+              <mat-icon>content_copy</mat-icon>
+            </button>
+          </div>
+        }
+        @case ('closed') {
+          <h2 class="font-display text-lg text-slate-100">Mesa fechada</h2>
+          <p class="text-sm text-slate-400">{{ s.message || 'Só você vê o app, neste computador. Abra quando for narrar.' }}</p>
+        }
+        @case ('approval') {
+          <h2 class="font-display text-lg text-star-300">Falta aprovar uma vez</h2>
+          <p class="text-sm text-slate-400">
+            O Tailscale pede que você autorize o Funnel na sua conta.
+            <a class="text-astral-300 underline" [href]="s.approvalUrl" target="_blank" rel="noopener noreferrer">Abrir a página de aprovação</a>.
+            A mesa abre sozinha em seguida.
+          </p>
+        }
+        @case ('logged-out') {
+          <h2 class="font-display text-lg text-star-300">Entre na sua conta do Tailscale</h2>
+          <p class="text-sm text-slate-400">
+            Abra o Tailscale neste computador e conecte a sua conta.
+            @if (s.approvalUrl) {
+              <a class="text-astral-300 underline" [href]="s.approvalUrl" target="_blank" rel="noopener noreferrer">Conectar agora</a>.
+            }
+          </p>
+        }
+        @case ('not-installed') {
+          <h2 class="font-display text-lg text-star-300">Falta instalar o Tailscale</h2>
+          <p class="text-sm text-slate-400">
+            É ele que leva os jogadores até este computador, sem abrir portas no roteador. É gratuito:
+            <a class="text-astral-300 underline" href="https://tailscale.com/download" target="_blank" rel="noopener noreferrer">baixar o Tailscale</a>,
+            instalar e entrar com uma conta. Depois, inicie o app de novo.
+          </p>
+        }
+        @case ('unavailable') {
+          <h2 class="font-display text-lg text-slate-100">Mesa fechada</h2>
+          <p class="text-sm text-slate-400">{{ s.message }}</p>
+        }
+        @default {
+          <h2 class="font-display text-lg text-red-300">A mesa não abriu</h2>
+          <p class="text-sm text-slate-400">{{ s.message }}</p>
+        }
+      }
+    </div>
+
+    @if (s.state === 'open' && local()) {
+      <button mat-stroked-button class="!h-11" [disabled]="host.busy()" (click)="close()">
+        <mat-icon>public_off</mat-icon>
+        Fechar a mesa
+      </button>
+    } @else if (s.state === 'closed' && local()) {
+      <button mat-flat-button class="!h-11" [disabled]="host.busy()" (click)="open()">
+        <mat-icon>public</mat-icon>
+        {{ host.busy() ? 'Abrindo…' : 'Abrir para os jogadores' }}
+      </button>
+    } @else if (s.state === 'closed' || s.state === 'open') {
+      <p class="max-w-52 text-xs text-slate-500">Para abrir ou fechar, use o app no computador onde ele está rodando.</p>
+    }
+  </section>
+}

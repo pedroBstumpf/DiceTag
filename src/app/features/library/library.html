@@ -1,0 +1,193 @@
+<div
+  class="mx-auto flex min-h-full max-w-6xl flex-col gap-5 px-4 py-6 transition-colors sm:px-8 sm:py-10"
+  [class.bg-astral-500/5]="dragOver()"
+  (dragover)="onDragOver($event)"
+  (dragleave)="dragOver.set(false)"
+  (drop)="onDrop($event)"
+>
+  <!-- ===== Cabeçalho ===== -->
+  <header class="flex flex-wrap items-end justify-between gap-4">
+    <div>
+      <h1 class="font-display text-3xl text-slate-100">Arquivos</h1>
+      <p class="mt-1 text-sm text-slate-400">Suas imagens e seus sons. Arraste arquivos ou pastas para cá, ou coloque direto na pasta do computador.</p>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      <button mat-stroked-button class="!h-11" (click)="creating.set(true)">
+        <mat-icon>create_new_folder</mat-icon>
+        Nova pasta
+      </button>
+      <button mat-flat-button class="!h-11" (click)="fileInput.click()">
+        <mat-icon>upload</mat-icon>
+        Enviar arquivos
+      </button>
+      <input #fileInput type="file" multiple hidden accept="image/*,audio/*,.mp3,.ogg,.oga,.opus,.wav,.flac,.m4a,.m4b,.aac,.weba" (change)="onPicked(fileInput)" />
+    </div>
+  </header>
+
+  <!-- ===== A única pasta do computador que o app enxerga ===== -->
+  @if (library.root(); as root) {
+    <section class="flex flex-wrap items-center gap-3 rounded-xl border border-white/5 bg-ink-900 px-4 py-3 text-sm">
+      <mat-icon class="shrink-0" [class]="library.sandboxed() ? 'text-emerald-300' : 'text-star-300'">{{ library.sandboxed() ? 'verified_user' : 'shield' }}</mat-icon>
+      <div class="min-w-48 flex-1">
+        <p class="text-slate-300">O app só tem acesso a esta pasta do seu computador:</p>
+        <code class="break-all text-xs text-slate-400">{{ root }}</code>
+        <p class="mt-0.5 text-xs" [class]="library.sandboxed() ? 'text-emerald-300/80' : 'text-star-300/80'">
+          {{ library.sandboxed() ? 'Proteção do sistema ativa: o servidor não consegue ler nem gravar fora dela.' : 'Modo de desenvolvimento: só o código protege. Use "Iniciar mesa" para a proteção do sistema.' }}
+        </p>
+      </div>
+      @if (host.status()?.local && host.status()?.state !== 'unavailable') {
+        <button mat-stroked-button (click)="openInExplorer()">
+          <mat-icon>folder_open</mat-icon>
+          Abrir a pasta
+        </button>
+      }
+    </section>
+  }
+
+  <!-- ===== Imagens / Sons + busca ===== -->
+  <div class="flex flex-wrap items-center gap-3">
+    <div class="grid grid-cols-2 rounded-xl bg-ink-950 p-1 text-sm font-medium">
+      @for (s of sections; track s.id) {
+        <button
+          type="button"
+          class="flex items-center justify-center gap-2 rounded-lg px-4 py-2 transition-colors"
+          [class]="section() === s.id ? 'bg-ink-700 text-white shadow' : 'text-slate-400 hover:text-slate-200'"
+          (click)="openSection(s.id)"
+        >
+          <mat-icon class="!size-5 !text-xl">{{ s.icon }}</mat-icon>
+          {{ s.label }}
+          <span class="text-xs text-slate-500">{{ countOf(s.id) }}</span>
+        </button>
+      }
+    </div>
+    <div class="flex h-10 min-w-48 flex-1 items-center gap-2 rounded-xl bg-ink-950 px-3 ring-1 ring-white/5">
+      <mat-icon class="!size-5 shrink-0 !text-xl text-slate-500">search</mat-icon>
+      <input #searchInput class="min-w-0 flex-1 bg-transparent text-sm text-slate-100 outline-none" placeholder="Buscar nesta seção" aria-label="Buscar nesta seção" [value]="search()" (input)="search.set(searchInput.value)" />
+    </div>
+  </div>
+
+  <!-- ===== Caminho da pasta aberta ===== -->
+  @if (!search()) {
+    <nav class="flex flex-wrap items-center gap-1 text-sm" aria-label="Pasta aberta">
+      @for (crumb of crumbs(); track crumb.path; let last = $last) {
+        <button
+          type="button"
+          class="rounded-md px-2 py-1 transition-colors hover:bg-white/5"
+          [class]="last ? 'text-slate-100' : 'text-slate-400'"
+          (click)="openFolder(crumb.path)"
+          (dragover)="allowDrop($event)"
+          (drop)="dropOnFolder(crumb.path, $event)"
+        >
+          {{ crumb.name }}
+        </button>
+        @if (!last) {
+          <mat-icon class="!size-4 !text-base text-slate-600">chevron_right</mat-icon>
+        }
+      }
+    </nav>
+  }
+
+  <!-- ===== Andamento dos envios ===== -->
+  @if (library.progress(); as p) {
+    <div class="flex items-center gap-3 rounded-xl border border-astral-500/30 bg-astral-500/10 p-3 text-sm text-astral-300 animate-fade-in">
+      <mat-spinner diameter="20" />
+      Enviando: {{ p.done }} de {{ p.total }}
+    </div>
+  }
+
+  <!-- ===== Nova pasta ===== -->
+  @if (creating()) {
+    <form class="flex items-center gap-2 rounded-xl bg-ink-900 p-2 animate-fade-in" (submit)="$event.preventDefault(); createFolder(newFolder.value)">
+      <mat-icon class="ml-2 text-star-300">folder</mat-icon>
+      <input #newFolder appAutoFocus maxlength="120" class="h-9 min-w-0 flex-1 rounded bg-ink-950 px-2 text-sm text-slate-100 outline-none ring-1 ring-astral-500/60" placeholder="Nome da pasta" aria-label="Nome da pasta" (keydown.escape)="creating.set(false)" />
+      <button mat-flat-button type="submit">Criar</button>
+      <button mat-button type="button" (click)="creating.set(false)">Cancelar</button>
+    </form>
+  }
+
+  <!-- ===== Conteúdo ===== -->
+  @if (!library.loaded()) {
+    <div class="flex justify-center py-16"><mat-spinner diameter="32" /></div>
+  } @else if (!visible().length) {
+    <app-empty-state
+      [icon]="section() === 'imagens' ? 'image' : 'graphic_eq'"
+      [title]="search() ? 'Nada encontrado' : 'Nada aqui ainda'"
+      [message]="search() ? 'Tente outro nome.' : 'Arraste para cá arquivos ou pastas inteiras.'"
+    />
+  } @else {
+    <ul class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+      @for (entry of visible(); track entry.path) {
+        <li
+          class="group relative flex flex-col overflow-hidden rounded-xl border border-white/5 bg-ink-900 transition-colors hover:border-white/15"
+          draggable="true"
+          (dragstart)="onItemDragStart(entry, $event)"
+          (dragover)="entry.type === 'folder' && allowDrop($event)"
+          (drop)="entry.type === 'folder' && dropOnFolder(entry.path, $event)"
+        >
+          @if (entry.type === 'folder') {
+            <button type="button" class="grid aspect-[4/3] place-items-center bg-ink-850 text-star-300" [attr.aria-label]="'Abrir a pasta ' + entry.name" (click)="openFolder(entry.path)">
+              <mat-icon class="!size-12 !text-5xl">folder</mat-icon>
+            </button>
+          } @else if (entry.section === 'imagens') {
+            <div class="aspect-[4/3] bg-ink-950">
+              <img [src]="fileUrl(entry)" [alt]="entry.name" loading="lazy" draggable="false" class="size-full object-cover" />
+            </div>
+          } @else {
+            <div class="flex aspect-[4/3] flex-col items-center justify-center gap-2 bg-ink-850 p-2">
+              @if (playing() === entry.path) {
+                <audio controls autoplay class="w-full" [src]="fileUrl(entry)" (ended)="playing.set(null)"></audio>
+              } @else {
+                <button mat-icon-button [attr.aria-label]="'Ouvir ' + entry.name" (click)="playing.set(entry.path)">
+                  <mat-icon class="text-astral-300">play_arrow</mat-icon>
+                </button>
+              }
+            </div>
+          }
+
+          <div class="flex items-center gap-1 p-2">
+            @if (renaming() === entry.path) {
+              <input
+                #renameInput
+                appAutoFocus
+                maxlength="120"
+                class="h-7 min-w-0 flex-1 rounded bg-ink-950 px-1 text-sm text-slate-100 outline-none ring-1 ring-astral-500/60"
+                [attr.aria-label]="'Novo nome de ' + entry.name"
+                [value]="nameWithoutExtension(entry)"
+                (keydown.enter)="rename(entry, renameInput.value)"
+                (keydown.escape)="renaming.set(null)"
+                (blur)="rename(entry, renameInput.value)"
+              />
+            } @else {
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-sm text-slate-200" [matTooltip]="entry.name">{{ entry.name }}</p>
+                @if (entry.type === 'file') {
+                  <p class="text-xs text-slate-500">{{ entry.size / 1048576 | number: '1.1-1' }} MB</p>
+                }
+              </div>
+            }
+            <button mat-icon-button class="!size-8 shrink-0 !p-1" [matMenuTriggerFor]="menu" [attr.aria-label]="'Opções de ' + entry.name">
+              <mat-icon class="!text-xl">more_vert</mat-icon>
+            </button>
+            <mat-menu #menu="matMenu" xPosition="before">
+              <button mat-menu-item (click)="renaming.set(entry.path)">
+                <mat-icon>edit</mat-icon>
+                <span>Renomear</span>
+              </button>
+              <button mat-menu-item (click)="remove(entry)">
+                <mat-icon class="!text-red-400">delete</mat-icon>
+                <span>Apagar do computador</span>
+              </button>
+            </mat-menu>
+          </div>
+        </li>
+      }
+    </ul>
+  }
+
+  <p class="text-xs text-slate-500">
+    Até {{ library.maxUploadMb() }} MB por arquivo.
+    @if (library.ignored()) {
+      {{ library.ignored() }} item(ns) na pasta não aparecem aqui: outros tipos de arquivo, nomes não aceitos ou atalhos, que o app não segue.
+    }
+  </p>
+</div>
