@@ -28,6 +28,8 @@ Complementa o [`ARCHITECTURE.md`](ARCHITECTURE.md) (como o app é hoje) e o [`CL
 
 ---
 
+> **Decisão de produto (v0.4.0):** o app é só por convite e roda no computador do dono (`npm run mesa` + Tailscale Funnel). Ver `server/OPERATIONS.md` §1.
+
 ## 1. Sincronização em tempo real e conflitos
 
 ### Problema

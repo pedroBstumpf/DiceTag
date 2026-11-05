@@ -7,6 +7,31 @@ pode trazer mudanças incompatíveis. Como versionar e organizar as branches: `R
 
 ## [Não publicado]
 
+## [0.4.0] — 2026-11-05
+
+O app passa a ser só por convite e a rodar no computador de quem o possui.
+
+### Adicionado
+- **`npm run mesa` e `Iniciar mesa.cmd`:** iniciam tudo com um comando. O botão **Abrir para os jogadores** coloca a mesa na internet pelo
+  Tailscale Funnel, sem abrir portas, e fechar a janela a tira de lá.
+- **Convites:** link de uso único; o amigo entra só com um nome, sem cadastro nem senha. Link de retorno para quem troca de aparelho.
+- **Arquivos:** biblioteca de imagens e sons, em pastas, numa pasta real do computador; também pelo Explorador do Windows, e
+  disponível na mesa para mapas, sons e imagens de ficha.
+- `npm run dono`: cria o dono ou troca os dados dele, inclusive a senha.
+
+### Mudado
+- **Sem cadastro.** Só o dono entra com senha e cria mesas e mundos. Sem conta, tudo leva à página de entrada.
+- O que é do dono fica em `Documentos\Cronicas de Zehenia`, fora do repositório.
+
+### Segurança
+- O servidor roda isolado pelo modelo de permissões do Node: não lê nem grava fora da pasta do app e não executa programas.
+- Abrir e fechar a mesa só valem do próprio computador, mesmo com a senha do dono.
+- Caminhos da biblioteca conferidos contra saída da pasta, inclusive por atalhos.
+- Limites menores de envio para convidados.
+
+### Corrigido
+- "Vincular à minha conta" e "é meu" na ficha comparavam com a conta local: não funcionavam na mesa online.
+
 ## [0.3.0] — 2026-11-04
 
 A mesa online passa a funcionar de verdade entre duas máquinas.
@@ -58,7 +83,8 @@ A mesa online passa a funcionar de verdade entre duas máquinas.
   mesa de jogo (mapa em camadas, vista isométrica, névoa, tokens, desenhos, efeitos), fichas de
   personagem e NPC, automações, rolagens, chat e sons.
 
-[Não publicado]: https://github.com/pedroBStumpf/DiceTag/compare/v0.3.0...HEAD
+[Não publicado]: https://github.com/pedroBStumpf/DiceTag/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/pedroBStumpf/DiceTag/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/pedroBStumpf/DiceTag/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/pedroBStumpf/DiceTag/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/pedroBStumpf/DiceTag/releases/tag/v0.1.0

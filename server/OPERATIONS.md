@@ -6,16 +6,20 @@ Guia para publicar e manter o servidor (`server/`) em produção. Complementa o
 
 ---
 
-## 1. Onde hospedar
+## 1. Onde roda
 
-O servidor precisa de um processo sempre ligado (WebSocket) e de disco que não se apaga (banco SQLite e arquivos). Serve
-uma VPS ou uma plataforma com volume persistente; não servem hospedagens "serverless" nem as que apagam o disco a cada
-publicação. Sugestão de início: 1 a 2 GB de memória (cada login usa ~128 MB por um instante).
+**No computador do dono, com `npm run mesa`:** o servidor fica em `127.0.0.1`, sem porta aberta no roteador, e o Tailscale Funnel leva os
+jogadores até ele. Os jogadores só usam o navegador. A mesa só fica no ar enquanto a janela estiver aberta.
 
-**Não abra uma porta do seu computador para a internet.** O jogo não precisa disso: há um servidor só, e os jogadores
-conectam nele pelo navegador, sem instalar nem abrir nada. Hospedar em casa com redirecionamento de porta expõe o seu IP e
-a sua rede, torna o seu computador parte do alvo de qualquer falha e deixa o jogo fora do ar quando ele desliga. Para um
-teste rápido entre amigos sem contratar nada, prefira um túnel (Cloudflare Tunnel, Tailscale), que não abre porta.
+- **Isolamento:** o servidor roda com `--permission` do Node (`scripts/lib/app-env.ts`): só lê o próprio código, o app e a pasta do app; só
+  grava nessa pasta; não executa programas. `npm run e2e` prova isso rodando uma sondagem com as mesmas permissões. É uma camada
+  de defesa do processo, não um contêiner: o [Node avisa](https://nodejs.org/api/permissions.html) que ela não protege contra código já
+  malicioso carregado, como um pacote adulterado; por isso as dependências têm versões exatas e scripts de instalação bloqueados.
+- **Exposição:** enquanto a mesa estiver aberta, a página de entrada é pública. O endereço `*.ts.net` aparece em registros públicos de
+  certificados, então robôs podem achá-lo: por isso não há cadastro, e o login e os convites têm limite de taxa.
+- **Hábitos:** feche a mesa ao terminar; use uma senha longa; não rode o app como administrador; mantenha o Windows, o Node e o Tailscale atualizados.
+
+Numa VPS, o caminho é o da seção seguinte: `NODE_ENV=production` com proxy e HTTPS. **Não abra portas do computador pessoal.**
 
 **Por que só SQLite:** ele guarda contas, mesas e o mundo, e os arquivos ficam em disco (`FILES_DIR`), com o banco só
 referenciando cada um. É o bastante para um servidor só. Um banco externo só passa a valer com mais de uma instância, o
@@ -141,10 +145,11 @@ invalida todas as senhas. Nunca registre `process.env` em log.
 
 | Risco | Por que foi aceito | Quando rever |
 |---|---|---|
-| O cadastro responde 409 para e-mail já usado (dá para saber se um e-mail tem conta) | Sem e-mail de verificação, não há como esconder sem quebrar o cadastro; há limite por IP | Quando houver verificação por e-mail |
 | Arquivo de mundo pode ser baixado por qualquer membro de mesa daquele mundo que tenha o id | O id é um UUID aleatório (122 bits) que só chega a quem pode ver o item; a regra do §8 (membro da mesa) é cumprida | Se ids passarem a vazar (ex.: links compartilhados) |
 | O jogador recebe a imagem inteira do mapa (a névoa é desenhada por cima) | Decisão do SPEC §3.1, como nos VTTs mais usados; recortar por jogador é caro | Se virar problema nas mesas |
-| Cadastro aberto, sem verificação de e-mail: qualquer um cria conta e usa a cota de arquivos | Há limite por IP e cota por conta; com poucos usuários, o disco aguenta | **Antes de abrir ao público:** verificação de e-mail ou cadastro só por convite |
+| Quem recebe um convite e o repassa pode entrar no lugar do amigo | O link vale uma vez e o nome aparece na mesa; o mestre tira quem não reconhecer | Se a mesa crescer |
+| A sessão do convidado dura 180 dias, sem senha | Ele não tem como entrar de novo sozinho; o cookie é HttpOnly, e o dono encerra o acesso tirando-o da mesa | Se os convidados usarem aparelhos compartilhados |
+| O Tailscale Funnel é beta e tem limite de banda não divulgado | É gratuito, sem porta aberta e sem VPS | Se a banda atrapalhar as sessões |
 | Duas pessoas editando a mesma ficha ao mesmo tempo: vale a última gravação | A ficha ainda é gravada inteira; quase sempre só o dono a edita | Com os comandos por campo (SPEC §1) |
 | A memória da névoa (áreas exploradas) é gravada pelo cliente do mestre | Só o mestre pode gravá-la; calcular no servidor exige o tamanho do mapa (SPEC §1) | Na ligação do front ao servidor |
 | Limites de taxa e de login em memória | Um processo só | Se rodar mais de uma instância (usar um armazenamento compartilhado, como Redis) |

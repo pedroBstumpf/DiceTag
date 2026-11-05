@@ -61,7 +61,8 @@ src/
     ├── layout/             # Shell (barra lateral + conteúdo) e Sidebar
     └── features/           # uma pasta por área do app (rotas lazy)
         ├── home/           # landing
-        ├── auth/           # diálogo Entrar/Criar conta
+        ├── auth/           # entrada do dono, convite e redefinir a senha
+        ├── library/        # página Arquivos: biblioteca do dono
         ├── tables/         # "Minhas mesas" + diálogo de criação
         ├── worldbuild/     # Worldbuild do mundo aberto (o usuário tem até 2 mundos)
         └── game-table/     # mesa de jogo (a maior feature)
@@ -81,7 +82,7 @@ A regra **não é verificada automaticamente** e hoje tem três exceções conhe
 
 | De → para | O que é importado | Por quê |
 |---|---|---|
-| `shared` → `features` | `QuickActionsService` importa `AuthDialog` e `CreateTableDialog` | as ações rápidas (barra lateral e Home) abrem esses diálogos |
+| `shared` → `features` | `QuickActionsService` importa `CreateTableDialog` | as ações rápidas (barra lateral e Home) abrem esses diálogos |
 | `game-table` → `worldbuild` | editores, `Explorer`, `ItemCardView`, `RaceCard`, diretiva `appWorldNpcSheet`, `WorldbuildService` | abrir a lore e os itens do mundo sem sair da mesa |
 | `worldbuild` → `game-table` | `CharacterSheetView` e `BlobUrlService` | a ficha base dos NPCs do bestiário é a mesma tela da mesa |
 
@@ -99,7 +100,7 @@ features/<feature>/
 └── utils/                  # funções puras + *.spec.ts
 ```
 
-Features pequenas não seguem tudo: `auth/auth-dialog/` e `tables/create-table-dialog/` ficam direto na
+Features pequenas não seguem tudo: `auth/sign-in/`, `auth/invite/` e `tables/create-table-dialog/` ficam direto na
 pasta da feature, sem `components/`.
 
 ---
@@ -110,13 +111,16 @@ Definidas em [`app.routes.ts`](src/app/app.routes.ts); **todas as páginas são 
 
 | Rota | Componente | Contêiner |
 |---|---|---|
-| `''` | `Home` | `Shell` |
+| `entrar`, `convite`, `redefinir-senha` | `SignIn`, `Invite`, `ResetPassword` (abertas) | tela cheia, **fora** do `Shell` |
+| `''` | `Home` (só o dono) | `Shell` |
 | `mesas` | `Tables` | `Shell` |
+| `arquivos` | `Library` (só o dono) | `Shell` |
 | `worldbuild` | `Worldbuild` (aceita `?novo=<tipo>` e `?abrir=<id>`) | `Shell` |
 | `mesa/:id` | `GameTablePage` | tela cheia, **fora** do `Shell` |
 | `mesa-online/:id` | `GameTablePage` com `data: { online: true }` (mesa do servidor) | tela cheia, **fora** do `Shell` |
 | `**` | redireciona para `''` | — |
 
+Sem conta, tudo leva a `entrar` (`core/guards/account.guards.ts`). As proteções só organizam a tela: quem decide é o servidor.
 `withComponentInputBinding()` entrega os parâmetros e os dados da rota como `input()` (ex.: `GameTablePage.id` e
 `GameTablePage.online`).
 A mesa fica fora do `Shell` para ocupar a tela inteira; o chunk dela (`game-table`) só é baixado ao
@@ -474,6 +478,15 @@ regras de segurança em [`BACKEND_SECURITY.md`](BACKEND_SECURITY.md) e operaçã
   mesma origem da API, num processo só. A lista de arquivos é montada ao subir (nada da URL vira caminho no
   disco); rotas sem extensão caem no `index.html`; `/api`, `/ws` e `/dev` nunca caem no app. CSP própria
   (`frontendCsp`): scripts só do servidor, estilos inline permitidos (Angular/Material/Tiptap), Google Fonts.
+
+- **Só por convite:** dono (terminal) e convidados (`/invites/redeem`), ver `CLAUDE.md` §7. Sem rota de cadastro.
+- **Rodando de verdade (`npm run mesa`):** dois processos. O principal cuida do túnel; o servidor, compilado e com `--permission` do
+  Node, só alcança a pasta do app e não executa programas. Conversam por IPC, com operações fixas (`services/host-control.ts`):
+  ```
+  navegador ── Tailscale Funnel ── 127.0.0.1:3000 ── servidor isolado ── IPC ── scripts/mesa.ts ── tailscale
+                                                          └── Documentos\Cronicas de Zehenia (dados, arquivos, biblioteca)
+  ```
+- **Biblioteca** (`services/library.service.ts`, `security/library-path.ts`): pasta real do dono; os jogadores só recebem cópias enviadas à mesa.
 
 ## 12. Rumo ao backend
 
