@@ -45,6 +45,15 @@ export class WorldsService {
 
   // --- Ações ---------------------------------------------------------------
 
+  /** Mundos deste navegador que têm algo guardado (um mundo vazio não precisa aparecer ao lado dos do servidor). */
+  async withContent(): Promise<World[]> {
+    const userId = this.userId;
+    if (!userId) return [];
+    const list = this._worlds();
+    const items = await Promise.all(list.map((w) => this.storage.get<WorldItem[]>(worldbuildKey(userId, w.id))));
+    return list.filter((_, i) => !!items[i]?.length);
+  }
+
   /** Abre outro mundo (o Worldbuild recarrega os itens dele). Id desconhecido é ignorado. */
   select(id: string): void {
     if (!this._worlds().some((w) => w.id === id)) return;

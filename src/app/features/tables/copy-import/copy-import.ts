@@ -5,6 +5,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { BrowserCopyService, CopyImportResult } from '../../../core/services/browser-copy.service';
 import { OnlineTablesService } from '../../../core/services/online-tables.service';
 import { ServerAccountService } from '../../../core/services/server-account.service';
+import { ServerWorldsService } from '../../../core/services/server-worlds.service';
 import { BrowserCopy, COPY_EXTENSION, CopyContents, CopyWorld, copyContents, readCopy } from '../../../core/utils/browser-copy';
 
 /**
@@ -21,6 +22,7 @@ export class CopyImport {
   private readonly copies = inject(BrowserCopyService);
   private readonly account = inject(ServerAccountService);
   private readonly online = inject(OnlineTablesService);
+  private readonly serverWorlds = inject(ServerWorldsService);
 
   readonly accept = COPY_EXTENSION;
   readonly progress = this.copies.progress;
@@ -102,6 +104,7 @@ export class CopyImport {
       this.imported.emit();
       // Já importou: se a lista não recarregar agora, isso não é uma falha da importação
       await this.copies.load(() => this.online.load()).catch(() => undefined);
+      await this.serverWorlds.load();
     } catch (e) {
       this.error.set(e instanceof Error ? e.message : 'Não foi possível importar.');
     } finally {

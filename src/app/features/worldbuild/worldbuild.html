@@ -1,4 +1,4 @@
-  <div class="relative flex h-full">
+  <div class="relative flex h-full" [class.invisible]="resolving()">
     <!-- ===== Explorador (escondível) ===== -->
     @if (explorerOpen()) {
       <aside

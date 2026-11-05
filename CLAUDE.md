@@ -142,6 +142,7 @@ src/
     │   │   ├── browser-copy.service.ts # salva a cópia do navegador e a traz ao servidor
     │   │   ├── server-account.service.ts # conta do servidor (cookie HttpOnly): entrar, sair, exportar, excluir
     │   │   ├── online-tables.service.ts  # mesas online: listar, criar, excluir, convidar, entrar, sair
+    │   │   ├── server-worlds.service.ts # lista dos mundos do servidor (barra lateral, Worldbuild) e o último aberto
     │   │   ├── worlds.service.ts       # mundos do usuário (lista, aberto, criar/renomear/excluir) + spec
     │   │   ├── layout.service.ts       # barra lateral (recolhida/mobile)
     │   │   └── news.service.ts         # notícias (vazio por enquanto)
@@ -246,7 +247,7 @@ http/routes/frontend.ts   # entrega o app compilado (FRONTEND_DIR): lista fixa d
 
 Rotas (`app.routes.ts`, todas lazy):
 - Abertas: `entrar` · `convite` · `redefinir-senha`. O resto exige conta (`accountGuard`); Home, Arquivos, Worldbuild e `mesa/:id` são só do dono (`ownerGuard`).
-- `''` (Shell) → `''` Home · `mesas` Tables · `arquivos` Library · `worldbuild` Worldbuild do mundo aberto (aceita `?novo=<tipo>`, `?abrir=<id>` e `?servidor=<id do mundo>`) · `redefinir-senha` recuperação de senha.
+- `''` (Shell) → `''` Home · `mesas` Tables · `arquivos` Library · `worldbuild` Worldbuild do mundo aberto (aceita `?novo=<tipo>`, `?abrir=<id>`, `?servidor=<id do mundo>` e `?local=1`) · `redefinir-senha` recuperação de senha.
 - `mesa/:id` → GameTablePage (tela cheia, **fora** do Shell)
 - `mesa-online/:id` → a mesma GameTablePage com `data: { online: true }` (mesa do servidor)
 - `**` → redireciona para `''`
@@ -415,6 +416,10 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - Arquivos soltos no explorador: apenas imagens são aceitas.
 
 ### Mundos (`WorldsService`, `core/`)
+- **Com a conta do dono, o Worldbuild é o do servidor:** a barra lateral lista os mundos do servidor (`ServerWorldsService`) e `/worldbuild`
+  sem parâmetro vai ao último usado (`Worldbuild.goToServerWorld`; enquanto decide, `resolving` esconde a tela e impede criar itens ou
+  gravar janelas no mundo local). Mundos locais só aparecem em "Neste navegador" se tiverem conteúdo, e abrem com `?local=1`.
+  Sem servidor, ou sem mundos nele, vale o mundo local, como abaixo.
 - Cada usuário tem até **`MAX_WORLDS` = 2** mundos; cada um é um Worldbuild separado (`worldbuild:<usuário>:<mundo>`).
   O primeiro (`DEFAULT_WORLD_ID`, "Meu mundo") usa a chave antiga `worldbuild:<usuário>`: nada foi migrado.
   Lista em `worlds:<usuário>` (sem lista salva = só o primeiro); o mundo aberto fica em `localStorage dicetag.world.<usuário>`.
@@ -929,6 +934,7 @@ O `MapStage` recebe `insets` para enquadrar o mapa só na área livre entre as b
 | `desk:<userId>:<worldId>` | `OpenWindow[]`: janelas da mesa de trabalho do Worldbuild daquele mundo (posição, tamanho, estado) |
 | `localStorage: dicetag.session` | id do usuário logado |
 | `localStorage: dicetag.world.<userId>` | último mundo aberto pelo usuário |
+| `localStorage: dicetag.serverWorld` | último mundo do servidor aberto |
 | `localStorage: dicetag.sidebarCollapsed` | preferência da barra lateral |
 
 O banco e as chaves do `localStorage` mantêm o prefixo `dicetag` (nome antigo do projeto) — assim como o prefixo

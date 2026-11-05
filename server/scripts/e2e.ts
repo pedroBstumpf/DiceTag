@@ -299,6 +299,18 @@ function jpegWithExif(): Buffer {
   return Buffer.concat([pixel.subarray(0, 2), app1, pixel.subarray(2)]);
 }
 
+/**
+ * Espera o limite de requisições por minuto folgar. O teste roda contra o limite real do servidor e
+ * faz muito mais chamadas que uma pessoa: seções que dependem de telas carregando começam por aqui.
+ */
+async function calm(page: Page): Promise<void> {
+  for (let i = 0; i < 16; i++) {
+    const remaining = await page.eval<number>(`fetch('/api/auth/me').then((r) => Number(r.headers.get('x-ratelimit-remaining')))`);
+    if (!(remaining < 150)) return;
+    await sleep(5000);
+  }
+}
+
 /** Capturas de tela para conferir o visual, se E2E_SHOTS disser onde guardar. */
 async function shot(page: Page, name: string): Promise<void> {
   if (process.env['E2E_SHOTS']) await page.screenshot(join(process.env['E2E_SHOTS'], `${name}.png`));
@@ -734,11 +746,55 @@ async function run(gm: Page, player: Page, cdp: Cdp): Promise<void> {
   );
   check(listed, 'e continua lá depois de recarregar');
 
-  section('Mundo deste navegador enviado ao servidor');
+  section('Worldbuild da barra lateral');
+  const localBefore = () =>
+    gm.eval<number>(`new Promise((resolve) => {
+      const open = indexedDB.open('dicetag');
+      open.onsuccess = () => {
+        const read = open.result.transaction('kv').objectStore('kv').get('worldbuild:guest');
+        read.onsuccess = () => resolve((read.result ?? []).length);
+      };
+    })`);
+  await calm(gm);
+  await gm.goto(`${BASE}/`);
+  await gm.waitText('Início');
+  const localCount = await localBefore();
+  const { worlds: serverList } = await gm.api('GET', '/worlds');
+  const worldName: string = serverList.find((w: { id: string }) => w.id === worldId).name;
+  await until(async () => (await gm.eval<string>(`document.querySelector('app-sidebar').innerText`)).includes(worldName), 'mundo na barra', 5000).catch(() => undefined);
+  check(await gm.clickButton(worldName), 'a barra lateral lista o mundo do servidor');
+  check(await gm.waitText('Planos do mestre'), 'e ele abre com um clique, com o conteúdo do servidor');
+  check((await gm.eval<string>('location.search')).includes(`servidor=${worldId}`), 'no endereço do mundo do servidor');
   await gm.goto(`${BASE}/worldbuild`);
+  const redirected = await until(async () => (await gm.eval<string>('location.search')).includes(`servidor=${worldId}`), 'ir ao mundo do servidor', 6000).then(
+    () => true,
+    () => false,
+  );
+  check(redirected, 'o link Worldbuild, sem parâmetro, vai ao mundo do servidor');
+  await gm.goto(`${BASE}/worldbuild?novo=folder`);
+  const viaUrl = await until(async () => {
+    const { items } = await gm.api('GET', `/worlds/${worldId}/items`);
+    return items.filter((i: { name: string }) => i.name.startsWith('Nova pasta')).length === 2;
+  }, 'pasta pelo endereço', 6000).then(
+    () => true,
+    () => false,
+  );
+  check(viaUrl, 'criar pelo endereço grava no servidor');
+  check((await localBefore()) === localCount, 'e nada entra por engano no mundo deste navegador');
+  await shot(gm, 'worldbuild');
+  await gm.api('POST', `/worlds/${worldId}/items/delete`, {
+    ids: (await gm.api('GET', `/worlds/${worldId}/items`)).items.filter((i: { name: string }) => i.name === 'Nova pasta 2').map((i: { id: string }) => i.id),
+  });
+
+  section('Mundo deste navegador enviado ao servidor');
+  await gm.goto(`${BASE}/worldbuild?local=1`);
   await gm.waitText('Meu mundo');
-  const worldLocal = await gm.text();
-  check(!worldLocal.includes('Planos do mestre'), 'sem o parâmetro, a página volta ao mundo deste navegador');
+  await sleep(800);
+  const localExplorer = await gm.eval<string>(`document.querySelector('app-explorer').innerText`);
+  check(
+    localExplorer.includes('Meu mundo') && !localExplorer.includes('Planos do mestre') && (await gm.eval<string>('location.search')).includes('local=1'),
+    'com ?local=1, o mundo deste navegador continua acessível, sem redirecionar',
+  );
   await gm.clickButton('Nova pasta');
   await sleep(700);
   await gm.goto(`${BASE}/mesas`);
@@ -763,6 +819,11 @@ async function run(gm: Page, player: Page, cdp: Cdp): Promise<void> {
     };
   })`);
   check(localKept, 'e continua intacto neste navegador');
+  await calm(gm);
+  await gm.goto(`${BASE}/`);
+  // O título é em caixa alta por CSS, e innerText devolve como aparece na tela
+  check(await gm.waitText('NESTE NAVEGADOR'), 'com conteúdo, ele aparece na barra lateral, em separado');
+  await shot(gm, 'barra');
 
   section('Cópia do navegador levada ao servidor');
   await gm.goto(`${BASE}/mesas`);
@@ -784,6 +845,7 @@ async function run(gm: Page, player: Page, cdp: Cdp): Promise<void> {
           chat: [{ id: 'msg-local', author: 'Mestre', role: 'gm', userId: 'guest', at: 1, text: 'Sessão antiga' }],
         }, 'table-state:mesa-local');
         kv.put(map, 'blob:mapa-local');
+        kv.put([{ id: 'default', name: 'Mundo do navegador', createdAt: 1 }], 'worlds:guest');
         tx.oncomplete = () => resolve(true);
         tx.onerror = () => reject(tx.error);
       };
@@ -811,6 +873,11 @@ async function run(gm: Page, player: Page, cdp: Cdp): Promise<void> {
   const { tables: afterCopy } = await gm.api('GET', '/tables');
   const broughtTable = afterCopy.find((t: { name: string }) => t.name === 'Mesa do navegador');
   check(!!broughtTable, 'a mesa local virou mesa online');
+  const worldInSidebar = await until(async () => (await gm.eval<string>(`document.querySelector('app-sidebar').innerText`)).includes('Mundo do navegador'), 'mundo importado na barra', 5000).then(
+    () => true,
+    () => false,
+  );
+  check(worldInSidebar, 'o mundo importado aparece na barra lateral, sem recarregar');
   await gm.openRoom(broughtTable.id);
   const brought = await gm.eval<any>('window.__replies.find((m) => m.t === "welcome").state');
   const broughtMap: string | undefined = brought.scenes[0].blobId;

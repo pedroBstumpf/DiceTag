@@ -16,6 +16,8 @@ pode trazer mudanças incompatíveis. Como versionar e organizar as branches: `R
 - As mesas trazidas mantêm cenas, fichas, tokens, ações e histórico. Personagens chegam sem dono, para cada amigo vincular o dele.
 
 ### Corrigido
+- O Worldbuild da barra lateral abria um "Meu mundo" vazio, guardado no navegador. Agora, com a conta do dono, a barra lista os mundos do
+  servidor e o link abre o último usado; mundos locais com conteúdo aparecem em "Neste navegador".
 - `ng serve` executado dentro de `server/` gerava o app sem estilos: o Tailwind agora procura as classes sempre em `src/`.
 
 ## [0.4.0] — 2026-11-05
