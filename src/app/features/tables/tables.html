@@ -13,18 +13,30 @@
   }
   <app-online-tables />
 
-  <!-- ===== Mesas guardadas só neste navegador (dono) ===== -->
-  @if (account.isOwner()) {
+  <!-- ===== Mesas guardadas só neste navegador (dono; sem servidor, só o dono usa o `ng serve`) ===== -->
+  @if (account.isOwner() || account.error()) {
     <section class="flex flex-col gap-4 border-t border-white/5 pt-6">
       <header class="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 class="font-display text-2xl text-slate-100">Neste navegador</h2>
           <p class="mt-1 text-sm text-slate-400">Mesas de preparo, sem jogadores: ficam guardadas só aqui.</p>
         </div>
-        <button mat-stroked-button class="!h-11" (click)="actions.createTable()">
-          <mat-icon>add</mat-icon>
-          Nova mesa local
-        </button>
+        <div class="flex flex-wrap gap-2">
+          <button
+            mat-stroked-button
+            class="!h-11"
+            [disabled]="copies.saving()"
+            matTooltip="Baixa um arquivo com os mundos, as mesas e as imagens deste navegador. Nada é apagado."
+            (click)="saveCopy()"
+          >
+            <mat-icon>save</mat-icon>
+            Salvar cópia
+          </button>
+          <button mat-stroked-button class="!h-11" (click)="actions.createTable()">
+            <mat-icon>add</mat-icon>
+            Nova mesa local
+          </button>
+        </div>
       </header>
   @if (!service.tables().length) {
     <app-empty-state

@@ -1,6 +1,6 @@
 {
   "name": "cronicas-de-zehenia-server",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "description": "Back-end do Crônicas de Zehenia: API HTTP + sala da mesa por WebSocket.",

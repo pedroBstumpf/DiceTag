@@ -1,0 +1,99 @@
+<!-- Hidden: o botão abre a escolha do arquivo -->
+<input #file type="file" class="hidden" [accept]="accept" data-copy-file (change)="open(file)" />
+
+@if (!contents() && !result()) {
+  <div class="flex flex-wrap items-center gap-3 rounded-2xl border border-white/5 bg-ink-900/60 p-4">
+    <mat-icon class="text-astral-300">drive_folder_upload</mat-icon>
+    <p class="min-w-48 flex-1 text-sm text-slate-300">
+      Tem mundos ou mesas em outro navegador ou endereço? Traga por uma cópia salva em "Neste navegador".
+    </p>
+    <button mat-stroked-button type="button" [disabled]="working()" (click)="file.click()">
+      <mat-icon>upload_file</mat-icon>
+      Importar cópia
+    </button>
+    @if (progress(); as text) {
+      <span class="w-full text-sm text-slate-400" aria-live="polite">{{ text }}</span>
+    }
+  </div>
+}
+
+@if (error()) {
+  <p class="rounded-xl border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-300" role="alert">{{ error() }}</p>
+}
+
+<!-- ===== O que há na cópia ===== -->
+@if (contents(); as found) {
+  <section class="flex flex-col gap-4 rounded-2xl border border-astral-400/30 bg-ink-900 p-4 animate-fade-in" data-copy-panel>
+    <header>
+      <h3 class="font-display text-lg text-slate-100">O que trazer para o servidor</h3>
+      <p class="text-sm text-slate-400">Cópia de {{ copy()?.createdAt | date: 'dd/MM/yyyy HH:mm' }}. O arquivo e o navegador de origem não mudam.</p>
+    </header>
+
+    @if (!found.worlds.length && !found.tables.length) {
+      <p class="text-sm text-slate-400">Esta cópia não tem mundos nem mesas.</p>
+    }
+
+    @if (found.worlds.length) {
+      <div class="flex flex-col gap-2">
+        <span class="sheet-label">Mundos</span>
+        @for (world of found.worlds; track world.key) {
+          <label class="flex items-start gap-3 text-sm text-slate-200">
+            <input type="checkbox" class="mt-1 accent-astral-400" [checked]="pickedWorlds().has(world.key)" [disabled]="working()" (change)="toggleWorld(world.key)" />
+            <span>
+              {{ world.name }} <span class="text-slate-500">({{ world.items.length }} {{ world.items.length === 1 ? 'item' : 'itens' }})</span>
+              @if (existingWorlds().has(world.key)) {
+                <span class="block text-xs text-amber-300">Já há um mundo com esse nome no servidor. Trazer de novo substitui os itens iguais pela versão da cópia.</span>
+              }
+            </span>
+          </label>
+        }
+      </div>
+    }
+
+    @if (found.tables.length) {
+      <div class="flex flex-col gap-2">
+        <span class="sheet-label">Mesas</span>
+        @for (entry of found.tables; track entry.table.id) {
+          <label class="flex items-start gap-3 text-sm text-slate-200">
+            <input type="checkbox" class="mt-1 accent-astral-400" [checked]="pickedTables().has(entry.table.id)" [disabled]="working()" (change)="toggleTable(entry.table.id)" />
+            <span>
+              {{ entry.table.name }} <span class="text-slate-500">(em {{ worldNameOf(entry.worldKey, found.worlds) }})</span>
+              @if (existingTables().has(entry.table.id)) {
+                <span class="block text-xs text-amber-300">Já há uma mesa com esse nome no servidor. Trazer de novo cria outra igual.</span>
+              }
+            </span>
+          </label>
+        }
+        <p class="text-xs text-slate-500">Personagens ficam sem dono: cada amigo usa "Vincular à minha conta" na ficha dele.</p>
+      </div>
+    }
+
+    <footer class="flex flex-wrap items-center gap-3">
+      <button mat-flat-button type="button" [disabled]="working() || nothingPicked()" (click)="run()">
+        <mat-icon>cloud_upload</mat-icon>
+        Importar
+      </button>
+      <button mat-button type="button" [disabled]="working()" (click)="reset()">Cancelar</button>
+      @if (progress(); as text) {
+        <span class="text-sm text-slate-400" aria-live="polite">{{ text }}</span>
+      }
+    </footer>
+  </section>
+}
+
+<!-- ===== Resultado ===== -->
+@if (result(); as done) {
+  <section class="flex flex-col gap-2 rounded-2xl border border-white/10 bg-ink-900 p-4 text-sm text-slate-200 animate-fade-in" data-copy-result>
+    <h3 class="font-display text-lg text-slate-100">Cópia importada</h3>
+    <p>{{ done.worlds }} mundo(s), {{ done.tables }} mesa(s), {{ done.items }} item(ns) e {{ done.files }} arquivo(s).</p>
+    @if (done.failedItems || done.failedFiles) {
+      <p class="text-amber-300">
+        Ficaram de fora {{ done.failedItems }} item(ns) e {{ done.failedFiles }} arquivo(s), recusados pelo servidor (tipo não aceito ou acima do limite).
+      </p>
+    }
+    @for (problem of done.problems; track problem) {
+      <p class="text-red-300">{{ problem }}</p>
+    }
+    <div><button mat-button type="button" (click)="reset()">Fechar</button></div>
+  </section>
+}

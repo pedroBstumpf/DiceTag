@@ -53,6 +53,12 @@ export class StorageService {
     await this.request(store.delete(key));
   }
 
+  /** Todas as chaves guardadas (para a cópia do navegador). */
+  async keys(): Promise<string[]> {
+    const store = await this.store('readonly');
+    return (await this.request<IDBValidKey[]>(store.getAllKeys())).map(String);
+  }
+
   // --- Internos ------------------------------------------------------------
 
   /** Abre o banco uma única vez e reaproveita a conexão. */

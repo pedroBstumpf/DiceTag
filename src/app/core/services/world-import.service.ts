@@ -40,6 +40,15 @@ export class WorldImportService {
     const user = this.auth.user();
     if (!user) throw new ServerError(0, 'Ninguém está usando o app neste navegador.');
     const items = (await this.storage.get<WorldItem[]>(worldbuildKey(user.id, localWorldId))) ?? [];
+    return this.send(items, (id) => this.localFiles.get(id), serverWorldId);
+  }
+
+  /** Envia itens e imagens de qualquer origem (este navegador ou uma cópia). Devolve também os ids novos das imagens. */
+  async send(
+    items: WorldItem[],
+    fileOf: (blobId: string) => Promise<Blob | undefined>,
+    serverWorldId: string,
+  ): Promise<WorldImportResult & { newIds: ReadonlyMap<string, string> }> {
     const result: WorldImportResult = { items: 0, files: 0, failedItems: 0, failedFiles: 0 };
     const worldPath = `/worlds/${encodeURIComponent(serverWorldId)}/items`;
     const files = new ServerFileStore(this.api, { worldId: serverWorldId });
@@ -49,7 +58,7 @@ export class WorldImportService {
       const newIds = new Map<string, string>();
       for (const [i, blobId] of blobIds.entries()) {
         this.progress.set(`Enviando imagens: ${i + 1} de ${blobIds.length}`);
-        const blob = await this.localFiles.get(blobId);
+        const blob = await fileOf(blobId);
         const saved = blob && (await this.retry(() => files.put(blob)).catch(() => null));
         if (saved) {
           newIds.set(blobId, saved);
@@ -68,14 +77,14 @@ export class WorldImportService {
         if (sent) result.items++;
         else result.failedItems++;
       }
-      return result;
+      return { ...result, newIds };
     } finally {
       this.progress.set('');
     }
   }
 
   /** Repete quando o servidor pede para esperar (limite de envios por minuto). */
-  private async retry<T>(call: () => Promise<T>): Promise<T> {
+  async retry<T>(call: () => Promise<T>): Promise<T> {
     for (let attempt = 0; ; attempt++) {
       try {
         return await call();

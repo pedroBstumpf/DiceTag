@@ -39,6 +39,7 @@ organizar toda a atmosfera de uma campanha.
 | **Rolagem de dados** (2d12: falha crítica…sucesso crítico; 3d6: azar/neutro/sorte) + **chat** da mesa | Pronto |
 | **Efeitos especiais** no mapa (20 efeitos em 4 grupos; 13 cores por elemento) | Pronto |
 | **Servidor** (`server/`: API HTTP + sala da mesa por WebSocket, SQLite, contas/convites reais, visão no servidor, LGPD, backup) | Pronto, testado, auditado contra o `BACKEND_SECURITY.md` |
+| **Cópia do navegador** (arquivo `.zehenia`): leva mundos, mesas e imagens de um endereço ou navegador para o servidor | Pronto; testado com uma cópia de dados reais |
 | **Mesa online**: conta do servidor, convites, mesa ligada à sala (WebSocket), Worldbuild e bestiário no servidor, sons, pings e efeitos em tempo real | Pronto (testado com dois navegadores: `npm run e2e` em `server/`) |
 | **Recuperação de senha** da conta do servidor (por e-mail ou por `npm run reset-link`) e remoção de metadados (EXIF) das imagens enviadas | Pronto |
 | Front-end usando o servidor em tudo (contas e mesas locais substituídas) | Não iniciado: as duas coisas convivem |
@@ -138,12 +139,14 @@ src/
     │   │   ├── library.service.ts      # biblioteca do dono: listar, enviar, mover, apagar
     │   │   ├── host.service.ts         # abrir e fechar a mesa aos jogadores
     │   │   ├── world-import.service.ts # envia ao servidor um mundo guardado neste navegador + spec
+    │   │   ├── browser-copy.service.ts # salva a cópia do navegador e a traz ao servidor
     │   │   ├── server-account.service.ts # conta do servidor (cookie HttpOnly): entrar, sair, exportar, excluir
     │   │   ├── online-tables.service.ts  # mesas online: listar, criar, excluir, convidar, entrar, sair
     │   │   ├── worlds.service.ts       # mundos do usuário (lista, aberto, criar/renomear/excluir) + spec
     │   │   ├── layout.service.ts       # barra lateral (recolhida/mobile)
     │   │   └── news.service.ts         # notícias (vazio por enquanto)
     │   └── utils/id.ts                 # newId() com fallback fora de HTTPS
+    │       utils/browser-copy.ts       # formato do arquivo .zehenia, conteúdo e ajustes da mesa para o servidor + spec
     │       utils/file-name.ts          # uploadName: nome com extensão coerente para o servidor + spec
     │       utils/image-metadata.ts     # tira EXIF/XMP/IPTC de JPEG, PNG e WebP antes do envio + spec
     ├── shared/                 # reutilizável entre features
@@ -168,7 +171,7 @@ src/
         ├── auth/invite/        # entrada do convidado, pelo link (rota convite)
         ├── auth/reset-password/ # página aberta pelo link de recuperação de senha
         ├── library/            # página Arquivos: imagens e sons, em pastas
-        ├── tables/             # "Minhas mesas" + create-table-dialog + online-tables + host-panel (abrir a mesa)
+        ├── tables/             # "Minhas mesas" + create-table-dialog + online-tables + host-panel (abrir a mesa) + copy-import (trazer uma cópia)
         ├── worldbuild/
         │   ├── worldbuild.ts           # página: explorador (com seletor de mundo) + área de janelas
         │   ├── services/worldbuild.service.ts   # itens e mesa de trabalho do mundo aberto; migração de timelines antigas
@@ -442,6 +445,17 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - **Pastas de cenas** (`TableState.sceneFolders`, `Scene.folderId`; só o mestre organiza): na barra superior, cada
   pasta é um botão que abre a lista das cenas dela (a cena aberta aparece como "Pasta › Cena"); cenas fora de
   pastas são abas. Excluir a pasta mantém as cenas (saem da pasta). Renomear cena de pasta: campo no botão da pasta.
+
+### Cópia do navegador (`.zehenia`) — `utils/browser-copy.ts`, `BrowserCopyService`, `CopyImport`
+- O IndexedDB é separado por endereço, e o servidor do `npm run mesa` só aceita a própria origem: o que foi criado em
+  `localhost:4200` não chega a ele direto. Por isso a passagem é um arquivo, **sem relaxar a checagem de origem**.
+- **Salvar** ("Neste navegador" → "Salvar cópia"): só lê. Leva `tables`, `worlds:*`, `worldbuild:*`, `table-state:*` e `blob:*` (`isCopyKey`);
+  **nunca `users`** (hashes das senhas locais). A seção aparece também sem servidor (`ng serve` sozinho).
+- **Importar** (Mesas online → "Importar cópia", só o dono): só acrescenta. Mundo vai para o de mesmo nome, senão um vazio (renomeado), senão
+  um novo (limite de `MAX_WORLDS`). **Ids dos itens são mantidos** (a mesa acha NPCs, itens e pastas reveladas por eles); os de arquivos
+  são regerados. O que parece já estar no servidor vem desmarcado. Mesa que falha é removida.
+- **Mesa:** `stateForServer` troca arquivos e contas: personagem fica **sem dono** (o amigo usa "Vincular à minha conta"), o controle de NPC
+  é tirado e o resto passa ao dono. `PUT /tables/:id/state` só aceita o dono do app, mesa sem estado e sala fechada: nunca sobrescreve uma partida.
 
 ### Iniciar a mesa (`npm run mesa`, `Iniciar mesa.cmd`)
 - **Pasta do app** (`scripts/lib/app-env.ts`): `Documentos\Cronicas de Zehenia` (ou `ZEHENIA_HOME`), FORA do repositório: `dados/`

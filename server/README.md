@@ -201,6 +201,7 @@ experimental no Node. Os scripts já o escondem.
 | `GET/POST /tables` · `GET/PATCH/DELETE /tables/:id` | Mesas da conta (como mestre ou jogador) |
 | `GET /tables/:id/members` · `DELETE /tables/:id/members/:userId` | Membros (mestre remove, jogador sai) |
 | `POST/DELETE /tables/:id/invites` · `POST /invites/redeem` · `POST /invites/accept` | Convites (uso único, mostrados uma vez, 7 dias); `redeem` é pública: entra só com o nome |
+| `PUT /tables/:id/state` | Estado de uma mesa trazida de uma cópia (só o dono do app, só em mesa ainda não usada) |
 | `POST /tables/:id/members/:userId/access-link` | Link de retorno: devolve ao convidado a mesma conta |
 | `GET /library` · `/library/file` · `POST /library/files` · `/folders` · `/move` · `/delete` | Biblioteca do dono (só ele) |
 | `GET /host` · `POST /host/open` · `/close` · `/open-folder` | Abrir a mesa aos jogadores (só o dono; alterar, só deste computador) |

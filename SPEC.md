@@ -208,7 +208,7 @@ O que dava para preparar (regras e visão como funções puras, sorteio injetáv
 
 | Item | Por que importa | Quando |
 |---|---|---|
-| **Exportar/importar mesa e Worldbuild** (arquivo com estado + arquivos em base64, ids de arquivos regerados ao importar) | Única proteção contra o usuário limpar os dados do site; vira a ferramenta de migração dos dados locais para o servidor | **Antes do back-end** (é o caminho de migração) |
+| **Exportar/importar mesa e Worldbuild** | Feito na v0.5.0 como cópia inteira do navegador (`.zehenia`, sem base64): ver `CLAUDE.md` §7. Exportar uma mesa do servidor continua pendente. |
 | **Arquivos esquecidos ao excluir uma mesa:** `purgeTableData` não apaga as imagens das camadas, as imagens personalizadas de inventário nem as das cópias de ficha dos tokens | Ocupa espaço sem uso; no servidor, vira custo de armazenamento | Ao criar o `FilesRepository` (§2), ou antes, se o espaço virar problema |
 | **Ciclo entre features** `game-table` ↔ `worldbuild` (a ficha da mesa é usada no bestiário) e `shared` → `features` (`QuickActionsService`) | Dificulta separar módulos e verificar a regra de dependências | Antes de crescer mais: mover `BlobUrlService` para `shared/`; expor cada feature por um `index.ts`; tirar a ficha de `game-table` |
 | **Verificação automática das dependências** entre camadas | Hoje a regra só existe no papel | Junto com o item anterior. Sugestão sem dependências novas: script Node no `prebuild` |
@@ -220,7 +220,7 @@ O que dava para preparar (regras e visão como funções puras, sorteio injetáv
 
 ## 5. Ordem sugerida da fase de back-end
 
-1. Exportar/importar (§4): garante a migração dos dados locais.
+1. ~~Exportar/importar (§4)~~: feito (cópia do navegador).
 2. `FilesRepository` e `AuthGateway` (§2), com autenticação real e convites (o papel vem da conta).
 3. `TablesRepository` e `WorldRepository` (§2).
 4. Ajustes nos comandos (§1: "definir" em vez de alternar, fichas por campo, transferência atômica).
