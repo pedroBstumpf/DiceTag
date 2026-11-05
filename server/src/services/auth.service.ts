@@ -4,7 +4,7 @@ import { HttpError, badRequest, conflict } from '../lib/errors';
 import { newId } from '../lib/ids';
 import type { PasswordResetsRepository } from '../repositories/password-resets';
 import type { SessionsRepository } from '../repositories/sessions';
-import type { PublicUser, UsersRepository } from '../repositories/users';
+import type { PublicUser, UserKind, UsersRepository } from '../repositories/users';
 import type { WorldsRepository } from '../repositories/worlds';
 import { LoginThrottle } from '../security/login-throttle';
 import { passwordProblem, type PasswordHasher } from '../security/password';
@@ -27,7 +27,8 @@ const RESET_COOLDOWN_MS = 2 * 60_000;
 const RESET_INVALID = 'Este link é inválido ou já venceu. Peça outro em "Esqueci minha senha".';
 
 /**
- * Contas e sessões: cadastro, login, logout, troca de senha e validação do token de sessão.
+ * Contas e sessões. **Não há cadastro público:** o dono do app é criado pelo terminal
+ * (`npm run dono`), e todos os demais entram por um convite (`createGuest`), só com um nome.
  *
  * - Login com mensagem única para e-mail inexistente e senha errada, e o mesmo tempo de
  *   resposta nos dois casos (`dummyVerify`): não dá para descobrir quais e-mails têm conta.
@@ -59,19 +60,49 @@ export class AuthService {
 
   // --- Cadastro e login --------------------------------------------------------
 
-  async register(input: { name: string; email: string; password: string }): Promise<{ user: PublicUser; token: string }> {
+  /**
+   * Cria o dono do app ou, se ele já existe, troca o nome, o e-mail e a senha dele. Só é chamado
+   * pelo terminal de quem tem acesso à máquina (`npm run dono`); nenhuma rota chega aqui.
+   */
+  async setOwner(input: { name: string; email: string; password: string }): Promise<PublicUser> {
+    const owner = this.users.owner();
+    if (!owner) return (await this.createAccount(input, 'owner')).user;
+    const problem = passwordProblem(input.password, input.email);
+    if (problem) throw badRequest(problem);
+    const hash = await this.hasher.hash(input.password);
+    transaction(this.db, () => {
+      if (input.email !== owner.email && this.users.emailTaken(input.email)) throw conflict('Esse e-mail já está em uso.');
+      this.users.updateOwner(owner.id, input.name, input.email);
+      this.users.setPasswordHash(owner.id, hash);
+      this.sessions.deleteAllForUser(owner.id);
+    });
+    return { ...owner, name: input.name, email: input.email };
+  }
+
+  /** Conta com e-mail e senha. Só para uso interno: dono, dados de exemplo e testes. */
+  async createAccount(input: { name: string; email: string; password: string }, kind: UserKind): Promise<{ user: PublicUser; token: string }> {
     const problem = passwordProblem(input.password, input.email);
     if (problem) throw badRequest(problem);
     // Hash antes da transação (é lento e não precisa segurar o banco)
     const passwordHash = await this.hasher.hash(input.password);
     const now = this.now();
-    const user: PublicUser = { id: newId(), name: input.name, email: input.email, createdAt: now };
+    const user: PublicUser = { id: newId(), name: input.name, email: input.email, kind, createdAt: now };
     transaction(this.db, () => {
       if (this.users.emailTaken(input.email)) throw conflict('Não foi possível criar a conta com esse e-mail.');
       this.users.create({ ...user, passwordHash });
-      this.worlds.create({ id: newId(), ownerId: user.id, name: FIRST_WORLD_NAME, createdAt: now });
+      if (kind === 'owner') this.worlds.create({ id: newId(), ownerId: user.id, name: FIRST_WORLD_NAME, createdAt: now });
     });
-    return { user, token: this.openSession(user.id) };
+    return { user, token: this.openSession(user) };
+  }
+
+  /** Conta de convidado, só com o nome (quem chama já conferiu o convite, na mesma transação). */
+  createGuest(name: string): PublicUser {
+    return this.users.createGuest(newId(), name, this.now());
+  }
+
+  /** Abre uma sessão para quem apresentou um convite válido. */
+  sessionFor(user: PublicUser): string {
+    return this.openSession(user);
   }
 
   /** `ip`: de onde veio a tentativa (o atraso crescente conta e-mail + IP e só o e-mail). */
@@ -89,7 +120,7 @@ export class AuthService {
     this.throttle.succeed(email, ip);
     // Custo do hash mudou desde o cadastro: refaz agora que temos a senha
     if (this.hasher.needsRehash(found.passwordHash)) this.users.setPasswordHash(found.user.id, await this.hasher.hash(password));
-    return { user: found.user, token: this.openSession(found.user.id) };
+    return { user: found.user, token: this.openSession(found.user) };
   }
 
   logout(token: string): void {
@@ -117,7 +148,7 @@ export class AuthService {
     return transaction(this.db, () => {
       this.users.setPasswordHash(session.user.id, hash);
       this.sessions.deleteAllForUser(session.user.id);
-      return this.openSession(session.user.id);
+      return this.openSession(session.user);
     });
   }
 
@@ -173,12 +204,11 @@ export class AuthService {
     const session = this.sessions.find(tokenHash);
     if (!session) return null;
     const now = this.now();
-    if (session.expiresAt <= now || session.lastSeenAt + this.idleMs <= now) {
+    const user = this.users.findById(session.userId);
+    if (!user || !this.isAlive(session, user, now)) {
       this.sessions.delete(tokenHash);
       return null;
     }
-    const user = this.users.findById(session.userId);
-    if (!user) return null;
     if (now - session.lastSeenAt > TOUCH_EVERY_MS) this.sessions.touch(tokenHash, now);
     return { user, tokenHash };
   }
@@ -186,13 +216,22 @@ export class AuthService {
   /** A sessão (pelo hash) ainda vale? Conferido periodicamente nas conexões WebSocket. */
   stillValid(tokenHash: string): boolean {
     const session = this.sessions.find(tokenHash);
-    const now = this.now();
-    return !!session && session.expiresAt > now && session.lastSeenAt + this.idleMs > now;
+    const user = session && this.users.findById(session.userId);
+    return !!session && !!user && this.isAlive(session, user, this.now());
   }
 
-  /** Duração máxima do cookie, em segundos. */
-  get sessionMaxAgeSeconds(): number {
-    return this.config.SESSION_TTL_HOURS * 3600;
+  /** Dentro do prazo total e, para quem tem senha, do prazo de inatividade. */
+  private isAlive(session: { expiresAt: number; lastSeenAt: number }, user: PublicUser, now: number): boolean {
+    return session.expiresAt > now && (user.kind === 'guest' || session.lastSeenAt + this.idleMs > now);
+  }
+
+  /** Duração máxima do cookie da conta, em segundos. */
+  sessionMaxAgeSeconds(user: PublicUser): number {
+    return this.sessionTtlMs(user) / 1000;
+  }
+
+  private sessionTtlMs(user: PublicUser): number {
+    return user.kind === 'guest' ? this.config.GUEST_SESSION_DAYS * 86_400_000 : this.config.SESSION_TTL_HOURS * 3_600_000;
   }
 
   /** Apaga sessões e pedidos de recuperação vencidos (rodado periodicamente pelo servidor). */
@@ -205,10 +244,10 @@ export class AuthService {
     return this.config.SESSION_IDLE_HOURS * 3_600_000;
   }
 
-  private openSession(userId: string): string {
+  private openSession(user: PublicUser): string {
     const token = this.tokens.generate();
     const now = this.now();
-    this.sessions.create(this.tokens.hash(token, 'session'), userId, now, now + this.config.SESSION_TTL_HOURS * 3_600_000);
+    this.sessions.create(this.tokens.hash(token, 'session'), user.id, now, now + this.sessionTtlMs(user));
     return token;
   }
 }

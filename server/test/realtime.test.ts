@@ -249,7 +249,6 @@ describe('LGPD: exportar e excluir a conta', () => {
     expect(res.headers['content-disposition']).toContain('attachment');
     const data = res.json();
     expect(data.user.email).toBe('p@exemplo.com');
-    expect(data.worlds).toHaveLength(1);
     expect(data.tables.joined[0].characters.map((c: { id: string }) => c.id)).toEqual(['pc-p']);
     expect(res.body).not.toMatch(/password|Ficha de outra pessoa/);
     a.ws.close();

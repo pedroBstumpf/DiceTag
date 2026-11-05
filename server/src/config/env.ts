@@ -34,6 +34,9 @@ const schema = z.object({
 
   DATABASE_PATH: z.string().min(1).default('./data/zehenia.db'),
   FILES_DIR: z.string().min(1).default('./data/files'),
+  /** Biblioteca do dono: a pasta com `imagens/` e `sons/`, a única do computador que o app enxerga. */
+  LIBRARY_DIR: z.string().min(1).default('./data/biblioteca'),
+  LIBRARY_MAX_UPLOAD_MB: z.coerce.number().int().min(1).max(4096).default(500),
 
   /** Origens (esquema + host + porta) autorizadas a chamar a API e abrir o WebSocket. */
   ALLOWED_ORIGINS: z.string().default('http://localhost:4200,http://localhost:3000,http://127.0.0.1:3000'),
@@ -58,12 +61,17 @@ const schema = z.object({
 
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(24 * 30).default(24 * 7),
   SESSION_IDLE_HOURS: z.coerce.number().int().min(1).max(24 * 7).default(24),
+  /** Sessão de convidado: ele não tem senha, então vale até este prazo (ou até o dono tirá-lo da mesa). */
+  GUEST_SESSION_DAYS: z.coerce.number().int().min(1).max(365).default(180),
 
   MAX_UPLOAD_MB: z.coerce.number().int().min(1).max(100).default(10),
   /** Espaço total de arquivos por conta. */
   USER_QUOTA_MB: z.coerce.number().int().min(10).max(10_000).default(500),
   /** Espaço total de arquivos por mesa (somando os de todos os membros). */
   TABLE_QUOTA_MB: z.coerce.number().int().min(1).max(100_000).default(2000),
+  /** Limites do convidado: é o disco do dono que está em jogo. */
+  GUEST_QUOTA_MB: z.coerce.number().int().min(1).max(10_000).default(100),
+  GUEST_MAX_UPLOAD_MB: z.coerce.number().int().min(1).max(100).default(10),
 
   /**
    * Pasta do app Angular já compilado (`npm run build` na raiz) para o servidor entregar junto com a

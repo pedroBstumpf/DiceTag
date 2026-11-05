@@ -8,6 +8,7 @@ import type { FastifyBaseLogger } from 'fastify';
  */
 export type SecurityEvent =
   | 'conta.criada'
+  | 'convite.usado'
   | 'login.ok'
   | 'login.falha'
   | 'login.bloqueado'
@@ -26,7 +27,7 @@ export type SecurityEvent =
   | 'ws.comando_negado';
 
 /** Eventos esperados no uso normal (nível info); os demais são suspeitos ou recusas (warn). */
-const ROUTINE: ReadonlySet<SecurityEvent> = new Set(['conta.criada', 'login.ok', 'sessao.encerrada', 'sessoes.encerradas', 'senha.trocada', 'senha.recuperacao_pedida', 'senha.redefinida', 'conta.excluida']);
+const ROUTINE: ReadonlySet<SecurityEvent> = new Set(['conta.criada', 'convite.usado', 'login.ok', 'sessao.encerrada', 'sessoes.encerradas', 'senha.trocada', 'senha.recuperacao_pedida', 'senha.redefinida', 'conta.excluida']);
 
 export function audit(log: FastifyBaseLogger, event: SecurityEvent, data: Record<string, unknown> = {}): void {
   const entry = { security: event, ...data };

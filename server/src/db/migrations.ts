@@ -110,4 +110,13 @@ export const MIGRATIONS: readonly string[] = [
   ) STRICT;
   CREATE INDEX password_resets_user ON password_resets(user_id);
   `,
+  // 3 — o app tem um dono (a conta mais antiga, em bancos que já existiam) e convidados sem senha;
+  // o índice garante, no próprio banco, que nunca haverá dois donos. Convite com `target_user_id`
+  // é um "link de retorno": devolve a uma conta existente o acesso perdido.
+  `
+  ALTER TABLE users ADD COLUMN kind TEXT NOT NULL DEFAULT 'guest' CHECK (kind IN ('owner', 'guest'));
+  UPDATE users SET kind = 'owner' WHERE id = (SELECT id FROM users ORDER BY created_at, rowid LIMIT 1);
+  CREATE UNIQUE INDEX users_one_owner ON users(kind) WHERE kind = 'owner';
+  ALTER TABLE table_invites ADD COLUMN target_user_id TEXT REFERENCES users(id) ON DELETE CASCADE;
+  `,
 ];

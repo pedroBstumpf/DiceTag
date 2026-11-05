@@ -1,18 +1,32 @@
 import type { Db } from '../db/database';
 
+/** Dono do app (único, entra com senha) ou convidado (entra por link, sem senha nem e-mail). */
+export type UserKind = 'owner' | 'guest';
+
 /** Conta como vista pelo cliente (nunca inclui o hash da senha). */
 export interface PublicUser {
   id: string;
   name: string;
+  /** Vazio nos convidados, que não têm e-mail. */
   email: string;
+  kind: UserKind;
   createdAt: number;
 }
+
+/**
+ * Prefixo do "e-mail" guardado nos convidados: a coluna é obrigatória e única, e este valor nunca
+ * passa pela validação de e-mail do login, então não há como entrar com ele.
+ */
+const GUEST_EMAIL_PREFIX = 'convidado:';
+/** "Hash" dos convidados: não é um hash válido, então nenhuma senha confere. */
+const NO_PASSWORD = '!';
 
 interface UserRow {
   id: string;
   email: string;
   name: string;
   password_hash: string;
+  kind: UserKind;
   created_at: number;
 }
 
@@ -25,8 +39,25 @@ export class UsersRepository {
 
   create(user: PublicUser & { passwordHash: string }): void {
     this.db
-      .prepare('INSERT INTO users (id, email, name, password_hash, created_at) VALUES (?, ?, ?, ?, ?)')
-      .run(user.id, user.email, user.name, user.passwordHash, user.createdAt);
+      .prepare('INSERT INTO users (id, email, name, password_hash, kind, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(user.id, user.email, user.name, user.passwordHash, user.kind, user.createdAt);
+  }
+
+  /** Conta de convidado: só nome e id, sem e-mail nem senha. */
+  createGuest(id: string, name: string, now: number): PublicUser {
+    this.create({ id, name, email: GUEST_EMAIL_PREFIX + id, kind: 'guest', passwordHash: NO_PASSWORD, createdAt: now });
+    return { id, name, email: '', kind: 'guest', createdAt: now };
+  }
+
+  /** O dono do app (null = ainda não foi criado). */
+  owner(): PublicUser | null {
+    const row = this.db.prepare("SELECT * FROM users WHERE kind = 'owner'").get() as UserRow | undefined;
+    return row ? toPublic(row) : null;
+  }
+
+  /** Muda o nome e o e-mail do dono (só pelo terminal: `npm run dono`). */
+  updateOwner(id: string, name: string, email: string): void {
+    this.db.prepare("UPDATE users SET name = ?, email = ? WHERE id = ? AND kind = 'owner'").run(name, email, id);
   }
 
   emailTaken(email: string): boolean {
@@ -64,5 +95,5 @@ export class UsersRepository {
 }
 
 function toPublic(row: UserRow): PublicUser {
-  return { id: row.id, name: row.name, email: row.email, createdAt: row.created_at };
+  return { id: row.id, name: row.name, email: row.email.startsWith(GUEST_EMAIL_PREFIX) ? '' : row.email, kind: row.kind, createdAt: row.created_at };
 }

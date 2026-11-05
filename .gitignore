@@ -52,3 +52,4 @@ Thumbs.db
 *.db-shm
 /server/data/
 /server/node_modules/
+/server/.mesa/

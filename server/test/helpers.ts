@@ -31,6 +31,7 @@ export async function createTestServer(overrides: Record<string, string> = {}, o
     LOG_LEVEL: 'silent',
     DATABASE_PATH: ':memory:',
     FILES_DIR: filesDir,
+    LIBRARY_DIR: `${filesDir}-biblioteca`,
     ALLOWED_ORIGINS: ORIGIN,
     TOKEN_SECRET: randomBytes(32).toString('hex'),
     PASSWORD_PEPPER: randomBytes(32).toString('hex'),
@@ -39,6 +40,9 @@ export async function createTestServer(overrides: Record<string, string> = {}, o
     ...overrides,
   });
   const db = openDatabase(config.DATABASE_PATH);
+  // Em produção o banco só admite um dono. Aqui, os testes de isolamento precisam de vários com mesas
+  // próprias (um tentando acessar o do outro); o índice tem teste próprio em database.test.ts
+  db.exec('DROP INDEX users_one_owner');
   const ctx = createContext(config, db);
   const app = await buildApp(ctx, options);
   return {
@@ -49,6 +53,7 @@ export async function createTestServer(overrides: Record<string, string> = {}, o
       await app.http.close();
       db.close();
       rmSync(filesDir, { recursive: true, force: true });
+      rmSync(`${filesDir}-biblioteca`, { recursive: true, force: true });
     },
   };
 }
@@ -62,15 +67,21 @@ export function sessionCookie(res: LightMyRequestResponse): string {
   return cookie.split(';')[0];
 }
 
-/** Cria uma conta e devolve o id e o cookie. */
+/**
+ * Cria uma conta com senha, direto pelo serviço (não há cadastro público), e entra com ela.
+ * Vale como dono: os testes de isolamento precisam de várias contas com mesas próprias.
+ */
 export async function register(server: TestServer, email: string, name = 'Pessoa'): Promise<{ id: string; cookie: string }> {
-  const res = await server.app.http.inject({
-    method: 'POST',
-    url: '/api/auth/register',
-    headers: { origin: ORIGIN },
-    payload: { name, email, password: PASSWORD },
-  });
-  if (res.statusCode !== 201) throw new Error(`cadastro falhou: ${res.statusCode} ${res.body}`);
+  const { user } = await server.ctx.auth.createAccount({ name, email, password: PASSWORD }, 'owner');
+  const res = await server.app.http.inject({ method: 'POST', url: '/api/auth/login', headers: { origin: ORIGIN }, payload: { email, password: PASSWORD } });
+  if (res.statusCode !== 200) throw new Error(`login falhou: ${res.statusCode} ${res.body}`);
+  return { id: user.id, cookie: sessionCookie(res) };
+}
+
+/** Entra por um convite, como um amigo do dono: devolve a conta criada e o cookie. */
+export async function redeem(server: TestServer, code: string, name = 'Convidado'): Promise<{ id: string; cookie: string }> {
+  const res = await server.app.http.inject({ method: 'POST', url: '/api/invites/redeem', headers: { origin: ORIGIN }, payload: { code, name } });
+  if (res.statusCode !== 200) throw new Error(`convite falhou: ${res.statusCode} ${res.body}`);
   return { id: res.json().user.id, cookie: sessionCookie(res) };
 }
 

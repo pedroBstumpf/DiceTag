@@ -1,7 +1,8 @@
 import cookie from '@fastify/cookie';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { AppContext } from '../../context';
-import { unauthorized } from '../../lib/errors';
+import { forbidden, unauthorized } from '../../lib/errors';
+import type { PublicUser } from '../../repositories/users';
 import { sessionCookieName } from '../../security/cookie';
 import type { AuthSession } from '../../services/auth.service';
 
@@ -18,7 +19,7 @@ declare module 'fastify' {
 
 export { sessionCookieName };
 
-/** Configuração de rota pública (lista explícita: cadastro, login, logout, saúde e página de testes). */
+/** Configuração de rota pública (lista explícita: login, entrar por convite, logout, saúde e página de testes). */
 export const PUBLIC = { public: true } as const;
 
 /**
@@ -46,13 +47,20 @@ export function requireAuth(req: FastifyRequest): AuthSession {
   return req.auth;
 }
 
-export function setSessionCookie(reply: FastifyReply, ctx: AppContext, token: string): void {
+/** Só o dono do app (criar mesas e mundos, biblioteca de arquivos, abrir a mesa). */
+export function requireOwner(req: FastifyRequest): AuthSession {
+  const session = requireAuth(req);
+  if (session.user.kind !== 'owner') throw forbidden('Só o dono do app pode fazer isso.');
+  return session;
+}
+
+export function setSessionCookie(reply: FastifyReply, ctx: AppContext, token: string, user: PublicUser): void {
   reply.setCookie(sessionCookieName(ctx.config), token, {
     httpOnly: true,
     secure: ctx.config.COOKIE_SECURE,
     sameSite: 'strict',
     path: '/',
-    maxAge: ctx.auth.sessionMaxAgeSeconds,
+    maxAge: ctx.auth.sessionMaxAgeSeconds(user),
   });
 }
 

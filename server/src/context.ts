@@ -9,6 +9,7 @@ import { WorldsRepository } from './repositories/worlds';
 import { PasswordHasher } from './security/password';
 import { TokenService } from './security/tokens';
 import { AuthService } from './services/auth.service';
+import { LibraryService } from './services/library.service';
 import { createMailer, type Mailer } from './services/mailer';
 
 /**
@@ -25,6 +26,7 @@ export interface AppContext {
   tokens: TokenService;
   auth: AuthService;
   mailer: Mailer;
+  library: LibraryService;
 }
 
 export function createContext(config: Config, db: Db): AppContext {
@@ -44,5 +46,6 @@ export function createContext(config: Config, db: Db): AppContext {
     tokens,
     auth: new AuthService(db, users, sessions, worlds, hasher, tokens, config, resets),
     mailer: createMailer(config),
+    library: new LibraryService(config.LIBRARY_DIR),
   };
 }

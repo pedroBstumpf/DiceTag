@@ -29,6 +29,8 @@ export interface InviteRecord {
   expiresAt: number;
   maxUses: number;
   uses: number;
+  /** Link de retorno: a conta que ele devolve (null = convite para alguém novo). */
+  targetUserId: string | null;
 }
 
 export type TablePatch = Partial<Pick<TableRecord, 'name' | 'system' | 'description' | 'maxPlayers' | 'accent'>>;
@@ -153,21 +155,21 @@ export class TablesRepository {
   // --- Convites --------------------------------------------------------------
 
   /** Cria um convite se quem pede for mestre da mesa (false = não é). */
-  createInvite(codeHash: string, tableId: string, gmUserId: string, now: number, expiresAt: number, maxUses: number): boolean {
+  createInvite(codeHash: string, tableId: string, gmUserId: string, now: number, expiresAt: number, maxUses: number, targetUserId: string | null = null): boolean {
     const result = this.db
       .prepare(
-        `INSERT INTO table_invites (code_hash, table_id, created_by, created_at, expires_at, max_uses)
-         SELECT ?, id, ?, ?, ?, ? FROM game_tables WHERE id = ? AND EXISTS (${IS_GM})`,
+        `INSERT INTO table_invites (code_hash, table_id, created_by, created_at, expires_at, max_uses, target_user_id)
+         SELECT ?, id, ?, ?, ?, ?, ? FROM game_tables WHERE id = ? AND EXISTS (${IS_GM})`,
       )
-      .run(codeHash, gmUserId, now, expiresAt, maxUses, tableId, gmUserId);
+      .run(codeHash, gmUserId, now, expiresAt, maxUses, targetUserId, tableId, gmUserId);
     return Number(result.changes) > 0;
   }
 
   findInvite(codeHash: string): InviteRecord | null {
     const row = this.db.prepare('SELECT * FROM table_invites WHERE code_hash = ?').get(codeHash) as
-      | { table_id: string; expires_at: number; max_uses: number; uses: number }
+      | { table_id: string; expires_at: number; max_uses: number; uses: number; target_user_id: string | null }
       | undefined;
-    return row ? { tableId: row.table_id, expiresAt: row.expires_at, maxUses: row.max_uses, uses: row.uses } : null;
+    return row ? { tableId: row.table_id, expiresAt: row.expires_at, maxUses: row.max_uses, uses: row.uses, targetUserId: row.target_user_id } : null;
   }
 
   useInvite(codeHash: string): void {

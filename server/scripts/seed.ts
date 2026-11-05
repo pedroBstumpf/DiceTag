@@ -7,8 +7,9 @@ import { newId } from '../src/lib/ids';
 
 /**
  * Dados de exemplo para testar localmente (dados fictícios, nada pessoal):
- * - conta "Mestre" (mestre@zehenia.local) com uma mesa;
- * - conta "Jogadora" (jogador@zehenia.local), já membro da mesa;
+ * - conta "Mestre" (mestre@zehenia.local), o dono do app, com uma mesa;
+ * - conta "Jogadora" (jogador@zehenia.local), já membro da mesa. Só nos exemplos ela tem senha, para
+ *   os testes entrarem direto: um convidado de verdade entra por convite.
  * - uma cena com um personagem da jogadora, um NPC com ficha secreta, uma anotação pública,
  *   uma só do mestre, uma parede e uma porta; uma segunda cena (só o mestre a recebe).
  *
@@ -26,14 +27,14 @@ const config = loadConfig();
 const db = openDatabase(config.DATABASE_PATH);
 const ctx = createContext(config, db);
 
-async function account(name: string, email: string) {
+async function account(name: string, email: string, kind: 'owner' | 'guest') {
   const found = ctx.users.credentialsByEmail(email);
   if (found) return found.user;
-  return (await ctx.auth.register({ name, email, password: password! })).user;
+  return (await ctx.auth.createAccount({ name, email, password: password! }, kind)).user;
 }
 
-const gm = await account('Mestre', 'mestre@zehenia.local');
-const player = await account('Jogadora', 'jogador@zehenia.local');
+const gm = await account('Mestre', 'mestre@zehenia.local', 'owner');
+const player = await account('Jogadora', 'jogador@zehenia.local', 'guest');
 
 if (ctx.tables.listForUser(gm.id).length) {
   console.log('Dados de exemplo já existem.');

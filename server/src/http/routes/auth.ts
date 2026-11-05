@@ -7,34 +7,27 @@ import { PASSWORD_RESET_MINUTES } from '../../services/auth.service';
 import { passwordResetMail } from '../../services/mailer';
 import { audit } from '../../lib/audit';
 import { HttpError, parse } from '../../lib/errors';
-import { email, newPassword, passwordInput, text, withPasswordPolicy } from '../../lib/schemas';
+import { email, newPassword, passwordInput, text } from '../../lib/schemas';
 import { PUBLIC, clearSessionCookie, requireAuth, sessionCookieName, setSessionCookie } from '../plugins/auth';
 import { AUTH_RATE_LIMIT } from '../plugins/security';
 
-const registerBody = withPasswordPolicy(z.strictObject({ name: text(1, 60), email, password: newPassword }));
 const loginBody = z.strictObject({ email, password: passwordInput });
 const passwordBody = z.strictObject({ current: passwordInput, next: newPassword });
 const profileBody = z.strictObject({ name: text(1, 60) });
-const deleteBody = z.strictObject({ password: passwordInput });
+/** Convidado não tem senha: a sessão é a única credencial dele. */
+const deleteBody = z.strictObject({ password: passwordInput.optional() });
 const forgotBody = z.strictObject({ email });
 const resetBody = z.strictObject({ token: z.string().min(20).max(100).regex(/^[A-Za-z0-9_-]+$/), password: newPassword });
 
 /**
- * /api/auth — cadastro, login, logout (desta sessão ou de todas), conta atual, perfil, troca de senha,
+ * /api/auth — login do dono, logout (desta sessão ou de todas), conta atual, perfil, troca de senha,
  * exportação dos dados e exclusão da conta (LGPD).
  * O token de sessão só existe no cookie HttpOnly: nunca aparece no corpo das respostas.
- * Públicas (sem sessão): cadastro, login, logout e recuperação de senha; as demais exigem login (hook de `plugins/auth.ts`).
+ * Não há cadastro: o dono é criado no terminal e os demais entram por convite (`routes/tables.ts`).
+ * Públicas (sem sessão): login, logout e recuperação de senha; as demais exigem login (hook de `plugins/auth.ts`).
  */
 export async function authRoutes(app: FastifyInstance, ctx: AppContext, hub: RealtimeHub): Promise<void> {
   const account = new AccountService(ctx, hub);
-
-  app.post('/register', { config: { ...AUTH_RATE_LIMIT, ...PUBLIC } }, async (req, reply) => {
-    const body = parse(registerBody, req.body);
-    const { user, token } = await ctx.auth.register(body);
-    audit(req.log, 'conta.criada', { userId: user.id, ip: req.ip });
-    setSessionCookie(reply, ctx, token);
-    return reply.code(201).send({ user });
-  });
 
   app.post('/login', { config: { ...AUTH_RATE_LIMIT, ...PUBLIC } }, async (req, reply) => {
     const body = parse(loginBody, req.body);
@@ -46,7 +39,7 @@ export async function authRoutes(app: FastifyInstance, ctx: AppContext, hub: Rea
       throw err;
     });
     audit(req.log, 'login.ok', { userId: result.user.id, ip: req.ip });
-    setSessionCookie(reply, ctx, result.token);
+    setSessionCookie(reply, ctx, result.token, result.user);
     return { user: result.user };
   });
 
@@ -126,7 +119,7 @@ export async function authRoutes(app: FastifyInstance, ctx: AppContext, hub: Rea
   app.delete('/me', { config: AUTH_RATE_LIMIT }, async (req, reply) => {
     const session = requireAuth(req);
     const { password } = parse(deleteBody, req.body);
-    if (!(await ctx.auth.verifyPassword(session.user.id, password))) throw new HttpError(401, 'Senha incorreta.');
+    if (session.user.kind === 'owner' && !(await ctx.auth.verifyPassword(session.user.id, password ?? ''))) throw new HttpError(401, 'Senha incorreta.');
     await account.delete(session.user.id);
     audit(req.log, 'conta.excluida', { userId: session.user.id });
     clearSessionCookie(reply, ctx);
@@ -140,7 +133,7 @@ export async function authRoutes(app: FastifyInstance, ctx: AppContext, hub: Rea
     const token = await ctx.auth.changePassword(session, body.current, body.next);
     hub.userSessionsEnded(session.user.id);
     audit(req.log, 'senha.trocada', { userId: session.user.id, ip: req.ip });
-    setSessionCookie(reply, ctx, token);
+    setSessionCookie(reply, ctx, token, session.user);
     return reply.code(204).send();
   });
 }

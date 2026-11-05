@@ -53,8 +53,18 @@ export class SessionsRepository {
     this.db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
   }
 
-  /** Limpeza periódica das vencidas. */
+  /**
+   * Limpeza periódica das vencidas. A inatividade só vale para quem tem senha: o convidado não tem
+   * como entrar de novo sozinho, então a sessão dele só termina no prazo total.
+   */
   deleteExpired(now: number, idleMs: number): number {
-    return Number(this.db.prepare('DELETE FROM sessions WHERE expires_at <= ? OR last_seen_at <= ?').run(now, now - idleMs).changes);
+    return Number(
+      this.db
+        .prepare(
+          `DELETE FROM sessions WHERE expires_at <= ?
+           OR (last_seen_at <= ? AND user_id NOT IN (SELECT id FROM users WHERE kind = 'guest'))`,
+        )
+        .run(now, now - idleMs).changes,
+    );
   }
 }
