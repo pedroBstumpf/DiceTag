@@ -96,10 +96,9 @@ export async function frontendRoutes(app: FastifyInstance, config: Config): Prom
   }
   const files = listFrontendFiles(dir);
   const index = files.get('/index.html')!;
-  const csp = frontendCsp(config);
 
   const send = async (reply: FastifyReply, file: StaticFile, cache: string) =>
-    reply.header('Content-Type', file.type).header('Content-Security-Policy', csp).header('Cache-Control', cache).send(await readFile(file.path));
+    reply.header('Content-Type', file.type).header('Content-Security-Policy', frontendCsp(config)).header('Cache-Control', cache).send(await readFile(file.path));
 
   app.get('/*', { config: PUBLIC }, async (req, reply) => {
     const path = new URL(req.url, 'http://localhost').pathname;

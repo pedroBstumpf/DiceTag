@@ -41,6 +41,20 @@ describe('migrações', () => {
     db.close();
   });
 
+  it('o próprio banco não admite dois donos, e o dono de um banco antigo é a conta mais antiga', () => {
+    const path = join(dir, 'donos.db');
+    const old = new DatabaseSync(path, { enableForeignKeyConstraints: true });
+    migrate(old, null, MIGRATIONS.slice(0, 2));
+    const add = old.prepare("INSERT INTO users (id, email, name, password_hash, created_at) VALUES (?, ?, 'N', 'h', ?)");
+    add.run('nova', 'n@b.co', 200);
+    add.run('antiga', 'a@b.co', 100);
+    migrate(old, null);
+    const kinds = old.prepare('SELECT id, kind FROM users ORDER BY id').all();
+    expect(kinds).toEqual([{ id: 'antiga', kind: 'owner' }, { id: 'nova', kind: 'guest' }]);
+    expect(() => old.prepare("UPDATE users SET kind = 'owner' WHERE id = 'nova'").run()).toThrow(/UNIQUE/);
+    old.close();
+  });
+
   it('com o banco em uso, faz backup antes de aplicar as pendentes (e só então)', () => {
     const path = join(dir, 'zehenia.db');
     const db = openDatabase(path);

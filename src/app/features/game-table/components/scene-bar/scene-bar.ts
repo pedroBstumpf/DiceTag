@@ -1,11 +1,14 @@
 import { Component, computed, inject, input, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
+import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterLink } from '@angular/router';
 import { GameTable } from '../../../../core/models/game-table.model';
 import { Scene, SceneFolder } from '../../../../core/models/table-session.model';
+import { ServerAccountService } from '../../../../core/services/server-account.service';
+import { LibraryPicker } from '../../../../shared/components/library-picker/library-picker';
 import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
 import { SoundMixerService } from '../../services/sound-mixer.service';
 import { TableSessionService } from '../../services/table-session.service';
@@ -23,6 +26,10 @@ import { TableSessionService } from '../../services/table-session.service';
 export class SceneBar {
   readonly session = inject(TableSessionService);
   readonly mixer = inject(SoundMixerService);
+  private readonly dialog = inject(MatDialog);
+  private readonly account = inject(ServerAccountService);
+  /** Mesa online, e quem olha é o dono do app: a biblioteca de arquivos está disponível. */
+  readonly canUseLibrary = computed(() => !!this.session.online() && this.account.isOwner());
   readonly table = input.required<GameTable>();
 
   readonly renamingId = signal<string | null>(null);
@@ -87,6 +94,14 @@ export class SceneBar {
   pickMap(input: HTMLInputElement, sceneId: string | null = null): void {
     this.replaceTarget = sceneId;
     input.click();
+  }
+
+  /** Cena nova com um mapa da biblioteca, ou troca o mapa de `sceneId`. */
+  async pickMapFromLibrary(sceneId: string | null = null): Promise<void> {
+    const [file] = await LibraryPicker.pick(this.dialog, 'imagens');
+    if (!file) return;
+    if (sceneId) await this.session.setSceneMap(sceneId, file);
+    else await this.session.addScene(file);
   }
 
   async onMapPicked(input: HTMLInputElement): Promise<void> {

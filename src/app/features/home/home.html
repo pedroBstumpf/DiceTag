@@ -17,13 +17,6 @@
       <p class="max-w-md text-base font-medium text-slate-100 drop-shadow sm:text-lg">{{ greeting() }}</p>
 
       <div class="flex flex-wrap gap-2">
-        @if (!auth.isLoggedIn()) {
-          <button mat-flat-button class="!h-11 !px-6" (click)="actions.openAuth('register')">
-            <mat-icon>person_add</mat-icon>
-            Criar conta grátis
-          </button>
-          <button mat-stroked-button class="!h-11 !bg-ink-950/50 backdrop-blur" (click)="actions.openAuth('login')">Entrar</button>
-        } @else {
           <button mat-flat-button class="!h-11 !px-6" (click)="actions.createTable()">
             <mat-icon>add</mat-icon>
             Criar mesa
@@ -32,7 +25,6 @@
             <mat-icon>public</mat-icon>
             Worldbuild
           </a>
-        }
       </div>
     </div>
   </section>

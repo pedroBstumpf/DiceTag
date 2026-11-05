@@ -1,7 +1,9 @@
 import { randomBytes } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { loadConfig } from '../src/config/env';
+import { allowPublicOrigin, loadConfig } from '../src/config/env';
+import { parseFunnelOutput, parseTailscaleStatus } from '../src/ops/tailscale';
+import { ORIGIN, call, createTestServer, redeem, register, type TestServer } from './helpers';
 import { TrustedProxies, clientIp } from '../src/lib/client-ip';
 import { isSafeId } from '../src/lib/ids';
 import { Semaphore, TokenBucket, WindowLimiter } from '../src/lib/limiter';
@@ -314,5 +316,83 @@ describe('configuração', () => {
     expect(() => loadConfig({ ...base, TRUST_PROXY: 'true' })).toThrow(/TRUSTED_PROXIES/);
     expect(loadConfig({ ...base, TRUST_PROXY: 'false', TRUSTED_PROXIES: '127.0.0.1' }).trustedProxies.entries).toEqual(['127.0.0.1']);
     expect(() => loadConfig({ ...base, TRUSTED_PROXIES: '0.0.0.0/99' })).toThrow(/TRUSTED_PROXIES/);
+  });
+});
+
+describe('endereço público e controle da mesa', () => {
+  const base = { TOKEN_SECRET: 'a'.repeat(40), PASSWORD_PEPPER: 'b'.repeat(40) };
+
+  it('em produção, sem HTTPS só o próprio computador', () => {
+    expect(loadConfig({ ...base, NODE_ENV: 'production', ALLOWED_ORIGINS: 'http://localhost:3000' }).isProduction).toBe(true);
+    expect(() => loadConfig({ ...base, NODE_ENV: 'production', ALLOWED_ORIGINS: 'http://192.168.0.5:3000' })).toThrow(/HTTPS/);
+    expect(() => loadConfig({ ...base, NODE_ENV: 'production', ALLOWED_ORIGINS: 'http://localhost.evil.com' })).toThrow(/HTTPS/);
+  });
+
+  it('o endereço do Tailscale passa a valer só se for HTTPS, e só a origem', () => {
+    const config = loadConfig({ ...base, ALLOWED_ORIGINS: 'http://localhost:3000' });
+    allowPublicOrigin(config, 'http://mesa.tail1.ts.net');
+    expect(config.allowedOrigins.has('http://mesa.tail1.ts.net')).toBe(false);
+    allowPublicOrigin(config, 'https://mesa.tail1.ts.net/qualquer');
+    expect(config.allowedOrigins.has('https://mesa.tail1.ts.net')).toBe(true);
+    expect(config.publicUrl).toBe('https://mesa.tail1.ts.net');
+  });
+
+  it('lê a resposta do Tailscale sem confiar em nomes estranhos', () => {
+    const status = (DNSName: string, BackendState = 'Running') => JSON.stringify({ BackendState, Self: { DNSName } });
+    expect(parseTailscaleStatus(status('mesa.tail1.ts.net.'))).toEqual({ loggedIn: true, url: 'https://mesa.tail1.ts.net' });
+    expect(parseTailscaleStatus(status('mesa.tail1.ts.net.', 'NeedsLogin')).loggedIn).toBe(false);
+    expect(parseTailscaleStatus(status('site-malicioso.example.')).url).toBeUndefined();
+    expect(parseTailscaleStatus(status('x.ts.net.evil.com.')).url).toBeUndefined();
+    expect(parseTailscaleStatus('isto não é json')).toEqual({ loggedIn: false });
+  });
+
+  it('entende a saída do Funnel: no ar, ou esperando a aprovação da conta', () => {
+    expect(parseFunnelOutput('Available on the internet:\n\nhttps://mesa.tail1.ts.net/\n|-- proxy http://127.0.0.1:3000').ready).toBe(true);
+    const waiting = parseFunnelOutput('Funnel is not enabled on your tailnet.\nTo enable, visit:\n\n         https://login.tailscale.com/f/funnel?node=abc\n');
+    expect(waiting).toEqual({ ready: false, approvalUrl: 'https://login.tailscale.com/f/funnel?node=abc' });
+  });
+});
+
+describe('abrir a mesa só deste computador', () => {
+  let server: TestServer;
+  let cookie: string;
+  beforeEach(async () => {
+    server = await createTestServer();
+    cookie = (await register(server, 'dono@exemplo.com', 'Dono')).cookie;
+    server.ctx.host = { status: async () => ({ state: 'closed' }), open: async () => ({ state: 'open', url: 'https://mesa.tail1.ts.net' }), close: async () => ({ state: 'closed' }), openFolder: async () => undefined };
+  });
+  afterEach(() => server.close());
+  const post = (url: string, headers: Record<string, string>) => server.app.http.inject({ method: 'POST', url, headers: { cookie, origin: ORIGIN, host: 'localhost:3000', ...headers }, payload: {} });
+
+  it('direto do computador, o dono abre; a origem pública passa a valer', async () => {
+    const res = await post('/api/host/open', {});
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ state: 'open', url: 'https://mesa.tail1.ts.net' });
+    expect(server.config.allowedOrigins.has('https://mesa.tail1.ts.net')).toBe(true);
+  });
+
+  it.each([
+    [{ 'x-forwarded-for': '203.0.113.9' }],
+    [{ 'tailscale-funnel-request': '?1' }],
+    [{ host: 'mesa.tail1.ts.net' }],
+    [{ 'x-forwarded-host': 'mesa.tail1.ts.net' }],
+  ])('pelo túnel, mesmo com a sessão do dono, é recusado: %j', async (headers) => {
+    for (const url of ['/api/host/open', '/api/host/close', '/api/host/open-folder']) expect((await post(url, headers)).statusCode).toBe(403);
+  });
+
+  it('convidado não vê nem altera; sem sessão, nada', async () => {
+    const table = (await call(server, cookie, 'POST', '/api/tables', { name: 'M', system: '', description: '', maxPlayers: 4, accent: '#4f86f7' })).json().table;
+    const { code } = (await call(server, cookie, 'POST', `/api/tables/${table.id}/invites`)).json();
+    const guest = await redeem(server, code);
+    expect((await call(server, guest.cookie, 'GET', '/api/host')).statusCode).toBe(403);
+    expect((await post('/api/host/open', { cookie: guest.cookie })).statusCode).toBe(403);
+    expect((await server.app.http.inject({ method: 'GET', url: '/api/host' })).statusCode).toBe(401);
+  });
+
+  it('sem npm run mesa, o app só informa que o controle não está disponível', async () => {
+    const plain = await createTestServer();
+    const owner = await register(plain, 'dono@exemplo.com');
+    expect((await call(plain, owner.cookie, 'GET', '/api/host')).json().state).toBe('unavailable');
+    await plain.close();
   });
 });

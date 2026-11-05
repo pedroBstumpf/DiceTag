@@ -8,7 +8,7 @@ import { unsafeJsonReason } from '../../lib/safe-json';
 import { text } from '../../lib/schemas';
 import { MAX_WORLD_ITEMS, type WorldRecord } from '../../repositories/worlds';
 import type { RealtimeHub } from '../../realtime/hub';
-import { requireAuth } from '../plugins/auth';
+import { requireAuth, requireOwner } from '../plugins/auth';
 
 /** Tamanho máximo de um item do Worldbuild salvo (JSON). Documentos longos cabem com folga. */
 const MAX_ITEM_BYTES = 2 * 1024 * 1024;
@@ -53,7 +53,7 @@ export async function worldRoutes(app: FastifyInstance, ctx: AppContext, hub: Re
   app.get('/worlds', async (req) => ({ worlds: ctx.worlds.listByOwner(requireAuth(req).user.id) }));
 
   app.post('/worlds', async (req, reply) => {
-    const { user } = requireAuth(req);
+    const { user } = requireOwner(req);
     const { name } = parse(nameBody, req.body);
     if (ctx.worlds.countByOwner(user.id) >= MAX_WORLDS) throw conflict(`Limite de ${MAX_WORLDS} mundos atingido.`);
     const world: WorldRecord = { id: newId(), ownerId: user.id, name, createdAt: Date.now() };

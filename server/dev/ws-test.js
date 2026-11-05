@@ -104,10 +104,6 @@ $('login').addEventListener('click', async () => {
   await refreshMe();
   await listTables();
 });
-$('register').addEventListener('click', async () => {
-  await api('POST', '/api/auth/register', { name: $('name').value || 'Pessoa de teste', ...credentials() });
-  await refreshMe();
-});
 $('logout').addEventListener('click', async () => {
   await api('POST', '/api/auth/logout');
   ws?.close();

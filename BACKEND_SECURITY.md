@@ -141,7 +141,7 @@ Nunca use `GET` para ações que alteram dados.
 ## 3. Autorização nas rotas HTTP
 
 - Registre um **hook global (`onRequest`/`preHandler`) que exige sessão válida** e coloca o usuário
-  em `request.user`. Rotas públicas (login, cadastro, saúde) ficam numa lista explícita.
+  em `request.user`. Rotas públicas (login, entrar por convite, saúde) ficam numa lista explícita.
 - **Todo id recebido do cliente é verificado contra o usuário da sessão** (proteção contra IDOR,
   a falha mais comum em apps feitos com IA). Faça a checagem **na própria consulta SQL**:
 
@@ -323,6 +323,16 @@ malicioso.
 
 ---
 
+### Biblioteca do dono (`LIBRARY_DIR`)
+
+- Todo caminho vindo do navegador passa por `security/library-path.ts`; nenhuma outra parte monta caminhos dela.
+- Atalhos (links e junções) não são seguidos, e a parte existente do caminho, resolvida, precisa estar dentro da raiz.
+- Arquivos da biblioteca nunca vão aos jogadores: só cópias enviadas à mesa, sem metadados.
+- `--permission` do Node (`npm run mesa`) é a segunda camada: não relaxe `sandboxArgs` sem explicar o motivo e o risco, e nunca dê
+  `--allow-child-process` ao servidor exposto. O que precisa executar algo pertence a `scripts/mesa.ts`, com operações fixas.
+
+---
+
 ## 9. Cabeçalhos e CORS (`@fastify/helmet`, `@fastify/cors`)
 
 - **CORS com lista explícita de origens**, lida do `.env` e comparada de forma exata.
@@ -338,7 +348,7 @@ malicioso.
 ## 10. Rate limit e negação de serviço
 
 - **Limite global moderado** por IP com `@fastify/rate-limit`.
-- **Limites rígidos** em login, cadastro e redefinição de senha: por IP **e** por conta
+- **Limites rígidos** em login, convites e redefinição de senha: por IP **e** por conta
   (ex.: 5 tentativas por minuto), com atraso crescente em vez de bloqueio permanente da conta.
 - Limites próprios para uploads e criação de mesas.
 - WebSocket: `maxPayload`, rate limit por conexão e máximo de conexões por usuário (seção 4).

@@ -21,6 +21,7 @@ const QUOTA_FULL = 'Espaço de arquivos esgotado (da conta ou da mesa).';
  *
  * Envio:
  * - um arquivo por requisição, até MAX_UPLOAD_MB, recebido em streaming direto para o disco;
+ * - convidados têm limites próprios, menores (GUEST_MAX_UPLOAD_MB, GUEST_QUOTA_MB): o disco é do dono;
  * - cotas por conta (USER_QUOTA_MB) e por mesa (TABLE_QUOTA_MB), conferidas de novo, junto com o
  *   registro, numa instrução só (dois envios simultâneos não passam juntos da cota);
  * - tipo conferido pelos bytes, pela extensão e pelo tipo declarado (`security/file-type.ts`):
@@ -32,28 +33,29 @@ const QUOTA_FULL = 'Espaço de arquivos esgotado (da conta ou da mesa).';
  * `nosniff`, CSP `sandbox` e o tipo detectado (o navegador nunca executa o conteúdo).
  */
 export async function fileRoutes(app: FastifyInstance, ctx: AppContext): Promise<void> {
-  const maxBytes = ctx.config.MAX_UPLOAD_MB * MB;
-
   app.post('/files', { config: UPLOAD_RATE_LIMIT }, async (req, reply) => {
     const { user } = requireAuth(req);
     const scope = parse(uploadQuery, req.query);
     if (!!scope.tableId === !!scope.worldId) throw badRequest('Informe tableId ou worldId.');
     if (scope.tableId && !ctx.tables.roleOf(scope.tableId, user.id)) throw notFound('Mesa não encontrada.');
     if (scope.worldId && !ctx.worlds.findOwned(scope.worldId, user.id)) throw notFound('Mundo não encontrado.');
+    const guest = user.kind === 'guest';
+    const maxMb = guest ? ctx.config.GUEST_MAX_UPLOAD_MB : ctx.config.MAX_UPLOAD_MB;
+    const maxBytes = maxMb * MB;
 
     const part = await req.file({ limits: { fileSize: maxBytes, files: 1, fields: 0, parts: 1 } });
     if (!part) throw badRequest('Nenhum arquivo enviado.');
 
     // O que sobra nas cotas limita o envio já no streaming (a conferência final é no registro)
-    const quota = { user: ctx.config.USER_QUOTA_MB * MB, table: ctx.config.TABLE_QUOTA_MB * MB };
+    const quota = { user: (guest ? ctx.config.GUEST_QUOTA_MB : ctx.config.USER_QUOTA_MB) * MB, table: ctx.config.TABLE_QUOTA_MB * MB };
     const free = Math.min(quota.user - ctx.files.usedBytes(user.id), scope.tableId ? quota.table - ctx.files.tableBytes(scope.tableId) : Infinity);
     if (free <= 0) throw new HttpError(413, QUOTA_FULL);
     const id = newId();
     const temp = ctx.files.tempPathOf(id);
     try {
-      const tooBig = maxBytes <= free ? `Arquivo maior que ${ctx.config.MAX_UPLOAD_MB} MB.` : QUOTA_FULL;
+      const tooBig = maxBytes <= free ? `Arquivo maior que ${maxMb} MB.` : QUOTA_FULL;
       const received = await receiveUpload(part.file, temp, Math.min(maxBytes, free), tooBig);
-      if (part.file.truncated) throw new HttpError(413, `Arquivo maior que ${ctx.config.MAX_UPLOAD_MB} MB.`);
+      if (part.file.truncated) throw new HttpError(413, `Arquivo maior que ${maxMb} MB.`);
       if (!declaredTypeMatches(part.filename, part.mimetype, received.mime)) {
         throw new HttpError(415, 'O nome ou o tipo do arquivo não corresponde ao conteúdo.');
       }

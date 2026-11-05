@@ -21,7 +21,9 @@ organizar toda a atmosfera de uma campanha.
 | Landing page (banner com logo, atalhos, mural de notícias vazio) | Pronto |
 | Barra lateral global (navegação, **mundos** do usuário, atalhos para as **mesas** — até 6 + "Ver todas" —, conta) | Pronto |
 | **Mundos**: até 2 Worldbuilds separados por usuário; cada mesa se passa num mundo | Pronto |
-| Contas (login/cadastro locais) + **modo de teste sem conta** | Pronto (provisório) |
+| **Só por convite**: um dono (senha, criado no terminal) e convidados (nome e id, por link de uso único); sem cadastro | Pronto |
+| **Arquivos**: biblioteca do dono (imagens e sons, em pastas) numa única pasta do computador, com o servidor preso a ela | Pronto |
+| **`npm run mesa` / `Iniciar mesa.cmd`** e o botão "Abrir para os jogadores" (Tailscale Funnel) | Pronto; testado com um Tailscale de mentira, falta o real |
 | Minhas mesas (criar, listar, excluir com limpeza dos dados, abrir) | Pronto |
 | Worldbuild (pastas, documentos rich text, **linha do tempo em mapa mental**, mapas/imagens, **itens com cartão**) | Pronto |
 | **Mesa de jogo** (mapa em camadas, 4 barras escondíveis, janelas flutuantes) | Pronto |
@@ -82,9 +84,11 @@ npm run dev                  # http://localhost:3000 (o ng serve repassa /api e 
                              # jeito leve: `npm run build` na raiz + `npm start` aqui = app inteiro em :3000
                              # (FRONTEND_DIR no .env; sem o ng serve)
 npm test                     # testes de unidade e integração, um arquivo por vez
+npm run mesa                 # o jeito de narrar: inicia tudo, com o servidor isolado (também: Iniciar mesa.cmd, na raiz)
+npm run dono                 # cria o dono ou troca os dados dele, inclusive a senha (só pelo terminal)
 npm run smoke                # ponta a ponta contra o servidor aberto
-npm run e2e                  # dois navegadores reais na mesma mesa (precisa do Chrome e de `npm run build` na raiz;
-                             # sobe o próprio servidor, com banco e segredos temporários)
+npm run e2e                  # dois navegadores reais na mesma mesa, por `npm run mesa` isolado (precisa do Chrome e
+                             # de `npm run build` na raiz; usa pasta temporária e um Tailscale de mentira)
 npm run reset-link -- <e-mail> # link de recuperação de senha, sem serviço de e-mail
 npm run backup               # cópia do banco e dos arquivos + conferência (operação: server/OPERATIONS.md)
 ```
@@ -111,6 +115,7 @@ src/
 └── app/
     ├── app.ts / app.config.ts / app.routes.ts
     ├── core/                   # regras e dados — sem UI
+    │   ├── guards/account.guards.ts    # accountGuard, ownerGuard: sem conta, tudo leva a /entrar
     │   ├── config/app-settings.ts      # flags globais (requireAuth)
     │   ├── models/                     # interfaces e constantes de domínio
     │   │   ├── geometry.model.ts       # Point, Rect
@@ -130,6 +135,8 @@ src/
     │   │   ├── server-file-store.ts    # ServerFileStore: arquivos da mesa online em /api/files
     │   │   ├── game-tables.service.ts  # CRUD de mesas (excluir apaga table-state e blobs)
     │   │   ├── server-api.service.ts   # cliente HTTP da API do servidor (/api, ServerError, SERVER_OFFLINE)
+    │   │   ├── library.service.ts      # biblioteca do dono: listar, enviar, mover, apagar
+    │   │   ├── host.service.ts         # abrir e fechar a mesa aos jogadores
     │   │   ├── world-import.service.ts # envia ao servidor um mundo guardado neste navegador + spec
     │   │   ├── server-account.service.ts # conta do servidor (cookie HttpOnly): entrar, sair, exportar, excluir
     │   │   ├── online-tables.service.ts  # mesas online: listar, criar, excluir, convidar, entrar, sair
@@ -145,6 +152,7 @@ src/
     │   ├── components/color-picker/    # bolinha de cor + paleta (mat-menu) + cor livre
     │   ├── utils/color.ts              # readableTextOn: texto claro/escuro sobre uma cor (etiquetas pretas) + spec
     │   ├── components/tag-editor/      # lista editável de etiquetas (cor, texto, nível): token, ficha, item
+    │   ├── components/library-picker/  # escolher arquivos da biblioteca sem sair da mesa
     │   ├── components/rich-text-editor/ # Tiptap + barra de formatação (documentos e anotações da ficha)
     │   ├── directives/auto-focus.directive.ts
     │   ├── services/
@@ -156,9 +164,11 @@ src/
     │   └── sidebar/
     └── features/
         ├── home/               # landing
-        ├── auth/auth-dialog/   # diálogo único Entrar/Criar conta/Esqueci minha senha
+        ├── auth/sign-in/       # entrada do dono (rota entrar)
+        ├── auth/invite/        # entrada do convidado, pelo link (rota convite)
         ├── auth/reset-password/ # página aberta pelo link de recuperação de senha
-        ├── tables/             # "Minhas mesas" + create-table-dialog + online-tables (seção "Mesas online")
+        ├── library/            # página Arquivos: imagens e sons, em pastas
+        ├── tables/             # "Minhas mesas" + create-table-dialog + online-tables + host-panel (abrir a mesa)
         ├── worldbuild/
         │   ├── worldbuild.ts           # página: explorador (com seletor de mundo) + área de janelas
         │   ├── services/worldbuild.service.ts   # itens e mesa de trabalho do mundo aberto; migração de timelines antigas
@@ -226,13 +236,14 @@ Servidor (`server/`, pacote Node separado; detalhes em `ARCHITECTURE.md` §11 e 
 server/src/  main.ts · app.ts · context.ts · config/env.ts · db/ (SQLite + migrações + backup antes de migrar)
              domain/index.ts   # importa de src/app as regras puras (comandos, permissões, visão, dados, paredes, raça)
              repositories/ services/ security/ lib/ http/ (plugins + rotas) realtime/ (sala da mesa) ops/ (backup)
-server/scripts/ (setup, seed, smoke, backup) · server/dev/ (página /dev/) · server/test/ · server/OPERATIONS.md
+server/scripts/ (mesa, dono, setup, seed, smoke, e2e, reset-link, backup; lib/app-env.ts: pasta do app e permissões) · server/dev/ (página /dev/) · server/test/ · server/OPERATIONS.md
 http/routes/frontend.ts   # entrega o app compilado (FRONTEND_DIR): lista fixa de arquivos, rotas do app → index.html, CSP
 ```
 `proxy.conf.json` (raiz) liga o `ng serve` ao servidor em desenvolvimento.
 
 Rotas (`app.routes.ts`, todas lazy):
-- `''` (Shell) → `''` Home · `mesas` Tables · `worldbuild` Worldbuild do mundo aberto (aceita `?novo=<tipo>`, `?abrir=<id>` e `?servidor=<id do mundo>`) · `redefinir-senha` recuperação de senha.
+- Abertas: `entrar` · `convite` · `redefinir-senha`. O resto exige conta (`accountGuard`); Home, Arquivos, Worldbuild e `mesa/:id` são só do dono (`ownerGuard`).
+- `''` (Shell) → `''` Home · `mesas` Tables · `arquivos` Library · `worldbuild` Worldbuild do mundo aberto (aceita `?novo=<tipo>`, `?abrir=<id>` e `?servidor=<id do mundo>`) · `redefinir-senha` recuperação de senha.
 - `mesa/:id` → GameTablePage (tela cheia, **fora** do Shell)
 - `mesa-online/:id` → a mesma GameTablePage com `data: { online: true }` (mesa do servidor)
 - `**` → redireciona para `''`
@@ -342,11 +353,17 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 
 ## 7. Regras de negócio
 
-### Contas
-- `APP_SETTINGS.requireAuth` (`core/config/app-settings.ts`), hoje **`false` = modo de teste**:
-  `AuthService.user()` devolve um visitante fixo (`id: 'guest'`) quando ninguém está logado.
-- `isLoggedIn()` = há usuário (real ou visitante). `isGuest()` = é o visitante.
-- **No servidor** (`server/`), contas usam senha de 8 a 128 caracteres (sem as mais comuns), scrypt com pimenta e sessão por cookie HttpOnly; o papel na mesa vem da conta (dono = mestre, convite = jogador).
+### Contas (só por convite)
+- **Não há cadastro.** `users.kind` = `owner` ou `guest`; o banco admite um dono só (índice `users_one_owner`).
+- **Dono:** e-mail e senha, criados e alterados só pelo terminal (`npm run dono`, ou `npm run mesa` na primeira vez).
+  Nenhuma rota cria ou altera o dono. Só ele cria mesas e mundos e acessa a biblioteca (`requireOwner`).
+- **Convidado:** entra por `POST /invites/redeem` (público, com limite de taxa) só com um nome; o id da conta diz o que é de
+  quem, e a tela mostra o id curto (`shortAccountId`). Sem e-mail nem senha. Sessão de `GUEST_SESSION_DAYS` (180), sem cair
+  por inatividade. Limites próprios de envio (`GUEST_MAX_UPLOAD_MB`, `GUEST_QUOTA_MB`). Tirá-lo da última mesa encerra a sessão.
+- **Convite:** 192 bits, uso único, 7 dias, só o hash no banco; vai como link (`/convite#codigo=…`), com o código no fragmento.
+  **Link de retorno** (`/tables/:id/members/:userId/access-link`, `target_user_id`): devolve a uma conta existente, uma vez.
+- O `AuthService` local continua só como dono dos dados guardados no navegador do dono (visitante fixo `guest`, `requireAuth: false`).
+- **Senhas no servidor:** contas usam senha de 8 a 128 caracteres (sem as mais comuns), scrypt com pimenta e sessão por cookie HttpOnly; o papel na mesa vem da conta (dono = mestre, convite = jogador).
 - **Recuperação de senha** (conta do servidor): `POST /auth/password/forgot` e `/reset`, token de uso único, 30 minutos, só o
   HMAC no banco; o link usa `PUBLIC_URL` e leva o token no fragmento da URL. E-mail por `MAIL_PROVIDER` (`none`, `log` só em
   desenvolvimento, `resend`); sem serviço de e-mail, `npm run reset-link -- <e-mail>`.
@@ -424,15 +441,34 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   pasta é um botão que abre a lista das cenas dela (a cena aberta aparece como "Pasta › Cena"); cenas fora de
   pastas são abas. Excluir a pasta mantém as cenas (saem da pasta). Renomear cena de pasta: campo no botão da pasta.
 
+### Iniciar a mesa (`npm run mesa`, `Iniciar mesa.cmd`)
+- **Pasta do app** (`scripts/lib/app-env.ts`): `Documentos\Cronicas de Zehenia` (ou `ZEHENIA_HOME`), FORA do repositório: `dados/`
+  (SQLite), `arquivos-da-mesa/`, `biblioteca/` e `segredos.env`. O `server/.env` e `server/data` são só de desenvolvimento.
+- **Dois processos:** `scripts/mesa.ts` (confia no teclado: dono, compilação, túnel) e o servidor, compilado com esbuild e rodando
+  com `--permission` do Node (`sandboxArgs`): só lê o código, o app e a pasta do app, só grava na pasta do app e não executa
+  programas. Pede o túnel por IPC, com operações fixas (`services/host-control.ts`). Sem `npm run mesa`, `NO_HOST_CONTROL`.
+- **Túnel** (`scripts/lib/funnel.ts`): `tailscale funnel localhost:<porta>` em primeiro plano, sem shell: morre com a mesa. O processo
+  principal caindo derruba o servidor (`disconnect`). Ao iniciar, desliga um túnel que tenha sobrado.
+- **`/api/host`:** só o dono vê; abrir, fechar e abrir a pasta exigem `isDirectLocal` (127.0.0.1, sem cabeçalhos de proxy, Host
+  local). O endereço `*.ts.net` vira origem aceita (`allowPublicOrigin`). Painel: `HostPanel`, em Minhas mesas.
+- **Testes sem o Tailscale real:** `TAILSCALE_ARGV` aponta para `scripts/lib/tailscale-falso.mjs`.
+
+### Biblioteca de arquivos (só o dono) — `features/library`, `services/library.service.ts`
+- Pasta real com `imagens/` e `sons/` (seções fixas) e subpastas: o que for colocado pelo Explorador do Windows aparece. A lista vem do disco.
+- **Presa à pasta, em duas camadas:** `security/library-path.ts` (só nomes comuns separados por `/`; recusa `..`, `\`, absolutos,
+  unidades, ADS, reservados e ocultos; atalhos não são seguidos) e `--permission` do Node. Tipo conferido pelos bytes; cada seção aceita o seu.
+- Os jogadores nunca recebem estes arquivos: `LibraryPicker` (mapa da cena, sons, imagem da ficha) devolve um `File`, enviado à mesa pelo
+  caminho de sempre, e essa cópia vai sem metadados.
+
 ### Mesa online (servidor) — `OnlineTables`, rota `mesa-online/:id`
-- **Conta do servidor** (`ServerAccountService`, `core/`): separada da conta local (`AuthService`), sessão por cookie
-  HttpOnly (o token nunca chega ao JavaScript). Entrar/criar conta pelo mesmo `AuthDialog` em modo servidor (senha ≥ 8).
+- **Conta** (`ServerAccountService`, `core/`): a do dono ou a do convidado, com sessão por cookie HttpOnly (o token nunca
+  chega ao JavaScript). As rotas esperam `ensureChecked()`.
   `ServerApiService` chama `/api` com URLs relativas (proxy do `ng serve`); erros do servidor viram `ServerError` em
   PT-BR e servidor desligado vira o aviso `SERVER_OFFLINE`.
-- **Minhas mesas → "Mesas online"** (`features/tables/online-tables`): menu da conta (Baixar meus dados, Excluir conta
-  do servidor com a senha, Sair), criar mesa pelo nome, entrar com código de convite e, por mesa, o papel da conta
-  (dono = Mestre, convidado = Jogador), "Gerar convite" (código mostrado uma vez, com copiar), "Excluir mesa" ou
-  "Sair da mesa" e "Abrir mesa online". Chamadas em `OnlineTablesService`.
+- **Minhas mesas → "Mesas online"** (`features/tables/online-tables`): menu da conta (Baixar meus dados, Excluir a conta,
+  Sair), criar mesa pelo nome (dono) e, por mesa, o papel da conta, "Gerar convite" (link de uso único, mostrado uma vez),
+  "Jogadores" (nome + id, link de retorno, tirar da mesa), "Excluir mesa" ou "Sair da mesa" e "Abrir mesa online". O convidado
+  só vê as mesas dele; as mesas locais são do dono, em "Neste navegador".
 - **A mesa online é a mesma `GameTablePage`** (input `online` = dado da rota): busca a mesa (`OnlineTablesService.get`,
   com o motivo na tela se não abrir) e chama `session.connect(id)`. A conexão é a `TableRoom`
   (`services/table-room.ts`: WebSocket, `seq`, reconexão até 5 vezes; fechamentos 4401/4403/4404 são definitivos).

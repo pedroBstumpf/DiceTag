@@ -121,6 +121,12 @@
   Enviar áudio
 </button>
 <input #soundInput type="file" accept="audio/*,.mp3" multiple hidden (change)="onPicked(soundInput)" />
+@if (canUseLibrary()) {
+  <button mat-stroked-button class="w-full" (click)="pickFromLibrary()">
+    <mat-icon>perm_media</mat-icon>
+    Da biblioteca
+  </button>
+}
 
 <!-- Menu de opções de um som -->
 <mat-menu #soundMenu="matMenu" xPosition="before">

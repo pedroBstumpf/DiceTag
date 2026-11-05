@@ -20,7 +20,7 @@
   <nav class="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto overflow-x-hidden px-3 py-3">
     <!-- ===== Páginas ===== -->
     <ul class="flex flex-col gap-1">
-      @for (link of links; track link.route) {
+      @for (link of links(); track link.route) {
         <li>
           <a
             [routerLink]="link.route"
@@ -41,7 +41,7 @@
     </ul>
 
     <!-- ===== Mundos do usuário (cada um é um Worldbuild) ===== -->
-    @if (auth.isLoggedIn()) {
+    @if (account.isOwner()) {
       <section>
         @if (expanded()) {
           <h4 class="mb-2 px-3 text-[11px] font-semibold uppercase tracking-widest text-slate-500">Mundo</h4>
@@ -72,7 +72,7 @@
     }
 
     <!-- ===== Mesas do usuário (atalhos para abrir) ===== -->
-    @if (auth.isLoggedIn()) {
+    @if (account.isOwner()) {
       <section>
         @if (expanded()) {
           <h4 class="mb-2 px-3 text-[11px] font-semibold uppercase tracking-widest text-slate-500">Mesas</h4>
@@ -121,21 +121,7 @@
 
   <!-- ===== Conta ===== -->
   <footer class="shrink-0 border-t border-white/5 p-3">
-    @if (auth.isGuest() && expanded()) {
-      <!-- Modo de teste: visitante, com atalho para entrar -->
-      <div class="mb-2 flex items-center gap-2 rounded-xl bg-astral-500/10 px-3 py-2 text-xs text-astral-300">
-        <mat-icon class="!size-4 !text-base">science</mat-icon>
-        Modo de teste (sem conta)
-      </div>
-      <div class="flex flex-col gap-2">
-        <button mat-flat-button (click)="openAuth('register')">Criar conta</button>
-        <button mat-stroked-button (click)="openAuth('login')">Entrar</button>
-      </div>
-    } @else if (auth.isGuest()) {
-      <button mat-icon-button class="mx-auto !flex" matTooltip="Modo de teste — entrar" matTooltipPosition="right" (click)="openAuth('login')">
-        <mat-icon>login</mat-icon>
-      </button>
-    } @else if (auth.user(); as user) {
+    @if (account.user(); as user) {
       <button
         type="button"
         [matMenuTriggerFor]="accountMenu"
@@ -147,7 +133,7 @@
         @if (expanded()) {
           <span class="min-w-0 flex-1">
             <span class="block truncate text-sm font-medium text-slate-100">{{ user.name }}</span>
-            <span class="block truncate text-xs text-slate-500">{{ user.email }}</span>
+            <span class="block truncate text-xs text-slate-500">{{ user.email || 'Convidado ' + shortId(user.id) }}</span>
           </span>
           <mat-icon class="text-slate-500">unfold_more</mat-icon>
         }
@@ -158,15 +144,6 @@
           <span>Sair</span>
         </button>
       </mat-menu>
-    } @else if (expanded()) {
-      <div class="flex flex-col gap-2">
-        <button mat-flat-button (click)="openAuth('register')">Criar conta</button>
-        <button mat-stroked-button (click)="openAuth('login')">Entrar</button>
-      </div>
-    } @else {
-      <button mat-icon-button class="mx-auto !flex" matTooltip="Entrar" matTooltipPosition="right" (click)="openAuth('login')">
-        <mat-icon>login</mat-icon>
-      </button>
     }
 
     <!-- Recolher / expandir (somente desktop) -->

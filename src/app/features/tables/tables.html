@@ -3,27 +3,30 @@
   <header class="flex flex-wrap items-end justify-between gap-4">
     <div>
       <h1 class="font-display text-3xl text-slate-100">Minhas mesas</h1>
-      <p class="mt-1 text-sm text-slate-400">Campanhas e sessões que você mestra.</p>
+      <p class="mt-1 text-sm text-slate-400">{{ account.isOwner() ? 'Campanhas e sessões que você mestra.' : 'As mesas para as quais você foi convidado.' }}</p>
     </div>
-    @if (auth.isLoggedIn()) {
-      <button mat-flat-button class="!h-11" (click)="actions.createTable()">
-        <mat-icon>add</mat-icon>
-        Nova mesa
-      </button>
-    }
   </header>
 
-  <!-- ===== Conteúdo ===== -->
-  @if (!auth.isLoggedIn()) {
-    <app-empty-state
-      icon="lock"
-      title="Entre para ver suas mesas"
-      message="Crie uma conta gratuita para criar mesas e convidar seus amigos."
-    >
-      <button mat-flat-button (click)="actions.openAuth('register')">Criar conta</button>
-      <button mat-stroked-button (click)="actions.openAuth('login')">Entrar</button>
-    </app-empty-state>
-  } @else if (!service.tables().length) {
+  <!-- ===== Abrir a mesa para os jogadores (dono) e mesas online ===== -->
+  @if (account.isOwner()) {
+    <app-host-panel />
+  }
+  <app-online-tables />
+
+  <!-- ===== Mesas guardadas só neste navegador (dono) ===== -->
+  @if (account.isOwner()) {
+    <section class="flex flex-col gap-4 border-t border-white/5 pt-6">
+      <header class="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h2 class="font-display text-2xl text-slate-100">Neste navegador</h2>
+          <p class="mt-1 text-sm text-slate-400">Mesas de preparo, sem jogadores: ficam guardadas só aqui.</p>
+        </div>
+        <button mat-stroked-button class="!h-11" (click)="actions.createTable()">
+          <mat-icon>add</mat-icon>
+          Nova mesa local
+        </button>
+      </header>
+  @if (!service.tables().length) {
     <app-empty-state
       icon="casino"
       title="Nenhuma mesa ainda"
@@ -79,7 +82,6 @@
       }
     </div>
   }
-
-  <!-- ===== Mesas online (servidor) ===== -->
-  <app-online-tables />
+    </section>
+  }
 </div>

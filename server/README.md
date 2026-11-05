@@ -1,5 +1,8 @@
 # Servidor — Crônicas de Zehenia
 
+> **Para narrar de verdade:** `npm run mesa` (ou `Iniciar mesa.cmd`, na raiz). Usa a pasta `Documentos\Cronicas de Zehenia`, fora do
+> repositório, com o servidor isolado pelo modelo de permissões do Node. Este guia, com `.env` e `data/`, é para **desenvolver**.
+
 Back-end do VTT: **API HTTP** (contas, mesas, convites, mundos, arquivos) + **sala da mesa por
 WebSocket** (comandos em tempo real, validados e aplicados pelo servidor).
 
@@ -88,8 +91,7 @@ põe CSS crítico inline (`inlineCritical: false` no `angular.json`).
 Com os dois terminais abertos (servidor e `npm start`, ver §2) — ou só o servidor no jeito leve, trocando
 `localhost:4200` por `localhost:3000`:
 
-1. Abra **http://localhost:4200/mesas** e role até **Mesas online**. Clique em **Entrar no servidor** e use
-   `mestre@zehenia.local` com a senha `SEED_PASSWORD` do `.env`.
+1. Abra **http://localhost:4200**: sem conta, tudo leva à página de entrada. Use `mestre@zehenia.local` com a senha `SEED_PASSWORD` do `.env`.
 2. Na "Mesa de testes" (papel **Mestre**), clique em **Abrir mesa online**. A barra de cima mostra **Online**.
 3. Numa **janela anônima** (outra sessão de cookies), repita com `jogador@zehenia.local`: a mesa aparece como
    **Jogador**.
@@ -99,8 +101,8 @@ Com os dois terminais abertos (servidor e `npm start`, ver §2) — ou só o ser
      "O servidor recusou…");
    - ligar a névoa (mestre, ferramenta Névoa) muda o que a jogadora vê, com a visão calculada pelo servidor;
    - chat e rolagens (barra de baixo ou "Rolar") aparecem para os dois; o resultado é sorteado no servidor.
-5. Convites: no menu da mesa, **Gerar convite**; com outra conta (crie uma em "Criar conta"), cole o código em
-   **Código de convite** → **Entrar**.
+5. Convites: no menu da mesa, **Gerar convite** e abra o link numa janela anônima. A pessoa escolhe um nome e entra, sem cadastro.
+   Em **Jogadores**, cada um aparece com nome e id, com o link de retorno e a opção de tirar da mesa.
 6. LGPD: menu da conta → **Baixar meus dados** ou **Excluir conta do servidor** (pede a senha).
 
 Mapas, tokens, sons e imagens enviados na mesa online vão para o servidor (`/api/files`, cotas no `.env`), sem metadados
@@ -108,8 +110,7 @@ Mapas, tokens, sons e imagens enviados na mesa online vão para o servidor (`/ap
 no menu da mesa, **Preparar o mundo da mesa** abre o Worldbuild dele e **Enviar … deste navegador** copia um mundo local.
 Pings, efeitos e sons aparecem em tempo real nas duas janelas.
 
-7. Senha esquecida: em **Entrar no servidor** → **Esqueci minha senha**. Com `MAIL_PROVIDER=log` no `.env`, o e-mail com o
-   link aparece no terminal do servidor. Sem serviço de e-mail, gere o link com `npm run reset-link -- e-mail@exemplo.com`.
+7. Senha esquecida: `npm run dono`, no terminal. Com um serviço de e-mail configurado, também há a rota `/auth/password/forgot`.
 
 ### 3.1 Página de testes no navegador (o jeito mais visual)
 
@@ -192,14 +193,17 @@ experimental no Node. Os scripts já o escondem.
 
 | Rota | O quê |
 |---|---|
-| `POST /auth/register` · `POST /auth/login` · `POST /auth/logout` | Conta e sessão (cookie) — públicas, como `/health` e a recuperação de senha |
+| `POST /auth/login` · `POST /auth/logout` | Sessão (cookie); não há cadastro — públicas, como `/health` e a recuperação de senha |
 | `POST /auth/password/forgot` · `POST /auth/password/reset` | Recuperação de senha (públicas, com limite de taxa) |
 | `POST /auth/logout-all` | Sair de todos os dispositivos |
 | `GET/PATCH /auth/me` · `POST /auth/password` | Conta atual, nome, troca de senha (renova a sessão) |
 | `GET /auth/me/export` · `DELETE /auth/me` | LGPD: baixar os próprios dados; excluir a conta (pede a senha) |
 | `GET/POST /tables` · `GET/PATCH/DELETE /tables/:id` | Mesas da conta (como mestre ou jogador) |
 | `GET /tables/:id/members` · `DELETE /tables/:id/members/:userId` | Membros (mestre remove, jogador sai) |
-| `POST/DELETE /tables/:id/invites` · `POST /invites/accept` | Convites (código mostrado uma vez, 7 dias) |
+| `POST/DELETE /tables/:id/invites` · `POST /invites/redeem` · `POST /invites/accept` | Convites (uso único, mostrados uma vez, 7 dias); `redeem` é pública: entra só com o nome |
+| `POST /tables/:id/members/:userId/access-link` | Link de retorno: devolve ao convidado a mesma conta |
+| `GET /library` · `/library/file` · `POST /library/files` · `/folders` · `/move` · `/delete` | Biblioteca do dono (só ele) |
+| `GET /host` · `POST /host/open` · `/close` · `/open-folder` | Abrir a mesa aos jogadores (só o dono; alterar, só deste computador) |
 | `GET /tables/:id/lore` | Itens do mundo da mesa (jogador: os revelados + o mínimo do que a mesa mostra a ele) |
 | `PATCH /tables/:id/npcs/:itemId` | Quem controla um NPC do bestiário grava ficha, barras, etiquetas e ações |
 | `GET/POST /worlds` · `PATCH/DELETE /worlds/:id` | Mundos (até 2) |
@@ -265,7 +269,7 @@ As regras completas estão no [`BACKEND_SECURITY.md`](../BACKEND_SECURITY.md); a
 1. Publicar: seguir o [`OPERATIONS.md`](OPERATIONS.md) (hospedagem, HTTPS, `NODE_ENV=production`, segredos, backups, e-mail,
    política de privacidade).
 2. Fichas por campo em vez de gravadas inteiras (SPEC §1) e memória da névoa calculada no servidor.
-3. Verificação de e-mail no cadastro. Decidir se contas e mesas locais ficam na versão publicada.
+3. Testar com o Tailscale real (os testes usam um de mentira).
 
 ## Estrutura
 
@@ -284,7 +288,7 @@ server/
 │   ├── http/              # plugins (segurança, sessão) e rotas
 │   ├── realtime/          # sala da mesa: protocolo, limites, esquemas, regras (e da ficha), visão, projeção, rolagem
 │   └── ops/               # backup e teste de restauração
-├── scripts/               # setup, seed, smoke, e2e, reset-link, backup, backup-check
+├── scripts/               # mesa, dono, setup, seed, smoke, e2e, reset-link, backup, backup-check
 ├── OPERATIONS.md          # operação segura em produção
 ├── dev/                   # página /dev/
 └── test/                  # testes Vitest

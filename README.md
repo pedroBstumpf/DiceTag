@@ -6,7 +6,25 @@ Angular 21 · Angular Material (M3) · Tailwind CSS 4 · Tiptap (editor de texto
 Visual: tema espacial (preto, azul e branco), fontes angulares inspiradas em runas
 (Tektur nos títulos, Chakra Petch no texto) e ícones Material Symbols Sharp.
 
-## Como rodar
+## Como narrar uma sessão
+
+Só o dono do app instala algo; os jogadores usam só o navegador.
+
+**Na primeira vez**
+1. Instale o [Node.js](https://nodejs.org) (LTS) e o [Tailscale](https://tailscale.com/download), e entre numa conta do Tailscale.
+2. Dê dois cliques em **`Iniciar mesa.cmd`** e crie a sua conta no terminal. Ela é a única que entra com senha.
+
+**A cada sessão**
+1. Dois cliques em **`Iniciar mesa.cmd`**: o app abre no navegador.
+2. Em **Minhas mesas**, clique em **Abrir para os jogadores**.
+3. No menu da mesa, **Gerar convite** e envie o link a UMA pessoa. Ele vale uma vez. O amigo escolhe um nome e entra.
+4. Ao terminar, feche a janela do `Iniciar mesa`: a mesa sai da internet na hora.
+
+Tudo o que é seu fica em `Documentos\Cronicas de Zehenia`, fora deste repositório. Imagens e sons ficam em `biblioteca`: coloque-os
+lá pelo Explorador ou pela página **Arquivos**. Faça cópias dessa pasta de vez em quando: é o seu backup.
+Esqueceu a senha? `npm run dono` na pasta `server`.
+
+## Como desenvolver
 
 ```bash
 npm install
@@ -52,7 +70,8 @@ src/
     │   └── sidebar/           # navegação, mundos, mesas, conta
     └── features/
         ├── home/              # landing: banner, atalhos, notícias
-        ├── auth/              # diálogo de login / cadastro
+        ├── auth/              # entrada do dono e página do convite
+        ├── library/           # página Arquivos (imagens e sons)
         ├── tables/            # "Minhas mesas" + diálogo de criação
         ├── game-table/        # a mesa de jogo (rota /mesa/:id, tela cheia)
         │   ├── components/    # map-stage (orquestrador), map-layers/ (desenhos, notas, névoa,
@@ -66,11 +85,6 @@ src/
             ├── services/      # worldbuild (itens do mundo aberto + migrações), world-npc store
             └── utils/         # layout da linha do tempo em mapa mental, referências dos eventos
 ```
-
-## Modo de teste (sem conta)
-
-Em `src/app/core/config/app-settings.ts`, `requireAuth: false` faz o app usar
-automaticamente um usuário "Visitante". Mude para `true` para voltar a exigir conta.
 
 ## Mesa de jogo
 

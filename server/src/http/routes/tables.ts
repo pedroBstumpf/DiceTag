@@ -3,7 +3,8 @@ import { z } from 'zod';
 import type { AppContext } from '../../context';
 import { transaction } from '../../db/database';
 import { TABLE_ACCENTS, type TableRole, type WorldItem } from '../../domain';
-import { conflict, forbidden, HttpError, notFound, parse } from '../../lib/errors';
+import { audit } from '../../lib/audit';
+import { badRequest, conflict, forbidden, HttpError, notFound, parse } from '../../lib/errors';
 import { idSchema, newId } from '../../lib/ids';
 import { multilineText, text } from '../../lib/schemas';
 import type { MemberTable, TableRecord } from '../../repositories/tables';
@@ -11,7 +12,7 @@ import type { RealtimeHub } from '../../realtime/hub';
 import { barSchema, entrySchema, sheetSchema, tagSchema } from '../../realtime/command-schemas';
 import { projectLore } from '../../realtime/projection';
 import { controlledNpcChange, type ControlledNpcPatch } from '../../realtime/sheet-rules';
-import { requireAuth } from '../plugins/auth';
+import { PUBLIC, requireAuth, requireOwner, setSessionCookie } from '../plugins/auth';
 import { AUTH_RATE_LIMIT } from '../plugins/security';
 
 const tableFields = {
@@ -34,12 +35,17 @@ const npcBody = z.strictObject({
   tags: z.array(tagSchema).max(50).optional(),
   abilities: z.array(entrySchema).max(200).optional(),
 });
-const acceptBody = z.strictObject({ code: z.string().min(10).max(100).regex(/^[A-Za-z0-9_-]+$/) });
+const inviteCode = z.string().min(10).max(100).regex(/^[A-Za-z0-9_-]+$/);
+const acceptBody = z.strictObject({ code: inviteCode });
+/** Entrar por convite: o código e, se a conta ainda não existe, o nome que os outros vão ver. */
+const redeemBody = z.strictObject({ code: inviteCode, name: text(1, 40).optional() });
 
 /** Tamanho máximo de um NPC gravado por quem o controla (o mesmo dos itens do mundo). */
 const MAX_NPC_BYTES = 2 * 1024 * 1024;
 /** Validade dos convites. */
 const INVITE_TTL_MS = 7 * 24 * 3_600_000;
+/** Mesma resposta para código inexistente, vencido ou já usado (não revela qual é o caso). */
+const INVITE_INVALID = 'Convite inválido, vencido ou já usado. Peça outro a quem te convidou.';
 
 /**
  * /api/tables e /api/invites — mesas, membros, convites e a Lore da mesa.
@@ -66,8 +72,9 @@ export async function tableRoutes(app: FastifyInstance, ctx: AppContext, hub: Re
 
   app.get('/tables', async (req) => ({ tables: ctx.tables.listForUser(requireAuth(req).user.id) }));
 
+  /** Só o dono do app cria mesas; os demais entram nas dele por convite. */
   app.post('/tables', async (req, reply) => {
-    const { user } = requireAuth(req);
+    const { user } = requireOwner(req);
     const body = parse(createBody, req.body);
     const worlds = ctx.worlds.listByOwner(user.id);
     const world = body.worldId ? worlds.find((w) => w.id === body.worldId) : worlds[0];
@@ -113,22 +120,45 @@ export async function tableRoutes(app: FastifyInstance, ctx: AppContext, hub: Re
     if (target === table.ownerId) throw forbidden('O dono não pode sair da própria mesa.');
     if (role !== 'gm' && target !== userId) throw forbidden('Só o mestre pode remover jogadores.');
     // A consulta só apaga jogadores: o mestre nunca sai por aqui
-    if (ctx.tables.removePlayer(table.id, target)) hub.kick(table.id, target);
+    if (ctx.tables.removePlayer(table.id, target)) {
+      hub.kick(table.id, target);
+      // Convidado sem nenhuma mesa não tem por que continuar com uma sessão aberta
+      if (ctx.users.findById(target)?.kind === 'guest' && !ctx.tables.listForUser(target).length) {
+        ctx.auth.logoutAll(target);
+        hub.userSessionsEnded(target);
+      }
+    }
     return reply.code(204).send();
   });
 
   // --- Convites --------------------------------------------------------------
 
-  /** Gera um código de convite (mostrado UMA vez; o banco guarda só o hash). */
-  app.post('/tables/:id/invites', async (req, reply) => {
-    const { table, userId } = gmAccess(req);
+  /**
+   * Gera um convite: 192 bits aleatórios, de **uso único**, válido por 7 dias. É mostrado UMA vez,
+   * e o banco guarda só o hash. O código vai no fragmento do link (depois do #), que não chega ao
+   * servidor nem aos logs. `targetUserId`: link de retorno para uma conta que já existe.
+   */
+  const newInvite = (tableId: string, userId: string, targetUserId: string | null) => {
     const code = ctx.tokens.generate(24);
     const now = Date.now();
     const expiresAt = now + INVITE_TTL_MS;
-    if (!ctx.tables.createInvite(ctx.tokens.hash(code, 'invite'), table.id, userId, now, expiresAt, table.maxPlayers)) {
+    if (!ctx.tables.createInvite(ctx.tokens.hash(code, 'invite'), tableId, userId, now, expiresAt, 1, targetUserId)) {
       throw forbidden('Só o mestre pode fazer isso.');
     }
-    return reply.code(201).send({ code, expiresAt });
+    return { code, expiresAt, link: `${ctx.config.publicUrl}/convite#codigo=${code}` };
+  };
+
+  app.post('/tables/:id/invites', async (req, reply) => {
+    const { table, userId } = gmAccess(req);
+    return reply.code(201).send(newInvite(table.id, userId, null));
+  });
+
+  /** Link de retorno: o convidado trocou de aparelho ou limpou o navegador, e volta à mesma conta. */
+  app.post('/tables/:id/members/:userId/access-link', async (req, reply) => {
+    const { table, userId } = gmAccess(req);
+    const target = parse(memberParams, req.params).userId;
+    if (ctx.users.findById(target)?.kind !== 'guest' || !ctx.tables.roleOf(table.id, target)) throw notFound('Jogador não encontrado.');
+    return reply.code(201).send(newInvite(table.id, userId, target));
   });
 
   /** Cancela todos os convites da mesa. */
@@ -145,10 +175,10 @@ export async function tableRoutes(app: FastifyInstance, ctx: AppContext, hub: Re
     const codeHash = ctx.tokens.hash(code, 'invite');
     const tableId = transaction(ctx.db, () => {
       const invite = ctx.tables.findInvite(codeHash);
-      // Mesma resposta para código inexistente, vencido ou esgotado
-      if (!invite || invite.expiresAt <= Date.now() || invite.uses >= invite.maxUses) throw new HttpError(404, 'Convite inválido ou vencido.');
+      // Link de retorno é da conta dele: outra conta logada não pode usá-lo
+      if (!invite || invite.expiresAt <= Date.now() || invite.uses >= invite.maxUses || invite.targetUserId) throw new HttpError(404, INVITE_INVALID);
       const table = ctx.tables.find(invite.tableId);
-      if (!table) throw new HttpError(404, 'Convite inválido ou vencido.');
+      if (!table) throw new HttpError(404, INVITE_INVALID);
       if (ctx.tables.roleOf(table.id, user.id)) return table.id;
       if (ctx.tables.playerCount(table.id) >= table.maxPlayers) throw conflict('A mesa está cheia.');
       ctx.tables.addMember(table.id, user.id, 'player', Date.now());
@@ -156,6 +186,37 @@ export async function tableRoutes(app: FastifyInstance, ctx: AppContext, hub: Re
       return table.id;
     });
     return { table: ctx.tables.findForMember(tableId, user.id) };
+  });
+
+  /**
+   * Entra no app por um convite, sem conta: só com o nome (ou com a conta do link de retorno).
+   * Pública, mas só faz algo com um código válido; tudo acontece numa transação, então dois usos
+   * do mesmo código ao mesmo tempo não passam juntos.
+   */
+  app.post('/invites/redeem', { config: { ...AUTH_RATE_LIMIT, ...PUBLIC } }, async (req, reply) => {
+    const { code, name } = parse(redeemBody, req.body);
+    const codeHash = ctx.tokens.hash(code, 'invite');
+    const { tableId, user } = transaction(ctx.db, () => {
+      const invite = ctx.tables.findInvite(codeHash);
+      if (!invite || invite.expiresAt <= Date.now() || invite.uses >= invite.maxUses) throw new HttpError(404, INVITE_INVALID);
+      const table = ctx.tables.find(invite.tableId);
+      if (!table) throw new HttpError(404, INVITE_INVALID);
+      if (invite.targetUserId) {
+        const target = ctx.users.findById(invite.targetUserId);
+        if (!target || !ctx.tables.roleOf(table.id, target.id)) throw new HttpError(404, INVITE_INVALID);
+        ctx.tables.useInvite(codeHash);
+        return { tableId: table.id, user: target };
+      }
+      if (!name) throw badRequest('Informe o seu nome.');
+      if (ctx.tables.playerCount(table.id) >= table.maxPlayers) throw conflict('A mesa está cheia.');
+      const guest = ctx.auth.createGuest(name);
+      ctx.tables.addMember(table.id, guest.id, 'player', Date.now());
+      ctx.tables.useInvite(codeHash);
+      return { tableId: table.id, user: guest };
+    });
+    audit(req.log, 'convite.usado', { userId: user.id, tableId, ip: req.ip });
+    setSessionCookie(reply, ctx, ctx.auth.sessionFor(user), user);
+    return { user, table: ctx.tables.findForMember(tableId, user.id) };
   });
 
   // --- Lore da mesa ------------------------------------------------------------

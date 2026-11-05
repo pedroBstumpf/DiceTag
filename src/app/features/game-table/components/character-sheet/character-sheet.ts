@@ -1,5 +1,6 @@
 import { NgTemplateOutlet } from '@angular/common';
 import { Component, computed, inject, input, output, signal } from '@angular/core';
+import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { Tag } from '../../../../core/models/tag.model';
@@ -23,7 +24,8 @@ import {
   isDown,
   isStatusBar,
 } from '../../../../core/models/table-session.model';
-import { AuthService } from '../../../../core/services/auth.service';
+import { ServerAccountService } from '../../../../core/services/server-account.service';
+import { LibraryPicker } from '../../../../shared/components/library-picker/library-picker';
 import { newId } from '../../../../core/utils/id';
 import { TagEditor } from '../../../../shared/components/tag-editor/tag-editor';
 import { readableTextOn } from '../../../../shared/utils/color';
@@ -77,7 +79,8 @@ export class CharacterSheetView {
   readonly blobs = inject(BlobUrlService);
   /** Texto legível sobre a cor de uma etiqueta (branco em cores escuras, como o preto). */
   readonly textOn = readableTextOn;
-  private readonly auth = inject(AuthService);
+  private readonly account = inject(ServerAccountService);
+  private readonly dialog = inject(MatDialog);
   private readonly worldbuild = inject(WorldbuildService);
 
   /** Id da ficha no SheetStore. */
@@ -199,7 +202,7 @@ export class CharacterSheetView {
   /** Quantidade de itens no inventário (contador da aba). */
   readonly inventoryCount = computed(() => this.sheet()?.inventory.length ?? 0);
   /** O personagem é da conta atual? */
-  readonly isMine = computed(() => this.entry()?.ownerUserId === this.auth.user()?.id);
+  readonly isMine = computed(() => !!this.session && this.entry()?.ownerUserId === this.session.accountId());
 
   readonly maxLevel = SHEET_MAX_LEVEL;
 
@@ -218,7 +221,16 @@ export class CharacterSheetView {
 
   claim(): void {
     const entry = this.entry();
-    if (entry) this.session?.updateEntry(entry.id, { ownerUserId: this.auth.user()?.id });
+    if (entry) this.session?.updateEntry(entry.id, { ownerUserId: this.session.accountId() });
+  }
+
+  /** Mesa online, e quem olha é o dono do app: a biblioteca de arquivos está disponível. */
+  readonly canUseLibrary = computed(() => !!this.session?.online() && this.account.isOwner());
+
+  /** Imagem da ficha vinda da biblioteca (é a mesma do token). */
+  async pickImageFromLibrary(): Promise<void> {
+    const [file] = await LibraryPicker.pick(this.dialog, 'imagens');
+    if (file) await this.store.setSheetImage(this.sheetId(), file);
   }
 
   update(patch: Partial<CharacterSheet>): void {

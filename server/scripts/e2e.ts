@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
-import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -11,9 +11,10 @@ import { join, resolve } from 'node:path';
  *   npm run build            # na raiz: o servidor entrega o app compilado
  *   npm run e2e              # na pasta server/
  *
- * Sobe o próprio servidor, numa porta própria e com banco, arquivos e segredos TEMPORÁRIOS: não toca
- * em `data/` nem usa os segredos do `.env`. Controla o Chrome pelo protocolo de depuração, com o
- * WebSocket e o fetch do próprio Node (sem pacote novo). Chrome em outro lugar: variável CHROME_PATH.
+ * Inicia o app pelo mesmo caminho do dia a dia (`npm run mesa`, com o servidor preso à pasta do app e
+ * um Tailscale de mentira), numa porta própria e numa pasta TEMPORÁRIA: não toca na sua pasta nem usa
+ * os seus segredos. Controla o Chrome pelo protocolo de depuração, com o WebSocket e o fetch do próprio
+ * Node (sem pacote novo). Chrome em outro lugar: variável CHROME_PATH.
  */
 
 const PORT = 3177;
@@ -22,6 +23,18 @@ const CDP_PORT = 9333;
 const FRONTEND = resolve('../dist/zehenia/browser');
 const PASSWORD = randomBytes(12).toString('base64url');
 const work = mkdtempSync(join(tmpdir(), 'zehenia-e2e-'));
+const HOME = join(work, 'pasta-do-app');
+const OWNER_EMAIL = 'dono@exemplo.com';
+/** Ambiente dos comandos do app: a pasta temporária e o Tailscale de mentira. */
+const APP_ENV: NodeJS.ProcessEnv = {
+  ...process.env,
+  ZEHENIA_HOME: HOME,
+  MESA_PORT: String(PORT),
+  TAILSCALE_ARGV: JSON.stringify([process.execPath, resolve('scripts/lib/tailscale-falso.mjs')]),
+  DONO_NOME: 'Mestre Teste',
+  DONO_EMAIL: OWNER_EMAIL,
+  DONO_SENHA: PASSWORD,
+};
 
 // --- Resultado ------------------------------------------------------------------------
 
@@ -37,38 +50,16 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 let serverLog = '';
 let server: ChildProcess | undefined;
-/** Os mesmos ao reiniciar: as sessões continuam valendo, como num servidor de verdade. */
-const TOKEN_SECRET = randomBytes(40).toString('base64url');
-const PASSWORD_PEPPER = randomBytes(40).toString('base64url');
 
+/** Inicia o app como no dia a dia: `npm run mesa`. Reiniciar usa os mesmos dados e segredos. */
 function startServer(): Promise<void> {
-  server = spawn(process.execPath, ['--import', 'tsx', '--disable-warning=ExperimentalWarning', 'src/main.ts'], {
-    env: {
-      ...process.env,
-      NODE_ENV: 'development',
-      HOST: '127.0.0.1',
-      PORT: String(PORT),
-      LOG_LEVEL: 'warn',
-      DATABASE_PATH: join(work, 'data', 'zehenia.db'),
-      FILES_DIR: join(work, 'data', 'files'),
-      ALLOWED_ORIGINS: BASE,
-      PUBLIC_URL: BASE,
-      FRONTEND_DIR: FRONTEND,
-      TOKEN_SECRET,
-      PASSWORD_PEPPER,
-      PASSWORD_PEPPER_VERSION: '1',
-      PASSWORD_PEPPERS_PREVIOUS: '',
-      PASSWORD_COST: '15',
-      COOKIE_SECURE: 'true',
-      RATE_LIMIT: 'true',
-      DEV_TOOLS: 'false',
-      MAIL_PROVIDER: 'log',
-    },
+  server = spawn(process.execPath, ['--import', 'tsx', '--disable-warning=ExperimentalWarning', 'scripts/mesa.ts', '--sem-abrir', '--sem-build'], {
+    env: APP_ENV,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   server.stdout?.on('data', (d: Buffer) => (serverLog += d.toString()));
   server.stderr?.on('data', (d: Buffer) => (serverLog += d.toString()));
-  return until(async () => (await fetch(`${BASE}/api/health`).catch(() => null))?.ok === true, 'servidor no ar', 20_000);
+  return until(async () => (await fetch(`${BASE}/api/health`).catch(() => null))?.ok === true, 'servidor no ar', 40_000);
 }
 
 async function until(test: () => Promise<boolean> | boolean, label: string, timeout = 8000): Promise<void> {
@@ -308,6 +299,11 @@ function jpegWithExif(): Buffer {
   return Buffer.concat([pixel.subarray(0, 2), app1, pixel.subarray(2)]);
 }
 
+/** Capturas de tela para conferir o visual, se E2E_SHOTS disser onde guardar. */
+async function shot(page: Page, name: string): Promise<void> {
+  if (process.env['E2E_SHOTS']) await page.screenshot(join(process.env['E2E_SHOTS'], `${name}.png`));
+}
+
 /** WAV de 2 s de silêncio: o suficiente para o navegador tocar e sabermos o ponto da faixa. */
 const SILENT_WAV = `(() => {
   const rate = 8000, seconds = 30, size = rate * seconds;
@@ -351,16 +347,123 @@ async function main(): Promise<void> {
 }
 
 async function run(gm: Page, player: Page, cdp: Cdp): Promise<void> {
-  section('Contas, mesa e convite');
+  section('Só por convite');
+  const visitor = await Page.open(cdp);
+  await visitor.goto(`${BASE}/mesas`);
+  check(await visitor.waitText('Entrada do dono'), 'sem conta, qualquer página leva à entrada');
+  await shot(visitor, 'entrada');
+  const entrance = await visitor.text();
+  check(!/criar conta|cadastr/i.test(entrance), 'não há cadastro em lugar nenhum');
+  const register = await visitor.eval<number>(`fetch('/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'X', email: 'x@exemplo.com', password: 'uma senha qualquer' }) }).then((r) => r.status)`);
+  check(register === 404, 'a rota de cadastro não existe');
+
+  await gm.goto(`${BASE}/entrar`);
+  await until(() => gm.fill('input[formcontrolname="email"]', OWNER_EMAIL), 'campo de e-mail');
+  await gm.fill('input[formcontrolname="password"]', PASSWORD);
+  await gm.clickButton('Entrar');
+  check(await gm.waitText('Minhas mesas', 15_000), 'o dono entra com a senha criada no terminal');
+  const gmAccount = await gm.api('GET', '/auth/me');
+  check(gmAccount.user?.kind === 'owner', 'a conta é a do dono');
+
   await gm.goto(`${BASE}/mesas`);
-  await player.goto(`${BASE}/mesas`);
-  const gmAccount = await gm.api('POST', '/auth/register', { name: 'Mestre Teste', email: 'mestre@exemplo.com', password: PASSWORD });
-  const playerAccount = await player.api('POST', '/auth/register', { name: 'Jogadora Teste', email: 'jogadora@exemplo.com', password: PASSWORD });
-  check(gmAccount.status === 201 && playerAccount.status === 201, 'duas contas criadas, cada uma no próprio navegador');
   const { table } = await gm.api('POST', '/tables', { name: 'Mesa E2E', system: '', description: '', maxPlayers: 4, accent: '#4f86f7' });
-  const { code } = await gm.api('POST', `/tables/${table.id}/invites`);
-  check((await player.api('POST', '/invites/accept', { code })).status === 200, 'jogadora entrou pelo convite');
+  const invited = await gm.api('POST', `/tables/${table.id}/invites`);
+  check(invited.link.includes('/convite#codigo='), 'o convite vem como link, com o código depois do #');
+  await player.goto(`${BASE}/convite#codigo=${invited.code}`);
+  check(!(await player.eval<string>('location.href')).includes('codigo'), 'o código sai da barra de endereço ao abrir');
+  await until(() => player.fill('input[autocomplete="nickname"]', 'Jogadora Teste'), 'campo de nome');
+  await shot(player, 'convite');
+  await player.clickButton('Entrar na mesa');
+  check(await player.waitText('Online', 15_000), 'a amiga entra só com o nome, sem cadastro nem senha, direto na mesa');
+  const playerAccount = await player.api('GET', '/auth/me');
+  check(playerAccount.user?.kind === 'guest' && playerAccount.user.email === '' && !!playerAccount.user.id, 'ela tem uma conta com nome e id, sem e-mail');
+  await visitor.goto(`${BASE}/convite#codigo=${invited.code}`);
+  await until(() => visitor.fill('input[autocomplete="nickname"]', 'Intruso'), 'campo de nome');
+  await visitor.clickButton('Entrar na mesa');
+  check(await visitor.waitText('inválido, vencido ou já usado'), 'o mesmo link não serve para mais ninguém');
   const worldId: string = table.worldId;
+
+  section('O que o convidado não alcança');
+  await player.goto(`${BASE}/arquivos`);
+  check(await player.waitText('As mesas para as quais você foi convidado'), 'a página Arquivos leva o convidado de volta às mesas dele');
+  const menu = await player.text();
+  check(!menu.includes('Arquivos') && !menu.includes('Worldbuild'), 'o menu dele só tem as mesas');
+  check((await player.api('POST', '/tables', { name: 'X', system: '', description: '', maxPlayers: 4, accent: '#4f86f7' })).status === 403, 'ele não cria mesas');
+  check((await player.api('GET', '/library')).status === 403, 'ele não vê a biblioteca');
+  check((await player.api('POST', '/host/open')).status === 403, 'ele não abre nem fecha a mesa');
+  check((await player.api('GET', `/worlds/${worldId}/items`)).status === 404, 'ele não lê o mundo do mestre');
+
+  section('Biblioteca de arquivos, presa à pasta');
+  const library = join(HOME, 'biblioteca');
+  await gm.goto(`${BASE}/arquivos`);
+  check(await gm.waitText('O app só tem acesso a esta pasta'), 'a página Arquivos mostra a pasta do computador');
+  check(await gm.waitText('Proteção do sistema ativa'), 'com a proteção do sistema ligada');
+  // Colocado direto na pasta, sem passar pelo app
+  mkdirSync(join(library, 'imagens', 'Mapas'), { recursive: true });
+  writeFileSync(join(library, 'imagens', 'Mapas', 'ponte.png'), Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64'));
+  await gm.goto(`${BASE}/arquivos`);
+  check(await gm.waitText('Mapas'), 'a pasta criada no Explorador aparece no app');
+  await gm.clickButton('Abrir a pasta Mapas');
+  check(await gm.waitText('ponte.png'), 'e o arquivo dentro dela, com a pré-visualização');
+  const thumb = await until(() => gm.eval(`[...document.querySelectorAll('app-library img')].some((i) => i.naturalWidth > 0)`), 'miniatura', 5000).then(
+    () => true,
+    () => false,
+  );
+  check(thumb, 'a imagem carrega');
+  const sent = await gm.eval<{ status: number }>(`(async () => {
+    const form = new FormData();
+    form.append('file', ${PNG_BLOB}, 'enviada.png');
+    const res = await fetch('/api/library/files?folder=' + encodeURIComponent('imagens/Mapas'), { method: 'POST', body: form });
+    return { status: res.status };
+  })()`);
+  check(sent.status === 201 && existsSync(join(library, 'imagens', 'Mapas', 'enviada.png')), 'o que é enviado pelo app vai para a pasta real');
+  const secrets = readFileSync(join(HOME, 'segredos.env'), 'utf8');
+  const secretValue = secrets.split('TOKEN_SECRET=')[1].split(/\r?\n/)[0];
+  for (const attempt of ['../segredos.env', '..\\segredos.env', 'imagens/../../segredos.env', '../dados/zehenia.db', 'C:/Windows/win.ini']) {
+    const res = await gm.eval<{ status: number; body: string }>(`fetch('/api/library/file?path=' + encodeURIComponent(${JSON.stringify(attempt)})).then(async (r) => ({ status: r.status, body: await r.text() }))`);
+    check(res.status === 400 && !res.body.includes(secretValue), `recusa ${attempt}`, String(res.status));
+  }
+  // O sistema também recusa: o mesmo modelo de permissões do servidor, rodando esta sondagem
+  const probePath = join(resolve('.mesa'), 'sondagem.mjs');
+  writeFileSync(probePath, `
+    import { readFileSync, writeFileSync } from 'node:fs';
+    import { execSync } from 'node:child_process';
+    const attempt = (name, fn) => { try { fn(); console.log(name + '=PERMITIDO'); } catch (e) { console.log(name + '=' + e.code); } };
+    attempt('fora', () => readFileSync(process.argv[2]));
+    attempt('repositorio', () => readFileSync(process.argv[3]));
+    attempt('gravar', () => writeFileSync(process.argv[4], 'x'));
+    attempt('programa', () => execSync('whoami'));
+    attempt('dentro', () => readFileSync(process.argv[5]));
+  `);
+  const { sandboxArgs } = await import('./lib/app-env.js').catch(() => import('./lib/app-env'));
+  void sandboxArgs;
+  const outside = join(work, 'fora-da-pasta.txt');
+  writeFileSync(outside, 'segredo');
+  const probe = spawnSync(process.execPath, ['--import', 'tsx', 'scripts/lib/sondar.ts', probePath, outside, resolve('../README.md'), join(work, 'gravado.txt'), join(HOME, 'segredos.env')], { env: APP_ENV, encoding: 'utf8' });
+  const results = probe.stdout;
+  check(results.includes('fora=ERR_ACCESS_DENIED'), 'pelo sistema: o servidor não lê fora da pasta', results);
+  check(results.includes('repositorio=ERR_ACCESS_DENIED'), 'pelo sistema: nem este repositório');
+  check(results.includes('gravar=ERR_ACCESS_DENIED') && !existsSync(join(work, 'gravado.txt')), 'pelo sistema: não grava fora da pasta');
+  check(results.includes('programa=ERR_ACCESS_DENIED'), 'pelo sistema: não executa programas');
+  check(results.includes('dentro=PERMITIDO'), 'e dentro da pasta funciona normalmente');
+  rmSync(probePath, { force: true });
+
+  await shot(gm, 'arquivos');
+
+  section('Abrir para os jogadores (com um Tailscale de mentira)');
+  await gm.goto(`${BASE}/mesas`);
+  check(await gm.waitText('Mesa fechada'), 'a mesa começa fechada');
+  await gm.clickButton('Abrir para os jogadores');
+  check(await gm.waitText('Mesa aberta para os jogadores'), 'o botão abre a mesa');
+  check(await gm.waitText('mesa-de-teste.tail0000.ts.net'), 'e mostra o endereço público');
+  await shot(gm, 'mesas');
+  const newInvite = await gm.api('POST', `/tables/${table.id}/invites`);
+  check(newInvite.link.startsWith('https://mesa-de-teste.tail0000.ts.net/convite#codigo='), 'o convite usa o endereço público');
+  const tunnelled = await gm.eval<number>(`fetch('/api/host/close', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': '203.0.113.9' }, body: '{}' }).then((r) => r.status)`);
+  check(tunnelled === 403, 'pelo túnel, mesmo com a sessão do dono, não dá para mexer na mesa');
+  await gm.clickButton('Fechar a mesa');
+  check(await gm.waitText('Mesa fechada'), 'o botão fecha a mesa');
+  await gm.api('DELETE', `/tables/${table.id}/invites`);
 
   section('Worldbuild e bestiário no servidor');
   const put = (item: Record<string, unknown> & { id: string }) => gm.api('PUT', `/worlds/${worldId}/items/${item.id}`, item);
@@ -525,11 +628,14 @@ async function run(gm: Page, player: Page, cdp: Cdp): Promise<void> {
   );
   check(playing, 'o som está tocando na máquina da jogadora');
   await sleep(1500);
+  // Outro aparelho: a mesma pessoa volta à MESMA conta, pelo link de retorno do mestre
   const lateJoiner = await Page.open(cdp);
-  await lateJoiner.goto(`${BASE}/mesas`);
-  await lateJoiner.api('POST', '/auth/login', { email: 'jogadora@exemplo.com', password: PASSWORD });
-  await lateJoiner.goto(`${BASE}/mesa-online/${table.id}`);
+  const back = await gm.api('POST', `/tables/${table.id}/members/${playerAccount.user.id}/access-link`);
+  await lateJoiner.goto(`${BASE}/convite#codigo=${back.code}`);
+  await until(() => lateJoiner.eval(`[...document.querySelectorAll('button')].some((b) => b.innerText?.includes('Entrar na mesa') && !b.disabled) || !!document.querySelector('input[autocomplete="nickname"]')`), 'página de retorno');
+  await lateJoiner.clickButton('Entrar na mesa');
   await lateJoiner.waitText('Online');
+  check((await lateJoiner.api('GET', '/auth/me')).user?.id === playerAccount.user.id, 'o link de retorno devolve a mesma conta, sem senha');
   await until(() => lateJoiner.eval('window.__audios.length > 0'), 'faixa', 5000).catch(() => undefined);
   await sleep(300);
   await lateJoiner.clickAt(700, 450);
@@ -565,31 +671,48 @@ async function run(gm: Page, player: Page, cdp: Cdp): Promise<void> {
     check(stored.orientation === 6, 'a orientação da foto foi preservada');
   }
 
-  section('Recuperação de senha');
-  const forgotten = await player.api('POST', '/auth/password/forgot', { email: 'jogadora@exemplo.com' });
-  check(forgotten.status === 202, 'pedido aceito');
-  await until(() => /redefinir-senha#token=/.test(serverLog), 'e-mail no log', 4000).catch(() => undefined);
-  const link = /http\S+redefinir-senha#token=[\w-]+/.exec(serverLog)?.[0];
-  check(!!link, 'e-mail de recuperação enviado (no terminal, com MAIL_PROVIDER=log)');
-  const stranger = await Page.open(cdp);
+  section('Biblioteca dentro da mesa');
+  await gm.goto(`${BASE}/mesa-online/${table.id}`);
+  await gm.waitText('Online');
+  const scenesBefore = await gm.eval<number>(`document.querySelectorAll('app-scene-bar button').length`);
+  await gm.eval(`[...document.querySelectorAll('app-scene-bar button')].find((b) => b.querySelector('mat-icon')?.textContent?.trim() === 'add')?.click()`);
+  await sleep(250);
+  check(await gm.clickButton('Cena com mapa da biblioteca'), 'o mestre escolhe o mapa da biblioteca ao criar a cena');
+  check(await gm.waitText('Escolher imagem'), 'o seletor abre');
+  await gm.waitText('Mapas');
+  await gm.eval(`[...document.querySelectorAll('app-library-picker li button')].find((b) => b.innerText.includes('Mapas'))?.click()`);
+  await gm.waitText('ponte.png');
+  await shot(gm, 'seletor');
+  await gm.eval(`[...document.querySelectorAll('app-library-picker li button')].find((b) => b.innerText.includes('ponte.png'))?.click()`);
+  const sceneAdded = await gm.waitText('ponte', 8000) && (await until(async () => (await gm.eval<number>(`document.querySelectorAll('app-scene-bar button').length`)) > scenesBefore, 'cena nova', 8000).then(() => true, () => false));
+  check(sceneAdded, 'a cena nasce com o mapa escolhido');
+  const soundForLibrary = await gm.eval<{ status: number }>(`(async () => {
+    const form = new FormData();
+    form.append('file', ${SILENT_WAV}, 'chuva.wav');
+    const res = await fetch('/api/library/files?folder=sons', { method: 'POST', body: form });
+    return { status: res.status };
+  })()`);
+  check(soundForLibrary.status === 201, 'um som enviado à biblioteca');
+  await gm.clickButton('Sons');
+  await gm.waitText('Da biblioteca');
+  await gm.clickButton('Da biblioteca');
+  await gm.waitText('chuva.wav');
+  await gm.eval(`[...document.querySelectorAll('app-library-picker li button')].find((b) => b.innerText.includes('chuva.wav'))?.click()`);
+  await sleep(150);
+  await gm.eval(`[...document.querySelectorAll('app-library-picker button')].find((b) => b.innerText?.trim().startsWith('Usar'))?.click()`);
+  const soundListed = await until(() => gm.eval<boolean>(`document.querySelector('app-sound-list')?.innerText.includes('chuva') ?? false`), 'som na lista', 8000).then(() => true, () => false);
+  check(soundListed, 'o som da biblioteca entra na lista da mesa');
+
+  section('Senha do dono, só pelo terminal');
   const NEW_PASSWORD = randomBytes(12).toString('base64url');
-  if (link) {
-    await stranger.goto(link);
-    check(await stranger.waitText('Redefinir a senha'), 'o link abre a página de redefinição');
-    check(!(await stranger.eval<string>('location.href')).includes('token'), 'o token sai da barra de endereço ao abrir');
-    await until(() => stranger.fill('input[formcontrolname="password"]', NEW_PASSWORD), 'campo de senha');
-    await stranger.clickButton('Salvar a senha nova');
-    check(await stranger.waitText('Senha alterada'), 'a senha foi trocada pela tela');
-    const oldLogin = await stranger.api('POST', '/auth/login', { email: 'jogadora@exemplo.com', password: PASSWORD });
-    check(oldLogin.status === 401, 'a senha antiga não entra mais');
-    const newLogin = await stranger.api('POST', '/auth/login', { email: 'jogadora@exemplo.com', password: NEW_PASSWORD });
-    check(newLogin.status === 200, 'a senha nova entra');
-    const closed = await until(async () => (await player.text()).includes('Desconectado'), 'sessão derrubada', 6000).then(
-      () => true,
-      () => false,
-    );
-    check(closed, 'a sessão aberta da jogadora caiu na hora');
-  }
+  const changed = spawnSync(process.execPath, ['--import', 'tsx', '--disable-warning=ExperimentalWarning', 'scripts/dono.ts'], { env: { ...APP_ENV, DONO_SENHA: NEW_PASSWORD }, encoding: 'utf8' });
+  check(changed.status === 0, 'npm run dono troca a senha', changed.stderr);
+  check((await gm.api('GET', '/auth/me')).status === 401, 'as sessões antigas do dono caem');
+  const stranger = await Page.open(cdp);
+  await stranger.goto(`${BASE}/entrar`);
+  check((await stranger.api('POST', '/auth/login', { email: OWNER_EMAIL, password: PASSWORD })).status === 401, 'a senha antiga não entra mais');
+  check((await gm.api('POST', '/auth/login', { email: OWNER_EMAIL, password: NEW_PASSWORD })).status === 200, 'a senha nova entra');
+  check((await player.api('GET', '/auth/me')).status === 200, 'a sessão dos convidados não é afetada');
 
   section('Mundo editado pela tela');
   await gm.goto(`${BASE}/worldbuild?servidor=${worldId}`);
@@ -652,6 +775,9 @@ async function run(gm: Page, player: Page, cdp: Cdp): Promise<void> {
   await until(() => old?.exitCode !== null || old?.killed === true, 'servidor parado');
   check(await gm.waitText('Reconectando', 6000) || await gm.waitText('Desconectado', 1000), 'a barra mostra que a conexão caiu');
   await sleep(1500);
+  // O servidor cai junto com o processo principal: nada fica aberto sozinho
+  await until(async () => !(await fetch(`${BASE}/api/health`).catch(() => null)), 'servidor fora do ar', 8000);
+  check(true, 'o servidor caiu junto com o processo principal');
   await startServer();
   check(await gm.waitText('Online', 35_000), 'o app volta sozinho quando o servidor volta');
   await gm.openRoom(table.id);
@@ -659,11 +785,9 @@ async function run(gm: Page, player: Page, cdp: Cdp): Promise<void> {
   check(restored?.x === 777, 'nada se perdeu: o estado volta do banco', JSON.stringify(restored));
 
   section('Segurança no caminho real');
-  const blocked = await stranger.eval<number>(`fetch('/api/worlds/${worldId}/items').then((r) => r.status)`);
-  check(blocked === 404, 'outra conta não lê o mundo do mestre (404)');
   const csp = await fetch(`${BASE}/mesas`).then((r) => r.headers.get('content-security-policy') ?? '');
   check(csp.includes("script-src 'self'") && !csp.includes("script-src 'self' 'unsafe-inline'"), 'a CSP só aceita scripts do próprio servidor');
-  await gm.screenshot(join(process.env['E2E_SHOTS'] ?? work, 'mestre.png'));
+  await shot(gm, 'mestre');
 }
 
 main()

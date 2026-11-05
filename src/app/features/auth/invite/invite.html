@@ -1,0 +1,45 @@
+<div class="flex w-full max-w-md flex-col gap-5 rounded-2xl border border-white/5 bg-ink-900 p-6 animate-fade-in">
+  <div class="flex flex-col items-center gap-3 text-center">
+    <img src="images/zehenia-emblem.png" alt="" class="size-14 rounded-2xl ring-1 ring-white/10" />
+    <h1 class="font-display text-2xl text-star-300">Você foi convidado</h1>
+    <p class="text-sm text-slate-400">Crônicas de Zehenia: entre na mesa com os seus amigos. Não precisa de cadastro nem de senha.</p>
+  </div>
+
+  <form class="flex flex-col gap-3" (submit)="$event.preventDefault(); enter()">
+    @if (!fromLink) {
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Código de convite</mat-label>
+        <input #codeInput matInput maxlength="100" autocomplete="off" [value]="code()" (input)="code.set(codeInput.value)" />
+        <mat-icon matPrefix>key</mat-icon>
+      </mat-form-field>
+    }
+
+    @if (!account.checked()) {
+      <div class="flex justify-center py-4"><mat-spinner diameter="28" /></div>
+    } @else if (account.user(); as user) {
+      <p class="rounded-lg bg-white/5 px-3 py-2 text-sm text-slate-300">Você vai entrar como <strong class="text-slate-100">{{ user.name }}</strong>.</p>
+    } @else {
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Como os outros vão te chamar?</mat-label>
+        <input #nameInput matInput maxlength="40" autocomplete="nickname" [value]="name()" (input)="name.set(nameInput.value)" />
+        <mat-icon matPrefix>person</mat-icon>
+      </mat-form-field>
+      <p class="text-xs text-slate-500">Este navegador fica lembrando de você. Se trocar de aparelho, peça ao mestre um link de retorno: você volta à mesma conta.</p>
+    }
+
+    @if (error()) {
+      <p class="flex items-center gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">
+        <mat-icon class="!size-5 shrink-0 !text-xl">error</mat-icon>
+        {{ error() }}
+      </p>
+    }
+
+    <button mat-flat-button type="submit" class="!h-11" [disabled]="loading() || !account.checked() || !code().trim()">
+      @if (loading()) {
+        <mat-spinner diameter="20" />
+      } @else {
+        Entrar na mesa
+      }
+    </button>
+  </form>
+</div>
