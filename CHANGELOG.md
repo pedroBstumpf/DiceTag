@@ -7,7 +7,17 @@ pode trazer mudanças incompatíveis. Como versionar e organizar as branches: `R
 
 ## [Não publicado]
 
+## [0.5.0] — 2026-11-05
+
+### Adicionado
+- **Cópia do navegador:** "Salvar cópia" baixa um arquivo `.zehenia` com os mundos, as mesas e as imagens guardados no navegador, e
+  "Importar cópia" leva o que você escolher para o servidor do `Iniciar mesa`. O navegador de origem não muda. O arquivo também é
+  uma cópia de segurança, e nunca inclui as senhas locais.
+- As mesas trazidas mantêm cenas, fichas, tokens, ações e histórico. Personagens chegam sem dono, para cada amigo vincular o dele.
+
 ### Corrigido
+- O Worldbuild da barra lateral abria um "Meu mundo" vazio, guardado no navegador. Agora, com a conta do dono, a barra lista os mundos do
+  servidor e o link abre o último usado; mundos locais com conteúdo aparecem em "Neste navegador".
 - `ng serve` executado dentro de `server/` gerava o app sem estilos: o Tailwind agora procura as classes sempre em `src/`.
 
 ## [0.4.0] — 2026-11-05
@@ -86,7 +96,8 @@ A mesa online passa a funcionar de verdade entre duas máquinas.
   mesa de jogo (mapa em camadas, vista isométrica, névoa, tokens, desenhos, efeitos), fichas de
   personagem e NPC, automações, rolagens, chat e sons.
 
-[Não publicado]: https://github.com/pedroBStumpf/DiceTag/compare/v0.4.0...HEAD
+[Não publicado]: https://github.com/pedroBStumpf/DiceTag/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/pedroBStumpf/DiceTag/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/pedroBStumpf/DiceTag/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/pedroBStumpf/DiceTag/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/pedroBStumpf/DiceTag/compare/v0.1.0...v0.2.0

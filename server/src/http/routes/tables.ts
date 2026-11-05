@@ -2,15 +2,17 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { AppContext } from '../../context';
 import { transaction } from '../../db/database';
-import { TABLE_ACCENTS, type TableRole, type WorldItem } from '../../domain';
+import { normalizeState, TABLE_ACCENTS, type TableRole, type TableState, type WorldItem } from '../../domain';
 import { audit } from '../../lib/audit';
 import { badRequest, conflict, forbidden, HttpError, notFound, parse } from '../../lib/errors';
 import { idSchema, newId } from '../../lib/ids';
+import { unsafeJsonReason } from '../../lib/safe-json';
 import { multilineText, text } from '../../lib/schemas';
 import type { MemberTable, TableRecord } from '../../repositories/tables';
 import type { RealtimeHub } from '../../realtime/hub';
 import { barSchema, entrySchema, sheetSchema, tagSchema } from '../../realtime/command-schemas';
 import { projectLore } from '../../realtime/projection';
+import { MAX_STATE_BYTES } from '../../realtime/room';
 import { controlledNpcChange, type ControlledNpcPatch } from '../../realtime/sheet-rules';
 import { PUBLIC, requireAuth, requireOwner, setSessionCookie } from '../plugins/auth';
 import { AUTH_RATE_LIMIT } from '../plugins/security';
@@ -35,6 +37,31 @@ const npcBody = z.strictObject({
   tags: z.array(tagSchema).max(50).optional(),
   abilities: z.array(entrySchema).max(200).optional(),
 });
+/**
+ * Estado de uma mesa trazida de uma cópia do navegador. Valida o que o servidor percorre ao abrir a
+ * sala; o resto passa pelos limites de `safe-json`, como os itens do mundo. Só o dono do app envia.
+ */
+const withId = z.looseObject({ id: idSchema });
+const importStateBody = z.strictObject({
+  state: z.looseObject({
+    activeSceneId: idSchema.nullable().optional(),
+    scenes: z
+      .array(
+        z.looseObject({
+          id: idSchema,
+          tokens: z.array(withId).max(5000).optional(),
+          walls: z.array(withId).max(20_000).optional(),
+          drawings: z.array(withId).max(20_000).optional(),
+          notes: z.array(withId).max(5000).optional(),
+        }),
+      )
+      .max(1000),
+    entries: z.array(z.looseObject({ id: idSchema, kind: z.enum(['character', 'npc', 'sound', 'automation']) })).max(10_000),
+  }),
+});
+/** Uma mesa inteira tem muito mais nós e textos maiores (memória da névoa) que um comando. */
+const IMPORT_JSON_LIMITS = { maxDepth: 32, maxNodes: 2_000_000, maxStringLength: 8_000_000 };
+
 const inviteCode = z.string().min(10).max(100).regex(/^[A-Za-z0-9_-]+$/);
 const acceptBody = z.strictObject({ code: inviteCode });
 /** Entrar por convite: o código e, se a conta ainda não existe, o nome que os outros vão ver. */
@@ -103,6 +130,24 @@ export async function tableRoutes(app: FastifyInstance, ctx: AppContext, hub: Re
     if (!ctx.tables.delete(table.id, userId)) throw forbidden('Só o dono pode excluir a mesa.');
     hub.closeRoom(table.id);
     await ctx.files.delete(fileIds);
+    return reply.code(204).send();
+  });
+
+  /**
+   * Grava o estado de uma mesa trazida de uma cópia. Só o dono do app, só o mestre e só numa mesa
+   * que ainda não foi usada: nunca sobrescreve uma partida.
+   */
+  app.put('/tables/:id/state', { bodyLimit: MAX_STATE_BYTES + 1024 }, async (req, reply) => {
+    requireOwner(req);
+    const { table } = gmAccess(req);
+    const { state } = parse(importStateBody, req.body);
+    const unsafe = unsafeJsonReason(state, IMPORT_JSON_LIMITS);
+    if (unsafe) throw badRequest(`Mesa recusada: ${unsafe}.`);
+    if (hub.isOpen(table.id) || ctx.tables.loadState(table.id)) throw conflict('Esta mesa já foi usada.');
+    const json = JSON.stringify(normalizeState(state as unknown as TableState));
+    if (json.length > MAX_STATE_BYTES) throw new HttpError(413, 'Mesa grande demais.');
+    ctx.tables.saveState(table.id, json, 1, Date.now());
+    audit(req.log, 'mesa.importada', { userId: table.ownerId, tableId: table.id, ip: req.ip });
     return reply.code(204).send();
   });
 

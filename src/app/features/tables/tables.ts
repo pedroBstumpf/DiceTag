@@ -7,6 +7,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterLink } from '@angular/router';
 import { GameTable } from '../../core/models/game-table.model';
+import { BrowserCopyService } from '../../core/services/browser-copy.service';
 import { ServerAccountService } from '../../core/services/server-account.service';
 import { GameTablesService } from '../../core/services/game-tables.service';
 import { EmptyState } from '../../shared/components/empty-state/empty-state';
@@ -24,7 +25,18 @@ export class Tables {
   readonly account = inject(ServerAccountService);
   readonly service = inject(GameTablesService);
   readonly actions = inject(QuickActionsService);
+  readonly copies = inject(BrowserCopyService);
   private readonly snackBar = inject(MatSnackBar);
+
+  /** Baixa um arquivo com mundos, mesas e imagens deste navegador. Nada é apagado nem alterado. */
+  async saveCopy(): Promise<void> {
+    try {
+      await this.copies.save();
+      this.snackBar.open('Cópia salva na pasta de downloads.', undefined, { duration: 5000 });
+    } catch (e) {
+      this.snackBar.open(e instanceof Error ? e.message : 'Não foi possível salvar a cópia.', undefined, { duration: 6000 });
+    }
+  }
 
   async remove(table: GameTable): Promise<void> {
     if (!confirm(`Excluir a mesa "${table.name}"? Esta ação não pode ser desfeita.`)) return;

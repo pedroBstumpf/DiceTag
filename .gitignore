@@ -53,3 +53,6 @@ Thumbs.db
 /server/data/
 /server/node_modules/
 /server/.mesa/
+
+# Cópias do navegador: têm as imagens e as fichas (o repositório é público)
+*.zehenia

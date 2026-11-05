@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -297,6 +297,18 @@ function jpegWithExif(): Buffer {
   const length = data.length + 2;
   const app1 = Buffer.concat([Buffer.from([0xff, 0xe1, length >> 8, length & 0xff]), data]);
   return Buffer.concat([pixel.subarray(0, 2), app1, pixel.subarray(2)]);
+}
+
+/**
+ * Espera o limite de requisições por minuto folgar. O teste roda contra o limite real do servidor e
+ * faz muito mais chamadas que uma pessoa: seções que dependem de telas carregando começam por aqui.
+ */
+async function calm(page: Page): Promise<void> {
+  for (let i = 0; i < 16; i++) {
+    const remaining = await page.eval<number>(`fetch('/api/auth/me').then((r) => Number(r.headers.get('x-ratelimit-remaining')))`);
+    if (!(remaining < 150)) return;
+    await sleep(5000);
+  }
 }
 
 /** Capturas de tela para conferir o visual, se E2E_SHOTS disser onde guardar. */
@@ -734,11 +746,55 @@ async function run(gm: Page, player: Page, cdp: Cdp): Promise<void> {
   );
   check(listed, 'e continua lá depois de recarregar');
 
-  section('Mundo deste navegador enviado ao servidor');
+  section('Worldbuild da barra lateral');
+  const localBefore = () =>
+    gm.eval<number>(`new Promise((resolve) => {
+      const open = indexedDB.open('dicetag');
+      open.onsuccess = () => {
+        const read = open.result.transaction('kv').objectStore('kv').get('worldbuild:guest');
+        read.onsuccess = () => resolve((read.result ?? []).length);
+      };
+    })`);
+  await calm(gm);
+  await gm.goto(`${BASE}/`);
+  await gm.waitText('Início');
+  const localCount = await localBefore();
+  const { worlds: serverList } = await gm.api('GET', '/worlds');
+  const worldName: string = serverList.find((w: { id: string }) => w.id === worldId).name;
+  await until(async () => (await gm.eval<string>(`document.querySelector('app-sidebar').innerText`)).includes(worldName), 'mundo na barra', 5000).catch(() => undefined);
+  check(await gm.clickButton(worldName), 'a barra lateral lista o mundo do servidor');
+  check(await gm.waitText('Planos do mestre'), 'e ele abre com um clique, com o conteúdo do servidor');
+  check((await gm.eval<string>('location.search')).includes(`servidor=${worldId}`), 'no endereço do mundo do servidor');
   await gm.goto(`${BASE}/worldbuild`);
+  const redirected = await until(async () => (await gm.eval<string>('location.search')).includes(`servidor=${worldId}`), 'ir ao mundo do servidor', 6000).then(
+    () => true,
+    () => false,
+  );
+  check(redirected, 'o link Worldbuild, sem parâmetro, vai ao mundo do servidor');
+  await gm.goto(`${BASE}/worldbuild?novo=folder`);
+  const viaUrl = await until(async () => {
+    const { items } = await gm.api('GET', `/worlds/${worldId}/items`);
+    return items.filter((i: { name: string }) => i.name.startsWith('Nova pasta')).length === 2;
+  }, 'pasta pelo endereço', 6000).then(
+    () => true,
+    () => false,
+  );
+  check(viaUrl, 'criar pelo endereço grava no servidor');
+  check((await localBefore()) === localCount, 'e nada entra por engano no mundo deste navegador');
+  await shot(gm, 'worldbuild');
+  await gm.api('POST', `/worlds/${worldId}/items/delete`, {
+    ids: (await gm.api('GET', `/worlds/${worldId}/items`)).items.filter((i: { name: string }) => i.name === 'Nova pasta 2').map((i: { id: string }) => i.id),
+  });
+
+  section('Mundo deste navegador enviado ao servidor');
+  await gm.goto(`${BASE}/worldbuild?local=1`);
   await gm.waitText('Meu mundo');
-  const worldLocal = await gm.text();
-  check(!worldLocal.includes('Planos do mestre'), 'sem o parâmetro, a página volta ao mundo deste navegador');
+  await sleep(800);
+  const localExplorer = await gm.eval<string>(`document.querySelector('app-explorer').innerText`);
+  check(
+    localExplorer.includes('Meu mundo') && !localExplorer.includes('Planos do mestre') && (await gm.eval<string>('location.search')).includes('local=1'),
+    'com ?local=1, o mundo deste navegador continua acessível, sem redirecionar',
+  );
   await gm.clickButton('Nova pasta');
   await sleep(700);
   await gm.goto(`${BASE}/mesas`);
@@ -763,6 +819,99 @@ async function run(gm: Page, player: Page, cdp: Cdp): Promise<void> {
     };
   })`);
   check(localKept, 'e continua intacto neste navegador');
+  await calm(gm);
+  await gm.goto(`${BASE}/`);
+  // O título é em caixa alta por CSS, e innerText devolve como aparece na tela
+  check(await gm.waitText('NESTE NAVEGADOR'), 'com conteúdo, ele aparece na barra lateral, em separado');
+  await shot(gm, 'barra');
+
+  section('Cópia do navegador levada ao servidor');
+  await gm.goto(`${BASE}/mesas`);
+  await gm.waitText('Neste navegador');
+  // Uma mesa local de exemplo, com mapa, como as criadas antes da mesa online
+  await gm.eval(`new Promise((resolve, reject) => {
+    const canvas = Object.assign(document.createElement('canvas'), { width: 8, height: 8 });
+    canvas.getContext('2d').fillRect(0, 0, 8, 8);
+    canvas.toBlob((map) => {
+      const open = indexedDB.open('dicetag');
+      open.onsuccess = () => {
+        const tx = open.result.transaction('kv', 'readwrite');
+        const kv = tx.objectStore('kv');
+        kv.put([{ id: 'mesa-local', ownerId: 'guest', name: 'Mesa do navegador', system: '', description: '', maxPlayers: 4, accent: '#4f86f7', createdAt: 1 }], 'tables');
+        kv.put({
+          activeSceneId: 'cena-local',
+          scenes: [{ id: 'cena-local', name: 'Porto', blobId: 'mapa-local', gridSize: 70, showGrid: true, tokens: [] }],
+          entries: [{ id: 'heroi-local', kind: 'character', name: 'Heroína', ownerUserId: 'guest' }],
+          chat: [{ id: 'msg-local', author: 'Mestre', role: 'gm', userId: 'guest', at: 1, text: 'Sessão antiga' }],
+        }, 'table-state:mesa-local');
+        kv.put(map, 'blob:mapa-local');
+        kv.put([{ id: 'default', name: 'Mundo do navegador', createdAt: 1 }], 'worlds:guest');
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => reject(tx.error);
+      };
+    }, 'image/png');
+  })`);
+  const copyDir = join(work, 'copias');
+  mkdirSync(copyDir, { recursive: true });
+  await gm.send('Page.setDownloadBehavior', { behavior: 'allow', downloadPath: copyDir });
+  check(await gm.clickButton('Salvar cópia'), 'o dono salva a cópia');
+  await until(() => readdirSync(copyDir).some((f) => f.endsWith('.zehenia')), 'cópia baixada');
+  const copyFile = join(copyDir, readdirSync(copyDir).find((f) => f.endsWith('.zehenia'))!);
+  const usersLeak = readFileSync(copyFile).includes('"users"');
+  check(!usersLeak, 'as senhas locais não vão na cópia');
+  const pickCopy = async () => {
+    const { root } = await gm.send('DOM.getDocument');
+    const { nodeId } = await gm.send('DOM.querySelector', { nodeId: root.nodeId, selector: 'input[data-copy-file]' });
+    await gm.send('DOM.setFileInputFiles', { nodeId, files: [copyFile] });
+    // O servidor limita as requisições por minuto: o app espera a pausa e continua sozinho
+    return gm.waitText('O que trazer para o servidor', 100_000);
+  };
+  check(await pickCopy(), 'a cópia abre e mostra o conteúdo');
+  await shot(gm, 'copia');
+  await gm.eval(`[...document.querySelectorAll('[data-copy-panel] button')].find((b) => b.innerText.includes('Importar')).click()`);
+  check(await gm.waitText('Cópia importada', 20000), 'e é importada');
+  const { tables: afterCopy } = await gm.api('GET', '/tables');
+  const broughtTable = afterCopy.find((t: { name: string }) => t.name === 'Mesa do navegador');
+  check(!!broughtTable, 'a mesa local virou mesa online');
+  const worldInSidebar = await until(async () => (await gm.eval<string>(`document.querySelector('app-sidebar').innerText`)).includes('Mundo do navegador'), 'mundo importado na barra', 5000).then(
+    () => true,
+    () => false,
+  );
+  check(worldInSidebar, 'o mundo importado aparece na barra lateral, sem recarregar');
+  await gm.openRoom(broughtTable.id);
+  const brought = await gm.eval<any>('window.__replies.find((m) => m.t === "welcome").state');
+  const broughtMap: string | undefined = brought.scenes[0].blobId;
+  check(!!broughtMap && broughtMap !== 'mapa-local', 'com o mapa enviado ao servidor');
+  check((await gm.eval<number>(`fetch('/api/files/${broughtMap}').then((r) => r.status)`)) === 200, 'e o mapa pode ser baixado');
+  check(brought.chat[0].text === 'Sessão antiga' && brought.chat[0].userId !== 'guest', 'o histórico veio, sem a conta local');
+  const heroine = brought.entries.find((e: { id: string }) => e.id === 'heroi-local');
+  check(!!heroine && !heroine.ownerUserId, 'o personagem veio sem dono');
+
+  const joined = await gm.api('POST', `/tables/${broughtTable.id}/invites`);
+  await player.api('POST', '/invites/accept', { code: joined.code });
+  await player.openRoom(broughtTable.id);
+  const friend = (await player.eval<any>('window.__replies.find((m) => m.t === "welcome").you')).userId as string;
+  const claimed = await player.command('updateEntry', { entryId: 'heroi-local', patch: { ownerUserId: friend } });
+  check(claimed.t === 'ack', 'o amigo vincula o personagem à conta dele');
+  const edited = await gm.command('updateEntry', { entryId: 'heroi-local', patch: { name: 'Heroína do Porto' } });
+  check(edited.t === 'ack', 'e o mestre continua editando a ficha');
+  const overwrite = await gm.eval<number>(`fetch('/api/tables/${broughtTable.id}/state', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ state: { scenes: [], entries: [] } }) }).then((r) => r.status)`);
+  check(overwrite === 409, 'uma mesa em uso não pode ser sobrescrita');
+  await gm.goto(`${BASE}/mesas`);
+  await gm.waitText('Importar cópia');
+  check(await pickCopy(), 'a cópia abre de novo, mesmo com o servidor pedindo uma pausa');
+  await sleep(400);
+  const repeated = await gm.eval<string>(`document.querySelector('[data-copy-panel]').innerText`);
+  check(repeated.includes('Trazer de novo cria outra igual'), 'importar de novo avisa antes de duplicar');
+  await gm.eval(`[...document.querySelectorAll('[data-copy-panel] button')].find((b) => b.innerText.includes('Cancelar')).click()`);
+  const localAfterCopy = await gm.eval<boolean>(`new Promise((resolve) => {
+    const open = indexedDB.open('dicetag');
+    open.onsuccess = () => {
+      const read = open.result.transaction('kv').objectStore('kv').get('table-state:mesa-local');
+      read.onsuccess = () => resolve(read.result?.scenes[0].blobId === 'mapa-local');
+    };
+  })`);
+  check(localAfterCopy, 'e o navegador de origem não muda');
 
   section('Servidor reiniciando no meio da partida');
   await gm.goto(`${BASE}/mesa-online/${table.id}`);

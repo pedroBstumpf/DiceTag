@@ -6,6 +6,7 @@ import { RouterLink } from '@angular/router';
 import { ServerAccountService } from '../../core/services/server-account.service';
 import { MAX_WORLDS } from '../../core/models/world.model';
 import { GameTablesService } from '../../core/services/game-tables.service';
+import { ServerWorldsService } from '../../core/services/server-worlds.service';
 import { WorldsService } from '../../core/services/worlds.service';
 import { NewsService } from '../../core/services/news.service';
 import { EmptyState } from '../../shared/components/empty-state/empty-state';
@@ -35,6 +36,7 @@ export class Home {
   readonly news = inject(NewsService);
   private readonly tables = inject(GameTablesService);
   private readonly worlds = inject(WorldsService);
+  private readonly serverWorlds = inject(ServerWorldsService);
 
   /** Saudação personalizada quando logado. */
   readonly greeting = computed(() => {
@@ -61,7 +63,7 @@ export class Home {
     {
       icon: 'travel_explore',
       title: 'Mundos',
-      text: `Você tem ${this.worlds.worlds().length} de ${MAX_WORLDS} mundos. Cada mesa se passa em um deles.`,
+      text: `Você tem ${(this.account.isOwner() ? this.serverWorlds.worlds() : this.worlds.worlds()).length} de ${MAX_WORLDS} mundos. Cada mesa se passa em um deles.`,
       cta: 'Ver mundos',
       run: () => this.actions.openWorldbuild(),
     },

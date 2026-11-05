@@ -16,6 +16,7 @@ import { ServerAccountService, shortAccountId } from '../../../core/services/ser
 import { WorldImportService } from '../../../core/services/world-import.service';
 import { WorldsService } from '../../../core/services/worlds.service';
 import { EmptyState } from '../../../shared/components/empty-state/empty-state';
+import { CopyImport } from '../copy-import/copy-import';
 
 /**
  * Seção "Mesas online" da página Minhas mesas: a conta (sair, baixar os dados e excluir: LGPD) e as
@@ -24,7 +25,7 @@ import { EmptyState } from '../../../shared/components/empty-state/empty-state';
  */
 @Component({
   selector: 'app-online-tables',
-  imports: [DatePipe, RouterLink, MatButtonModule, MatTooltipModule, MatFormFieldModule, MatIconModule, MatInputModule, MatMenuModule, MatProgressSpinnerModule, EmptyState],
+  imports: [DatePipe, RouterLink, MatButtonModule, MatTooltipModule, MatFormFieldModule, MatIconModule, MatInputModule, MatMenuModule, MatProgressSpinnerModule, EmptyState, CopyImport],
   templateUrl: './online-tables.html',
 })
 export class OnlineTables {

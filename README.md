@@ -24,6 +24,12 @@ Tudo o que é seu fica em `Documentos\Cronicas de Zehenia`, fora deste repositó
 lá pelo Explorador ou pela página **Arquivos**. Faça cópias dessa pasta de vez em quando: é o seu backup.
 Esqueceu a senha? `npm run dono` na pasta `server`.
 
+**Trazer o que está no navegador** (mundos, mesas e imagens criados em `localhost:4200`, que não aparecem em `localhost:3000`):
+1. Com o `Iniciar mesa` fechado, rode `ng serve` e abra `localhost:4200/mesas`. Em **Neste navegador**, clique em **Salvar cópia**.
+2. Abra o `Iniciar mesa` e, em **Mesas online**, clique em **Importar cópia** e escolha o arquivo `.zehenia`.
+
+A importação só acrescenta: o navegador de origem e o arquivo não mudam. Guarde o arquivo: ele também é uma cópia de segurança.
+
 ## Como desenvolver
 
 ```bash

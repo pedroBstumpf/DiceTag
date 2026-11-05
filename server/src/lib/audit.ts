@@ -22,6 +22,7 @@ export type SecurityEvent =
   | 'permissao.negada'
   | 'limite.atingido'
   | 'upload.recusado'
+  | 'mesa.importada'
   | 'ws.recusado'
   | 'ws.mensagem_invalida'
   | 'ws.comando_negado';

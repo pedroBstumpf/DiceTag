@@ -279,6 +279,11 @@ export class RealtimeHub {
   }
 
   /** A mesa foi excluída: fecha as conexões sem gravar. */
+  /** A sala está aberta (na memória, com estado próprio): gravar direto no banco seria sobrescrito. */
+  isOpen(tableId: string): boolean {
+    return this.rooms.has(tableId);
+  }
+
   closeRoom(tableId: string): void {
     const room = this.rooms.get(tableId);
     if (!room) return;

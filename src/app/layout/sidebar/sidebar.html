@@ -49,8 +49,11 @@
           <hr class="mx-3 mb-3 border-white/5" />
         }
         <ul class="flex flex-col gap-1">
-          @for (world of worlds.worlds(); track world.id) {
-            @let active = onWorldbuild() && world.id === worlds.activeId();
+          @for (world of worldLinks(); track world.id) {
+            @let active = isOpenWorld(world);
+            @if (world.firstLocal && expanded()) {
+              <li class="mt-2 px-3 text-[11px] uppercase tracking-widest text-slate-600">Neste navegador</li>
+            }
             <li>
               <button
                 type="button"
@@ -58,7 +61,7 @@
                 matTooltipPosition="right"
                 class="flex h-10 w-full items-center gap-3 rounded-xl px-3 text-left text-sm transition-colors hover:bg-white/5 hover:text-white"
                 [class]="active ? '!bg-astral-500/15 !text-astral-300' : 'text-slate-300'"
-                (click)="openWorld(world.id)"
+                (click)="openWorld(world)"
               >
                 <mat-icon class="shrink-0 text-sky-300">public</mat-icon>
                 @if (expanded()) {
