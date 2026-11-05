@@ -7,6 +7,9 @@ pode trazer mudanças incompatíveis. Como versionar e organizar as branches: `R
 
 ## [Não publicado]
 
+### Corrigido
+- `ng serve` executado dentro de `server/` gerava o app sem estilos: o Tailwind agora procura as classes sempre em `src/`.
+
 ## [0.4.0] — 2026-11-05
 
 O app passa a ser só por convite e a rodar no computador de quem o possui.

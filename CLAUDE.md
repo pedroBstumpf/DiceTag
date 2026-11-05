@@ -316,6 +316,8 @@ Rotas (`app.routes.ts`, todas lazy):
 - **Atalhos da mesa** são escutados na `window`: editores com teclas próprias (linha do tempo) chamam
   `stopPropagation()` em Delete/Esc para não disparar ações do mapa.
 - `@theme static` no Tailwind é necessário porque `styles.scss` usa as variáveis `--color-*`.
+- `@import "tailwindcss" source("..")` fixa a busca de classes em `src/`: sem isso, ela parte da pasta do comando, e
+  um `ng serve` dentro de `server/` gera o app sem estilos.
 - Host de componente: classe estática + `[class]` dinâmico se combinam (usado no `FloatingWindow`).
 - Persistência com **debounce de 300ms** + `flush()` em `pagehide`/destroy — manter esse padrão.
 
