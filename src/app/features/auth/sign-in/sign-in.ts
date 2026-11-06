@@ -9,8 +9,9 @@ import { Router } from '@angular/router';
 import { ServerAccountService } from '../../../core/services/server-account.service';
 
 /**
- * Página de entrada. Só o dono do app entra com senha: não há cadastro, e os amigos dele entram
- * pelo link de convite (`features/auth/invite`).
+ * Página de entrada: o dono entra com o e-mail e os jogadores com o nome da mesa, cada um com a
+ * sua senha. Não há cadastro: as contas dos jogadores nascem pelo link de convite
+ * (`features/auth/invite`).
  */
 @Component({
   selector: 'app-sign-in',
@@ -27,7 +28,7 @@ export class SignIn {
   readonly showPassword = signal(false);
 
   readonly form = inject(FormBuilder).nonNullable.group({
-    email: ['', [Validators.required, Validators.email]],
+    login: ['', [Validators.required, Validators.maxLength(254)]],
     password: ['', [Validators.required]],
   });
 
@@ -36,11 +37,11 @@ export class SignIn {
       this.form.markAllAsTouched();
       return;
     }
-    const { email, password } = this.form.getRawValue();
+    const { login, password } = this.form.getRawValue();
     this.loading.set(true);
     this.error.set('');
     try {
-      await this.account.login(email, password);
+      await this.account.login(login, password);
       await this.router.navigate(['/']);
     } catch (e) {
       this.error.set(e instanceof Error ? e.message : 'Algo deu errado. Tente novamente.');

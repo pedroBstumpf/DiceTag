@@ -1,12 +1,17 @@
 <div class="flex w-full max-w-md flex-col gap-5 rounded-2xl border border-white/5 bg-ink-900 p-6 animate-fade-in">
   <div class="flex flex-col items-center gap-3 text-center">
     <img src="images/zehenia-emblem.png" alt="" class="size-14 rounded-2xl ring-1 ring-white/10" />
-    <h1 class="font-display text-2xl text-star-300">Você foi convidado</h1>
-    <p class="text-sm text-slate-400">Crônicas de Zehenia: entre na mesa com os seus amigos. Não precisa de cadastro nem de senha.</p>
+    @if (info()?.kind === 'return') {
+      <h1 class="font-display text-2xl text-star-300">Olá, {{ returningName() }}</h1>
+      <p class="text-sm text-slate-400">Defina uma senha nova para voltar à sua conta. Com ela, você entra de qualquer aparelho.</p>
+    } @else {
+      <h1 class="font-display text-2xl text-star-300">Você foi convidado</h1>
+      <p class="text-sm text-slate-400">Crônicas de Zehenia: entre na mesa com os seus amigos. Sem e-mail e sem cadastro.</p>
+    }
   </div>
 
-  <form class="flex flex-col gap-3" (submit)="$event.preventDefault(); enter()">
-    @if (!fromLink) {
+  <form class="flex flex-col gap-3" (submit)="$event.preventDefault(); info() ? enter() : check()">
+    @if (!fromLink && !info()) {
       <mat-form-field appearance="outline" subscriptSizing="dynamic">
         <mat-label>Código de convite</mat-label>
         <input #codeInput matInput maxlength="100" autocomplete="off" [value]="code()" (input)="code.set(codeInput.value)" />
@@ -14,17 +19,62 @@
       </mat-form-field>
     }
 
-    @if (!account.checked()) {
+    @if (!account.checked() || (loading() && !info())) {
       <div class="flex justify-center py-4"><mat-spinner diameter="28" /></div>
-    } @else if (account.user(); as user) {
-      <p class="rounded-lg bg-white/5 px-3 py-2 text-sm text-slate-300">Você vai entrar como <strong class="text-slate-100">{{ user.name }}</strong>.</p>
-    } @else {
-      <mat-form-field appearance="outline" subscriptSizing="dynamic">
-        <mat-label>Como os outros vão te chamar?</mat-label>
-        <input #nameInput matInput maxlength="40" autocomplete="nickname" [value]="name()" (input)="name.set(nameInput.value)" />
-        <mat-icon matPrefix>person</mat-icon>
-      </mat-form-field>
-      <p class="text-xs text-slate-500">Este navegador fica lembrando de você. Se trocar de aparelho, peça ao mestre um link de retorno: você volta à mesma conta.</p>
+    } @else if (info(); as current) {
+      @if (current.kind === 'new' && account.user(); as user) {
+        <p class="rounded-lg bg-white/5 px-3 py-2 text-sm text-slate-300">Você vai entrar como <strong class="text-slate-100">{{ user.name }}</strong>.</p>
+      } @else {
+        @if (needsAccount() || needsNewName()) {
+          @if (needsNewName()) {
+            <p class="rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-200">O nome "{{ returningName() }}" agora é de outra pessoa: escolha outro.</p>
+          }
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Como os outros vão te chamar?</mat-label>
+            <input #nameInput matInput maxlength="40" autocomplete="username" [value]="name()" (input)="name.set(nameInput.value)" />
+            <mat-icon matPrefix>person</mat-icon>
+          </mat-form-field>
+        }
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>{{ current.kind === 'return' ? 'Senha nova' : 'Crie uma senha' }}</mat-label>
+          <input
+            #pwdInput
+            matInput
+            maxlength="128"
+            [type]="showPassword() ? 'text' : 'password'"
+            autocomplete="new-password"
+            [value]="password()"
+            (input)="password.set(pwdInput.value)"
+          />
+          <mat-icon matPrefix>lock</mat-icon>
+          <button
+            mat-icon-button
+            matSuffix
+            type="button"
+            [attr.aria-label]="showPassword() ? 'Ocultar senha' : 'Mostrar senha'"
+            (click)="showPassword.set(!showPassword())"
+          >
+            <mat-icon>{{ showPassword() ? 'visibility_off' : 'visibility' }}</mat-icon>
+          </button>
+        </mat-form-field>
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Repita a senha</mat-label>
+          <input
+            #repeatInput
+            matInput
+            maxlength="128"
+            [type]="showPassword() ? 'text' : 'password'"
+            autocomplete="new-password"
+            [value]="repeat()"
+            (input)="repeat.set(repeatInput.value)"
+          />
+          <mat-icon matPrefix>lock_reset</mat-icon>
+        </mat-form-field>
+        <p class="text-xs text-slate-500">
+          Pelo menos 8 caracteres. Para voltar de outro aparelho, use
+          <a routerLink="/entrar" class="text-astral-300 hover:underline">Entrar</a> com o seu nome e esta senha.
+        </p>
+      }
     }
 
     @if (error()) {
@@ -37,6 +87,8 @@
     <button mat-flat-button type="submit" class="!h-11" [disabled]="loading() || !account.checked() || !code().trim()">
       @if (loading()) {
         <mat-spinner diameter="20" />
+      } @else if (!info()) {
+        Continuar
       } @else {
         Entrar na mesa
       }
