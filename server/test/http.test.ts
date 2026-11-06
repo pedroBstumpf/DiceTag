@@ -38,7 +38,8 @@ describe('contas e sessão', () => {
     expect(cookie).toMatch(/SameSite=Strict/);
     expect(res.json().user).toEqual({ id: expect.any(String), name: 'Ana', email: 'ana@exemplo.com', kind: 'owner', createdAt: expect.any(Number), hasPassword: true });
     expect(res.body).not.toContain(sessionCookie(res).split('=')[1]);
-    expect(res.body).not.toMatch(/password|hash/i);
+    // Nenhum campo de senha ou de hash (o `hasPassword` só diz se há senha) e nenhum hash no corpo
+    expect(res.body).not.toMatch(/"(password|passwordHash|password_hash|hash)"|scrypt\$/i);
   });
 
   it('a conta do dono já nasce com o primeiro mundo', async () => {
