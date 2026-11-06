@@ -717,18 +717,80 @@ describe('convites: quem não é o dono só entra assim', () => {
     expect((await call(server, owner.cookie, 'GET', '/api/auth/me')).statusCode).toBe(401);
   });
 
-  it('link de retorno: o convidado volta à MESMA conta, uma vez só; ninguém mais o usa', async () => {
+  const NEW_PASSWORD = 'outra frase para a senha';
+  const accessLink = async (userId: string) => (await call(server, owner.cookie, 'POST', `/api/tables/${tableId}/members/${userId}/access-link`)).json().code as string;
+  const info = (code: string) => inject({ method: 'POST', url: '/api/invites/info', headers: { origin: ORIGIN }, payload: { code } });
+
+  it('link de retorno: volta à MESMA conta com uma senha nova, uma vez só; ninguém mais o usa', async () => {
     const guest = await redeem(server, (await invite()).code, 'Bia');
     const url = `/api/tables/${tableId}/members/${guest.id}/access-link`;
     expect((await call(server, guest.cookie, 'POST', url)).statusCode).toBe(403);
     const { code } = (await call(server, owner.cookie, 'POST', url)).json();
     const logged = await register(server, 'outro@exemplo.com');
     expect((await call(server, logged.cookie, 'POST', '/api/invites/accept', { code })).statusCode).toBe(404);
-    const back = await redeemRaw({ code });
+    expect((await redeemRaw({ code })).statusCode).toBe(400);
+    const back = await redeemRaw({ code, password: NEW_PASSWORD });
     expect(back.statusCode).toBe(200);
     expect(back.json().user.id).toBe(guest.id);
-    expect((await redeemRaw({ code })).statusCode).toBe(404);
+    expect((await redeemRaw({ code, password: NEW_PASSWORD })).statusCode).toBe(404);
     expect((await call(server, owner.cookie, 'POST', `/api/tables/${tableId}/members/${owner.id}/access-link`)).statusCode).toBe(404);
+  });
+
+  it('link de retorno troca a senha: a antiga não entra, a nova sim, e as outras sessões caem', async () => {
+    const guest = await redeem(server, (await invite()).code, 'Bia');
+    const back = await redeemRaw({ code: await accessLink(guest.id), password: NEW_PASSWORD });
+    expect(back.statusCode).toBe(200);
+    expect((await loginAs('Bia')).statusCode).toBe(401);
+    expect((await loginAs('Bia', NEW_PASSWORD)).statusCode).toBe(200);
+    expect((await call(server, guest.cookie, 'GET', '/api/auth/me')).statusCode).toBe(401);
+    expect((await call(server, sessionCookie(back), 'GET', '/api/auth/me')).statusCode).toBe(200);
+  });
+
+  it('informações do código: convite novo ou link de retorno (com o nome), sem gastar nada', async () => {
+    const { code } = await invite();
+    expect((await info(code)).json()).toEqual({ kind: 'new' });
+    const guest = await redeem(server, code, 'Bia');
+    const back = await accessLink(guest.id);
+    expect((await info(back)).json()).toEqual({ kind: 'return', name: 'Bia', nameTaken: false });
+    expect((await info(back)).statusCode).toBe(200);
+    expect((await info('a'.repeat(32))).statusCode).toBe(404);
+    expect((await redeemRaw({ code: back, password: NEW_PASSWORD })).statusCode).toBe(200);
+  });
+
+  it('convidado antigo cujo nome outro já usa: o link de retorno pede um nome novo', async () => {
+    await redeem(server, (await invite()).code, 'Bia');
+    const old = server.ctx.users.createGuest('antigo', 'bia', Date.now());
+    server.ctx.tables.addMember(tableId, old.id, 'player', Date.now());
+    const code = await accessLink(old.id);
+    expect((await info(code)).json()).toEqual({ kind: 'return', name: 'bia', nameTaken: true });
+    const taken = await redeemRaw({ code, password: NEW_PASSWORD });
+    expect(taken.statusCode).toBe(409);
+    expect(taken.json().error).toBe('Esse nome já está em uso. Escolha outro.');
+    const renamed = await redeemRaw({ code, password: NEW_PASSWORD, name: 'Bia 2' });
+    expect(renamed.statusCode).toBe(200);
+    expect(renamed.json().user).toMatchObject({ id: 'antigo', name: 'Bia 2', hasPassword: true });
+    expect((await loginAs('bia 2', NEW_PASSWORD)).statusCode).toBe(200);
+  });
+
+  it('convidado antigo cria a senha pelo menu (uma vez só); o dono não usa essa rota', async () => {
+    const old = server.ctx.users.createGuest('antigo', 'Velho', Date.now());
+    server.ctx.tables.addMember(tableId, old.id, 'player', Date.now());
+    const cookie = `__Host-zh_session=${server.ctx.auth.sessionFor(old)}`;
+    const created = await call(server, cookie, 'POST', '/api/auth/password/create', { password: NEW_PASSWORD });
+    expect(created.statusCode).toBe(204);
+    expect((await loginAs('velho', NEW_PASSWORD)).statusCode).toBe(200);
+    const again = await call(server, sessionCookie(created), 'POST', '/api/auth/password/create', { password: NEW_PASSWORD });
+    expect(again.statusCode).toBe(409);
+    expect((await call(server, owner.cookie, 'POST', '/api/auth/password/create', { password: NEW_PASSWORD })).statusCode).toBe(409);
+  });
+
+  it('renomear o convidado com senha muda o nome de entrada, sem repetir o de outro', async () => {
+    await redeem(server, (await invite()).code, 'Ana');
+    const guest = await redeem(server, (await invite()).code, 'Bia');
+    expect((await call(server, guest.cookie, 'PATCH', '/api/auth/me', { name: 'ana' })).statusCode).toBe(409);
+    expect((await call(server, guest.cookie, 'PATCH', '/api/auth/me', { name: 'Beatriz' })).statusCode).toBe(200);
+    expect((await loginAs('beatriz')).statusCode).toBe(200);
+    expect((await loginAs('bia')).statusCode).toBe(401);
   });
 
   it('tirar o convidado da mesa encerra o acesso dele', async () => {
@@ -737,11 +799,15 @@ describe('convites: quem não é o dono só entra assim', () => {
     expect((await call(server, guest.cookie, 'GET', '/api/auth/me')).statusCode).toBe(401);
   });
 
-  it('o convidado pode excluir a própria conta sem senha; o dono continua precisando dela', async () => {
+  it('excluir a conta pede a senha a quem tem (dono e convidado com senha); o convidado antigo, não', async () => {
     const guest = await redeem(server, (await invite()).code, 'Bia');
     expect((await call(server, owner.cookie, 'DELETE', '/api/auth/me', {})).statusCode).toBe(401);
-    expect((await call(server, guest.cookie, 'DELETE', '/api/auth/me', {})).statusCode).toBe(204);
+    expect((await call(server, guest.cookie, 'DELETE', '/api/auth/me', {})).statusCode).toBe(401);
+    expect((await call(server, guest.cookie, 'DELETE', '/api/auth/me', { password: PASSWORD })).statusCode).toBe(204);
     expect(server.ctx.users.findById(guest.id)).toBeNull();
+    const old = server.ctx.users.createGuest('antigo', 'Velho', Date.now());
+    server.ctx.tables.addMember(tableId, old.id, 'player', Date.now());
+    expect((await call(server, `__Host-zh_session=${server.ctx.auth.sessionFor(old)}`, 'DELETE', '/api/auth/me', {})).statusCode).toBe(204);
   });
 
   it('convidado tem limites menores de envio: o disco é do dono', async () => {

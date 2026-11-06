@@ -125,6 +125,36 @@ export class AuthService {
     }
   }
 
+  /**
+   * Grava o nome, o nome de entrada e a senha de um convidado ("Criar senha" ou link de retorno),
+   * encerra TODAS as sessões da conta e devolve o token de uma sessão nova. Síncrono: roda dentro
+   * da transação de quem chama. Nome de entrada de outra conta → 409.
+   */
+  setGuestPassword(user: PublicUser, name: string, credentials: GuestCredentials): string {
+    if (this.users.loginTaken(credentials.loginName, user.id)) throw conflict(NAME_TAKEN);
+    try {
+      this.users.setGuestCredentials(user.id, name, credentials);
+    } catch (err) {
+      if (isUniqueViolation(err)) throw conflict(NAME_TAKEN);
+      throw err;
+    }
+    this.sessions.deleteAllForUser(user.id);
+    return this.openSession({ ...user, name, hasPassword: true });
+  }
+
+  /** Renomeia um convidado com senha: o nome de entrada acompanha, sem repetir o de outra conta. */
+  renameGuest(user: PublicUser, name: string): void {
+    if (!validGuestName(name)) throw badRequest('Escolha um nome sem @.');
+    const loginName = loginNameOf(name);
+    if (this.users.loginTaken(loginName, user.id)) throw conflict(NAME_TAKEN);
+    try {
+      this.users.renameGuestLogin(user.id, name, loginName);
+    } catch (err) {
+      if (isUniqueViolation(err)) throw conflict(NAME_TAKEN);
+      throw err;
+    }
+  }
+
   /** Abre uma sessão para quem apresentou um convite válido. */
   sessionFor(user: PublicUser): string {
     return this.openSession(user);

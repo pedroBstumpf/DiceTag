@@ -6,6 +6,7 @@ import { normalizeState, TABLE_ACCENTS, type TableRole, type TableState, type Wo
 import { audit } from '../../lib/audit';
 import { badRequest, conflict, forbidden, HttpError, notFound, parse } from '../../lib/errors';
 import { idSchema, newId } from '../../lib/ids';
+import { loginNameOf } from '../../lib/login-name';
 import { unsafeJsonReason } from '../../lib/safe-json';
 import { multilineText, newPassword, text } from '../../lib/schemas';
 import type { MemberTable, TableRecord } from '../../repositories/tables';
@@ -241,29 +242,56 @@ export async function tableRoutes(app: FastifyInstance, ctx: AppContext, hub: Re
   app.post('/invites/redeem', { config: { ...AUTH_RATE_LIMIT, ...PUBLIC } }, async (req, reply) => {
     const { code, name, password } = parse(redeemBody, req.body);
     const codeHash = ctx.tokens.hash(code, 'invite');
-    // Conta nova: nome e senha conferidos e hash calculado antes da transação (o hash é lento)
-    const credentials = name && password ? await ctx.auth.guestCredentials(name, password) : null;
-    const { tableId, user } = transaction(ctx.db, () => {
+    // Nome da conta: o informado ou, no link de retorno, o atual. Nome e senha conferidos e hash
+    // calculado antes da transação (o hash é lento); o convite é conferido de novo lá dentro
+    const peek = ctx.tables.findInvite(codeHash);
+    const returning = peek?.targetUserId ? ctx.users.findById(peek.targetUserId) : null;
+    const accountName = name ?? returning?.name;
+    const credentials = accountName && password ? await ctx.auth.guestCredentials(accountName, password) : null;
+    const { tableId, user, token } = transaction(ctx.db, () => {
       const invite = ctx.tables.findInvite(codeHash);
       if (!invite || invite.expiresAt <= Date.now() || invite.uses >= invite.maxUses) throw new HttpError(404, INVITE_INVALID);
       const table = ctx.tables.find(invite.tableId);
       if (!table) throw new HttpError(404, INVITE_INVALID);
       if (invite.targetUserId) {
+        // Link de retorno: define uma senha nova (e o nome, se o atual já é de outra conta)
         const target = ctx.users.findById(invite.targetUserId);
         if (!target || !ctx.tables.roleOf(table.id, target.id)) throw new HttpError(404, INVITE_INVALID);
+        if (!credentials || target.id !== returning?.id) throw badRequest('Crie uma senha nova.');
         ctx.tables.useInvite(codeHash);
-        return { tableId: table.id, user: target };
+        const newName = name ?? target.name;
+        const session = ctx.auth.setGuestPassword(target, newName, credentials);
+        return { tableId: table.id, user: { ...target, name: newName, hasPassword: true }, token: session };
       }
       if (!name || !credentials) throw badRequest('Informe o seu nome e crie uma senha.');
       if (ctx.tables.playerCount(table.id) >= table.maxPlayers) throw conflict('A mesa está cheia.');
       const guest = ctx.auth.createGuest(name, credentials);
       ctx.tables.addMember(table.id, guest.id, 'player', Date.now());
       ctx.tables.useInvite(codeHash);
-      return { tableId: table.id, user: guest };
+      return { tableId: table.id, user: guest, token: null };
     });
     audit(req.log, 'convite.usado', { userId: user.id, tableId, ip: req.ip });
-    setSessionCookie(reply, ctx, ctx.auth.sessionFor(user), user);
+    if (token) {
+      // As outras sessões da conta caíram: as conexões abertas com elas também
+      hub.userSessionsEnded(user.id);
+      audit(req.log, 'senha.redefinida_por_link', { userId: user.id, tableId, ip: req.ip });
+    }
+    setSessionCookie(reply, ctx, token ?? ctx.auth.sessionFor(user), user);
     return { user, table: ctx.tables.findForMember(tableId, user.id) };
+  });
+
+  /**
+   * O que é este código, sem gastá-lo: convite novo, ou link de retorno (com o nome da conta e se ele
+   * já é de outra conta). A página do convite mostra o formulário certo a partir disto.
+   */
+  app.post('/invites/info', { config: { ...AUTH_RATE_LIMIT, ...PUBLIC } }, async (req) => {
+    const { code } = parse(acceptBody, req.body);
+    const invite = ctx.tables.findInvite(ctx.tokens.hash(code, 'invite'));
+    if (!invite || invite.expiresAt <= Date.now() || invite.uses >= invite.maxUses || !ctx.tables.find(invite.tableId)) throw new HttpError(404, INVITE_INVALID);
+    if (!invite.targetUserId) return { kind: 'new' };
+    const target = ctx.users.findById(invite.targetUserId);
+    if (!target || !ctx.tables.roleOf(invite.tableId, target.id)) throw new HttpError(404, INVITE_INVALID);
+    return { kind: 'return', name: target.name, nameTaken: ctx.users.loginTaken(loginNameOf(target.name), target.id) };
   });
 
   // --- Lore da mesa ------------------------------------------------------------
