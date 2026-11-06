@@ -497,7 +497,10 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   (confirmado + pendentes = tela; `ack` confirma com o payload final, `nack` desfaz e avisa, `cmd` de outra pessoa entra
   no confirmado, `state` do jogador substitui) e envia; `flush` não grava nada (o estado online nunca vai para o
   IndexedDB). **Rajadas** (`burstKey`: mover tokens, memória da névoa e controles de volume) vão agrupadas a cada `BURST_MS` = 100 ms, só com
-  o último valor (`mergeBurst`/`squashPending`), por causa do limite de mensagens do servidor.
+  o último valor (`mergeBurst`/`squashPending`), por causa do limite de mensagens do servidor. Por isso, na tela
+  de quem assiste, o token **desliza** entre as posições recebidas (`TokensLayer.glide`: transição de 100 ms em
+  `left/top`, igual a `BURST_MS`); os tokens que a própria tela está movendo (`pendingMoveIds` em `state/sync.ts` →
+  `session.localMoves`, atualizado junto com o estado) não deslizam. A névoa do jogador continua no ritmo do servidor.
 - **Papel da conta:** `welcome.you.role`; `setRole` não faz nada online e a barra de ações mostra só o rótulo. A conta
   usada nas regras (`viewer`, chat, dono de personagem/item/efeito) é `me` = a do servidor.
 - **Rolagens no servidor:** `useAction` devolve `RollSent` e `quickRoll` devolve `null`; o resultado chega no chat e em

@@ -121,6 +121,22 @@ export function squashPending(sync: SyncState, seqs: readonly number[], seq: num
   return withView({ ...sync, pending });
 }
 
+// --- Movimento suave dos outros ----------------------------------------------
+
+/**
+ * Tokens que esta tela está movendo agora (movimentos ainda sem resposta do servidor). Eles
+ * acompanham o ponteiro/teclado sem atraso; os demais deslizam até cada posição recebida, para o
+ * movimento dos outros (que chega em rajadas) não aparecer aos saltos.
+ */
+export function pendingMoveIds(sync: SyncState): ReadonlySet<string> {
+  const ids = new Set<string>();
+  for (const { command } of sync.pending) {
+    if (command.type === 'moveToken') ids.add(command.payload.placementId);
+    else if (command.type === 'moveTokens') for (const m of command.payload.moves) ids.add(m.placementId);
+  }
+  return ids;
+}
+
 /** Recalcula a tela: confirmado + pendentes, na ordem em que foram feitos. */
 function withView(sync: SyncState): SyncState {
   return { ...sync, view: sync.pending.reduce((s, p) => applyCommand(s, p.command), sync.confirmed) };

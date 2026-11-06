@@ -136,6 +136,8 @@
           [interactive]="selecting()"
           [movable]="canMoveToken"
           [upright]="upright()"
+          [glide]="session.online() !== null"
+          [localMoves]="session.localMoves()"
           (tokenDown)="onTokenDown($event)"
         />
 
@@ -202,7 +204,14 @@
         }
       } @else {
         <!-- Tokens das outras camadas (só exibição) -->
-        <app-tokens-layer [tokens]="plane.tokens" [scale]="scale()" [gridSize]="gridSize()" [upright]="upright()" />
+        <app-tokens-layer
+          [tokens]="plane.tokens"
+          [scale]="scale()"
+          [gridSize]="gridSize()"
+          [upright]="upright()"
+          [glide]="session.online() !== null"
+          [localMoves]="session.localMoves()"
+        />
       }
     </div>
   }

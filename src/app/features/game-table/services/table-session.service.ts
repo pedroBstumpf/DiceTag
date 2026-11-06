@@ -92,6 +92,7 @@ import {
   burstKey,
   localCommand,
   mergeBurst,
+  pendingMoveIds,
   rejectCommand,
   remoteCommand,
   replaceState,
@@ -277,6 +278,13 @@ export class TableSessionService extends SheetStore {
   readonly roomProblem = signal('');
   /** Polígonos de visão calculados pelo servidor (jogador com névoa: ele não recebe as paredes). */
   private readonly serverVision = signal<Point[][] | null>(null);
+  /**
+   * Mesa online: tokens que esta tela está movendo (movimentos ainda sem resposta do servidor).
+   * Eles seguem o ponteiro sem atraso; os movidos por outras pessoas deslizam (`TokensLayer.glide`).
+   */
+  readonly localMoves = signal<ReadonlySet<string>>(new Set(), {
+    equal: (a, b) => a.size === b.size && [...a].every((id) => b.has(id)),
+  });
   /** Aviso do servidor para a página mostrar (comando recusado, erro). */
   readonly roomNotice = signal<{ text: string } | null>(null);
   /** Última rolagem feita pelo servidor a pedido desta conta (a página mostra o resultado). */
@@ -983,6 +991,7 @@ export class TableSessionService extends SheetStore {
     this.room?.close();
     this.room = null;
     this.sync = null;
+    this.localMoves.set(new Set());
     this.files = this.localFiles;
     this.online.set(null);
     this.serverVision.set(null);
@@ -1070,6 +1079,8 @@ export class TableSessionService extends SheetStore {
 
   private applySync(sync: SyncState): void {
     this.sync = sync;
+    // Junto com o estado: o token que eu movo nunca recebe a transição no mesmo quadro em que anda
+    this.localMoves.set(pendingMoveIds(sync));
     this.state.set(sync.view);
   }
 

@@ -18,6 +18,12 @@ export interface TokenPointerDown {
 /** Cor do círculo de tokens sem imagem, por tipo de ficha. */
 const NO_IDS: ReadonlySet<string> = new Set();
 const INITIAL_BG ={ character: '#3462d6', npc: '#7c4dcc' } as Record<string, string>;
+/**
+ * Deslize até a posição recebida do servidor. A duração acompanha o intervalo das rajadas de
+ * movimento (`BURST_MS` = 100 ms em `TableSessionService`): cada posição nova chega quando o
+ * deslize anterior termina, e o movimento dos outros parece contínuo.
+ */
+const GLIDE = 'transition-[left,top] duration-100 ease-linear motion-reduce:transition-none';
 
 /**
  * Camada de tokens do mapa (dentro do "mundo" transformado).
@@ -48,8 +54,18 @@ export class TokensLayer {
   readonly movable = input<(token: ResolvedToken) => boolean>(() => true);
   /** Vista isométrica: transformação CSS que deixa o token "em pé" (vazio na 2D). */
   readonly upright = input('');
+  /** Mesa online: tokens movidos por outras pessoas deslizam entre as posições recebidas. */
+  readonly glide = input(false);
+  /** Tokens que esta tela está movendo: seguem o ponteiro sem deslize. */
+  readonly localMoves = input<ReadonlySet<string>>(NO_IDS);
 
   readonly tokenDown = output<TokenPointerDown>();
+
+  /** Classes do token: ponteiro conforme a ferramenta e, na mesa online, o deslize. */
+  tokenClass(token: ResolvedToken): string {
+    const pointer = this.interactive() ? 'pointer-events-auto cursor-grab active:cursor-grabbing' : 'pointer-events-none';
+    return this.glide() && !this.localMoves().has(token.placement.id) ? `${pointer} ${GLIDE}` : pointer;
+  }
 
   /** Tamanho em px do mundo que aparece com `screenPx` na tela. */
   ui(screenPx: number): number {
