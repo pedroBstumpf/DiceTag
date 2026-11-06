@@ -73,14 +73,14 @@ export function sessionCookie(res: LightMyRequestResponse): string {
  */
 export async function register(server: TestServer, email: string, name = 'Pessoa'): Promise<{ id: string; cookie: string }> {
   const { user } = await server.ctx.auth.createAccount({ name, email, password: PASSWORD }, 'owner');
-  const res = await server.app.http.inject({ method: 'POST', url: '/api/auth/login', headers: { origin: ORIGIN }, payload: { email, password: PASSWORD } });
+  const res = await server.app.http.inject({ method: 'POST', url: '/api/auth/login', headers: { origin: ORIGIN }, payload: { login: email, password: PASSWORD } });
   if (res.statusCode !== 200) throw new Error(`login falhou: ${res.statusCode} ${res.body}`);
   return { id: user.id, cookie: sessionCookie(res) };
 }
 
-/** Entra por um convite, como um amigo do dono: devolve a conta criada e o cookie. */
-export async function redeem(server: TestServer, code: string, name = 'Convidado'): Promise<{ id: string; cookie: string }> {
-  const res = await server.app.http.inject({ method: 'POST', url: '/api/invites/redeem', headers: { origin: ORIGIN }, payload: { code, name } });
+/** Entra por um convite, como um amigo do dono (nome + senha): devolve a conta criada e o cookie. */
+export async function redeem(server: TestServer, code: string, name = 'Convidado', password = PASSWORD): Promise<{ id: string; cookie: string }> {
+  const res = await server.app.http.inject({ method: 'POST', url: '/api/invites/redeem', headers: { origin: ORIGIN }, payload: { code, name, password } });
   if (res.statusCode !== 200) throw new Error(`convite falhou: ${res.statusCode} ${res.body}`);
   return { id: res.json().user.id, cookie: sessionCookie(res) };
 }

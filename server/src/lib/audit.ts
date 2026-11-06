@@ -3,8 +3,9 @@ import type { FastifyBaseLogger } from 'fastify';
 /**
  * Eventos de segurança (BACKEND_SECURITY.md §12), registrados no log do Fastify (pino) com o
  * campo `security`, para filtrar e alertar. Nunca levam senha, token, id de sessão, código de
- * convite nem e-mail em claro: a conta aparece pelo id e o e-mail tentado só como `emailRef`
- * (HMAC truncado, que permite correlacionar tentativas sem guardar o endereço).
+ * convite nem e-mail em claro: a conta aparece pelo id, o e-mail tentado só como `emailRef` e o
+ * login tentado (e-mail ou nome) só como `loginRef` (HMAC truncado, que permite correlacionar
+ * tentativas sem guardar o valor).
  */
 export type SecurityEvent =
   | 'conta.criada'
@@ -18,6 +19,8 @@ export type SecurityEvent =
   | 'senha.recuperacao_pedida'
   | 'senha.recuperacao_sem_email'
   | 'senha.redefinida'
+  | 'senha.criada'
+  | 'senha.redefinida_por_link'
   | 'conta.excluida'
   | 'permissao.negada'
   | 'limite.atingido'
@@ -28,7 +31,7 @@ export type SecurityEvent =
   | 'ws.comando_negado';
 
 /** Eventos esperados no uso normal (nível info); os demais são suspeitos ou recusas (warn). */
-const ROUTINE: ReadonlySet<SecurityEvent> = new Set(['conta.criada', 'convite.usado', 'login.ok', 'sessao.encerrada', 'sessoes.encerradas', 'senha.trocada', 'senha.recuperacao_pedida', 'senha.redefinida', 'conta.excluida']);
+const ROUTINE: ReadonlySet<SecurityEvent> = new Set(['conta.criada', 'convite.usado', 'login.ok', 'sessao.encerrada', 'sessoes.encerradas', 'senha.trocada', 'senha.recuperacao_pedida', 'senha.redefinida', 'senha.criada', 'senha.redefinida_por_link', 'conta.excluida']);
 
 export function audit(log: FastifyBaseLogger, event: SecurityEvent, data: Record<string, unknown> = {}): void {
   const entry = { security: event, ...data };

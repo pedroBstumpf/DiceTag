@@ -479,7 +479,7 @@ regras de segurança em [`BACKEND_SECURITY.md`](BACKEND_SECURITY.md) e operaçã
   disco); rotas sem extensão caem no `index.html`; `/api`, `/ws` e `/dev` nunca caem no app. CSP própria
   (`frontendCsp`): scripts só do servidor, estilos inline permitidos (Angular/Material/Tiptap), Google Fonts.
 
-- **Só por convite:** dono (terminal) e convidados (`/invites/redeem`), ver `CLAUDE.md` §7. Sem rota de cadastro.
+- **Só por convite:** dono (terminal, entra pelo e-mail) e convidados (`/invites/redeem` com nome + senha; entram pelo nome), ver `CLAUDE.md` §7. Sem rota de cadastro.
 - **Rodando de verdade (`npm run mesa`):** dois processos. O principal cuida do túnel; o servidor, compilado e com `--permission` do
   Node, só alcança a pasta do app e não executa programas. Conversam por IPC, com operações fixas (`services/host-control.ts`):
   ```

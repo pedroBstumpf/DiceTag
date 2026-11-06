@@ -193,14 +193,15 @@ experimental no Node. Os scripts já o escondem.
 
 | Rota | O quê |
 |---|---|
-| `POST /auth/login` · `POST /auth/logout` | Sessão (cookie); não há cadastro — públicas, como `/health` e a recuperação de senha |
+| `POST /auth/login` · `POST /auth/logout` | Sessão (cookie); `login` = e-mail do dono ou nome do convidado; não há cadastro — públicas, como `/health` e a recuperação de senha |
+| `POST /auth/password/create` | Convidado antigo (sem senha) cria a dele |
 | `POST /auth/password/forgot` · `POST /auth/password/reset` | Recuperação de senha (públicas, com limite de taxa) |
 | `POST /auth/logout-all` | Sair de todos os dispositivos |
 | `GET/PATCH /auth/me` · `POST /auth/password` | Conta atual, nome, troca de senha (renova a sessão) |
 | `GET /auth/me/export` · `DELETE /auth/me` | LGPD: baixar os próprios dados; excluir a conta (pede a senha) |
 | `GET/POST /tables` · `GET/PATCH/DELETE /tables/:id` | Mesas da conta (como mestre ou jogador) |
 | `GET /tables/:id/members` · `DELETE /tables/:id/members/:userId` | Membros (mestre remove, jogador sai) |
-| `POST/DELETE /tables/:id/invites` · `POST /invites/redeem` · `POST /invites/accept` | Convites (uso único, mostrados uma vez, 7 dias); `redeem` é pública: entra só com o nome |
+| `POST/DELETE /tables/:id/invites` · `POST /invites/info` · `POST /invites/redeem` · `POST /invites/accept` | Convites (uso único, mostrados uma vez, 7 dias); `info` e `redeem` são públicas: o convite novo cria a conta com nome e senha; o link de retorno define uma senha nova |
 | `PUT /tables/:id/state` | Estado de uma mesa trazida de uma cópia (só o dono do app, só em mesa ainda não usada) |
 | `POST /tables/:id/members/:userId/access-link` | Link de retorno: devolve ao convidado a mesma conta |
 | `GET /library` · `/library/file` · `POST /library/files` · `/folders` · `/move` · `/delete` | Biblioteca do dono (só ele) |

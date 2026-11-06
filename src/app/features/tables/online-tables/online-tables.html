@@ -27,6 +27,17 @@
         <mat-icon class="text-slate-500">unfold_more</mat-icon>
       </button>
       <mat-menu #accountMenu="matMenu" xPosition="before">
+        @if (guestWithoutPassword()) {
+          <button mat-menu-item (click)="openPassword('create')">
+            <mat-icon class="!text-amber-300">key</mat-icon>
+            <span>Criar senha</span>
+          </button>
+        } @else if (user.kind === 'guest') {
+          <button mat-menu-item (click)="openPassword('change')">
+            <mat-icon>key</mat-icon>
+            <span>Trocar senha</span>
+          </button>
+        }
         <a mat-menu-item [href]="account.exportUrl" download>
           <mat-icon>download</mat-icon>
           <span>Baixar meus dados</span>
@@ -43,22 +54,68 @@
     }
   </header>
 
+  <!-- ===== Convidado sem senha: só entra por este navegador ===== -->
+  @if (guestWithoutPassword() && !passwordMode()) {
+    <div class="flex flex-wrap items-center gap-3 rounded-2xl border border-amber-400/30 bg-amber-400/5 p-4 animate-fade-in">
+      <mat-icon class="text-amber-300">key</mat-icon>
+      <p class="min-w-48 flex-1 text-sm text-slate-300">Crie uma senha para entrar de outros aparelhos com o seu nome.</p>
+      <button mat-flat-button type="button" (click)="openPassword('create')">Criar senha</button>
+    </div>
+  }
+
+  <!-- ===== Criar ou trocar a senha ===== -->
+  @if (passwordMode(); as mode) {
+    <form class="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-ink-900 p-4 animate-fade-in" (submit)="$event.preventDefault(); savePassword()">
+      <mat-icon class="text-astral-300">key</mat-icon>
+      <p class="w-full text-sm text-slate-300">
+        {{
+          mode === 'create'
+            ? 'Com a senha, você entra pela página Entrar com o seu nome, de qualquer aparelho. Se o nome já for de outra pessoa (ou tiver @), escolha outro.'
+            : 'Os outros aparelhos conectados à sua conta vão precisar entrar de novo.'
+        }}
+      </p>
+      @if (mode === 'create') {
+        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="w-52">
+          <mat-label>Seu nome (para entrar)</mat-label>
+          <input #lname matInput maxlength="40" autocomplete="username" [value]="loginName()" (input)="loginName.set(lname.value)" />
+        </mat-form-field>
+      }
+      @if (mode === 'change') {
+        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="w-52">
+          <mat-label>Senha atual</mat-label>
+          <input #cur matInput type="password" autocomplete="current-password" [value]="currentPassword()" (input)="currentPassword.set(cur.value)" />
+        </mat-form-field>
+      }
+      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="w-52">
+        <mat-label>Senha nova</mat-label>
+        <input #nxt matInput type="password" maxlength="128" autocomplete="new-password" [value]="nextPassword()" (input)="nextPassword.set(nxt.value)" />
+      </mat-form-field>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="w-52">
+        <mat-label>Repita a senha</mat-label>
+        <input #rep matInput type="password" maxlength="128" autocomplete="new-password" [value]="repeatPassword()" (input)="repeatPassword.set(rep.value)" />
+      </mat-form-field>
+      <button mat-flat-button type="submit" [disabled]="busy() || !nextPassword() || (mode === 'change' && !currentPassword())">Salvar</button>
+      <button mat-button type="button" (click)="cancelPassword()">Cancelar</button>
+    </form>
+  }
+
   <!-- ===== Excluir a conta: confirma com a senha ===== -->
   @if (deleting() && account.user()) {
     <form class="flex flex-wrap items-center gap-3 rounded-2xl border border-red-500/30 bg-red-500/5 p-4 animate-fade-in" (submit)="$event.preventDefault(); deleteAccount()">
       <mat-icon class="text-red-400">warning</mat-icon>
-      @if (account.isOwner()) {
-        <p class="min-w-48 flex-1 text-sm text-slate-300">
-          Excluir a conta apaga, no servidor, as mesas e os mundos dela. Digite a senha para confirmar.
-        </p>
+      <p class="min-w-48 flex-1 text-sm text-slate-300">
+        {{ account.isOwner() ? 'Excluir a conta apaga, no servidor, as mesas e os mundos dela.' : 'Excluir a conta tira as suas fichas das mesas. Para voltar, será preciso um novo convite.' }}
+        @if (hasPassword()) {
+          Digite a senha para confirmar.
+        }
+      </p>
+      @if (hasPassword()) {
         <mat-form-field appearance="outline" subscriptSizing="dynamic" class="w-56">
           <mat-label>Senha</mat-label>
           <input #pwd matInput type="password" autocomplete="current-password" [value]="deletePassword()" (input)="deletePassword.set(pwd.value)" />
         </mat-form-field>
-      } @else {
-        <p class="min-w-48 flex-1 text-sm text-slate-300">Excluir a conta tira as suas fichas das mesas. Para voltar, será preciso um novo convite.</p>
       }
-      <button mat-flat-button type="submit" class="!bg-red-500 !text-white" [disabled]="(account.isOwner() && !deletePassword()) || busy()">Excluir</button>
+      <button mat-flat-button type="submit" class="!bg-red-500 !text-white" [disabled]="(hasPassword() && !deletePassword()) || busy()">Excluir</button>
       <button mat-button type="button" (click)="cancelDelete()">Cancelar</button>
     </form>
   }

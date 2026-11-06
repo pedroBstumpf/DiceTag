@@ -41,6 +41,15 @@ export class OnlineTables {
   readonly deletePassword = signal('');
   readonly busy = signal(false);
 
+  // --- Senha do convidado (criar ou trocar) --------------------------------
+  /** Formulário aberto: criar (convidado antigo, sem senha) ou trocar. */
+  readonly passwordMode = signal<'create' | 'change' | null>(null);
+  readonly currentPassword = signal('');
+  readonly nextPassword = signal('');
+  readonly repeatPassword = signal('');
+  /** Ao criar a senha: o nome de entrada (começa com o atual; muda se ele já é de outra pessoa ou tem @). */
+  readonly loginName = signal('');
+
   // --- Formulários rápidos -------------------------------------------------
   readonly newName = signal('');
   /** Convites gerados nesta visita (id da mesa → código): o código só é mostrado uma vez. */
@@ -149,14 +158,15 @@ export class OnlineTables {
     if (await this.run(() => this.account.logout())) await this.router.navigate(['/entrar']);
   }
 
-  /** O dono confirma com a senha; o convidado não tem senha. */
+  /** Quem tem senha (o dono e os convidados com senha) confirma com ela. */
   async deleteAccount(): Promise<void> {
     const owner = this.account.isOwner();
+    const withPassword = this.hasPassword();
     const password = this.deletePassword();
-    if (owner && !password) return;
+    if (withPassword && !password) return;
     const question = owner ? 'Excluir a sua conta e todas as mesas dela? Esta ação não pode ser desfeita.' : 'Excluir a sua conta? As suas fichas saem das mesas. Para voltar, será preciso um novo convite.';
     if (!confirm(question)) return;
-    const done = await this.run(() => this.account.deleteAccount(owner ? password : undefined), 'Conta excluída.');
+    const done = await this.run(() => this.account.deleteAccount(withPassword ? password : undefined), 'Conta excluída.');
     if (done) {
       this.cancelDelete();
       await this.router.navigate(['/entrar']);
@@ -166,6 +176,51 @@ export class OnlineTables {
   cancelDelete(): void {
     this.deleting.set(false);
     this.deletePassword.set('');
+  }
+
+  /** A conta tem senha? (o dono sempre; convidados antigos podem não ter) */
+  hasPassword(): boolean {
+    const user = this.account.user();
+    return !!user && (user.kind === 'owner' || user.hasPassword === true);
+  }
+
+  /** Convidado sem senha: só entra por este navegador (o aviso e o menu oferecem "Criar senha"). */
+  guestWithoutPassword(): boolean {
+    return this.account.user()?.kind === 'guest' && !this.hasPassword();
+  }
+
+  openPassword(mode: 'create' | 'change'): void {
+    this.cancelPassword();
+    this.loginName.set(this.account.user()?.name ?? '');
+    this.passwordMode.set(mode);
+  }
+
+  cancelPassword(): void {
+    this.passwordMode.set(null);
+    this.currentPassword.set('');
+    this.nextPassword.set('');
+    this.repeatPassword.set('');
+  }
+
+  /** Cria (convidado antigo) ou troca a senha; as outras sessões da conta caem, esta continua. */
+  async savePassword(): Promise<void> {
+    const mode = this.passwordMode();
+    const next = this.nextPassword();
+    if (!mode || next.length < 8) {
+      this.snackBar.open('A senha precisa ter pelo menos 8 caracteres.');
+      return;
+    }
+    if (next !== this.repeatPassword()) {
+      this.snackBar.open('As senhas não conferem.');
+      return;
+    }
+    const name = this.loginName().trim();
+    const renamed = name && name !== this.account.user()?.name ? name : undefined;
+    const done =
+      mode === 'create'
+        ? await this.run(() => this.account.createPassword(next, renamed), 'Senha criada: agora você entra pelo seu nome de qualquer aparelho.')
+        : await this.run(() => this.account.changePassword(this.currentPassword(), next), 'Senha trocada.');
+    if (done) this.cancelPassword();
   }
 
   // --- Internos ------------------------------------------------------------

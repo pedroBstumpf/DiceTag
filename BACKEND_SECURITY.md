@@ -58,8 +58,12 @@ as paredes. Isso evita regras duplicadas, mas traz responsabilidades:
 - **Compare com `timingSafeEqual`**, nunca com `===`.
 - **Política de senha:** mínimo de 8 caracteres, máximo de 128 (validado no zod), sem exigir
   combinações artificiais de símbolos; aceite espaços e Unicode.
-- **Login com resposta genérica:** "e-mail ou senha incorretos", com tempo semelhante quando o
-  usuário não existe (calcule um hash falso nesse caso).
+- **Login com resposta genérica:** "Nome, e-mail ou senha inválidos.", com tempo semelhante quando o
+  usuário não existe (calcule um hash falso nesse caso). O login é o e-mail (dono) ou o nome da mesa
+  (convidado, normalizado por `loginNameOf`, único no banco); o atraso crescente usa o login normalizado.
+- **Convidados:** a senha nasce no convite; o hash é calculado **fora** da transação e a unicidade do
+  nome é garantida pelo índice único (`users_login_name`). Recuperação sem e-mail: o link de retorno
+  do mestre (uso único, só o hash no banco) define uma senha nova e encerra as outras sessões.
 - O hash **nunca** sai do repositório de usuários: as consultas que alimentam respostas da API usam
   um tipo sem o campo de senha. Nunca registre senhas em log, nem em erro.
 
