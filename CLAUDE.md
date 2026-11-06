@@ -91,7 +91,9 @@ npm run smoke                # ponta a ponta contra o servidor aberto
 npm run e2e                  # dois navegadores reais na mesma mesa, por `npm run mesa` isolado (precisa do Chrome e
                              # de `npm run build` na raiz; usa pasta temporária e um Tailscale de mentira)
 npm run reset-link -- <e-mail> # link de recuperação de senha, sem serviço de e-mail
-npm run backup               # cópia do banco e dos arquivos + conferência (operação: server/OPERATIONS.md)
+npm run backup               # cópia do banco e dos arquivos + conferência (servidor hospedado: server/OPERATIONS.md)
+npm run backup-drive         # backup da pasta do app no Google Drive, agora (o npm run mesa já faz sozinho)
+npm run restaurar            # decifra um backup do Drive numa pasta nova e o confere (não mexe na pasta do app)
 ```
 
 **Antes de iniciar servidores ou testes, pergunte ao dono do projeto** (a máquina tem pouca memória livre).
@@ -474,6 +476,12 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - **`/api/host`:** só o dono vê; abrir, fechar e abrir a pasta exigem `isDirectLocal` (127.0.0.1, sem cabeçalhos de proxy, Host
   local). O endereço `*.ts.net` vira origem aceita (`allowPublicOrigin`). Painel: `HostPanel`, em Minhas mesas.
 - **Testes sem o Tailscale real:** `TAILSCALE_ARGV` aponta para `scripts/lib/tailscale-falso.mjs`.
+- **Backup no Google Drive** (`src/ops/drive-backup.ts` + teste; agenda em `scripts/lib/drive-backup.ts`): o processo principal
+  (nunca o servidor isolado) grava em `ZEHENIA_BACKUP_DIR` ou `<Meu Drive>\Cronicas de Zehenia - backup` (Google Drive para
+  computador, `findDriveFolder`): `banco/` (cópia `VACUUM INTO` conferida e cifrada, 14 mais novas), `arquivos-da-mesa/` (cifrados,
+  só os novos) e `biblioteca/` (espelho legível, `planMirror`). Cifra AES-256-GCM (`ZHB1 | iv | dados | etiqueta`) com a `BACKUP_KEY`,
+  criada no primeiro backup e guardada só no `segredos.env` (que não vai para a nuvem; `backupKey`). Quando: ao abrir, a cada hora e,
+  só o banco, ao fechar (com prazo de 4 s). `--sem-backup` desliga (o `npm run e2e` usa). `npm run restaurar` monta e confere uma cópia.
 
 ### Biblioteca de arquivos (só o dono) — `features/library`, `services/library.service.ts`
 - Pasta real com `imagens/` e `sons/` (seções fixas) e subpastas: o que for colocado pelo Explorador do Windows aparece. A lista vem do disco.

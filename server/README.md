@@ -260,7 +260,9 @@ As regras completas estão no [`BACKEND_SECURITY.md`](../BACKEND_SECURITY.md); a
   `security`), sem senhas, cookies, tokens nem e-mails; erro 500 só com o `requestId`.
 - **Banco:** arquivo 600, migrações registradas em `schema_migrations`, backup antes de migrar.
 - **LGPD:** exportar os dados e excluir a conta (em cascata). Backup com teste de restauração
-  (`npm run backup`, `npm run backup:check`).
+  (`npm run backup`, `npm run backup:check`). Com `npm run mesa`, backup automático e cifrado no Google Drive para
+  computador (ao abrir, a cada hora e ao fechar; `npm run backup-drive` na hora, `npm run restaurar` para montar e
+  conferir uma cópia). A chave fica só no `segredos.env`: guarde uma cópia dele fora da nuvem.
 - **Dependências:** versões exatas, lockfile, `ignore-scripts`, `npm audit` sem vulnerabilidades.
 
 ---
