@@ -86,7 +86,7 @@ export class AuthService {
     // Hash antes da transação (é lento e não precisa segurar o banco)
     const passwordHash = await this.hasher.hash(input.password);
     const now = this.now();
-    const user: PublicUser = { id: newId(), name: input.name, email: input.email, kind, createdAt: now };
+    const user: PublicUser = { id: newId(), name: input.name, email: input.email, kind, createdAt: now, hasPassword: true };
     transaction(this.db, () => {
       if (this.users.emailTaken(input.email)) throw conflict('Não foi possível criar a conta com esse e-mail.');
       this.users.create({ ...user, passwordHash });

@@ -36,7 +36,7 @@ describe('contas e sessão', () => {
     expect(cookie).toMatch(/HttpOnly/);
     expect(cookie).toMatch(/Secure/);
     expect(cookie).toMatch(/SameSite=Strict/);
-    expect(res.json().user).toEqual({ id: expect.any(String), name: 'Ana', email: 'ana@exemplo.com', kind: 'owner', createdAt: expect.any(Number) });
+    expect(res.json().user).toEqual({ id: expect.any(String), name: 'Ana', email: 'ana@exemplo.com', kind: 'owner', createdAt: expect.any(Number), hasPassword: true });
     expect(res.body).not.toContain(sessionCookie(res).split('=')[1]);
     expect(res.body).not.toMatch(/password|hash/i);
   });
@@ -604,7 +604,7 @@ describe('convites: quem não é o dono só entra assim', () => {
   it('entra só com o nome: sem e-mail, sem senha, com um id próprio e como jogador', async () => {
     const res = await redeemRaw({ code: (await invite()).code, name: '  Bia ' });
     expect(res.statusCode).toBe(200);
-    expect(res.json().user).toEqual({ id: expect.any(String), name: 'Bia', email: '', kind: 'guest', createdAt: expect.any(Number) });
+    expect(res.json().user).toEqual({ id: expect.any(String), name: 'Bia', email: '', kind: 'guest', createdAt: expect.any(Number), hasPassword: false });
     expect(res.json().table).toMatchObject({ id: tableId, role: 'player' });
     expect(res.body).not.toMatch(/password|hash|convidado:/);
     expect(String(res.headers['set-cookie'])).toMatch(/HttpOnly/);

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { migrate, openDatabase, transaction } from '../src/db/database';
 import { MIGRATIONS } from '../src/db/migrations';
 import { checkBackup, createBackup } from '../src/ops/backup';
+import { isUniqueViolation } from '../src/repositories/users';
 
 /**
  * Banco: migrações registradas e só para frente, backup antes de migrar, adoção de bancos da
@@ -68,6 +69,31 @@ describe('migrações', () => {
     expect(copy.prepare('SELECT COUNT(*) AS n FROM users').get()).toEqual({ n: 1 });
     expect(copy.prepare("SELECT name FROM sqlite_master WHERE name = 'nova'").get()).toBeUndefined();
     copy.close();
+    db.close();
+  });
+});
+
+describe('nome de entrada dos convidados (migração 4)', () => {
+  const insert = (db: DatabaseSync, id: string, login: string | null) =>
+    db.prepare("INSERT INTO users (id, email, name, password_hash, kind, created_at, login_name) VALUES (?, ?, 'X', 'h', 'guest', 0, ?)").run(id, `convidado:${id}`, login);
+
+  it('dois convidados não podem ter o mesmo nome de entrada', () => {
+    const db = openDatabase(':memory:');
+    insert(db, 'a', 'lyra');
+    let error: unknown;
+    try {
+      insert(db, 'b', 'lyra');
+    } catch (err) {
+      error = err;
+    }
+    expect(isUniqueViolation(error)).toBe(true);
+    db.close();
+  });
+
+  it('convidados antigos, sem nome de entrada, continuam podendo repetir o nome', () => {
+    const db = openDatabase(':memory:');
+    insert(db, 'a', null);
+    expect(() => insert(db, 'b', null)).not.toThrow();
     db.close();
   });
 });

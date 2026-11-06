@@ -119,4 +119,10 @@ export const MIGRATIONS: readonly string[] = [
   CREATE UNIQUE INDEX users_one_owner ON users(kind) WHERE kind = 'owner';
   ALTER TABLE table_invites ADD COLUMN target_user_id TEXT REFERENCES users(id) ON DELETE CASCADE;
   `,
+  // 4 — convidado com senha entra pelo nome da mesa: `login_name` é esse nome normalizado
+  // (`lib/login-name.ts`), único no banco; convidados antigos (sem senha) ficam com NULL
+  `
+  ALTER TABLE users ADD COLUMN login_name TEXT;
+  CREATE UNIQUE INDEX users_login_name ON users(login_name) WHERE login_name IS NOT NULL;
+  `,
 ];
