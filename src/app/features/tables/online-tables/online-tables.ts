@@ -47,6 +47,8 @@ export class OnlineTables {
   readonly currentPassword = signal('');
   readonly nextPassword = signal('');
   readonly repeatPassword = signal('');
+  /** Ao criar a senha: o nome de entrada (começa com o atual; muda se ele já é de outra pessoa ou tem @). */
+  readonly loginName = signal('');
 
   // --- Formulários rápidos -------------------------------------------------
   readonly newName = signal('');
@@ -189,6 +191,7 @@ export class OnlineTables {
 
   openPassword(mode: 'create' | 'change'): void {
     this.cancelPassword();
+    this.loginName.set(this.account.user()?.name ?? '');
     this.passwordMode.set(mode);
   }
 
@@ -211,9 +214,11 @@ export class OnlineTables {
       this.snackBar.open('As senhas não conferem.');
       return;
     }
+    const name = this.loginName().trim();
+    const renamed = name && name !== this.account.user()?.name ? name : undefined;
     const done =
       mode === 'create'
-        ? await this.run(() => this.account.createPassword(next), 'Senha criada: agora você entra pelo seu nome de qualquer aparelho.')
+        ? await this.run(() => this.account.createPassword(next, renamed), 'Senha criada: agora você entra pelo seu nome de qualquer aparelho.')
         : await this.run(() => this.account.changePassword(this.currentPassword(), next), 'Senha trocada.');
     if (done) this.cancelPassword();
   }

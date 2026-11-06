@@ -6,7 +6,7 @@ import { normalizeState, TABLE_ACCENTS, type TableRole, type TableState, type Wo
 import { audit } from '../../lib/audit';
 import { badRequest, conflict, forbidden, HttpError, notFound, parse } from '../../lib/errors';
 import { idSchema, newId } from '../../lib/ids';
-import { loginNameOf } from '../../lib/login-name';
+import { loginNameOf, validGuestName } from '../../lib/login-name';
 import { unsafeJsonReason } from '../../lib/safe-json';
 import { multilineText, newPassword, text } from '../../lib/schemas';
 import type { MemberTable, TableRecord } from '../../repositories/tables';
@@ -291,7 +291,9 @@ export async function tableRoutes(app: FastifyInstance, ctx: AppContext, hub: Re
     if (!invite.targetUserId) return { kind: 'new' };
     const target = ctx.users.findById(invite.targetUserId);
     if (!target || !ctx.tables.roleOf(invite.tableId, target.id)) throw new HttpError(404, INVITE_INVALID);
-    return { kind: 'return', name: target.name, nameTaken: ctx.users.loginTaken(loginNameOf(target.name), target.id) };
+    // Precisa de um nome novo: o atual já é o login de outra conta, ou tem @ (convidados antigos)
+    const nameTaken = !validGuestName(target.name) || ctx.users.loginTaken(loginNameOf(target.name), target.id);
+    return { kind: 'return', name: target.name, nameTaken };
   });
 
   // --- Lore da mesa ------------------------------------------------------------

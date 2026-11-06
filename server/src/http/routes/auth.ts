@@ -7,7 +7,8 @@ import { PASSWORD_RESET_MINUTES } from '../../services/auth.service';
 import { passwordResetMail } from '../../services/mailer';
 import { audit } from '../../lib/audit';
 import { transaction } from '../../db/database';
-import { HttpError, conflict, parse } from '../../lib/errors';
+import { HttpError, badRequest, conflict, parse } from '../../lib/errors';
+import { validGuestName } from '../../lib/login-name';
 import { email, newPassword, passwordInput, text } from '../../lib/schemas';
 import { PUBLIC, clearSessionCookie, requireAuth, sessionCookieName, setSessionCookie } from '../plugins/auth';
 import { AUTH_RATE_LIMIT } from '../plugins/security';
@@ -15,7 +16,8 @@ import { AUTH_RATE_LIMIT } from '../plugins/security';
 /** `login`: e-mail (dono) ou o nome da mesa (convidado com senha). */
 const loginBody = z.strictObject({ login: z.string().trim().min(1).max(254), password: passwordInput });
 const passwordBody = z.strictObject({ current: passwordInput, next: newPassword });
-const createPasswordBody = z.strictObject({ password: newPassword });
+/** `name`: só quando o nome atual não serve para entrar (já é o login de outra conta ou tem @). */
+const createPasswordBody = z.strictObject({ password: newPassword, name: text(1, 40).optional() });
 const profileBody = z.strictObject({ name: text(1, 60) });
 /** Convidado antigo, sem senha: a sessão é a única credencial dele. */
 const deleteBody = z.strictObject({ password: passwordInput.optional() });
@@ -106,6 +108,7 @@ export async function authRoutes(app: FastifyInstance, ctx: AppContext, hub: Rea
     const { name } = parse(profileBody, req.body);
     // Convidado com senha entra pelo nome: o nome de entrada muda junto, sem repetir o de outra conta
     if (session.user.kind === 'guest' && session.user.hasPassword) transaction(ctx.db, () => ctx.auth.renameGuest(session.user, name));
+    else if (session.user.kind === 'guest' && !validGuestName(name)) throw badRequest('Escolha um nome sem @.');
     else ctx.users.rename(session.user.id, name);
     return { user: { ...session.user, name } };
   });
@@ -113,17 +116,18 @@ export async function authRoutes(app: FastifyInstance, ctx: AppContext, hub: Rea
   /** Convidado antigo, sem senha, cria a dele: passa a entrar pelo nome de qualquer aparelho. */
   app.post('/password/create', { config: AUTH_RATE_LIMIT }, async (req, reply) => {
     const session = requireAuth(req);
-    const { password } = parse(createPasswordBody, req.body);
+    const { password, name } = parse(createPasswordBody, req.body);
     if (session.user.kind !== 'guest' || session.user.hasPassword) throw conflict(ALREADY_HAS_PASSWORD);
-    const credentials = await ctx.auth.guestCredentials(session.user.name, password);
+    const newName = name ?? session.user.name;
+    const credentials = await ctx.auth.guestCredentials(newName, password);
     const token = transaction(ctx.db, () => {
       // Conferido de novo aqui: o hash leva tempo, e outro pedido pode ter criado a senha nesse meio-tempo
       if (ctx.users.findById(session.user.id)?.hasPassword) throw conflict(ALREADY_HAS_PASSWORD);
-      return ctx.auth.setGuestPassword(session.user, session.user.name, credentials);
+      return ctx.auth.setGuestPassword(session.user, newName, credentials);
     });
     hub.userSessionsEnded(session.user.id);
     audit(req.log, 'senha.criada', { userId: session.user.id, ip: req.ip });
-    setSessionCookie(reply, ctx, token, { ...session.user, hasPassword: true });
+    setSessionCookie(reply, ctx, token, { ...session.user, name: newName, hasPassword: true });
     return reply.code(204).send();
   });
 

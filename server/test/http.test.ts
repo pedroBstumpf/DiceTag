@@ -772,6 +772,35 @@ describe('convites: quem não é o dono só entra assim', () => {
     expect((await loginAs('bia 2', NEW_PASSWORD)).statusCode).toBe(200);
   });
 
+  it('convidado antigo com @ no nome: o link de retorno pede um nome novo e funciona com ele', async () => {
+    const old = server.ctx.users.createGuest('antigo', 'bia@mesa', Date.now());
+    server.ctx.tables.addMember(tableId, old.id, 'player', Date.now());
+    const code = await accessLink(old.id);
+    expect((await info(code)).json()).toEqual({ kind: 'return', name: 'bia@mesa', nameTaken: true });
+    expect((await redeemRaw({ code, password: NEW_PASSWORD })).statusCode).toBe(400);
+    expect((await redeemRaw({ code, password: NEW_PASSWORD, name: 'Bia' })).statusCode).toBe(200);
+    expect((await loginAs('bia', NEW_PASSWORD)).statusCode).toBe(200);
+  });
+
+  it('"Criar senha" aceita um nome novo quando o atual já é de outro ou tem @', async () => {
+    await redeem(server, (await invite()).code, 'Bia');
+    const old = server.ctx.users.createGuest('antigo', 'bia', Date.now());
+    server.ctx.tables.addMember(tableId, old.id, 'player', Date.now());
+    const cookie = `__Host-zh_session=${server.ctx.auth.sessionFor(old)}`;
+    expect((await call(server, cookie, 'POST', '/api/auth/password/create', { password: NEW_PASSWORD })).statusCode).toBe(409);
+    const created = await call(server, cookie, 'POST', '/api/auth/password/create', { password: NEW_PASSWORD, name: 'Bia do Norte' });
+    expect(created.statusCode).toBe(204);
+    expect((await call(server, sessionCookie(created), 'GET', '/api/auth/me')).json().user).toMatchObject({ name: 'Bia do Norte', hasPassword: true });
+    expect((await loginAs('bia do norte', NEW_PASSWORD)).statusCode).toBe(200);
+  });
+
+  it('convidado não pode pôr @ no nome, nem o antigo, sem senha', async () => {
+    const old = server.ctx.users.createGuest('antigo', 'Velho', Date.now());
+    server.ctx.tables.addMember(tableId, old.id, 'player', Date.now());
+    const cookie = `__Host-zh_session=${server.ctx.auth.sessionFor(old)}`;
+    expect((await call(server, cookie, 'PATCH', '/api/auth/me', { name: 'velho@mesa' })).statusCode).toBe(400);
+  });
+
   it('convidado antigo cria a senha pelo menu (uma vez só); o dono não usa essa rota', async () => {
     const old = server.ctx.users.createGuest('antigo', 'Velho', Date.now());
     server.ctx.tables.addMember(tableId, old.id, 'player', Date.now());

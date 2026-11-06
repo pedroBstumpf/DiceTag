@@ -79,10 +79,13 @@ export class ServerAccountService {
     return table;
   }
 
-  /** Convidado antigo, sem senha, cria a dele (as outras sessões da conta caem). */
-  async createPassword(password: string): Promise<void> {
-    await this.api.post('/auth/password/create', { password });
-    this.user.update((user) => user && { ...user, hasPassword: true });
+  /**
+   * Convidado antigo, sem senha, cria a dele (as outras sessões da conta caem). `name`: um nome novo,
+   * quando o atual não serve para entrar (já é de outra pessoa ou tem @).
+   */
+  async createPassword(password: string, name?: string): Promise<void> {
+    await this.api.post('/auth/password/create', { password, ...(name && { name }) });
+    this.user.update((user) => user && { ...user, hasPassword: true, ...(name && { name }) });
   }
 
   /** Troca a senha (as outras sessões da conta caem; esta continua). */

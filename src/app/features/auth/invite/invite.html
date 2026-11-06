@@ -27,7 +27,9 @@
       } @else {
         @if (needsAccount() || needsNewName()) {
           @if (needsNewName()) {
-            <p class="rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-200">O nome "{{ returningName() }}" agora é de outra pessoa: escolha outro.</p>
+            <p class="rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+              O nome "{{ returningName() }}" não pode ser usado para entrar (já é de outra pessoa ou tem &#64;): escolha outro.
+            </p>
           }
           <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Como os outros vão te chamar?</mat-label>

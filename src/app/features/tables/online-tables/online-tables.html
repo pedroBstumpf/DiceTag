@@ -68,8 +68,18 @@
     <form class="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-ink-900 p-4 animate-fade-in" (submit)="$event.preventDefault(); savePassword()">
       <mat-icon class="text-astral-300">key</mat-icon>
       <p class="w-full text-sm text-slate-300">
-        {{ mode === 'create' ? 'Com a senha, você entra pela página Entrar com o seu nome, de qualquer aparelho.' : 'Os outros aparelhos conectados à sua conta vão precisar entrar de novo.' }}
+        {{
+          mode === 'create'
+            ? 'Com a senha, você entra pela página Entrar com o seu nome, de qualquer aparelho. Se o nome já for de outra pessoa (ou tiver @), escolha outro.'
+            : 'Os outros aparelhos conectados à sua conta vão precisar entrar de novo.'
+        }}
       </p>
+      @if (mode === 'create') {
+        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="w-52">
+          <mat-label>Seu nome (para entrar)</mat-label>
+          <input #lname matInput maxlength="40" autocomplete="username" [value]="loginName()" (input)="loginName.set(lname.value)" />
+        </mat-form-field>
+      }
       @if (mode === 'change') {
         <mat-form-field appearance="outline" subscriptSizing="dynamic" class="w-52">
           <mat-label>Senha atual</mat-label>
