@@ -202,6 +202,7 @@ src/
             │   ├── visibility.ts       # visão por ray casting, paredes/portas → segmentos, ponto-em-polígono, doorSeen
             │   ├── walls.ts            # mover parede/alça, distância até a parede
             │   ├── fog-memory.ts       # máscara de áreas exploradas (bitset base64)
+            │   ├── fog-fade.ts         # mistura entre quadros da névoa na mesa online (misturar ou trocar; progresso)
             │   ├── simplify.ts         # Ramer–Douglas–Peucker (traços)
             │   ├── projection.ts       # matriz 2D/isométrica, tela↔mundo, enquadramento, "em pé" (upright)
             │   ├── inventory.ts        # quantidade e transferência de unidades entre inventários + spec
@@ -500,7 +501,9 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
   o último valor (`mergeBurst`/`squashPending`), por causa do limite de mensagens do servidor. Por isso, na tela
   de quem assiste, o token **desliza** entre as posições recebidas (`TokensLayer.glide`: transição de 100 ms em
   `left/top`, igual a `BURST_MS`); os tokens que a própria tela está movendo (`pendingMoveIds` em `state/sync.ts` →
-  `session.localMoves`, atualizado junto com o estado) não deslizam. A névoa do jogador continua no ritmo do servidor.
+  `session.localMoves`, atualizado junto com o estado) não deslizam. A névoa faz o mesmo: na mesa online
+  (`FogLayer.smooth`), cada quadro novo se mistura ao anterior em 100 ms (`utils/fog-fade.ts` + spec; composição
+  `lighter` = mistura exata, sem piscar); quadros a menos de 50 ms um do outro (arrasto desta tela) trocam na hora.
 - **Papel da conta:** `welcome.you.role`; `setRole` não faz nada online e a barra de ações mostra só o rótulo. A conta
   usada nas regras (`viewer`, chat, dono de personagem/item/efeito) é `me` = a do servidor.
 - **Rolagens no servidor:** `useAction` devolve `RollSent` e `quickRoll` devolve `null`; o resultado chega no chat e em

@@ -1,5 +1,6 @@
 import { Component, DestroyRef, ElementRef, effect, inject, input, viewChild } from '@angular/core';
 import { Point } from '../../../../../core/models/geometry.model';
+import { fogFadeProgress, shouldFadeFog } from '../../../utils/fog-fade';
 import { ExploredMask, isCellExplored } from '../../../utils/fog-memory';
 
 /** Limites do canvas: mapas grandes são desenhados em resolução menor. */
@@ -26,6 +27,10 @@ interface FogFrame {
  * - as áreas visíveis agora, por completo, com bordas suavizadas.
  * Jogador: névoa opaca. Mestre: névoa semitransparente (~45%) e contorno das áreas visíveis.
  * Redesenha só quando os dados mudam, agrupando num requestAnimationFrame.
+ *
+ * Mesa online (`smooth`): o quadro novo é desenhado fora da tela e misturado ao que estava
+ * aparecendo ao longo de `FOG_FADE_MS` (utils/fog-fade.ts), para a área visível acompanhar o
+ * movimento que chega em rajadas sem andar aos saltos.
  */
 @Component({
   selector: 'app-fog-layer',
@@ -41,9 +46,17 @@ export class FogLayer {
   readonly explored = input<ExploredMask | null>(null);
   /** Visão de jogador (opaca) ou de mestre (semitransparente com contornos). */
   readonly player = input(false);
+  /** Mesa online: mistura cada quadro novo com o anterior (ver `utils/fog-fade.ts`). */
+  readonly smooth = input(false);
 
   private readonly canvas = viewChild.required<ElementRef<HTMLCanvasElement>>('canvas');
   private frame = 0;
+  /** Animação da mistura entre o quadro anterior e o novo. */
+  private fade = 0;
+  /** Quando os dados mudaram pela última vez (decide se mistura ou troca na hora). */
+  private lastChange = 0;
+  /** Quadros fora da tela da mistura (criados só na primeira mistura). */
+  private buffers: { from: HTMLCanvasElement; to: HTMLCanvasElement } | null = null;
   /** Imagem da máscara explorada (refeita só quando a máscara muda). */
   private maskImage: { mask: ExploredMask; canvas: HTMLCanvasElement } | null = null;
 
@@ -57,18 +70,77 @@ export class FogLayer {
         explored: this.explored(),
         player: this.player(),
       };
+      const now = performance.now();
+      const fade = shouldFadeFog(this.smooth(), now - this.lastChange);
+      this.lastChange = now;
       cancelAnimationFrame(this.frame);
-      this.frame = requestAnimationFrame(() => this.draw(data));
+      this.frame = requestAnimationFrame(() => this.show(data, fade));
     });
-    inject(DestroyRef).onDestroy(() => cancelAnimationFrame(this.frame));
+    inject(DestroyRef).onDestroy(() => {
+      cancelAnimationFrame(this.frame);
+      cancelAnimationFrame(this.fade);
+    });
   }
 
-  private draw({ w, h, polygons, explored, player }: FogFrame): void {
+  // --- Troca de quadro ---------------------------------------------------------
+
+  /** Mostra o quadro novo: direto na tela, ou misturado ao que estava aparecendo. */
+  private show(data: FogFrame, fade: boolean): void {
+    cancelAnimationFrame(this.fade);
     const canvas = this.canvas().nativeElement;
-    // Resolução proporcional, limitada para não estourar memória em mapas grandes
+    const { cw, ch } = this.canvasSize(data);
+    // Primeiro quadro ou mapa de outro tamanho: não há o que misturar
+    if (!fade || canvas.width !== cw || canvas.height !== ch) {
+      this.draw(canvas, data);
+      return;
+    }
+    const { from, to } = (this.buffers ??= { from: document.createElement('canvas'), to: document.createElement('canvas') });
+    // Ponto de partida = o que está na tela agora (pode ser o meio de outra mistura)
+    this.copy(canvas, from);
+    this.draw(to, data);
+    const start = performance.now();
+    const step = () => {
+      const t = fogFadeProgress(performance.now() - start);
+      this.blend(canvas, from, to, t);
+      if (t < 1) this.fade = requestAnimationFrame(step);
+    };
+    step();
+  }
+
+  /** Tela = (1 − t) × anterior + t × novo, pixel a pixel ('lighter' soma as duas metades). */
+  private blend(canvas: HTMLCanvasElement, from: HTMLCanvasElement, to: HTMLCanvasElement, t: number): void {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.filter = 'none';
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1 - t;
+    ctx.drawImage(from, 0, 0);
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = t;
+    ctx.drawImage(to, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+  }
+
+  private copy(source: HTMLCanvasElement, target: HTMLCanvasElement): void {
+    target.width = source.width;
+    target.height = source.height;
+    target.getContext('2d')?.drawImage(source, 0, 0);
+  }
+
+  /** Resolução proporcional, limitada para não estourar memória em mapas grandes. */
+  private canvasSize({ w, h }: FogFrame): { k: number; cw: number; ch: number } {
     const k = Math.min(1, MAX_SIDE / Math.max(w, h), Math.sqrt(MAX_PIXELS / (w * h)));
-    const cw = Math.max(1, Math.round(w * k));
-    const ch = Math.max(1, Math.round(h * k));
+    return { k, cw: Math.max(1, Math.round(w * k)), ch: Math.max(1, Math.round(h * k)) };
+  }
+
+  // --- Desenho de um quadro ------------------------------------------------------
+
+  private draw(canvas: HTMLCanvasElement, data: FogFrame): void {
+    const { w, h, polygons, explored, player } = data;
+    const { k, cw, ch } = this.canvasSize(data);
     if (canvas.width !== cw || canvas.height !== ch) {
       canvas.width = cw;
       canvas.height = ch;
