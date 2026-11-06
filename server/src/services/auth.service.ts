@@ -2,9 +2,11 @@ import type { Config } from '../config/env';
 import { transaction, type Db } from '../db/database';
 import { HttpError, badRequest, conflict } from '../lib/errors';
 import { newId } from '../lib/ids';
+import { loginNameOf, validGuestName } from '../lib/login-name';
+import { email as emailSchema } from '../lib/schemas';
 import type { PasswordResetsRepository } from '../repositories/password-resets';
 import type { SessionsRepository } from '../repositories/sessions';
-import type { PublicUser, UserKind, UsersRepository } from '../repositories/users';
+import { NAME_TAKEN, isUniqueViolation, type GuestCredentials, type PublicUser, type UserKind, type UsersRepository } from '../repositories/users';
 import type { WorldsRepository } from '../repositories/worlds';
 import { LoginThrottle } from '../security/login-throttle';
 import { passwordProblem, type PasswordHasher } from '../security/password';
@@ -22,17 +24,20 @@ const FIRST_WORLD_NAME = 'Meu mundo';
 const TOUCH_EVERY_MS = 5 * 60_000;
 /** Validade do link de recuperação de senha (BACKEND_SECURITY.md §1: de 30 a 60 minutos). */
 export const PASSWORD_RESET_MINUTES = 30;
+/** Resposta única do login (não entrega se o nome ou o e-mail têm conta). */
+export const LOGIN_FAILED = 'Nome, e-mail ou senha inválidos.';
 /** Tempo mínimo entre dois e-mails de recuperação para a mesma conta (ninguém enche a caixa de outra pessoa). */
 const RESET_COOLDOWN_MS = 2 * 60_000;
 const RESET_INVALID = 'Este link é inválido ou já venceu. Peça outro em "Esqueci minha senha".';
 
 /**
  * Contas e sessões. **Não há cadastro público:** o dono do app é criado pelo terminal
- * (`npm run dono`), e todos os demais entram por um convite (`createGuest`), só com um nome.
+ * (`npm run dono`), e todos os demais entram por um convite (`createGuest`), com o nome da mesa
+ * e uma senha; depois, entram por esse nome (único, `lib/login-name.ts`) e a senha.
  *
- * - Login com mensagem única para e-mail inexistente e senha errada, e o mesmo tempo de
- *   resposta nos dois casos (`dummyVerify`): não dá para descobrir quais e-mails têm conta.
- * - Falhas de login: atraso crescente por e-mail + IP e, com mais folga, por e-mail
+ * - Login com mensagem única para conta inexistente e senha errada, e o mesmo tempo de
+ *   resposta nos dois casos (`dummyVerify`): não dá para descobrir quais nomes ou e-mails têm conta.
+ * - Falhas de login: atraso crescente por login + IP e, com mais folga, por login
  *   (`LoginThrottle`), em vez de bloquear a conta por um tempo fixo.
  * - Sessão nova a cada login (o token antigo não é reaproveitado: sem fixação de sessão).
  * - Trocar a senha encerra TODAS as sessões da conta e abre uma nova (id novo a cada mudança
@@ -95,9 +100,29 @@ export class AuthService {
     return { user, token: this.openSession(user) };
   }
 
-  /** Conta de convidado, só com o nome (quem chama já conferiu o convite, na mesma transação). */
-  createGuest(name: string): PublicUser {
-    return this.users.createGuest(newId(), name, this.now());
+  /**
+   * Confere o nome e a senha de um convidado e calcula o hash (lento: fora de qualquer transação).
+   * Não grava nada: o resultado vai para `createGuest` ou `setGuestPassword`.
+   */
+  async guestCredentials(name: string, password: string): Promise<GuestCredentials> {
+    if (!validGuestName(name)) throw badRequest('Escolha um nome sem @.');
+    const problem = passwordProblem(password, name);
+    if (problem) throw badRequest(problem);
+    return { loginName: loginNameOf(name), passwordHash: await this.hasher.hash(password) };
+  }
+
+  /**
+   * Conta de convidado com nome e senha (quem chama já conferiu o convite, na mesma transação).
+   * Nome de entrada repetido → 409 (o índice único segura dois pedidos ao mesmo tempo).
+   */
+  createGuest(name: string, credentials: GuestCredentials): PublicUser {
+    if (this.users.loginTaken(credentials.loginName)) throw conflict(NAME_TAKEN);
+    try {
+      return this.users.createGuest(newId(), name, this.now(), credentials);
+    } catch (err) {
+      if (isUniqueViolation(err)) throw conflict(NAME_TAKEN);
+      throw err;
+    }
   }
 
   /** Abre uma sessão para quem apresentou um convite válido. */
@@ -105,19 +130,25 @@ export class AuthService {
     return this.openSession(user);
   }
 
-  /** `ip`: de onde veio a tentativa (o atraso crescente conta e-mail + IP e só o e-mail). */
-  async login(email: string, password: string, ip: string): Promise<{ user: PublicUser; token: string }> {
-    const wait = this.throttle.waitMs(email, ip);
+  /**
+   * Login pelo e-mail (dono: tem `@`) ou pelo nome da mesa (convidado com senha). `ip`: de onde veio a
+   * tentativa (o atraso crescente conta login + IP e só o login, já normalizado).
+   */
+  async login(login: string, password: string, ip: string): Promise<{ user: PublicUser; token: string }> {
+    const byEmail = login.includes('@');
+    const parsedEmail = byEmail ? emailSchema.safeParse(login) : null;
+    const key = parsedEmail?.success ? parsedEmail.data : byEmail ? login.trim().toLowerCase() : loginNameOf(login);
+    const wait = this.throttle.waitMs(key, ip);
     if (wait > 0) {
-      throw new HttpError(429, `Muitas tentativas para este e-mail. Tente novamente em ${Math.ceil(wait / 1000)} s.`);
+      throw new HttpError(429, `Muitas tentativas para esta conta. Tente novamente em ${Math.ceil(wait / 1000)} s.`);
     }
-    const found = this.users.credentialsByEmail(email);
+    const found = byEmail ? (parsedEmail?.success ? this.users.credentialsByEmail(key) : null) : this.users.credentialsByLogin(key);
     const ok = found ? await this.hasher.verify(password, found.passwordHash) : (await this.hasher.dummyVerify(password), false);
     if (!found || !ok) {
-      this.throttle.fail(email, ip);
-      throw new HttpError(401, 'E-mail ou senha inválidos.');
+      this.throttle.fail(key, ip);
+      throw new HttpError(401, LOGIN_FAILED);
     }
-    this.throttle.succeed(email, ip);
+    this.throttle.succeed(key, ip);
     // Custo do hash mudou desde o cadastro: refaz agora que temos a senha
     if (this.hasher.needsRehash(found.passwordHash)) this.users.setPasswordHash(found.user.id, await this.hasher.hash(password));
     return { user: found.user, token: this.openSession(found.user) };

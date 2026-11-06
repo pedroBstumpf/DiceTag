@@ -97,7 +97,7 @@ function connect() {
 
 // --- Botões ----------------------------------------------------------------------
 
-const credentials = () => ({ email: $('email').value, password: $('password').value });
+const credentials = () => ({ login: $('email').value, password: $('password').value });
 
 $('login').addEventListener('click', async () => {
   await api('POST', '/api/auth/login', credentials());

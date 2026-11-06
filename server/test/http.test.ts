@@ -29,7 +29,7 @@ describe('contas e sessão', () => {
 
   it('login cria sessão com cookie HttpOnly, Secure e SameSite=Strict, sem token no corpo', async () => {
     await server.ctx.auth.createAccount({ name: 'Ana', email: 'ana@exemplo.com', password: PASSWORD }, 'owner');
-    const res = await inject({ method: 'POST', url: '/api/auth/login', headers: { origin: ORIGIN }, payload: { email: 'Ana@Exemplo.com ', password: PASSWORD } });
+    const res = await inject({ method: 'POST', url: '/api/auth/login', headers: { origin: ORIGIN }, payload: { login: 'Ana@Exemplo.com ', password: PASSWORD } });
     expect(res.statusCode).toBe(200);
     const cookie = String(res.headers['set-cookie']);
     expect(cookie).toMatch(/^__Host-zh_session=/);
@@ -56,8 +56,8 @@ describe('contas e sessão', () => {
 
   it('login: mesma resposta para e-mail inexistente e senha errada', async () => {
     await register(server, 'a@exemplo.com');
-    const wrong = await inject({ method: 'POST', url: '/api/auth/login', headers: { origin: ORIGIN }, payload: { email: 'a@exemplo.com', password: 'errada-123' } });
-    const missing = await inject({ method: 'POST', url: '/api/auth/login', headers: { origin: ORIGIN }, payload: { email: 'b@exemplo.com', password: 'errada-123' } });
+    const wrong = await inject({ method: 'POST', url: '/api/auth/login', headers: { origin: ORIGIN }, payload: { login: 'a@exemplo.com', password: 'errada-123' } });
+    const missing = await inject({ method: 'POST', url: '/api/auth/login', headers: { origin: ORIGIN }, payload: { login: 'b@exemplo.com', password: 'errada-123' } });
     expect(wrong.statusCode).toBe(401);
     expect(missing.statusCode).toBe(401);
     expect(wrong.json()).toEqual(missing.json());
@@ -66,7 +66,7 @@ describe('contas e sessão', () => {
   it('depois de 5 senhas erradas, o mesmo IP espera; de outro IP a conta não fica trancada', async () => {
     await register(server, 'a@exemplo.com');
     const attempt = (password: string, remoteAddress = '203.0.113.1') =>
-      inject({ method: 'POST', url: '/api/auth/login', remoteAddress, headers: { origin: ORIGIN }, payload: { email: 'a@exemplo.com', password } });
+      inject({ method: 'POST', url: '/api/auth/login', remoteAddress, headers: { origin: ORIGIN }, payload: { login: 'a@exemplo.com', password } });
     for (let i = 0; i < 5; i++) expect((await attempt('errada-123')).statusCode).toBe(401);
     expect((await attempt(PASSWORD)).statusCode).toBe(429);
     // A dona da conta, de outro IP, entra normalmente
@@ -82,7 +82,7 @@ describe('contas e sessão', () => {
 
   it('trocar a senha encerra todas as sessões e dá uma nova a quem trocou', async () => {
     const { cookie } = await register(server, 'a@exemplo.com');
-    const login = await inject({ method: 'POST', url: '/api/auth/login', headers: { origin: ORIGIN }, payload: { email: 'a@exemplo.com', password: PASSWORD } });
+    const login = await inject({ method: 'POST', url: '/api/auth/login', headers: { origin: ORIGIN }, payload: { login: 'a@exemplo.com', password: PASSWORD } });
     const other = sessionCookie(login);
     const res = await call(server, cookie, 'POST', '/api/auth/password', { current: PASSWORD, next: 'outra senha bem longa' });
     expect(res.statusCode).toBe(204);
@@ -95,7 +95,7 @@ describe('contas e sessão', () => {
 
   it('sair de todos os dispositivos encerra todas as sessões, inclusive a atual', async () => {
     const { cookie } = await register(server, 'a@exemplo.com');
-    const login = await inject({ method: 'POST', url: '/api/auth/login', headers: { origin: ORIGIN }, payload: { email: 'a@exemplo.com', password: PASSWORD } });
+    const login = await inject({ method: 'POST', url: '/api/auth/login', headers: { origin: ORIGIN }, payload: { login: 'a@exemplo.com', password: PASSWORD } });
     const other = sessionCookie(login);
     expect((await call(server, cookie, 'POST', '/api/auth/logout-all')).statusCode).toBe(204);
     expect((await call(server, other, 'GET', '/api/auth/me')).statusCode).toBe(401);
@@ -166,9 +166,10 @@ describe('proteções HTTP', () => {
   });
 
   it('erros não vazam detalhes internos nem ecoam valores enviados', async () => {
-    const res = await inject({ method: 'POST', url: '/api/auth/login', headers: { origin: ORIGIN }, payload: { email: 'não-é-email', password: PASSWORD } });
+    const tooLong = 'nome-comprido-'.repeat(30);
+    const res = await inject({ method: 'POST', url: '/api/auth/login', headers: { origin: ORIGIN }, payload: { login: tooLong, password: PASSWORD } });
     expect(res.statusCode).toBe(400);
-    expect(res.body).not.toContain('não-é-email');
+    expect(res.body).not.toContain(tooLong);
     expect(res.body).not.toContain(PASSWORD);
     expect(res.body).not.toMatch(/at .*\.ts/);
   });
@@ -184,7 +185,7 @@ describe('limite de requisições', () => {
     try {
       const codes: number[] = [];
       for (let i = 0; i < 12; i++) {
-        const res = await limited.app.http.inject({ method: 'POST', url: '/api/auth/login', headers: { origin: ORIGIN }, payload: { email: `x${i}@b.co`, password: 'errada-123' } });
+        const res = await limited.app.http.inject({ method: 'POST', url: '/api/auth/login', headers: { origin: ORIGIN }, payload: { login: `x${i}@b.co`, password: 'errada-123' } });
         codes.push(res.statusCode);
       }
       expect(codes.slice(0, 10).every((c) => c === 401)).toBe(true);
@@ -211,7 +212,7 @@ describe('registro de eventos de segurança', () => {
     try {
       const user = await register(logged, 'pessoa@exemplo.com');
       const wrong = 'senha-errada-' + PASSWORD;
-      await logged.app.http.inject({ method: 'POST', url: '/api/auth/login', headers: { origin: ORIGIN }, payload: { email: 'pessoa@exemplo.com', password: wrong } });
+      await logged.app.http.inject({ method: 'POST', url: '/api/auth/login', headers: { origin: ORIGIN }, payload: { login: 'pessoa@exemplo.com', password: wrong } });
       await logged.app.http.inject({ method: 'POST', url: '/api/tables', headers: { cookie: user.cookie }, payload: {} });
       const crash = await call(logged, user.cookie, 'GET', '/api/quebra');
 
@@ -220,9 +221,9 @@ describe('registro de eventos de segurança', () => {
       expect(crash.body).not.toContain('detalhe interno');
       expect(lines.some((l) => l.includes(crash.json().requestId) && l.includes('detalhe interno'))).toBe(true);
 
-      const events = lines.map((l) => JSON.parse(l) as { security?: string; emailRef?: string }).filter((e) => e.security);
+      const events = lines.map((l) => JSON.parse(l) as { security?: string; loginRef?: string }).filter((e) => e.security);
       expect(events.map((e) => e.security)).toEqual(expect.arrayContaining(['login.ok', 'login.falha', 'permissao.negada']));
-      expect(events.find((e) => e.security === 'login.falha')?.emailRef).toMatch(/^[0-9a-f]{16}$/);
+      expect(events.find((e) => e.security === 'login.falha')?.loginRef).toMatch(/^[0-9a-f]{16}$/);
       const all = lines.join('\n');
       for (const secret of [PASSWORD, wrong, 'pessoa@exemplo.com', user.cookie.split('=')[1]]) expect(all).not.toContain(secret);
     } finally {
@@ -463,7 +464,7 @@ describe('recuperação de senha', () => {
   const account = 'pessoa@exemplo.com';
   const forgot = (email: string) => server.app.http.inject({ method: 'POST', url: '/api/auth/password/forgot', headers: { origin: ORIGIN }, payload: { email } });
   const reset = (token: string, password: string, origin = ORIGIN) => server.app.http.inject({ method: 'POST', url: '/api/auth/password/reset', headers: { origin }, payload: { token, password } });
-  const login = (password: string) => server.app.http.inject({ method: 'POST', url: '/api/auth/login', headers: { origin: ORIGIN }, payload: { email: account, password } });
+  const login = (password: string) => server.app.http.inject({ method: 'POST', url: '/api/auth/login', headers: { origin: ORIGIN }, payload: { login: account, password } });
   const tokenOf = (mail: MailMessage) => /#token=([\w-]+)/.exec(mail.text)![1];
   const NEW_PASSWORD = 'uma frase bem diferente';
 
@@ -602,45 +603,103 @@ describe('convites: quem não é o dono só entra assim', () => {
     expect(rows[0].code_hash).not.toContain(code);
   });
 
-  it('entra só com o nome: sem e-mail, sem senha, com um id próprio e como jogador', async () => {
-    const res = await redeemRaw({ code: (await invite()).code, name: '  Bia ' });
+  const users = () => (server.ctx.db.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }).n;
+  const loginAs = (login: string, password = PASSWORD) => inject({ method: 'POST', url: '/api/auth/login', headers: { origin: ORIGIN }, payload: { login, password } });
+
+  it('entra com nome e senha: sem e-mail, com um id próprio e como jogador', async () => {
+    const res = await redeemRaw({ code: (await invite()).code, name: '  Bia ', password: PASSWORD });
     expect(res.statusCode).toBe(200);
-    expect(res.json().user).toEqual({ id: expect.any(String), name: 'Bia', email: '', kind: 'guest', createdAt: expect.any(Number), hasPassword: false });
+    expect(res.json().user).toEqual({ id: expect.any(String), name: 'Bia', email: '', kind: 'guest', createdAt: expect.any(Number), hasPassword: true });
     expect(res.json().table).toMatchObject({ id: tableId, role: 'player' });
-    expect(res.body).not.toMatch(/password|hash|convidado:/);
+    expect(res.body).not.toMatch(/"(password|passwordHash|hash)"|scrypt\$|convidado:/);
     expect(String(res.headers['set-cookie'])).toMatch(/HttpOnly/);
     const me = await call(server, sessionCookie(res), 'GET', '/api/auth/me');
     expect(me.json().user.kind).toBe('guest');
   });
 
+  it('a senha é obrigatória no convite novo: sem ela, não cria conta nem gasta o convite', async () => {
+    const before = users();
+    const { code } = await invite();
+    expect((await redeemRaw({ code, name: 'Bia' })).statusCode).toBe(400);
+    expect((await redeemRaw({ code, name: 'Bia', password: '12345678' })).statusCode).toBe(400);
+    expect(users()).toBe(before);
+    expect((await redeemRaw({ code, name: 'Bia', password: PASSWORD })).statusCode).toBe(200);
+  });
+
+  it('o nome é único (sem diferenciar acento, maiúscula e espaço) e o convite continua valendo', async () => {
+    await redeem(server, (await invite()).code, 'lyra');
+    const { code } = await invite();
+    const taken = await redeemRaw({ code, name: ' Lýra ', password: PASSWORD });
+    expect(taken.statusCode).toBe(409);
+    expect(taken.json().error).toBe('Esse nome já está em uso. Escolha outro.');
+    expect((await redeemRaw({ code, name: 'Lyra 2', password: PASSWORD })).statusCode).toBe(200);
+  });
+
+  it('nome com @ não é aceito (o @ é do e-mail do dono)', async () => {
+    const before = users();
+    const { code } = await invite();
+    expect((await redeemRaw({ code, name: 'bia@mesa', password: PASSWORD })).statusCode).toBe(400);
+    expect(users()).toBe(before);
+  });
+
+  it('o convidado entra de outro aparelho pelo nome (sem acento nem maiúscula) e a senha', async () => {
+    const guest = await redeem(server, (await invite()).code, 'Lýra');
+    const res = await loginAs(' LYRA ');
+    expect(res.statusCode).toBe(200);
+    expect(res.json().user).toMatchObject({ id: guest.id, kind: 'guest' });
+    expect(sessionCookie(res)).not.toBe(guest.cookie);
+  });
+
+  it('login por nome: mesma resposta para nome inexistente e senha errada', async () => {
+    await redeem(server, (await invite()).code, 'Bia');
+    const wrong = await loginAs('Bia', 'errada-123');
+    const missing = await loginAs('Ninguém', 'errada-123');
+    expect(wrong.statusCode).toBe(401);
+    expect(missing.statusCode).toBe(401);
+    expect(wrong.json()).toEqual(missing.json());
+    expect(wrong.json().error).toBe('Nome, e-mail ou senha inválidos.');
+  });
+
+  it('convidado antigo (sem senha) continua na sessão, mas não entra pelo nome', async () => {
+    const old = server.ctx.users.createGuest('antigo', 'Velho', Date.now());
+    server.ctx.tables.addMember(tableId, old.id, 'player', Date.now());
+    const cookie = `__Host-zh_session=${server.ctx.auth.sessionFor(old)}`;
+    expect((await call(server, cookie, 'GET', '/api/auth/me')).json().user).toMatchObject({ id: 'antigo', hasPassword: false });
+    expect((await loginAs('Velho')).statusCode).toBe(401);
+  });
+
+  it('o dono continua entrando pelo e-mail', async () => {
+    expect((await loginAs('dono@exemplo.com')).statusCode).toBe(200);
+  });
+
   it('o convite só vale uma vez: dois amigos não entram com o mesmo link', async () => {
     const { code } = await invite();
-    expect((await redeemRaw({ code, name: 'Bia' })).statusCode).toBe(200);
-    const second = await redeemRaw({ code, name: 'Intruso' });
+    expect((await redeemRaw({ code, name: 'Bia', password: PASSWORD })).statusCode).toBe(200);
+    const second = await redeemRaw({ code, name: 'Intruso', password: PASSWORD });
     expect(second.statusCode).toBe(404);
     expect(server.ctx.tables.playerCount(tableId)).toBe(1);
   });
 
   it('código inventado, vencido ou sem nome não entra, e não cria conta', async () => {
-    const before = (server.ctx.db.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }).n;
-    expect((await redeemRaw({ code: 'a'.repeat(32), name: 'Bia' })).statusCode).toBe(404);
+    const before = users();
+    expect((await redeemRaw({ code: 'a'.repeat(32), name: 'Bia', password: PASSWORD })).statusCode).toBe(404);
     const { code } = await invite();
-    expect((await redeemRaw({ code })).statusCode).toBe(400);
+    expect((await redeemRaw({ code, password: PASSWORD })).statusCode).toBe(400);
     server.ctx.db.prepare('UPDATE table_invites SET expires_at = 1').run();
-    expect((await redeemRaw({ code, name: 'Bia' })).statusCode).toBe(404);
-    expect((server.ctx.db.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }).n).toBe(before);
+    expect((await redeemRaw({ code, name: 'Bia', password: PASSWORD })).statusCode).toBe(404);
+    expect(users()).toBe(before);
   });
 
   it('outra origem é recusada (CSRF) e mesa cheia não aceita mais ninguém', async () => {
     const { code } = await invite();
-    expect((await redeemRaw({ code, name: 'Bia' }, 'https://site-malicioso.example')).statusCode).toBe(403);
+    expect((await redeemRaw({ code, name: 'Bia', password: PASSWORD }, 'https://site-malicioso.example')).statusCode).toBe(403);
     server.ctx.db.prepare('UPDATE game_tables SET max_players = 0').run();
-    expect((await redeemRaw({ code, name: 'Bia' })).statusCode).toBe(409);
+    expect((await redeemRaw({ code, name: 'Bia', password: PASSWORD })).statusCode).toBe(409);
   });
 
-  it('convidado não entra com senha, não cria mesa nem mundo e não vê a mesa dos outros', async () => {
+  it('o "e-mail" interno do convidado não serve para entrar, não cria mesa nem mundo e não vê a mesa dos outros', async () => {
     const guest = await redeem(server, (await invite()).code, 'Bia');
-    expect((await inject({ method: 'POST', url: '/api/auth/login', headers: { origin: ORIGIN }, payload: { email: `convidado:${guest.id}`, password: PASSWORD } })).statusCode).toBe(400);
+    expect((await loginAs(`convidado:${guest.id}`)).statusCode).toBe(401);
     expect((await newTable(guest.cookie)).statusCode).toBe(403);
     expect((await call(server, guest.cookie, 'POST', '/api/worlds', { name: 'Meu' })).statusCode).toBe(403);
     expect((await call(server, guest.cookie, 'GET', '/api/worlds')).json().worlds).toEqual([]);

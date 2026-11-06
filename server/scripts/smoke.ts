@@ -24,7 +24,7 @@ async function login(email: string): Promise<string> {
   const res = await fetch(`${base}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Origin: origin },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ login: email, password }),
   });
   if (res.status !== 200) fail(`login de ${email}: HTTP ${res.status} ${await res.text()}`);
   const cookie = res.headers.getSetCookie().find((c) => c.includes('zh_session'));

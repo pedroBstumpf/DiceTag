@@ -11,7 +11,8 @@ import { email, newPassword, passwordInput, text } from '../../lib/schemas';
 import { PUBLIC, clearSessionCookie, requireAuth, sessionCookieName, setSessionCookie } from '../plugins/auth';
 import { AUTH_RATE_LIMIT } from '../plugins/security';
 
-const loginBody = z.strictObject({ email, password: passwordInput });
+/** `login`: e-mail (dono) ou o nome da mesa (convidado com senha). */
+const loginBody = z.strictObject({ login: z.string().trim().min(1).max(254), password: passwordInput });
 const passwordBody = z.strictObject({ current: passwordInput, next: newPassword });
 const profileBody = z.strictObject({ name: text(1, 60) });
 /** Convidado não tem senha: a sessão é a única credencial dele. */
@@ -20,7 +21,7 @@ const forgotBody = z.strictObject({ email });
 const resetBody = z.strictObject({ token: z.string().min(20).max(100).regex(/^[A-Za-z0-9_-]+$/), password: newPassword });
 
 /**
- * /api/auth — login do dono, logout (desta sessão ou de todas), conta atual, perfil, troca de senha,
+ * /api/auth — login (dono pelo e-mail, convidado pelo nome da mesa), logout (desta sessão ou de todas), conta atual, perfil, troca de senha,
  * exportação dos dados e exclusão da conta (LGPD).
  * O token de sessão só existe no cookie HttpOnly: nunca aparece no corpo das respostas.
  * Não há cadastro: o dono é criado no terminal e os demais entram por convite (`routes/tables.ts`).
@@ -31,8 +32,8 @@ export async function authRoutes(app: FastifyInstance, ctx: AppContext, hub: Rea
 
   app.post('/login', { config: { ...AUTH_RATE_LIMIT, ...PUBLIC } }, async (req, reply) => {
     const body = parse(loginBody, req.body);
-    const attempt = { emailRef: ctx.tokens.ref(body.email), ip: req.ip };
-    const result = await ctx.auth.login(body.email, body.password, req.ip).catch((err: unknown) => {
+    const attempt = { loginRef: ctx.tokens.ref(body.login.toLowerCase()), ip: req.ip };
+    const result = await ctx.auth.login(body.login, body.password, req.ip).catch((err: unknown) => {
       if (err instanceof HttpError && (err.statusCode === 401 || err.statusCode === 429)) {
         audit(req.log, err.statusCode === 429 ? 'login.bloqueado' : 'login.falha', attempt);
       }

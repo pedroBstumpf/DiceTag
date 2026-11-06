@@ -7,7 +7,7 @@ import { audit } from '../../lib/audit';
 import { badRequest, conflict, forbidden, HttpError, notFound, parse } from '../../lib/errors';
 import { idSchema, newId } from '../../lib/ids';
 import { unsafeJsonReason } from '../../lib/safe-json';
-import { multilineText, text } from '../../lib/schemas';
+import { multilineText, newPassword, text } from '../../lib/schemas';
 import type { MemberTable, TableRecord } from '../../repositories/tables';
 import type { RealtimeHub } from '../../realtime/hub';
 import { barSchema, entrySchema, sheetSchema, tagSchema } from '../../realtime/command-schemas';
@@ -64,8 +64,8 @@ const IMPORT_JSON_LIMITS = { maxDepth: 32, maxNodes: 2_000_000, maxStringLength:
 
 const inviteCode = z.string().min(10).max(100).regex(/^[A-Za-z0-9_-]+$/);
 const acceptBody = z.strictObject({ code: inviteCode });
-/** Entrar por convite: o código e, se a conta ainda não existe, o nome que os outros vão ver. */
-const redeemBody = z.strictObject({ code: inviteCode, name: text(1, 40).optional() });
+/** Entrar por convite: o código e, no convite novo, o nome que os outros vão ver e a senha da conta. */
+const redeemBody = z.strictObject({ code: inviteCode, name: text(1, 40).optional(), password: newPassword.optional() });
 
 /** Tamanho máximo de um NPC gravado por quem o controla (o mesmo dos itens do mundo). */
 const MAX_NPC_BYTES = 2 * 1024 * 1024;
@@ -239,8 +239,10 @@ export async function tableRoutes(app: FastifyInstance, ctx: AppContext, hub: Re
    * do mesmo código ao mesmo tempo não passam juntos.
    */
   app.post('/invites/redeem', { config: { ...AUTH_RATE_LIMIT, ...PUBLIC } }, async (req, reply) => {
-    const { code, name } = parse(redeemBody, req.body);
+    const { code, name, password } = parse(redeemBody, req.body);
     const codeHash = ctx.tokens.hash(code, 'invite');
+    // Conta nova: nome e senha conferidos e hash calculado antes da transação (o hash é lento)
+    const credentials = name && password ? await ctx.auth.guestCredentials(name, password) : null;
     const { tableId, user } = transaction(ctx.db, () => {
       const invite = ctx.tables.findInvite(codeHash);
       if (!invite || invite.expiresAt <= Date.now() || invite.uses >= invite.maxUses) throw new HttpError(404, INVITE_INVALID);
@@ -252,9 +254,9 @@ export async function tableRoutes(app: FastifyInstance, ctx: AppContext, hub: Re
         ctx.tables.useInvite(codeHash);
         return { tableId: table.id, user: target };
       }
-      if (!name) throw badRequest('Informe o seu nome.');
+      if (!name || !credentials) throw badRequest('Informe o seu nome e crie uma senha.');
       if (ctx.tables.playerCount(table.id) >= table.maxPlayers) throw conflict('A mesa está cheia.');
-      const guest = ctx.auth.createGuest(name);
+      const guest = ctx.auth.createGuest(name, credentials);
       ctx.tables.addMember(table.id, guest.id, 'player', Date.now());
       ctx.tables.useInvite(codeHash);
       return { tableId: table.id, user: guest };

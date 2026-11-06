@@ -722,8 +722,8 @@ async function run(gm: Page, player: Page, cdp: Cdp): Promise<void> {
   check((await gm.api('GET', '/auth/me')).status === 401, 'as sessões antigas do dono caem');
   const stranger = await Page.open(cdp);
   await stranger.goto(`${BASE}/entrar`);
-  check((await stranger.api('POST', '/auth/login', { email: OWNER_EMAIL, password: PASSWORD })).status === 401, 'a senha antiga não entra mais');
-  check((await gm.api('POST', '/auth/login', { email: OWNER_EMAIL, password: NEW_PASSWORD })).status === 200, 'a senha nova entra');
+  check((await stranger.api('POST', '/auth/login', { login: OWNER_EMAIL, password: PASSWORD })).status === 401, 'a senha antiga não entra mais');
+  check((await gm.api('POST', '/auth/login', { login: OWNER_EMAIL, password: NEW_PASSWORD })).status === 200, 'a senha nova entra');
   check((await player.api('GET', '/auth/me')).status === 200, 'a sessão dos convidados não é afetada');
 
   section('Mundo editado pela tela');

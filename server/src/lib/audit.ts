@@ -3,8 +3,9 @@ import type { FastifyBaseLogger } from 'fastify';
 /**
  * Eventos de segurança (BACKEND_SECURITY.md §12), registrados no log do Fastify (pino) com o
  * campo `security`, para filtrar e alertar. Nunca levam senha, token, id de sessão, código de
- * convite nem e-mail em claro: a conta aparece pelo id e o e-mail tentado só como `emailRef`
- * (HMAC truncado, que permite correlacionar tentativas sem guardar o endereço).
+ * convite nem e-mail em claro: a conta aparece pelo id, o e-mail tentado só como `emailRef` e o
+ * login tentado (e-mail ou nome) só como `loginRef` (HMAC truncado, que permite correlacionar
+ * tentativas sem guardar o valor).
  */
 export type SecurityEvent =
   | 'conta.criada'
