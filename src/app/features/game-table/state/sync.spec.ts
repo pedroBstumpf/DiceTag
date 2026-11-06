@@ -1,6 +1,17 @@
 import { TableState } from '../../../core/models/table-session.model';
 import { TableCommand } from './commands';
-import { ackCommand, burstKey, localCommand, mergeBurst, rejectCommand, remoteCommand, replaceState, squashPending, startSync } from './sync';
+import {
+  ackCommand,
+  burstKey,
+  localCommand,
+  mergeBurst,
+  pendingMoveIds,
+  rejectCommand,
+  remoteCommand,
+  replaceState,
+  squashPending,
+  startSync,
+} from './sync';
 
 /** Cena com um token em (0, 0). */
 const base = (): TableState => ({
@@ -126,5 +137,37 @@ describe('rajadas de comandos (arrastar, WASD, memória da névoa)', () => {
     expect(burstKey({ type: 'updateEntry', payload: { entryId: 'a', patch: { volume: 0.5 } } })).toBe('volume:a');
     expect(burstKey({ type: 'updateEntry', payload: { entryId: 'a', patch: { name: 'x' } } })).toBeNull();
     expect(burstKey({ type: 'updateEntry', payload: { entryId: 'a', patch: { volume: 0.5, name: 'x' } } })).toBeNull();
+  });
+
+  describe('tokens que esta tela está movendo (sem suavização)', () => {
+    it('sem pendentes, nenhum', () => {
+      expect(pendingMoveIds(startSync(base(), 1)).size).toBe(0);
+    });
+
+    it('junta os tokens dos movimentos pendentes, simples e em grupo', () => {
+      let sync = localCommand(startSync(base(), 1), 1, move(70));
+      const group: TableCommand = {
+        type: 'moveTokens',
+        payload: {
+          moves: [
+            { placementId: 't', x: 140, y: 0 },
+            { placementId: 'outro', x: 0, y: 70 },
+          ],
+        },
+      };
+      sync = { ...sync, pending: [...sync.pending, { seq: 2, command: group }] };
+      expect([...pendingMoveIds(sync)].sort()).toEqual(['outro', 't']);
+    });
+
+    it('ignora pendentes que não movem tokens', () => {
+      const sync = localCommand(startSync(base(), 1), 1, rename('Taverna'));
+      expect(pendingMoveIds(sync).size).toBe(0);
+    });
+
+    it('depois do ack, o token deixa de ser "meu" (o próximo movimento remoto desliza)', () => {
+      let sync = localCommand(startSync(base(), 1), 1, move(70));
+      sync = ackCommand(sync, 1, move(70), 2);
+      expect(pendingMoveIds(sync).size).toBe(0);
+    });
   });
 });

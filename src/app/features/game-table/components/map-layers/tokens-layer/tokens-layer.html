@@ -3,7 +3,7 @@
   @let selected = selectedIds().has(t.placement.id);
   <div
     class="absolute"
-    [class]="interactive() ? 'pointer-events-auto cursor-grab active:cursor-grabbing' : 'pointer-events-none'"
+    [class]="tokenClass(t)"
     [style.left.px]="t.placement.x - px / 2"
     [style.top.px]="t.placement.y - px / 2"
     [style.width.px]="px"
