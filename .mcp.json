@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "semble": {
+      "command": "C:\\Users\\pBianchi\\.local\\bin\\uvx.exe",
+      "args": ["--from", "semble[mcp]", "semble"]
+    }
+  }
+}

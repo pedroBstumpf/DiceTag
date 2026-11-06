@@ -984,3 +984,7 @@ repositórios por domínio, servidor autoritativo (névoa, rolagens, permissões
    `RichTextEditor`, `TokenEditor`, `LevelPips`, tokens, `.glass` e os utilitários `sheet-*`.
 5. Valide com `npm run build` e `npx ng test --watch=false` ao final; corrija erros e avisos introduzidos.
 6. Atualize este `CLAUDE.md` (e o `README.md`) quando mudar arquitetura, regras ou convenções.
+
+### Busca de código
+Para encontrar código, use a ferramenta de busca do semble antes de abrir arquivos.
+Só leia um arquivo inteiro se a busca não trouxer o que você precisa.
