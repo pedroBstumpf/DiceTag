@@ -22,6 +22,9 @@ const BASE = `http://localhost:${PORT}`;
 const CDP_PORT = 9333;
 const FRONTEND = resolve('../dist/zehenia/browser');
 const PASSWORD = randomBytes(12).toString('base64url');
+/** Senha que a jogadora cria no convite (e a nova, no link de retorno). */
+const PLAYER_PASSWORD = randomBytes(12).toString('base64url');
+const PLAYER_NEW_PASSWORD = randomBytes(12).toString('base64url');
 const work = mkdtempSync(join(tmpdir(), 'zehenia-e2e-'));
 const HOME = join(work, 'pasta-do-app');
 const OWNER_EMAIL = 'dono@exemplo.com';
@@ -223,6 +226,19 @@ class Page {
     })()`);
   }
 
+  /** Preenche TODOS os campos do seletor (ex.: a senha e a confirmação). false = nenhum. */
+  fillAll(selector: string, value: string): Promise<boolean> {
+    return this.eval(`(() => {
+      const list = [...document.querySelectorAll(${JSON.stringify(selector)})];
+      for (const el of list) {
+        el.focus();
+        el.value = ${JSON.stringify(value)};
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      return list.length > 0;
+    })()`);
+  }
+
   async screenshot(file: string): Promise<void> {
     const { data } = await this.send('Page.captureScreenshot', { format: 'png' });
     writeFileSync(file, Buffer.from(data, 'base64'));
@@ -362,7 +378,7 @@ async function run(gm: Page, player: Page, cdp: Cdp): Promise<void> {
   section('Só por convite');
   const visitor = await Page.open(cdp);
   await visitor.goto(`${BASE}/mesas`);
-  check(await visitor.waitText('Entrada do dono'), 'sem conta, qualquer página leva à entrada');
+  check(await visitor.waitText('E-mail ou nome'), 'sem conta, qualquer página leva à entrada');
   await shot(visitor, 'entrada');
   const entrance = await visitor.text();
   check(!/criar conta|cadastr/i.test(entrance), 'não há cadastro em lugar nenhum');
@@ -370,7 +386,7 @@ async function run(gm: Page, player: Page, cdp: Cdp): Promise<void> {
   check(register === 404, 'a rota de cadastro não existe');
 
   await gm.goto(`${BASE}/entrar`);
-  await until(() => gm.fill('input[formcontrolname="email"]', OWNER_EMAIL), 'campo de e-mail');
+  await until(() => gm.fill('input[formcontrolname="login"]', OWNER_EMAIL), 'campo de e-mail ou nome');
   await gm.fill('input[formcontrolname="password"]', PASSWORD);
   await gm.clickButton('Entrar');
   check(await gm.waitText('Minhas mesas', 15_000), 'o dono entra com a senha criada no terminal');
@@ -383,15 +399,15 @@ async function run(gm: Page, player: Page, cdp: Cdp): Promise<void> {
   check(invited.link.includes('/convite#codigo='), 'o convite vem como link, com o código depois do #');
   await player.goto(`${BASE}/convite#codigo=${invited.code}`);
   check(!(await player.eval<string>('location.href')).includes('codigo'), 'o código sai da barra de endereço ao abrir');
-  await until(() => player.fill('input[autocomplete="nickname"]', 'Jogadora Teste'), 'campo de nome');
+  await until(() => player.fill('input[autocomplete="username"]', 'Jogadora Teste'), 'campo de nome');
+  await player.fillAll('input[autocomplete="new-password"]', PLAYER_PASSWORD);
   await shot(player, 'convite');
   await player.clickButton('Entrar na mesa');
-  check(await player.waitText('Online', 15_000), 'a amiga entra só com o nome, sem cadastro nem senha, direto na mesa');
+  check(await player.waitText('Online', 15_000), 'a amiga entra com nome e senha, sem e-mail nem cadastro, direto na mesa');
   const playerAccount = await player.api('GET', '/auth/me');
   check(playerAccount.user?.kind === 'guest' && playerAccount.user.email === '' && !!playerAccount.user.id, 'ela tem uma conta com nome e id, sem e-mail');
+  check(playerAccount.user?.hasPassword === true, 'e com senha');
   await visitor.goto(`${BASE}/convite#codigo=${invited.code}`);
-  await until(() => visitor.fill('input[autocomplete="nickname"]', 'Intruso'), 'campo de nome');
-  await visitor.clickButton('Entrar na mesa');
   check(await visitor.waitText('inválido, vencido ou já usado'), 'o mesmo link não serve para mais ninguém');
   const worldId: string = table.worldId;
 
@@ -640,14 +656,16 @@ async function run(gm: Page, player: Page, cdp: Cdp): Promise<void> {
   );
   check(playing, 'o som está tocando na máquina da jogadora');
   await sleep(1500);
-  // Outro aparelho: a mesma pessoa volta à MESMA conta, pelo link de retorno do mestre
+  // Outro aparelho: a mesma pessoa entra pela página Entrar, com o nome da mesa e a senha
   const lateJoiner = await Page.open(cdp);
-  const back = await gm.api('POST', `/tables/${table.id}/members/${playerAccount.user.id}/access-link`);
-  await lateJoiner.goto(`${BASE}/convite#codigo=${back.code}`);
-  await until(() => lateJoiner.eval(`[...document.querySelectorAll('button')].some((b) => b.innerText?.includes('Entrar na mesa') && !b.disabled) || !!document.querySelector('input[autocomplete="nickname"]')`), 'página de retorno');
-  await lateJoiner.clickButton('Entrar na mesa');
+  await lateJoiner.goto(`${BASE}/entrar`);
+  await until(() => lateJoiner.fill('input[formcontrolname="login"]', ' jogadora teste '), 'campo de e-mail ou nome');
+  await lateJoiner.fill('input[formcontrolname="password"]', PLAYER_PASSWORD);
+  await lateJoiner.clickButton('Entrar');
+  await lateJoiner.waitText('Mesas online', 15_000);
+  check((await lateJoiner.api('GET', '/auth/me')).user?.id === playerAccount.user.id, 'em outro aparelho, ela entra pelo nome (sem acento nem maiúscula) e a senha, na MESMA conta');
+  await lateJoiner.goto(`${BASE}/mesa-online/${table.id}`);
   await lateJoiner.waitText('Online');
-  check((await lateJoiner.api('GET', '/auth/me')).user?.id === playerAccount.user.id, 'o link de retorno devolve a mesma conta, sem senha');
   await until(() => lateJoiner.eval('window.__audios.length > 0'), 'faixa', 5000).catch(() => undefined);
   await sleep(300);
   await lateJoiner.clickAt(700, 450);
@@ -932,6 +950,20 @@ async function run(gm: Page, player: Page, cdp: Cdp): Promise<void> {
   await gm.openRoom(table.id);
   const restored = await gm.eval(`window.__replies.find((m) => m.t === 'welcome').state.scenes[0].tokens.find((t) => t.id === 't-lobo')`);
   check(restored?.x === 777, 'nada se perdeu: o estado volta do banco', JSON.stringify(restored));
+
+  section('Senha esquecida: link de retorno');
+  // Por último: a senha nova encerra as outras sessões da jogadora (a aba dela cai)
+  const returner = await Page.open(cdp);
+  const back = await gm.api('POST', `/tables/${table.id}/members/${playerAccount.user.id}/access-link`);
+  await returner.goto(`${BASE}/convite#codigo=${back.code}`);
+  check(await returner.waitText('Olá, Jogadora Teste'), 'o link de retorno mostra o nome da conta e pede uma senha nova');
+  await until(() => returner.fillAll('input[autocomplete="new-password"]', PLAYER_NEW_PASSWORD), 'campos da senha nova');
+  await returner.clickButton('Entrar na mesa');
+  await returner.waitText('Online', 15_000);
+  check((await returner.api('GET', '/auth/me')).user?.id === playerAccount.user.id, 'o link de retorno devolve a mesma conta');
+  check((await player.api('GET', '/auth/me')).status === 401, 'as outras sessões dela caem');
+  check((await visitor.api('POST', '/auth/login', { login: 'Jogadora Teste', password: PLAYER_PASSWORD })).status === 401, 'a senha antiga não entra mais');
+  check((await visitor.api('POST', '/auth/login', { login: 'Jogadora Teste', password: PLAYER_NEW_PASSWORD })).status === 200, 'a senha nova entra');
 
   section('Segurança no caminho real');
   const csp = await fetch(`${BASE}/mesas`).then((r) => r.headers.get('content-security-policy') ?? '');

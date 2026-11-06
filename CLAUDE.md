@@ -21,7 +21,7 @@ organizar toda a atmosfera de uma campanha.
 | Landing page (banner com logo, atalhos, mural de notícias vazio) | Pronto |
 | Barra lateral global (navegação, **mundos** do usuário, atalhos para as **mesas** — até 6 + "Ver todas" —, conta) | Pronto |
 | **Mundos**: até 2 Worldbuilds separados por usuário; cada mesa se passa num mundo | Pronto |
-| **Só por convite**: um dono (senha, criado no terminal) e convidados (nome e id, por link de uso único); sem cadastro | Pronto |
+| **Só por convite**: um dono (e-mail e senha, criado no terminal) e convidados (nome da mesa + senha, criados por link de uso único; entram de qualquer aparelho); sem cadastro | Pronto |
 | **Arquivos**: biblioteca do dono (imagens e sons, em pastas) numa única pasta do computador, com o servidor preso a ela | Pronto |
 | **`npm run mesa` / `Iniciar mesa.cmd`** e o botão "Abrir para os jogadores" (Tailscale Funnel) | Pronto; testado com um Tailscale de mentira, falta o real |
 | Minhas mesas (criar, listar, excluir com limpeza dos dados, abrir) | Pronto |
@@ -366,11 +366,19 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 - **Não há cadastro.** `users.kind` = `owner` ou `guest`; o banco admite um dono só (índice `users_one_owner`).
 - **Dono:** e-mail e senha, criados e alterados só pelo terminal (`npm run dono`, ou `npm run mesa` na primeira vez).
   Nenhuma rota cria ou altera o dono. Só ele cria mesas e mundos e acessa a biblioteca (`requireOwner`).
-- **Convidado:** entra por `POST /invites/redeem` (público, com limite de taxa) só com um nome; o id da conta diz o que é de
-  quem, e a tela mostra o id curto (`shortAccountId`). Sem e-mail nem senha. Sessão de `GUEST_SESSION_DAYS` (180), sem cair
-  por inatividade. Limites próprios de envio (`GUEST_MAX_UPLOAD_MB`, `GUEST_QUOTA_MB`). Tirá-lo da última mesa encerra a sessão.
+- **Convidado:** nasce por `POST /invites/redeem` (público, com limite de taxa) com o **nome da mesa e uma senha**
+  (obrigatória; sem e-mail). Depois entra de qualquer aparelho em `/entrar` ("E-mail ou nome": com `@` = dono, sem = convidado).
+  O nome é o login: único entre os convidados com senha, comparado sem maiúsculas, acentos e espaços extras
+  (`users.login_name` = `loginNameOf`, migração 4, índice único; sem `@`; repetido = 409 "Esse nome já está em uso. Escolha
+  outro."). Renomear (`PATCH /me`) muda o login junto. O id da conta diz o que é de quem (id curto na tela, `shortAccountId`).
+  Sessão de `GUEST_SESSION_DAYS` (180), sem cair por inatividade. Limites próprios de envio (`GUEST_MAX_UPLOAD_MB`,
+  `GUEST_QUOTA_MB`). Tirá-lo da última mesa encerra a sessão (a conta continua; ele entra, mas sem mesas). Excluir a conta pede a senha.
+  **Convidado antigo** (sem senha, `login_name` NULL): segue pela sessão; "Criar senha" no menu da conta (`/auth/password/create`).
+  Ninguém lê as senhas (só o hash): quem esqueceu usa o link de retorno.
 - **Convite:** 192 bits, uso único, 7 dias, só o hash no banco; vai como link (`/convite#codigo=…`), com o código no fragmento.
-  **Link de retorno** (`/tables/:id/members/:userId/access-link`, `target_user_id`): devolve a uma conta existente, uma vez.
+  A página pergunta antes o que o código é (`POST /invites/info`: `new` ou `return` com o nome e `nameTaken`).
+  **Link de retorno** (`/tables/:id/members/:userId/access-link`, `target_user_id`): devolve a uma conta existente, uma vez,
+  **definindo uma senha nova** (e um nome novo se o atual já é de outra conta); encerra as outras sessões da conta.
 - O `AuthService` local continua só como dono dos dados guardados no navegador do dono (visitante fixo `guest`, `requireAuth: false`).
 - **Senhas no servidor:** contas usam senha de 8 a 128 caracteres (sem as mais comuns), scrypt com pimenta e sessão por cookie HttpOnly; o papel na mesa vem da conta (dono = mestre, convite = jogador).
 - **Recuperação de senha** (conta do servidor): `POST /auth/password/forgot` e `/reset`, token de uso único, 30 minutos, só o
