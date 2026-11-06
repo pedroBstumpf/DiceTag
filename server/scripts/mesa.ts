@@ -8,6 +8,7 @@ import { openDatabase } from '../src/db/database';
 import { email as emailSchema, newPassword, text } from '../src/lib/schemas';
 import type { HostRequest } from '../src/services/host-control';
 import { appEnv, bundleDir, frontendDir, home, libraryDir, localUrl, port, repoDir, sandboxArgs, serverDir } from './lib/app-env';
+import { DriveBackups, backupTarget } from './lib/drive-backup';
 import { Funnel } from './lib/funnel';
 import { ask, askHidden } from './lib/terminal';
 
@@ -16,6 +17,7 @@ import { ask, askHidden } from './lib/terminal';
  *
  *   npm run mesa                 # abre o app neste computador
  *   npm run mesa -- --publico    # já abre também para os jogadores
+ *   npm run mesa -- --sem-backup # sem o backup automático no Google Drive
  *
  * Tudo o que é seu fica numa pasta só, fora do repositório (`lib/app-env.ts`).
  *
@@ -111,13 +113,20 @@ async function main(): Promise<void> {
     }
   });
 
+  // Backup no Google Drive (lib/drive-backup.ts): sem o Drive, só avisa
+  const target = flags.has('--sem-backup') ? null : backupTarget();
+  const backups = target ? new DriveBackups(target) : null;
+
   let stopping = false;
   const stop = (code = 0): void => {
     if (stopping) return;
     stopping = true;
+    // A mesa sai da internet na hora; o último backup do banco vem antes de desligar o servidor
     funnel.stop();
-    server.kill();
-    setTimeout(() => process.exit(code), 1500).unref();
+    void (backups?.finish() ?? Promise.resolve()).finally(() => {
+      server.kill();
+      setTimeout(() => process.exit(code), 1500).unref();
+    });
   };
   process.on('SIGINT', () => stop());
   process.on('SIGTERM', () => stop());
@@ -146,6 +155,11 @@ async function main(): Promise<void> {
   │  a mesa sai da internet na hora.
   └────────────────────────────────────────────────────────────
 `);
+  if (backups) backups.start();
+  else if (!flags.has('--sem-backup')) {
+    console.log('  Backup: o Google Drive para computador não foi encontrado. Instale-o (ou defina ZEHENIA_BACKUP_DIR)');
+    console.log('  para ter um backup automático, cifrado, a cada sessão.\n');
+  }
   if (flags.has('--publico')) {
     const status = await funnel.open();
     console.log(status.state === 'open' ? `  Aberta para os jogadores: ${status.url}\n` : `  A mesa não abriu aos jogadores (${status.state}). ${status.message ?? status.approvalUrl ?? ''}\n`);

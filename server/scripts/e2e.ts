@@ -53,7 +53,7 @@ let server: ChildProcess | undefined;
 
 /** Inicia o app como no dia a dia: `npm run mesa`. Reiniciar usa os mesmos dados e segredos. */
 function startServer(): Promise<void> {
-  server = spawn(process.execPath, ['--import', 'tsx', '--disable-warning=ExperimentalWarning', 'scripts/mesa.ts', '--sem-abrir', '--sem-build'], {
+  server = spawn(process.execPath, ['--import', 'tsx', '--disable-warning=ExperimentalWarning', 'scripts/mesa.ts', '--sem-abrir', '--sem-build', '--sem-backup'], {
     env: APP_ENV,
     stdio: ['ignore', 'pipe', 'pipe'],
   });

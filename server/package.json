@@ -19,6 +19,8 @@
     "reset-link": "tsx --disable-warning=ExperimentalWarning scripts/reset-link.ts",
     "backup": "tsx --disable-warning=ExperimentalWarning scripts/backup.ts",
     "backup:check": "tsx --disable-warning=ExperimentalWarning scripts/backup-check.ts",
+    "backup-drive": "tsx --disable-warning=ExperimentalWarning scripts/backup-drive.ts",
+    "restaurar": "tsx --disable-warning=ExperimentalWarning scripts/restaurar.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",

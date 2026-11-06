@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,8 +19,9 @@ export const bundleDir = join(serverDir, '.mesa');
 export const home = resolve(process.env['ZEHENIA_HOME'] ?? join(homedir(), 'Documents', 'Cronicas de Zehenia'));
 export const libraryDir = join(home, 'biblioteca');
 const dataDir = join(home, 'dados');
-const tableFilesDir = join(home, 'arquivos-da-mesa');
-const secretsFile = join(home, 'segredos.env');
+export const databasePath = join(dataDir, 'zehenia.db');
+export const tableFilesDir = join(home, 'arquivos-da-mesa');
+export const secretsFile = join(home, 'segredos.env');
 
 export const port = Number(process.env['MESA_PORT'] ?? 3000);
 export const localUrl = `http://localhost:${port}`;
@@ -37,6 +38,25 @@ function loadSecrets(): { TOKEN_SECRET: string; PASSWORD_PEPPER: string } {
   return { TOKEN_SECRET, PASSWORD_PEPPER };
 }
 
+/**
+ * Chave dos backups na nuvem (AES-256), criada no primeiro backup e guardada só no `segredos.env`.
+ * Fica com este processo: o servidor exposto nunca a recebe.
+ */
+export function backupKey(create = true): Buffer {
+  if (!create && !existsSync(secretsFile)) throw new Error(`Falta ${secretsFile}: copie para lá o segredos.env guardado fora da nuvem.`);
+  loadSecrets();
+  let { BACKUP_KEY } = parseEnv(readFileSync(secretsFile, 'utf8'));
+  if (!BACKUP_KEY && !create) throw new Error(`${secretsFile} não tem a BACKUP_KEY: use o segredos.env guardado fora da nuvem.`);
+  if (!BACKUP_KEY) {
+    BACKUP_KEY = randomBytes(32).toString('base64url');
+    appendFileSync(secretsFile, `# Chave dos backups no Google Drive. Sem ela, os backups não podem ser lidos.\nBACKUP_KEY=${BACKUP_KEY}\n`);
+    chmodSync(secretsFile, 0o600);
+  }
+  const key = Buffer.from(BACKUP_KEY, 'base64url');
+  if (key.length !== 32) throw new Error(`BACKUP_KEY inválida em ${secretsFile}.`);
+  return key;
+}
+
 /** Configuração completa do app: nada vem do `.env` de desenvolvimento. */
 export function appEnv(publicUrl?: string): NodeJS.ProcessEnv {
   for (const dir of [home, dataDir, tableFilesDir, libraryDir]) mkdirSync(dir, { recursive: true });
@@ -49,7 +69,7 @@ export function appEnv(publicUrl?: string): NodeJS.ProcessEnv {
     HOST: '127.0.0.1',
     PORT: String(port),
     LOG_LEVEL: process.env['LOG_LEVEL'] ?? 'warn',
-    DATABASE_PATH: join(dataDir, 'zehenia.db'),
+    DATABASE_PATH: databasePath,
     FILES_DIR: tableFilesDir,
     LIBRARY_DIR: libraryDir,
     FRONTEND_DIR: frontendDir,

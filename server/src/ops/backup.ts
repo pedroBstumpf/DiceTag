@@ -40,8 +40,11 @@ export interface BackupReport {
   counts: Record<'users' | 'worlds' | 'tables' | 'files', number>;
 }
 
-/** Abre a cópia como numa restauração e confere se ela está inteira e utilizável. */
-export function checkBackup(dir: string): BackupReport {
+/**
+ * Abre a cópia como numa restauração e confere se ela está inteira e utilizável. `filesDir`: onde
+ * estão os arquivos enviados (padrão: a pasta `files` da cópia).
+ */
+export function checkBackup(dir: string, filesDir = join(dir, BACKUP_FILES)): BackupReport {
   const problems: string[] = [];
   const path = join(dir, BACKUP_DB);
   if (!existsSync(path)) return { ok: false, problems: [`banco não encontrado em ${path}`], counts: { users: 0, worlds: 0, tables: 0, files: 0 } };
@@ -54,7 +57,7 @@ export function checkBackup(dir: string): BackupReport {
     const migrations = Number((db.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get() as { n: number }).n);
     if (migrations > MIGRATIONS.length) problems.push(`banco de uma versão mais nova do servidor (${migrations} migrações)`);
 
-    const stored = new Set(existsSync(join(dir, BACKUP_FILES)) ? readdirSync(join(dir, BACKUP_FILES)) : []);
+    const stored = new Set(existsSync(filesDir) ? readdirSync(filesDir) : []);
     const missing = (db.prepare('SELECT id FROM files').all() as { id: string }[]).filter((f) => !stored.has(f.id));
     if (missing.length) problems.push(`${missing.length} arquivo(s) registrado(s) sem o conteúdo na cópia`);
 
