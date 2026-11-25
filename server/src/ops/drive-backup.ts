@@ -203,7 +203,7 @@ export interface DriveBackupReport {
   library: { copied: number; removed: number };
 }
 
-const README = `Backup do Crônicas de Zehenia
+const README = `Backup do Game Master's Dream
 =============================
 
 banco/             cópias do banco de dados, CIFRADAS (as mais novas ficam; as antigas saem sozinhas)

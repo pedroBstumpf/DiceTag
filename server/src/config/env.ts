@@ -90,7 +90,7 @@ const schema = z.object({
    */
   MAIL_PROVIDER: z.enum(['none', 'log', 'resend']).default('none'),
   MAIL_API_KEY: z.string().max(500).default(''),
-  /** Remetente, ex.: Crônicas de Zehenia <nao-responda@exemplo.com> (domínio verificado no serviço). */
+  /** Remetente, ex.: Game Master's Dream <nao-responda@exemplo.com> (domínio verificado no serviço). */
   MAIL_FROM: z.string().max(300).default(''),
   /** Página de testes do WebSocket em /dev (só desenvolvimento). */
   DEV_TOOLS: bool(false),

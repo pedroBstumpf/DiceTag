@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Tailwind CSS — configuração e design tokens de Crônicas de Zehenia
+   Tailwind CSS — configuração e design tokens de Game Master's Dream
    (Tailwind v4: o tema é definido aqui via @theme, sem tailwind.config.js)
    "static" garante que as variáveis existam sempre, pois também são usadas
    no styles.scss (tema do Angular Material).
@@ -9,13 +9,17 @@
 @import "tailwindcss" source("..");
 
 /* Visual "grimório do cartógrafo" (o mesmo do Worldbuilder's Dream): um livro antigo de capa de couro.
-   Couro escuro com filetes dourados nas barras e painéis (60%), pergaminho no texto e nas páginas de
+   Couro escuro com filetes dourados nas barras e painéis (60%), texto branco, pergaminho nas páginas de
    leitura (30%) e ouro só onde o olho precisa ir (10%: ação principal, item ativo, seleção, foco).
    Os NOMES dos tokens continuam os antigos (ink, astral, star) para não mexer em centenas de templates:
      ink    = couro       (superfícies)
      astral = ouro        (ações, foco, seleção)
-     star   = pergaminho  (títulos e realces)
-   slate, white, red e emerald do Tailwind também foram trocados pelas versões quentes da paleta. */
+     star   = branco      (títulos e realces)
+   O TEXTO é branco puro (star, slate e white): tons de pergaminho sobre couro ficavam parecidos demais
+   e difíceis de ler. Só o ouro destaca; slate-600 (dicas de campo, desativados) é o branco a 55%.
+   red e emerald do Tailwind foram trocados por lacre e musgo.
+   Textura de couro só nas barras laterais e nos cards de informação (glass, leather); o fundo das
+   partes mais fundas é marrom liso. */
 @theme static {
   /* --- Tipografia ---
      Cinzel (títulos, inscrições), EB Garamond (nomes e texto de leitura),
@@ -49,10 +53,10 @@
   --color-astral-500: #b8903f;
   --color-astral-600: #8a6a2a;
 
-  /* --- star = pergaminho: títulos e realces --- */
-  --color-star-300: #f4ead3;
-  --color-star-400: #efe3c8;
-  --color-star-500: #e3d2ac;
+  /* --- star = branco puro: títulos e realces --- */
+  --color-star-300: #ffffff;
+  --color-star-400: #ffffff;
+  --color-star-500: #ffffff;
 
   /* --- Nomes do kit, para código novo --- */
   --color-couro-950: #1f140d;
@@ -79,21 +83,21 @@
   --color-cobre: #8c5a3c;
   --color-latao: #b5a27a;
 
-  /* --- Texto secundário: slate vira um pergaminho envelhecido (antes, cinza frio) --- */
-  --color-slate-50: #f4ead3;
-  --color-slate-100: #efe3c8;
-  --color-slate-200: #e3d2ac;
-  --color-slate-300: #d2bb8b;
-  --color-slate-400: #c9b48e;
-  --color-slate-500: #a8916c;
-  --color-slate-600: #8a6444;
+  /* --- Texto: slate (só usado em texto) é branco puro. 600 = dicas de campo e desativados, a 55% --- */
+  --color-slate-50: #ffffff;
+  --color-slate-100: #ffffff;
+  --color-slate-200: #ffffff;
+  --color-slate-300: #ffffff;
+  --color-slate-400: #ffffff;
+  --color-slate-500: #ffffff;
+  --color-slate-600: rgb(255 255 255 / 0.55);
   --color-slate-700: #6b4a30;
   --color-slate-800: #4e3422;
   --color-slate-900: #3a2618;
   --color-slate-950: #2b1c12;
 
-  /* --- Branco = pergaminho claro (texto, filetes e realces translúcidos ficam quentes) --- */
-  --color-white: #f4ead3;
+  /* --- Branco puro --- */
+  --color-white: #ffffff;
 
   /* --- Estados: red = lacre (erro), emerald = musgo (sucesso) --- */
   --color-red-100: #f7ddd5;
@@ -299,35 +303,34 @@
   }
 }
 
-/* Painel de couro (o nome "glass" ficou do visual antigo): barras sobrepostas da mesa, submenus e popovers.
-   Opaco a 95%, com textura, borda dourada a 40% e filete interno a 4px. Nada de vidro fosco. */
+/* Painel de couro (o nome "glass" ficou do visual antigo): barras da mesa, janelas e cards de informação.
+   Opaco a 95%, com a textura de couro, borda dourada a 40% e filete interno a 4px. Nada de vidro fosco. */
 @utility glass {
   background-color: color-mix(in oklab, var(--color-couro-900) 95%, transparent);
   background-image: var(--texture-leather);
   border: 1px solid var(--rule);
   outline: 1px solid var(--rule-inner);
   outline-offset: -4px;
-  color: var(--color-pergaminho-100);
+  color: var(--color-white);
 }
-/* O mesmo couro sem o filete interno, para peças pequenas (abas das bordas, pílulas, rótulos no mapa) */
+/* Peças pequenas (abas das bordas, pílulas, rótulos no mapa): marrom liso, sem textura nem filete interno */
 @utility glass-sm {
   background-color: color-mix(in oklab, var(--color-couro-900) 95%, transparent);
-  background-image: var(--texture-leather);
   border: 1px solid var(--rule);
-  color: var(--color-pergaminho-100);
+  color: var(--color-white);
 }
 
-/* Só o couro (fundo e textura), para barras fixas da página: barra lateral, cabeçalho, explorador.
-   A borda vem à parte (ex.: border-r border-astral-500/30). */
+/* Couro com textura (sem borda), para as barras laterais fixas da página: barra lateral, cabeçalho,
+   explorador do Worldbuild. A borda vem à parte (ex.: border-r border-astral-500/30). */
 @utility leather {
   background-color: var(--color-couro-900);
   background-image: var(--texture-leather);
 }
 
-/* Página de pergaminho: leitura (documentos). Texto em couro, vinheta e fibras. */
+/* Página de pergaminho: leitura (documentos) e cena sem mapa. Texto em couro e vinheta (sem textura). */
 @utility page {
   background-color: var(--color-pergaminho-50);
-  background-image: var(--vignette-page), var(--texture-parchment);
+  background-image: var(--vignette-page);
   color: var(--color-couro-900);
   color-scheme: light;
 }
@@ -372,5 +375,5 @@
   @apply flex flex-col gap-0.5 text-[11px] font-semibold uppercase tracking-widest text-slate-500;
 }
 @utility sheet-input {
-  @apply h-8 rounded-md bg-ink-700 px-2 text-sm font-normal normal-case tracking-normal text-slate-100 outline-none ring-1 ring-astral-500/40 placeholder:text-slate-400/70 focus:ring-astral-300;
+  @apply h-8 rounded-md bg-ink-700 px-2 text-sm font-normal normal-case tracking-normal text-slate-100 outline-none ring-1 ring-astral-500/40 placeholder:text-slate-600 focus:ring-astral-300;
 }

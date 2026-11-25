@@ -1,20 +1,19 @@
 <div class="mx-auto flex max-w-6xl flex-col gap-10 px-4 pb-16 pt-4 sm:px-8 sm:pt-8">
-  <!-- ===== Banner com a logo ===== -->
-  <section class="relative overflow-hidden rounded-3xl border border-astral-500 shadow-panel">
+  <!-- ===== Capa: a logo (quadrada) ao lado do nome, da saudação e das ações ===== -->
+  <section class="glass grid items-center gap-6 rounded-xl p-5 shadow-panel sm:grid-cols-[minmax(0,320px)_1fr] sm:gap-10 sm:p-8">
     <img
-      src="images/zehenia-banner.jpg"
-      alt="Crônicas de Zehenia"
-      width="1024"
-      height="572"
+      src="images/gmd-logo.jpg"
+      alt="Game Master's Dream"
+      width="768"
+      height="768"
       fetchpriority="high"
-      class="aspect-[1024/572] max-h-[460px] w-full object-cover"
+      class="mx-auto aspect-square w-full max-w-[320px] rounded-xl border border-astral-500 object-cover shadow-panel"
     />
-    <!-- Degradê para leitura do texto (desktop, onde o texto fica sobre a imagem) -->
-    <div class="pointer-events-none absolute inset-0 hidden bg-gradient-to-t from-ink-950 via-ink-950/20 to-transparent sm:block"></div>
 
-    <!-- Texto e ações: abaixo da imagem no mobile, sobre ela no desktop -->
-    <div class="flex flex-col items-start gap-4 bg-ink-900 p-5 sm:absolute sm:inset-x-0 sm:bottom-0 sm:flex-row sm:items-end sm:justify-between sm:bg-transparent sm:p-8">
-      <p class="max-w-md text-base font-medium text-slate-100 drop-shadow sm:text-lg">{{ greeting() }}</p>
+    <div class="flex flex-col items-start gap-4">
+      <h1 class="inscription text-3xl font-bold text-astral-400 sm:text-4xl">Game Master's Dream</h1>
+      <div class="divider-gem w-full max-w-sm" aria-hidden="true"><i></i></div>
+      <p class="max-w-md font-book text-xl text-slate-100">{{ greeting() }}</p>
 
       <div class="flex flex-wrap gap-2">
           <button mat-flat-button class="!h-11 !px-6" (click)="actions.createTable()">
@@ -79,7 +78,7 @@
         class="rounded-xl border border-dashed border-astral-500/30 bg-ink-900/40"
         icon="newspaper"
         title="Nenhuma novidade por enquanto"
-        message="Atualizações, eventos e anúncios de Crônicas de Zehenia aparecerão aqui."
+        message="Atualizações, eventos e anúncios do Game Master's Dream aparecerão aqui."
       />
     }
   </section>

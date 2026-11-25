@@ -11,19 +11,19 @@ import { Shell } from './layout/shell/shell';
 export const routes: Routes = [
   {
     path: 'entrar',
-    title: 'Zehenia — Entrar',
+    title: "Game Master's Dream — Entrar",
     loadComponent: () => import('./features/auth/sign-in/sign-in').then((m) => m.SignIn),
   },
   {
     // Aberta pelo link que o mestre envia
     path: 'convite',
-    title: 'Zehenia — Convite',
+    title: "Game Master's Dream — Convite",
     loadComponent: () => import('./features/auth/invite/invite').then((m) => m.Invite),
   },
   {
     // Aberta pelo link de recuperação de senha
     path: 'redefinir-senha',
-    title: 'Zehenia — Redefinir a senha',
+    title: "Game Master's Dream — Redefinir a senha",
     loadComponent: () => import('./features/auth/reset-password/reset-password').then((m) => m.ResetPassword),
   },
   {
@@ -33,24 +33,24 @@ export const routes: Routes = [
     children: [
       {
         path: '',
-        title: 'Zehenia — Início',
+        title: "Game Master's Dream — Início",
         canActivate: [ownerGuard],
         loadComponent: () => import('./features/home/home').then((m) => m.Home),
       },
       {
         path: 'mesas',
-        title: 'Zehenia — Minhas mesas',
+        title: "Game Master's Dream — Minhas mesas",
         loadComponent: () => import('./features/tables/tables').then((m) => m.Tables),
       },
       {
         path: 'arquivos',
-        title: 'Zehenia — Arquivos',
+        title: "Game Master's Dream — Arquivos",
         canActivate: [ownerGuard],
         loadComponent: () => import('./features/library/library').then((m) => m.Library),
       },
       {
         path: 'worldbuild',
-        title: 'Zehenia — Worldbuild',
+        title: "Game Master's Dream — Worldbuild",
         canActivate: [ownerGuard],
         loadComponent: () => import('./features/worldbuild/worldbuild').then((m) => m.Worldbuild),
       },
@@ -59,14 +59,14 @@ export const routes: Routes = [
   {
     // Mesa de jogo: tela cheia, fora do Shell, para máxima imersão
     path: 'mesa/:id',
-    title: 'Zehenia — Mesa',
+    title: "Game Master's Dream — Mesa",
     canActivate: [ownerGuard],
     loadComponent: () => import('./features/game-table/game-table').then((m) => m.GameTablePage),
   },
   {
     // Mesa online: a mesma tela, ligada à sala da mesa no servidor (input `online`)
     path: 'mesa-online/:id',
-    title: 'Zehenia — Mesa online',
+    title: "Game Master's Dream — Mesa online",
     canActivate: [accountGuard],
     data: { online: true },
     loadComponent: () => import('./features/game-table/game-table').then((m) => m.GameTablePage),

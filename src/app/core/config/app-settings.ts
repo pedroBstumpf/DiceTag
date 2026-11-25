@@ -1,5 +1,5 @@
 /**
- * Configurações gerais de Crônicas de Zehenia.
+ * Configurações gerais de Game Master's Dream.
  * Altere aqui comportamentos globais sem mexer no restante do código.
  */
 export const APP_SETTINGS = {

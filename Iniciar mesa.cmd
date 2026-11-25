@@ -1,6 +1,6 @@
 @echo off
 rem Duplo clique: inicia o app. Fechar esta janela encerra a mesa e tira tudo da internet.
-title Cronicas de Zehenia
+title Game Master's Dream
 cd /d "%~dp0"
 chcp 65001 >nul
 

@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Estilos globais de Crônicas de Zehenia
+   Estilos globais de Game Master's Dream
    1. Tema Angular Material (M3, escuro)
    2. Base da página
    3. Ícones (Material Symbols)
@@ -34,15 +34,15 @@ html {
       primary-container: var(--color-ouro-700),
       on-primary-container: var(--color-pergaminho-50),
       secondary-container: var(--color-couro-700),
-      on-secondary-container: var(--color-pergaminho-100),
+      on-secondary-container: var(--color-white),
       surface: var(--color-couro-900),
       surface-container-lowest: var(--color-couro-950),
       surface-container-low: var(--color-couro-900),
       surface-container: var(--color-ink-850),
       surface-container-high: var(--color-couro-800),
       surface-container-highest: var(--color-couro-700),
-      on-surface: var(--color-pergaminho-100),
-      on-surface-variant: var(--color-pergaminho-400),
+      on-surface: var(--color-white),
+      on-surface-variant: var(--color-white),
       outline: var(--color-couro-500),
       outline-variant: var(--color-couro-600),
       error: var(--color-lacre-claro),
@@ -73,13 +73,13 @@ html {
       container-color: var(--color-couro-900),
       container-shape: 10px,
       subhead-color: var(--color-ouro-400),
-      supporting-text-color: var(--color-pergaminho-100),
+      supporting-text-color: var(--color-white),
     )
   );
   @include mat.snack-bar-overrides(
     (
       container-color: var(--color-couro-800),
-      supporting-text-color: var(--color-pergaminho-100),
+      supporting-text-color: var(--color-white),
       button-color: var(--color-ouro-300),
     )
   );
@@ -92,7 +92,7 @@ html {
   @include mat.tooltip-overrides(
     (
       container-color: var(--color-couro-950),
-      supporting-text-color: var(--color-pergaminho-100),
+      supporting-text-color: var(--color-white),
       container-shape: 6px,
     )
   );
@@ -106,15 +106,9 @@ body {
 
 body {
   margin: 0;
-  color: var(--color-pergaminho-100);
+  color: var(--color-white);
+  /* Fundo das partes mais fundas: marrom liso, sem textura (a textura fica nas barras e nos cards) */
   background-color: var(--color-couro-950);
-  /* Fundo de couro: textura procedural e a luz quente de uma lamparina, só com CSS */
-  background-image:
-    radial-gradient(ellipse 70% 55% at 80% 0%, rgb(217 178 95 / 0.07), transparent 70%),
-    radial-gradient(ellipse 120% 90% at 50% 50%, transparent 55%, rgb(10 6 3 / 0.55) 100%),
-    var(--texture-leather);
-  background-size: 100% 100%, 100% 100%, 256px 256px;
-  background-attachment: fixed;
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
@@ -142,8 +136,8 @@ fieldset:disabled {
 /* --- 4. Conteúdo do editor (documentos do worldbuild e anotações) ------- */
 /* Cores por variável: sobre couro (anotações da ficha) ou sobre pergaminho (.page, documentos) */
 .prose-editor {
-  --prose-text: var(--color-pergaminho-100);
-  --prose-muted: var(--color-pergaminho-400);
+  --prose-text: var(--color-white);
+  --prose-muted: var(--color-white);
   --prose-heading: var(--color-ouro-400);
   --prose-rule: var(--color-couro-600);
   --prose-link: var(--color-ouro-300);
@@ -192,7 +186,7 @@ fieldset:disabled {
 
   pre {
     background: var(--prose-pre);
-    color: var(--color-pergaminho-200);
+    color: var(--color-white);
     padding: 0.75rem 1rem;
     border-radius: 6px;
     overflow-x: auto;
@@ -214,7 +208,7 @@ fieldset:disabled {
     height: 0;
     pointer-events: none;
     color: var(--prose-muted);
-    opacity: 0.7;
+    opacity: 0.55;
   }
 }
 
@@ -245,10 +239,9 @@ fieldset:disabled {
   text-transform: uppercase;
 }
 
-/* Menu sobre couro, com filete dourado forte */
+/* Menu: marrom liso (sem textura), com filete dourado forte */
 .mat-mdc-menu-panel {
   border: 1px solid var(--rule-strong);
-  background-image: var(--texture-leather);
   box-shadow: var(--shadow-panel) !important;
 }
 

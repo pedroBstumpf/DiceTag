@@ -1,4 +1,4 @@
-# CLAUDE.md — Crônicas de Zehenia
+# CLAUDE.md — Game Master's Dream
 
 Contexto do projeto para o Claude Code. Leia antes de qualquer alteração.
 Idioma de trabalho: **português do Brasil** (respostas, comentários no código e textos da interface).
@@ -9,7 +9,7 @@ Regras obrigatórias de segurança para qualquer código em `server/`: [`BACKEND
 
 ## 1. Resumo executivo
 
-**Crônicas de Zehenia** (antigo DiceTag) é um VTT (Virtual Tabletop): um aplicativo web para jogar RPG de mesa
+**Game Master's Dream** (antes Crônicas de Zehenia e, antes disso, DiceTag) é um VTT (Virtual Tabletop): um aplicativo web para jogar RPG de mesa
 online com amigos, no mundo de Zehenia.
 A meta final inclui simular eventos, calcular rolagens, manter fichas, criar mapas, tocar sons e
 organizar toda a atmosfera de uma campanha.
@@ -333,7 +333,7 @@ Rotas (`app.routes.ts`, todas lazy):
 ## 6. Design system
 
 **Tema:** "o grimório do cartógrafo" (o mesmo visual do Worldbuilder's Dream) — um livro antigo de capa de couro.
-Regra **60/30/10**: couro escuro com filetes dourados nas barras e painéis (60%), pergaminho no texto e nas páginas de
+Regra **60/30/10**: couro escuro com filetes dourados nas barras e painéis (60%), texto branco, pergaminho nas páginas de
 leitura (30%) e **ouro só no destaque** (10%: ação principal — um botão primário por contexto —, item ativo, seleção,
 foco). Painéis opacos com sombra quente; **nada de vidro fosco** (`backdrop-blur`).
 
@@ -344,8 +344,8 @@ e agora valem as cores do kit:
 |---|---|
 | `ink-950 … ink-600` | **Couro** (superfícies). 950 = fundo, 900/850 = painéis, 800/700 = elevação e campos, 600 = trilhos e bordas fortes |
 | `astral-300 … 600` | **Ouro**: ações, foco, seleção, item ativo. 300 = hover/foco, 400 = destaque, 500 = filetes, 600 = ouro sobre pergaminho |
-| `star-300 … 500` | **Pergaminho**: títulos e realces |
-| `slate-*`, `white` (Tailwind) | Trocados por tons de pergaminho envelhecido (texto secundário e realces translúcidos ficam quentes) |
+| `star-300 … 500` | **Branco puro**: títulos e realces |
+| `slate-*`, `white` (Tailwind) | **Branco puro**: todo o texto é branco (tons de pergaminho sobre couro ficavam parecidos demais). `slate-600` = branco a 55% (dicas de campo, desativados). Só o ouro destaca |
 | `red-*`, `emerald-*` (Tailwind) | Trocados por **lacre** (erro) e **musgo** (sucesso) |
 | `couro-*`, `pergaminho-*`, `ouro-*`, `lacre`, `lacre-claro`, `musgo`, `tinta`, `bronze`, `cobre`, `latao` | Nomes do kit, para código novo |
 
@@ -359,9 +359,11 @@ Com `prefers-contrast: more`, as texturas somem e os filetes ficam sólidos.
 - **Cantos:** 6px nos controles (`rounded-lg`, botões Material), 10px nos painéis (`rounded-xl`).
 - **Utilitário `glass`** (o nome ficou do visual antigo): **painel de couro**, 95% opaco, textura, borda `--rule` e filete
   interno a 4px (`outline` com `outline-offset: -4px`). Usar em barras, submenus e popovers sobre o mapa e na
-  `FloatingWindow`. `glass-sm` = o mesmo sem o filete interno, para peças pequenas (abas das bordas, pílulas, rótulos).
+  `FloatingWindow`. `glass-sm` = marrom liso, sem textura nem filete interno, para peças pequenas (abas das bordas, pílulas, rótulos).
   `leather` = só o couro (fundo + textura), para barras fixas da página (barra lateral, cabeçalho, explorador), com a borda à parte.
-- **Utilitário `page`:** folha de pergaminho (texto em couro, vinheta, fibras). Usado nos **documentos** do Worldbuild
+  **Textura de couro só nas barras laterais e nos cards de informação** (`glass`, `leather`, diálogos); menus, peças pequenas
+  e o fundo das partes mais fundas são marrom liso.
+- **Utilitário `page`:** folha de pergaminho (texto em couro e vinheta, sem textura). Usado nos **documentos** do Worldbuild
   (`RichTextEditor` com `[paper]="true"`; `.page .prose-editor` troca as cores do texto) e na **cena sem mapa** (papel
   quadriculado, com a grade em sépia; sobre mapas a grade é dourada).
 - **Utilitário `divider-gem`:** divisor com losango dourado no meio (`<div class="divider-gem"><i></i></div>`).
@@ -372,7 +374,7 @@ Com `prefers-contrast: more`, as texturas somem e os filetes ficam sólidos.
 - **Utilitários da ficha** (`tailwind.css`): `sheet-card` (card), `sheet-title` (título do card, inscrição dourada), `sheet-label`
   (rótulo de campo em caixa alta) e `sheet-input` (campo de texto). A ficha usa container queries
   (`@container` + `@2xl:`/`@xl:`), porque o tamanho que importa é o da janela, não o da tela.
-- **Fundo:** couro com textura e uma luz quente de lamparina, só em CSS no `body` (sem imagens).
+- **Fundo:** marrom liso (`couro-950`) no `body`, sem textura (como o fundo do mapa no Worldbuilder's Dream).
 - **Animações:** `animate-fade-in` (entrada de painéis/janelas: sobe 6px e cresce de 98%, 200ms), `animate-ping-once`
   (ping no mapa), `animate-eq` (barras de equalizador do som tocando), `animate-halo` (halo dourado pulsando). Anime só
   `transform` e `opacity`.
@@ -381,11 +383,14 @@ Com `prefers-contrast: more`, as texturas somem e os filetes ficam sólidos.
   (régua, paredes, contorno da visão, brilho da seleção) em ouro; a névoa é um preto quente (couro-950).
   As **paletas de dados** (etiquetas, notas, pincel, barras Corpo/Mente/Espírito, cores dos efeitos) não mudaram: são
   guardadas nas fichas e servem para distinguir as coisas.
-- Material: primary = ouro (`ouro-400`, texto em `couro-950`), superfícies = couro, texto = pergaminho (overrides em
-  `styles.scss`). Diálogo e menu = painel de couro com filete dourado; dica (tooltip) em Cinzel caixa-alta; aviso
-  (snackbar) com filete dourado à esquerda.
-- Logo: `public/images/zehenia-banner.jpg` (banner 1024×572) e `zehenia-emblem.png` (monograma "Z", 96px);
-  `public/favicon.png` (o mesmo "Z", 64px). Na barra lateral o nome aparece em duas linhas ("Crônicas de" / "Zehenia").
+- Material: primary = ouro (`ouro-400`, texto em `couro-950`), superfícies = couro, texto = branco (overrides em
+  `styles.scss`). Diálogo = painel de couro (com textura) e filete dourado; menu = marrom liso com filete dourado; dica
+  (tooltip) em Cinzel caixa-alta; aviso (snackbar) com filete dourado à esquerda.
+- Logo: `public/images/gmd-logo.jpg` (a logo inteira, 768×768: árvore celta sobre um d20 e o nome; capa da página
+  inicial) e `gmd-emblem.png` (recorte da árvore com o d20, sem o texto, 96px: barra lateral e telas de entrada);
+  `public/favicon.png` (o mesmo recorte, 64px). Na barra lateral o nome aparece em duas linhas ("Game Master's" / "Dream").
+- **Nome:** só o nome exibido mudou. Caminhos e identificadores continuam com `zehenia` (pasta `Documentos\Cronicas de Zehenia`,
+  backup, `zehenia.db`, `ZEHENIA_*`, a extensão `.zehenia`, o projeto `zehenia` do `angular.json`): renomeá-los perderia os dados.
 
 ---
 

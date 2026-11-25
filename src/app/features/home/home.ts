@@ -12,7 +12,7 @@ import { NewsService } from '../../core/services/news.service';
 import { EmptyState } from '../../shared/components/empty-state/empty-state';
 import { QuickActionsService } from '../../shared/services/quick-actions.service';
 
-/** Cartão de atalho exibido abaixo do banner. */
+/** Cartão de atalho exibido abaixo da capa. */
 interface FeatureCard {
   icon: string;
   title: string;
@@ -22,7 +22,7 @@ interface FeatureCard {
 }
 
 /**
- * Página inicial (landing): banner com a logo, atalhos principais
+ * Página inicial (landing): capa com a logo, atalhos principais
  * (mesas, worldbuild, mundos) e o mural de notícias e anúncios.
  */
 @Component({

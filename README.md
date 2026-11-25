@@ -1,10 +1,10 @@
-# Crônicas de Zehenia
+# Game Master's Dream
 
-Mesa virtual (VTT) para jogar RPG de mesa online com amigos no mundo de Zehenia (projeto antes chamado DiceTag).
+Mesa virtual (VTT) para jogar RPG de mesa online com amigos no mundo de Zehenia (projeto antes chamado Crônicas de Zehenia e DiceTag).
 Angular 21 · Angular Material (M3) · Tailwind CSS 4 · Tiptap (editor de texto) · Vitest.
 
-Visual: "o grimório do cartógrafo" (o mesmo do Worldbuilder's Dream): painéis de couro com filetes dourados,
-páginas de pergaminho e ouro só no destaque. Fontes Cinzel (títulos), EB Garamond (leitura), Inter (interface) e
+Visual: "o grimório do cartógrafo" (o mesmo do Worldbuilder's Dream): barras e cards de couro com filetes dourados
+sobre um fundo marrom liso, texto em branco, páginas de pergaminho nos documentos e ouro só no destaque. Fontes Cinzel (títulos), EB Garamond (leitura), Inter (interface) e
 JetBrains Mono (números), e ícones Material Symbols Rounded.
 
 ## Como narrar uma sessão

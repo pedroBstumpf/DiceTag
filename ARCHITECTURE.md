@@ -1,4 +1,4 @@
-# Arquitetura — Crônicas de Zehenia
+# Arquitetura — Game Master's Dream
 
 Visão técnica do app: como as pastas se organizam, quais são as peças principais, por onde os dados
 passam e onde cada parte do estado mora. As **regras de negócio** detalhadas (fichas, NPCs, névoa,

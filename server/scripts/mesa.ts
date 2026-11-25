@@ -146,7 +146,7 @@ async function main(): Promise<void> {
   }
 
   console.log(`
-  ┌─ Crônicas de Zehenia ──────────────────────────────────────
+  ┌─ Game Master's Dream ──────────────────────────────────────
   │  No seu computador:  ${localUrl}
   │  Sua pasta:          ${home}
   │

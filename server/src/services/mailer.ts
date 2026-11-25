@@ -69,7 +69,7 @@ export function createMailer(config: Config): Mailer {
 export function passwordResetMail(to: string, name: string, link: string, minutes: number): MailMessage {
   return {
     to,
-    subject: 'Crônicas de Zehenia: redefinir a senha',
+    subject: "Game Master's Dream: redefinir a senha",
     text: [
       `Olá, ${name}.`,
       '',
