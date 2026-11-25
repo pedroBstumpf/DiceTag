@@ -105,7 +105,7 @@
           icon: 'groups',
           label: 'Mesas de jogo',
           count: tableCount(),
-          add: account.isOwner() ? startTable : null,
+          add: owner() ? startTable : null,
           addLabel: 'Nova mesa',
           addDisabled: busy(),
         }"
@@ -149,7 +149,7 @@
     </section>
 
     <!-- ===== Worldbuild: os tipos de item do mundo aberto ===== -->
-    @if (account.isOwner()) {
+    @if (owner()) {
       <section>
         <ng-container
           [ngTemplateOutlet]="groupHeader"
@@ -188,7 +188,7 @@
     }
 
     <!-- ===== Mundos (cada um é um Worldbuild separado) ===== -->
-    @if (account.isOwner()) {
+    @if (owner()) {
       <section>
         <ng-container
           [ngTemplateOutlet]="groupHeader"

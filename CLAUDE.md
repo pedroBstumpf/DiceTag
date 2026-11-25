@@ -474,6 +474,9 @@ Com `prefers-contrast: more`, as texturas somem e os filetes ficam sólidos.
   Na mesa, o explorador não troca de mundo (é o da mesa). Barra lateral: grupo "Mundos" lista os mundos (abre o Worldbuild) e cria um mundo no servidor.
 
 ### Barra lateral (`layout/sidebar`)
+- **Quem vê o quê:** `owner()` = conta do dono **ou** `ServerAccountService.localOnly` (sem servidor, só o `ng serve`: sem conta,
+  tudo neste navegador — a mesma regra do `ownerGuard`). Sem servidor, o "+" cria a mesa (`GameTablesService`, no mundo aberto)
+  e o mundo (`WorldsService`) neste navegador.
 - Páginas soltas (dono: Início, Arquivos) e três **grupos que abrem e fecham** (quais estão abertos fica em
   `localStorage dicetag.sidebarGroups`; padrão: todos abertos). Com a barra recolhida, o ícone do grupo expande a barra e o abre.
   - **Mesas de jogo:** mesas online (`OnlineTablesService`, carregadas pela barra quando há conta; abrem `/mesa-online/:id`) e,

@@ -26,6 +26,11 @@ export class ServerAccountService {
   readonly error = signal('');
   /** É o dono do app? */
   readonly isOwner = computed(() => this.user()?.kind === 'owner');
+  /**
+   * Sem servidor (só o `ng serve`, em desenvolvimento): não há conta, e tudo é o que está guardado neste
+   * navegador. As telas do dono abrem (ver `ownerGuard`) e usam os dados locais.
+   */
+  readonly localOnly = computed(() => !this.user() && !!this.error());
   /** Id curto, para diferenciar pessoas de mesmo nome na tela. */
   readonly shortId = computed(() => shortAccountId(this.user()?.id ?? ''));
   private checking: Promise<void> | null = null;

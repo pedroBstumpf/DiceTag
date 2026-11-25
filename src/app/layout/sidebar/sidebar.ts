@@ -112,10 +112,17 @@ export class Sidebar {
     { initialValue: this.router.url },
   );
 
+  /**
+   * Vê o que é do dono: a conta do dono ou, sem servidor (só o `ng serve`), quem usa este navegador —
+   * a mesma regra do `ownerGuard`. Sem servidor, mesas e mundos são criados neste navegador.
+   */
+  readonly owner = computed(() => this.account.isOwner() || this.account.localOnly());
+  readonly localOnly = this.account.localOnly;
+
   // --- Páginas -------------------------------------------------------------
   /** Mesas, Worldbuild e Mundos ficam nos grupos abaixo; aqui, só as páginas soltas (do dono). */
   readonly links = computed<NavLink[]>(() =>
-    this.account.isOwner()
+    this.owner()
       ? [
           { label: 'Início', icon: 'home', route: '/' },
           { label: 'Arquivos', icon: 'perm_media', route: '/arquivos' },
@@ -175,7 +182,10 @@ export class Sidebar {
     this.draftName.set((event.target as HTMLInputElement).value);
   }
 
-  /** Cria a mesa (no mundo que o Worldbuild abriria) ou o mundo, no servidor. */
+  /**
+   * Cria a mesa (no mundo que o Worldbuild abriria) ou o mundo: no servidor, com a conta do dono;
+   * neste navegador, sem servidor.
+   */
   async submitCreate(): Promise<void> {
     const kind = this.creating();
     const name = this.draftName().trim();
@@ -184,10 +194,18 @@ export class Sidebar {
 
     this.busy.set(true);
     try {
-      if (kind === 'table') {
-        const worldId = this.serverWorlds.preferred() ?? undefined;
-        await this.onlineTables.create({ name, system: 'Sistema próprio', description: '', maxPlayers: 5, accent: TABLE_ACCENTS[0], worldId });
+      const table = { name, system: 'Sistema próprio', description: '', maxPlayers: 5, accent: TABLE_ACCENTS[0] };
+      if (kind === 'table' && this.localOnly()) {
+        await this.tables.create({ ...table, worldId: this.worlds.activeId() });
+        this.snackBar.open(`Mesa "${name}" criada neste navegador.`);
+      } else if (kind === 'table') {
+        await this.onlineTables.create({ ...table, worldId: this.serverWorlds.preferred() ?? undefined });
         this.snackBar.open(`Mesa "${name}" criada. Convide os jogadores em Minhas mesas.`);
+      } else if (this.localOnly()) {
+        const world = await this.worlds.create(name);
+        if (!world) throw new Error(`Limite de ${MAX_WORLDS} mundos atingido.`);
+        this.snackBar.open(`Mundo "${name}" criado neste navegador.`);
+        this.openWorld({ id: world.id, name: world.name, local: true, firstLocal: false });
       } else {
         const world = await this.serverWorlds.create(name);
         this.snackBar.open(`Mundo "${name}" criado.`);
@@ -205,7 +223,7 @@ export class Sidebar {
   /** Mesas online (do servidor) primeiro; depois, para o dono, as guardadas neste navegador. */
   private readonly allTables = computed<TableLink[]>(() => {
     const online = this.onlineTables.tables().map((t) => ({ id: t.id, name: t.name, accent: t.accent, route: ['/mesa-online', t.id], firstLocal: false }));
-    const local = this.account.isOwner() ? this.tables.tables() : [];
+    const local = this.owner() ? this.tables.tables() : [];
     return [
       ...online,
       ...local.map((t, i) => ({ id: t.id, name: t.name, accent: t.accent, route: ['/mesa', t.id], firstLocal: i === 0 && online.length > 0 })),
@@ -218,6 +236,7 @@ export class Sidebar {
   readonly tableCount = computed(() => this.allTables().length);
   /** Nome do mundo em que uma mesa nova se passa (o que o Worldbuild abriria). */
   readonly newTableWorld = computed(() => {
+    if (this.localOnly()) return this.worlds.active()?.name ?? null;
     const id = this.serverWorlds.preferred();
     return this.serverWorlds.worlds().find((w) => w.id === id)?.name ?? null;
   });
@@ -234,8 +253,8 @@ export class Sidebar {
       ...local.map((w, i) => ({ id: w.id, name: w.name, local: true, firstLocal: i === 0 && this.serverWorlds.worlds().length > 0 })),
     ];
   });
-  /** Ainda cabe um mundo no servidor (o limite é do servidor). */
-  readonly canCreateWorld = computed(() => this.serverWorlds.worlds().length < MAX_WORLDS);
+  /** Ainda cabe um mundo (no servidor, quem confere é o servidor; sem ele, este navegador). */
+  readonly canCreateWorld = computed(() => (this.localOnly() ? this.worlds.canCreate() : this.serverWorlds.worlds().length < MAX_WORLDS));
 
   /** Nome do mundo que o Worldbuild mostra (ou mostraria ao ser aberto). */
   readonly worldbuildWorld = computed(() => {
