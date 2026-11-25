@@ -8,7 +8,7 @@
         tool.soon
           ? 'cursor-not-allowed text-slate-600'
           : session.tool() === tool.id
-            ? 'bg-astral-500/25 text-astral-300 ring-1 ring-astral-400/40'
+            ? 'bg-astral-400 text-ink-950 ring-1 ring-astral-500'
             : 'text-slate-300 hover:bg-white/10 hover:text-white'
       "
       [matTooltip]="tool.label + (tool.soon ? ' (em breve)' : ' (' + tool.key + ')')"
@@ -28,7 +28,7 @@
     <button
       type="button"
       class="relative grid size-10 place-items-center rounded-lg transition-colors"
-      [class]="session.levelsOpen() ? 'bg-astral-500/25 text-astral-300 ring-1 ring-astral-400/40' : 'text-slate-300 hover:bg-white/10 hover:text-white'"
+      [class]="session.levelsOpen() ? 'bg-astral-400 text-ink-950 ring-1 ring-astral-500' : 'text-slate-300 hover:bg-white/10 hover:text-white'"
       matTooltip="Camadas do mapa (PageUp/PageDown)"
       matTooltipPosition="right"
       aria-label="Camadas do mapa"
@@ -37,7 +37,7 @@
     >
       <mat-icon>layers</mat-icon>
       @if (session.levelCount() > 1) {
-        <span class="absolute bottom-0.5 right-0.5 grid size-4 place-items-center rounded-full bg-astral-500 text-[9px] font-bold text-white">
+        <span class="absolute bottom-0.5 right-0.5 grid size-4 place-items-center rounded-full bg-ink-950 text-[9px] font-bold text-astral-300 ring-1 ring-astral-500">
           {{ session.currentLevel() + 1 }}
         </span>
       }

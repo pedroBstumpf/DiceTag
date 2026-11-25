@@ -14,33 +14,43 @@ html {
   @include mat.theme(
     (
       color: (
-        primary: mat.$blue-palette,
-        tertiary: mat.$violet-palette,
+        primary: mat.$orange-palette,
+        tertiary: mat.$red-palette,
         theme-type: dark,
       ),
       typography: (
-        plain-family: ("Chakra Petch", ui-sans-serif, sans-serif),
-        brand-family: ("Tektur", "Chakra Petch", sans-serif),
+        plain-family: ("Inter", ui-sans-serif, system-ui, sans-serif),
+        brand-family: ("Cinzel", Georgia, serif),
       ),
       density: 0,
     )
   );
 
-  /* Cores principais alinhadas à paleta espacial (tokens do Tailwind) */
+  /* Cores do grimório: couro, pergaminho e ouro (tokens do Tailwind) */
   @include mat.theme-overrides(
     (
-      primary: var(--color-astral-400),
-      on-primary: var(--color-ink-950),
-      primary-container: var(--color-astral-600),
-      on-primary-container: #eef3ff,
-      surface: var(--color-ink-900),
+      primary: var(--color-ouro-400),
+      on-primary: var(--color-couro-950),
+      primary-container: var(--color-ouro-700),
+      on-primary-container: var(--color-pergaminho-50),
+      secondary-container: var(--color-couro-700),
+      on-secondary-container: var(--color-pergaminho-100),
+      surface: var(--color-couro-900),
+      surface-container-lowest: var(--color-couro-950),
+      surface-container-low: var(--color-couro-900),
       surface-container: var(--color-ink-850),
-      surface-container-high: var(--color-ink-800),
-      outline: var(--color-ink-600),
+      surface-container-high: var(--color-couro-800),
+      surface-container-highest: var(--color-couro-700),
+      on-surface: var(--color-pergaminho-100),
+      on-surface-variant: var(--color-pergaminho-400),
+      outline: var(--color-couro-500),
+      outline-variant: var(--color-couro-600),
+      error: var(--color-lacre-claro),
+      on-error: var(--color-couro-950),
     )
   );
 
-  /* Botões e campos com cantos retos, combinando com as fontes angulares */
+  /* Botões com cantos de 6px (controles do kit) */
   @include mat.button-overrides(
     (
       filled-container-shape: 6px,
@@ -60,19 +70,30 @@ html {
   /* Superfícies do Material alinhadas aos tokens do Tailwind */
   @include mat.dialog-overrides(
     (
-      container-color: var(--color-ink-850),
+      container-color: var(--color-couro-900),
       container-shape: 10px,
+      subhead-color: var(--color-ouro-400),
+      supporting-text-color: var(--color-pergaminho-100),
     )
   );
   @include mat.snack-bar-overrides(
     (
-      container-color: var(--color-ink-700),
-      supporting-text-color: var(--color-star-300),
+      container-color: var(--color-couro-800),
+      supporting-text-color: var(--color-pergaminho-100),
+      button-color: var(--color-ouro-300),
     )
   );
   @include mat.menu-overrides(
     (
-      container-color: var(--color-ink-800),
+      container-color: var(--color-couro-900),
+      container-shape: 10px,
+    )
+  );
+  @include mat.tooltip-overrides(
+    (
+      container-color: var(--color-couro-950),
+      supporting-text-color: var(--color-pergaminho-100),
+      container-shape: 6px,
     )
   );
 }
@@ -85,19 +106,14 @@ body {
 
 body {
   margin: 0;
-  color: #e6ecfa;
-  background-color: var(--color-ink-950);
-  /* Fundo de espaço: nebulosas suaves + campo de estrelas, só com CSS */
+  color: var(--color-pergaminho-100);
+  background-color: var(--color-couro-950);
+  /* Fundo de couro: textura procedural e a luz quente de uma lamparina, só com CSS */
   background-image:
-    radial-gradient(ellipse 60% 45% at 85% 10%, rgb(79 134 247 / 0.14), transparent 70%),
-    radial-gradient(ellipse 50% 40% at 10% 90%, rgb(177 140 255 / 0.10), transparent 70%),
-    radial-gradient(1px 1px at 12% 18%, #fff9, transparent),
-    radial-gradient(1px 1px at 72% 34%, #fff7, transparent),
-    radial-gradient(1.5px 1.5px at 38% 72%, #cfe0ff, transparent),
-    radial-gradient(1px 1px at 88% 82%, #fff8, transparent),
-    radial-gradient(1px 1px at 55% 12%, #fff6, transparent),
-    radial-gradient(1.5px 1.5px at 22% 48%, #a9c7ff, transparent);
-  background-size: 100% 100%, 100% 100%, 420px 420px, 420px 420px, 420px 420px, 420px 420px, 420px 420px, 420px 420px;
+    radial-gradient(ellipse 70% 55% at 80% 0%, rgb(217 178 95 / 0.07), transparent 70%),
+    radial-gradient(ellipse 120% 90% at 50% 50%, transparent 55%, rgb(10 6 3 / 0.55) 100%),
+    var(--texture-leather);
+  background-size: 100% 100%, 100% 100%, 256px 256px;
   background-attachment: fixed;
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
@@ -106,7 +122,7 @@ body {
 /* Barra de rolagem discreta para não competir com o conteúdo */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--color-ink-600) transparent;
+  scrollbar-color: var(--color-couro-600) transparent;
 }
 
 /* Ficha só leitura (fieldset desabilitado): os controles não reagem ao mouse */
@@ -115,27 +131,39 @@ fieldset:disabled {
 }
 
 /* --- 3. Ícones ---------------------------------------------------------- */
-.material-symbols-sharp {
-  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+/* Material Symbols Rounded, traço fino (a fonte é carregada só no peso 300) */
+.material-symbols-rounded {
+  font-variation-settings: "FILL" 0, "wght" 300, "GRAD" 0, "opsz" 24;
 }
 .icon-filled {
-  font-variation-settings: "FILL" 1, "wght" 400, "GRAD" 0, "opsz" 24;
+  font-variation-settings: "FILL" 1, "wght" 300, "GRAD" 0, "opsz" 24;
 }
 
-/* --- 4. Conteúdo do editor (documentos do worldbuild) ------------------- */
+/* --- 4. Conteúdo do editor (documentos do worldbuild e anotações) ------- */
+/* Cores por variável: sobre couro (anotações da ficha) ou sobre pergaminho (.page, documentos) */
 .prose-editor {
+  --prose-text: var(--color-pergaminho-100);
+  --prose-muted: var(--color-pergaminho-400);
+  --prose-heading: var(--color-ouro-400);
+  --prose-rule: var(--color-couro-600);
+  --prose-link: var(--color-ouro-300);
+  --prose-code: var(--color-couro-700);
+  --prose-pre: var(--color-couro-950);
+
   outline: none;
   min-height: 50vh; /* toda a página é clicável para escrever */
-  line-height: 1.75;
-  font-size: 1rem;
-  color: #dde5f7;
+  line-height: 1.7;
+  font-family: var(--font-book);
+  font-size: 1.125rem;
+  color: var(--prose-text);
 
   > * + * { margin-top: 0.85em; }
 
   h1, h2, h3 {
     font-family: var(--font-display);
-    letter-spacing: 0.02em;
-    color: var(--color-star-300);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: var(--prose-heading);
     line-height: 1.25;
     margin-top: 1.4em;
   }
@@ -148,34 +176,36 @@ fieldset:disabled {
   ol { list-style: decimal; }
 
   blockquote {
-    border-left: 3px solid var(--color-astral-500);
+    border-left: 3px solid var(--color-ouro-500);
     padding-left: 1rem;
-    color: #b5c3e0;
+    color: var(--prose-muted);
     font-style: italic;
   }
 
   code {
-    background: var(--color-ink-700);
+    background: var(--prose-code);
     padding: 0.1em 0.35em;
     border-radius: 4px;
-    font-size: 0.9em;
+    font-family: var(--font-mono);
+    font-size: 0.85em;
   }
 
   pre {
-    background: var(--color-ink-950);
+    background: var(--prose-pre);
+    color: var(--color-pergaminho-200);
     padding: 0.75rem 1rem;
-    border-radius: 8px;
+    border-radius: 6px;
     overflow-x: auto;
     code { background: none; padding: 0; }
   }
 
   hr {
     border: none;
-    border-top: 1px solid var(--color-ink-600);
+    border-top: 1px solid var(--prose-rule);
     margin: 2em 0;
   }
 
-  a { color: var(--color-astral-300); text-decoration: underline; }
+  a { color: var(--prose-link); text-decoration: underline; }
 
   /* Texto de placeholder no documento vazio */
   p.is-editor-empty:first-child::before {
@@ -183,13 +213,61 @@ fieldset:disabled {
     float: left;
     height: 0;
     pointer-events: none;
-    color: #6b7a99;
+    color: var(--prose-muted);
+    opacity: 0.7;
   }
 }
 
+/* Documento na página de pergaminho: tinta escura, títulos em ouro velho */
+.page .prose-editor {
+  --prose-text: var(--color-couro-900);
+  --prose-muted: var(--color-couro-600);
+  --prose-heading: var(--color-ouro-700);
+  --prose-rule: var(--color-pergaminho-300);
+  --prose-link: var(--color-tinta);
+  --prose-code: var(--color-pergaminho-200);
+  --prose-pre: var(--color-couro-900);
+}
+
 /* --- 5. Ajustes de componentes Material --------------------------------- */
+/* Diálogo = painel de couro com filete duplo dourado */
+.mat-mdc-dialog-surface {
+  border: 1px solid var(--rule);
+  outline: 1px solid var(--rule-inner);
+  outline-offset: -4px;
+  background-image: var(--texture-leather);
+  box-shadow: var(--shadow-panel) !important;
+}
 .mat-mdc-dialog-container .mat-mdc-dialog-title {
   font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Menu sobre couro, com filete dourado forte */
+.mat-mdc-menu-panel {
+  border: 1px solid var(--rule-strong);
+  background-image: var(--texture-leather);
+  box-shadow: var(--shadow-panel) !important;
+}
+
+/* Dica (tooltip): inscrição em Cinzel, caixa-alta, com filete dourado */
+.mat-mdc-tooltip .mat-mdc-tooltip-surface {
+  border: 1px solid var(--rule-strong);
+  font-family: var(--font-display);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Aviso (snackbar): filete dourado à esquerda, como o toast do kit */
+.mat-mdc-snack-bar-container .mat-mdc-snackbar-surface {
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--color-ouro-400);
+  border-radius: 6px;
+  box-shadow: var(--shadow-panel);
 }
 
 /* --- 6. Arrastar para reordenar (CDK drag-drop) ------------------------- */
@@ -197,8 +275,9 @@ fieldset:disabled {
 .cdk-drag-preview {
   z-index: 10000 !important;
   border-radius: 6px;
-  background: var(--color-ink-800);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 0.5);
+  border: 1px solid var(--rule);
+  background: var(--color-couro-800);
+  box-shadow: var(--shadow-panel);
 }
 .cdk-drop-list-dragging .cdk-drag:not(.cdk-drag-placeholder),
 .cdk-drag-animating {

@@ -156,7 +156,7 @@ export class FogLayer {
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
     ctx.filter = 'none';
-    ctx.fillStyle = player ? 'rgba(4, 6, 12, 1)' : 'rgba(4, 6, 12, 0.45)';
+    ctx.fillStyle = player ? 'rgba(31, 20, 13, 1)' : 'rgba(31, 20, 13, 0.45)';
     ctx.fillRect(0, 0, w, h);
 
     ctx.globalCompositeOperation = 'destination-out';
@@ -178,7 +178,7 @@ export class FogLayer {
     if (!player) {
       ctx.globalCompositeOperation = 'source-over';
       ctx.filter = 'none';
-      ctx.strokeStyle = 'rgba(169, 199, 255, 0.55)';
+      ctx.strokeStyle = 'rgba(232, 201, 122, 0.55)';
       ctx.lineWidth = Math.max(2, Math.max(w, h) / 1200);
       ctx.setLineDash([12, 8]);
       for (const poly of polygons) this.trace(ctx, poly).stroke();

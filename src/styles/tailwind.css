@@ -8,44 +8,120 @@
    em que o comando foi executado, e um `ng serve` dentro de server/ gera o app sem estilos. */
 @import "tailwindcss" source("..");
 
+/* Visual "grimório do cartógrafo" (o mesmo do Worldbuilder's Dream): um livro antigo de capa de couro.
+   Couro escuro com filetes dourados nas barras e painéis (60%), pergaminho no texto e nas páginas de
+   leitura (30%) e ouro só onde o olho precisa ir (10%: ação principal, item ativo, seleção, foco).
+   Os NOMES dos tokens continuam os antigos (ink, astral, star) para não mexer em centenas de templates:
+     ink    = couro       (superfícies)
+     astral = ouro        (ações, foco, seleção)
+     star   = pergaminho  (títulos e realces)
+   slate, white, red e emerald do Tailwind também foram trocados pelas versões quentes da paleta. */
 @theme static {
-  /* --- Tipografia: letras angulares, inspiradas em runas ---
-     Tektur (títulos): contornos octogonais e miolos retangulares.
-     Chakra Petch (texto): cantos chanfrados, legível em tamanhos pequenos. */
-  --font-sans: "Chakra Petch", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Tektur", "Chakra Petch", ui-sans-serif, sans-serif;
+  /* --- Tipografia ---
+     Cinzel (títulos, inscrições), EB Garamond (nomes e texto de leitura),
+     Inter (interface) e JetBrains Mono (medidas, datas e números). */
+  --font-sans: "Inter", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --font-display: "Cinzel", "Trajan Pro", Georgia, serif;
+  --font-book: "EB Garamond", Garamond, Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
 
-  /* --- Cantos mais retos (estética angular) --- */
+  /* --- Cantos: 6px nos controles, 10px nos painéis --- */
   --radius-md: 0.25rem;
   --radius-lg: 0.375rem;
-  --radius-xl: 0.5rem;
-  --radius-2xl: 0.625rem;
-  --radius-3xl: 0.875rem;
+  --radius-xl: 0.625rem;
+  --radius-2xl: 0.75rem;
+  --radius-3xl: 1rem;
 
-  /* --- Superfícies: preto espacial com leve tom azulado --- */
-  --color-ink-950: #04060c;
-  --color-ink-900: #080c18;
-  --color-ink-850: #0c1222;
-  --color-ink-800: #111a30;
-  --color-ink-700: #18243f;
-  --color-ink-600: #253457;
+  /* --- Sombra quente dos painéis --- */
+  --shadow-panel: 0 8px 24px rgb(15 9 5 / 45%);
 
-  /* --- Astral: azul principal (ações, foco, seleção) --- */
-  --color-astral-300: #a9c7ff;
-  --color-astral-400: #7aa7ff;
-  --color-astral-500: #4f86f7;
-  --color-astral-600: #3462d6;
+  /* --- ink = couro: superfícies --- */
+  --color-ink-950: #1f140d;
+  --color-ink-900: #2b1c12;
+  --color-ink-850: #322115;
+  --color-ink-800: #3a2618;
+  --color-ink-700: #4e3422;
+  --color-ink-600: #6b4a30;
 
-  /* --- Star: branco estelar (títulos e realces) --- */
-  --color-star-300: #f5f8ff;
-  --color-star-400: #dce6ff;
-  --color-star-500: #b6c8f2;
+  /* --- astral = ouro: ações, foco, seleção (só destaque) --- */
+  --color-astral-300: #e8c97a;
+  --color-astral-400: #d9b25f;
+  --color-astral-500: #b8903f;
+  --color-astral-600: #8a6a2a;
+
+  /* --- star = pergaminho: títulos e realces --- */
+  --color-star-300: #f4ead3;
+  --color-star-400: #efe3c8;
+  --color-star-500: #e3d2ac;
+
+  /* --- Nomes do kit, para código novo --- */
+  --color-couro-950: #1f140d;
+  --color-couro-900: #2b1c12;
+  --color-couro-800: #3a2618;
+  --color-couro-700: #4e3422;
+  --color-couro-600: #6b4a30;
+  --color-couro-500: #8a6444;
+  --color-pergaminho-50: #f4ead3;
+  --color-pergaminho-100: #efe3c8;
+  --color-pergaminho-200: #e3d2ac;
+  --color-pergaminho-300: #d2bb8b;
+  --color-pergaminho-400: #c9b48e;
+  --color-ouro-200: #f0dca6;
+  --color-ouro-300: #e8c97a;
+  --color-ouro-400: #d9b25f;
+  --color-ouro-500: #b8903f;
+  --color-ouro-700: #8a6a2a;
+  --color-lacre: #a33a2a;
+  --color-lacre-claro: #e07a5f;
+  --color-musgo: #7f9a62;
+  --color-tinta: #5c7fa3;
+  --color-bronze: #9c7a4e;
+  --color-cobre: #8c5a3c;
+  --color-latao: #b5a27a;
+
+  /* --- Texto secundário: slate vira um pergaminho envelhecido (antes, cinza frio) --- */
+  --color-slate-50: #f4ead3;
+  --color-slate-100: #efe3c8;
+  --color-slate-200: #e3d2ac;
+  --color-slate-300: #d2bb8b;
+  --color-slate-400: #c9b48e;
+  --color-slate-500: #a8916c;
+  --color-slate-600: #8a6444;
+  --color-slate-700: #6b4a30;
+  --color-slate-800: #4e3422;
+  --color-slate-900: #3a2618;
+  --color-slate-950: #2b1c12;
+
+  /* --- Branco = pergaminho claro (texto, filetes e realces translúcidos ficam quentes) --- */
+  --color-white: #f4ead3;
+
+  /* --- Estados: red = lacre (erro), emerald = musgo (sucesso) --- */
+  --color-red-100: #f7ddd5;
+  --color-red-200: #f0bfb0;
+  --color-red-300: #ec9a84;
+  --color-red-400: #e07a5f;
+  --color-red-500: #c4543c;
+  --color-red-600: #a33a2a;
+  --color-emerald-100: #e3ead8;
+  --color-emerald-200: #c8d6b4;
+  --color-emerald-300: #a9c08d;
+  --color-emerald-400: #93ad76;
+  --color-emerald-500: #7f9a62;
+  --color-emerald-600: #64804a;
 
   /* --- Animações utilitárias --- */
-  --animate-fade-in: fade-in 180ms ease-out;
+  /* Entrada de painéis e janelas: sobe 6px e cresce de 98% (curva do kit) */
+  --animate-fade-in: fade-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
   @keyframes fade-in {
-    from { opacity: 0; transform: translateY(4px); }
+    from { opacity: 0; transform: translateY(6px) scale(0.98); }
     to   { opacity: 1; transform: none; }
+  }
+
+  /* Halo dourado pulsando (destaques no mapa) */
+  --animate-halo: halo 2.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+  @keyframes halo {
+    0%, 100% { opacity: 0.35; transform: scale(1); }
+    50%      { opacity: 0.8; transform: scale(1.25); }
   }
 
   /* Pulso de "ping" no mapa da mesa */
@@ -182,23 +258,119 @@
   50%      { transform: scale(1, var(--sy, 0.6)); }
 }
 
-/* Painel "vidro" usado nas barras sobrepostas da mesa e janelas */
+/* --- Matéria do grimório: filetes e texturas (ruído procedural próprio, em SVG, sem emendas) --- */
+:root {
+  --rule: color-mix(in oklab, var(--color-ouro-500) 40%, transparent);       /* borda dos painéis */
+  --rule-inner: color-mix(in oklab, var(--color-ouro-500) 18%, transparent); /* filete interno, a 4px */
+  --rule-strong: var(--color-ouro-500);                                       /* menus, popovers, ornamentos */
+  --divider: color-mix(in oklab, var(--color-couro-500) 50%, transparent);   /* divisões internas */
+  --accent-glow: color-mix(in oklab, var(--color-ouro-300) 55%, transparent); /* brilho da seleção */
+
+  --texture-leather: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='256' height='256'><filter id='m' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='0.035' numOctaves='3' seed='11' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.04 0 0 0 0 0.025 0 0 0 0 0.015 2.6 0 0 0 -1.05'/></filter><filter id='p' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='2' seed='4' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.04 0 0 0 0 0.025 0 0 0 0 0.015 -3.2 0 0 0 1.55'/></filter><filter id='s' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='0.18' numOctaves='2' seed='23' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.95 0 0 0 0 0.86 0 0 0 0 0.66 3 0 0 0 -1.6'/></filter><rect width='256' height='256' filter='url(%23m)' opacity='0.5'/><rect width='256' height='256' filter='url(%23p)' opacity='0.35'/><rect width='256' height='256' filter='url(%23s)' opacity='0.08'/></svg>");
+  --texture-parchment: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='256' height='256'><filter id='a' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='0.012' numOctaves='4' seed='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.42 0 0 0 0 0.29 0 0 0 0 0.16 2.4 0 0 0 -1'/></filter><filter id='f' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='0.008 0.35' numOctaves='2' seed='9' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.42 0 0 0 0 0.29 0 0 0 0 0.16 4 0 0 0 -2.1'/></filter><filter id='g' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='1' seed='17' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.42 0 0 0 0 0.29 0 0 0 0 0.16 -2.5 0 0 0 1.35'/></filter><rect width='256' height='256' filter='url(%23a)' opacity='0.14'/><rect width='256' height='256' filter='url(%23f)' opacity='0.09'/><rect width='256' height='256' filter='url(%23g)' opacity='0.08'/></svg>");
+  --vignette-page: radial-gradient(ellipse at center, transparent 55%, color-mix(in oklab, var(--color-couro-600) 22%, transparent) 100%);
+}
+
+/* Seleção de texto em ouro e foco visível: anel ouro-300 de 2px, a 2px do controle (ouro-700 no
+   pergaminho). Na camada base, para `outline-none` e os anéis próprios dos campos continuarem valendo. */
+@layer base {
+  ::selection {
+    background-color: var(--color-ouro-400);
+    color: var(--color-couro-950);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-ouro-300);
+    outline-offset: 2px;
+  }
+  .page :focus-visible {
+    outline-color: var(--color-ouro-700);
+  }
+}
+
+/* Alto contraste: sem texturas, filetes sólidos */
+@media (prefers-contrast: more) {
+  :root {
+    --texture-leather: none;
+    --texture-parchment: none;
+    --vignette-page: none;
+    --rule: var(--color-ouro-500);
+    --rule-inner: var(--color-ouro-500);
+    --divider: var(--color-couro-500);
+  }
+}
+
+/* Painel de couro (o nome "glass" ficou do visual antigo): barras sobrepostas da mesa, submenus e popovers.
+   Opaco a 95%, com textura, borda dourada a 40% e filete interno a 4px. Nada de vidro fosco. */
 @utility glass {
-  background-color: color-mix(in oklab, var(--color-ink-900) 82%, transparent);
-  backdrop-filter: blur(14px) saturate(140%);
-  border: 1px solid color-mix(in oklab, var(--color-astral-300) 12%, transparent);
+  background-color: color-mix(in oklab, var(--color-couro-900) 95%, transparent);
+  background-image: var(--texture-leather);
+  border: 1px solid var(--rule);
+  outline: 1px solid var(--rule-inner);
+  outline-offset: -4px;
+  color: var(--color-pergaminho-100);
+}
+/* O mesmo couro sem o filete interno, para peças pequenas (abas das bordas, pílulas, rótulos no mapa) */
+@utility glass-sm {
+  background-color: color-mix(in oklab, var(--color-couro-900) 95%, transparent);
+  background-image: var(--texture-leather);
+  border: 1px solid var(--rule);
+  color: var(--color-pergaminho-100);
+}
+
+/* Só o couro (fundo e textura), para barras fixas da página: barra lateral, cabeçalho, explorador.
+   A borda vem à parte (ex.: border-r border-astral-500/30). */
+@utility leather {
+  background-color: var(--color-couro-900);
+  background-image: var(--texture-leather);
+}
+
+/* Página de pergaminho: leitura (documentos). Texto em couro, vinheta e fibras. */
+@utility page {
+  background-color: var(--color-pergaminho-50);
+  background-image: var(--vignette-page), var(--texture-parchment);
+  color: var(--color-couro-900);
+  color-scheme: light;
+}
+
+/* Divisor com losango dourado no meio: <div class="divider-gem"><i></i></div> */
+@utility divider-gem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--rule-strong);
+  &::before,
+  &::after {
+    content: "";
+    flex: 1;
+    border-top: 1px solid var(--rule);
+  }
+  & > i {
+    width: 7px;
+    height: 7px;
+    background: currentColor;
+    transform: rotate(45deg);
+  }
+}
+
+/* Inscrição: Cinzel em caixa-alta espaçada (títulos de barra, eras, dicas de ferramenta) */
+@utility inscription {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 /* Ficha de personagem: card, título de card, rótulo de campo e campo de texto */
 @utility sheet-card {
-  @apply rounded-xl bg-ink-900/80 p-4 ring-1 ring-white/10;
+  @apply rounded-xl p-4;
+  background-color: color-mix(in oklab, var(--color-couro-800) 70%, transparent);
+  border: 1px solid var(--rule-inner);
 }
 @utility sheet-title {
-  @apply mb-3 flex items-center gap-1.5 font-display text-sm tracking-wide text-star-300;
+  @apply mb-3 flex items-center gap-1.5 font-display text-sm font-semibold uppercase tracking-[0.08em] text-astral-400;
 }
 @utility sheet-label {
   @apply flex flex-col gap-0.5 text-[11px] font-semibold uppercase tracking-widest text-slate-500;
 }
 @utility sheet-input {
-  @apply h-8 rounded-md bg-ink-950 px-2 text-sm font-normal normal-case tracking-normal text-slate-100 outline-none ring-1 ring-white/10 placeholder:text-slate-600 focus:ring-astral-500/60;
+  @apply h-8 rounded-md bg-ink-700 px-2 text-sm font-normal normal-case tracking-normal text-slate-100 outline-none ring-1 ring-astral-500/40 placeholder:text-slate-400/70 focus:ring-astral-300;
 }

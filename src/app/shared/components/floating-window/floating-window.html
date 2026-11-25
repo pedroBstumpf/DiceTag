@@ -1,12 +1,12 @@
 <!-- Barra de título: arraste para mover, duplo clique para maximizar -->
 <header
-  class="flex h-11 shrink-0 touch-none items-center gap-1 border-b border-white/5 bg-ink-800/80 pl-3 pr-1"
+  class="flex h-11 shrink-0 touch-none items-center gap-1 border-b border-astral-500/30 bg-ink-800/70 pl-3 pr-1"
   [class]="pinned() || maximized() ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'"
   (pointerdown)="startPointer($event, 'move')"
   (dblclick)="toggleMaximize()"
 >
   <mat-icon class="!size-5 shrink-0 !text-[20px]" [class]="iconClass()">{{ icon() }}</mat-icon>
-  <h3 class="min-w-0 flex-1 truncate pl-1 pr-2 text-sm font-medium text-slate-200">{{ title() }}</h3>
+  <h3 class="min-w-0 flex-1 truncate pl-1 pr-2 font-book text-[17px] font-medium leading-none text-star-400">{{ title() }}</h3>
 
   <!-- Controles da janela -->
   <button

@@ -1,6 +1,6 @@
 <div class="mx-auto flex max-w-6xl flex-col gap-10 px-4 pb-16 pt-4 sm:px-8 sm:pt-8">
   <!-- ===== Banner com a logo ===== -->
-  <section class="relative overflow-hidden rounded-3xl ring-1 ring-white/10">
+  <section class="relative overflow-hidden rounded-3xl border border-astral-500 shadow-panel">
     <img
       src="images/zehenia-banner.jpg"
       alt="Crônicas de Zehenia"
@@ -21,7 +21,7 @@
             <mat-icon>add</mat-icon>
             Criar mesa
           </button>
-          <a mat-stroked-button class="!h-11 !bg-ink-950/50 backdrop-blur" routerLink="/worldbuild">
+          <a mat-stroked-button class="!h-11 !bg-ink-950/70" routerLink="/worldbuild">
             <mat-icon>public</mat-icon>
             Worldbuild
           </a>
@@ -33,13 +33,13 @@
   <section class="grid gap-4 md:grid-cols-3">
     @for (card of features(); track card.title) {
       <article
-        class="group flex flex-col gap-3 rounded-2xl border border-white/5 bg-ink-900 p-6 transition-all hover:-translate-y-0.5 hover:border-astral-500/30 hover:bg-ink-850"
+        class="leather group flex flex-col gap-3 rounded-xl border border-astral-500/35 p-6 shadow-panel transition-transform hover:-translate-y-0.5 hover:border-astral-500/70"
       >
-        <span class="grid size-11 place-items-center rounded-xl bg-astral-500/15 text-astral-300">
-          <mat-icon>{{ card.icon }}</mat-icon>
+        <span class="m-1.5 grid size-9 rotate-45 place-items-center rounded-md border border-astral-500/60 bg-ink-800 text-astral-300">
+          <mat-icon class="-rotate-45">{{ card.icon }}</mat-icon>
         </span>
-        <h2 class="font-display text-lg text-slate-100">{{ card.title }}</h2>
-        <p class="flex-1 text-sm leading-relaxed text-slate-400">{{ card.text }}</p>
+        <h2 class="inscription text-base font-semibold text-astral-400">{{ card.title }}</h2>
+        <p class="flex-1 font-book text-[17px] leading-relaxed text-slate-300">{{ card.text }}</p>
         <button mat-button class="-ml-3 self-start" (click)="card.run()">
           {{ card.cta }}
           <mat-icon iconPositionEnd class="transition-transform group-hover:translate-x-0.5">arrow_forward</mat-icon>
@@ -52,13 +52,14 @@
   <section class="flex flex-col gap-4">
     <header class="flex items-center gap-3">
       <mat-icon class="text-star-400">campaign</mat-icon>
-      <h2 class="font-display text-xl text-slate-100">Notícias e anúncios</h2>
+      <h2 class="inscription text-lg font-semibold text-astral-400">Notícias e anúncios</h2>
+      <div class="divider-gem flex-1" aria-hidden="true"><i></i></div>
     </header>
 
     @if (news.posts().length) {
       <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         @for (post of news.posts(); track post.id) {
-          <article class="overflow-hidden rounded-2xl border border-white/5 bg-ink-900">
+          <article class="leather overflow-hidden rounded-xl border border-astral-500/35 shadow-panel">
             @if (post.imageUrl) {
               <img [src]="post.imageUrl" alt="" class="aspect-video w-full object-cover" loading="lazy" />
             }
@@ -75,7 +76,7 @@
       </div>
     } @else {
       <app-empty-state
-        class="rounded-2xl border border-dashed border-white/10 bg-ink-900/40"
+        class="rounded-xl border border-dashed border-astral-500/30 bg-ink-900/40"
         icon="newspaper"
         title="Nenhuma novidade por enquanto"
         message="Atualizações, eventos e anúncios de Crônicas de Zehenia aparecerão aqui."

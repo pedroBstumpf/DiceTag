@@ -1,5 +1,5 @@
 <aside
-  class="flex h-full flex-col border-r border-white/5 bg-ink-900/95 backdrop-blur-xl transition-[width,transform] duration-200 ease-out"
+  class="leather flex h-full flex-col border-r border-astral-500/30 transition-[width,transform] duration-200 ease-out"
   [class]="
     layout.isMobile()
       ? 'fixed inset-y-0 left-0 z-50 w-72 shadow-2xl ' + (layout.mobileOpen() ? 'translate-x-0' : '-translate-x-full')
@@ -8,11 +8,11 @@
 >
   <!-- ===== Marca ===== -->
   <a routerLink="/" class="flex h-16 shrink-0 items-center gap-3 px-4" (click)="layout.closeMobile()">
-    <img src="images/zehenia-emblem.png" alt="Crônicas de Zehenia" class="size-10 shrink-0 rounded-xl object-cover ring-1 ring-white/10" />
+    <img src="images/zehenia-emblem.png" alt="Crônicas de Zehenia" class="size-10 shrink-0 rounded-xl object-cover ring-1 ring-astral-500/60" />
     @if (expanded()) {
       <span class="flex flex-col leading-none">
-        <span class="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-400">Crônicas de</span>
-        <span class="font-display text-xl font-bold tracking-wide text-star-300">Zehenia</span>
+        <span class="inscription text-[10px] font-semibold tracking-[0.2em] text-slate-400">Crônicas de</span>
+        <span class="inscription text-xl font-bold tracking-[0.12em] text-astral-400">Zehenia</span>
       </span>
     }
   </a>
@@ -24,7 +24,7 @@
         <li>
           <a
             [routerLink]="link.route"
-            routerLinkActive="!bg-astral-500/15 !text-astral-300"
+            routerLinkActive="!bg-ink-700 !text-astral-300 shadow-[inset_3px_0_0_var(--color-astral-400)]"
             [routerLinkActiveOptions]="{ exact: link.route === '/' }"
             [matTooltip]="expanded() ? '' : link.label"
             matTooltipPosition="right"
@@ -60,7 +60,7 @@
                 [matTooltip]="expanded() ? '' : world.name"
                 matTooltipPosition="right"
                 class="flex h-10 w-full items-center gap-3 rounded-xl px-3 text-left text-sm transition-colors hover:bg-white/5 hover:text-white"
-                [class]="active ? '!bg-astral-500/15 !text-astral-300' : 'text-slate-300'"
+                [class]="active ? '!bg-ink-700 !text-astral-300 shadow-[inset_3px_0_0_var(--color-astral-400)]' : 'text-slate-300'"
                 (click)="openWorld(world)"
               >
                 <mat-icon class="shrink-0 text-sky-300">public</mat-icon>

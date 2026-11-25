@@ -44,18 +44,18 @@ export type WallDraft =
 
       <!-- Alças da parede selecionada (modo "Editar paredes") -->
       @for (h of handles(); track $index) {
-        <circle [attr.cx]="h.x" [attr.cy]="h.y" [attr.r]="ui(6)" fill="#04060c" [attr.stroke]="selectedColor" [attr.stroke-width]="ui(2)" />
+        <circle [attr.cx]="h.x" [attr.cy]="h.y" [attr.r]="ui(6)" fill="#1f140d" [attr.stroke]="selectedColor" [attr.stroke-width]="ui(2)" />
       }
 
       <!-- Parede em construção -->
       @if (draft(); as d) {
         @if (d.kind === 'line') {
-          <polyline [attr.points]="draftPoints(d)" stroke="#f5f8ff" [attr.stroke-width]="ui(2.5)" />
+          <polyline [attr.points]="draftPoints(d)" stroke="#f4ead3" [attr.stroke-width]="ui(2.5)" />
           @for (p of d.points; track $index) {
-            <circle [attr.cx]="p.x" [attr.cy]="p.y" [attr.r]="ui($first ? 6 : 4)" [attr.fill]="$first ? '#7aa7ff' : '#f5f8ff'" />
+            <circle [attr.cx]="p.x" [attr.cy]="p.y" [attr.r]="ui($first ? 6 : 4)" [attr.fill]="$first ? '#d9b25f' : '#f4ead3'" />
           }
         } @else if (d.kind === 'circle') {
-          <circle [attr.cx]="d.cx" [attr.cy]="d.cy" [attr.r]="d.r" stroke="#f5f8ff" [attr.stroke-width]="ui(2.5)" />
+          <circle [attr.cx]="d.cx" [attr.cy]="d.cy" [attr.r]="d.r" stroke="#f4ead3" [attr.stroke-width]="ui(2.5)" />
         } @else {
           <line [attr.x1]="d.a.x" [attr.y1]="d.a.y" [attr.x2]="d.b.x" [attr.y2]="d.b.y" stroke="#f59e0b" [attr.stroke-width]="ui(5)" />
         }
@@ -72,8 +72,8 @@ export class WallsLayer {
   /** Modo "Editar paredes": mostra as alças da parede selecionada. */
   readonly editing = input(false);
 
-  readonly color = '#7aa7ff';
-  readonly selectedColor = '#f5f8ff';
+  readonly color = '#d9b25f';
+  readonly selectedColor = '#f4ead3';
 
   /** Alças de edição (pontos da linha ou raio do círculo). */
   readonly handles = computed(() => {

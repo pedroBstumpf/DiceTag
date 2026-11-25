@@ -3,8 +3,9 @@
 Mesa virtual (VTT) para jogar RPG de mesa online com amigos no mundo de Zehenia (projeto antes chamado DiceTag).
 Angular 21 · Angular Material (M3) · Tailwind CSS 4 · Tiptap (editor de texto) · Vitest.
 
-Visual: tema espacial (preto, azul e branco), fontes angulares inspiradas em runas
-(Tektur nos títulos, Chakra Petch no texto) e ícones Material Symbols Sharp.
+Visual: "o grimório do cartógrafo" (o mesmo do Worldbuilder's Dream): painéis de couro com filetes dourados,
+páginas de pergaminho e ouro só no destaque. Fontes Cinzel (títulos), EB Garamond (leitura), Inter (interface) e
+JetBrains Mono (números), e ícones Material Symbols Rounded.
 
 ## Como narrar uma sessão
 
@@ -54,7 +55,7 @@ Arquitetura detalhada (camadas, fluxos de dados e onde fica o estado) em [`ARCHI
 
 ```
 src/
-├── index.html                 # fontes (Chakra Petch, Tektur, Material Symbols)
+├── index.html                 # fontes (Cinzel, EB Garamond, Inter, JetBrains Mono, Material Symbols)
 ├── styles.scss                # tema Angular Material + estilos globais
 ├── styles/tailwind.css        # Tailwind + design tokens (cores, fontes, animações)
 └── app/

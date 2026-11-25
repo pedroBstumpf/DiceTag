@@ -115,7 +115,7 @@
           <input #pwd matInput type="password" autocomplete="current-password" [value]="deletePassword()" (input)="deletePassword.set(pwd.value)" />
         </mat-form-field>
       }
-      <button mat-flat-button type="submit" class="!bg-red-500 !text-white" [disabled]="(hasPassword() && !deletePassword()) || busy()">Excluir</button>
+      <button mat-flat-button type="submit" class="!bg-red-600 !text-white" [disabled]="(hasPassword() && !deletePassword()) || busy()">Excluir</button>
       <button mat-button type="button" (click)="cancelDelete()">Cancelar</button>
     </form>
   }

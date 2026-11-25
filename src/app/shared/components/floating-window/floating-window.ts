@@ -35,7 +35,7 @@ const HEADER_HEIGHT = 44;
   templateUrl: './floating-window.html',
   host: {
     class:
-      'pointer-events-auto absolute flex flex-col overflow-hidden rounded-xl border bg-ink-850/95 shadow-2xl shadow-black/60 backdrop-blur-md animate-fade-in',
+      'glass pointer-events-auto absolute flex flex-col overflow-hidden rounded-xl shadow-panel animate-fade-in',
     '[class]': 'stateClass()',
     '[style.z-index]': 'zIndex()',
     '[style.left.px]': 'maximized() ? null : geometry().x',
@@ -72,7 +72,8 @@ export class FloatingWindow {
   /** Classes que dependem do estado (borda ativa, maximizada, mobile). */
   protected readonly stateClass = computed(() =>
     [
-      this.active() ? 'border-astral-400/50' : 'border-white/10',
+      // Janela em foco: filete dourado forte (as outras ficam com o filete a 40% do painel de couro)
+      this.active() ? 'border-astral-500' : '',
       this.maximized() ? 'inset-0 rounded-none' : '',
       // No mobile a janela aberta ocupa a tela; minimizada continua compacta (largura do conteúdo, até 22rem)
       this.minimized() ? 'w-max max-w-[22rem]' : 'max-md:inset-0! max-md:w-auto! max-md:h-auto! max-md:rounded-none',

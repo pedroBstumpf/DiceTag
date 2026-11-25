@@ -43,9 +43,9 @@ Três princípios guiam o código:
 ```
 src/
 ├── main.ts                 # bootstrap (appConfig + App)
-├── index.html              # fontes (Tektur, Chakra Petch, Material Symbols Sharp)
+├── index.html              # fontes (Cinzel, EB Garamond, Inter, JetBrains Mono, Material Symbols Rounded)
 ├── styles.scss             # tema Material M3 escuro + overrides + estilos do editor
-├── styles/tailwind.css     # Tailwind 4: tokens de design, animações, utilitários (.glass, sheet-*)
+├── styles/tailwind.css     # Tailwind 4: tokens de design, texturas, animações, utilitários (glass, page, leather, sheet-*)
 └── app/
     ├── app.ts / app.config.ts / app.routes.ts
     ├── core/               # domínio e dados — sem UI
@@ -433,8 +433,8 @@ Também têm specs:
 
 ## 10. Interface e estilo
 
-- **Tailwind 4** nas classes dos templates; tokens de design (`ink-*`, `astral-*`, `star-*`) em
-  `src/styles/tailwind.css`. Sem `.scss` por componente.
+- **Tailwind 4** nas classes dos templates; tokens de design (`ink-*` = couro, `astral-*` = ouro, `star-*` = pergaminho;
+  visual "grimório do cartógrafo", ver CLAUDE.md §6) em `src/styles/tailwind.css`. Sem `.scss` por componente.
 - **Angular Material** (M3, escuro) para botões, menus, diálogos, tooltips e snackbars; overrides em `styles.scss`.
 - **CDK** para reordenar as páginas das anotações (`cdkDropList`) e para o overlay do `QuickRoll`.
 - **Arrastar nativo do HTML5** (`draggable` + `dragstart`/`drop`) para levar fichas do painel ao mapa,

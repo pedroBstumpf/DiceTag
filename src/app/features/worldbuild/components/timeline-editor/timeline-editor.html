@@ -20,7 +20,7 @@
 <!-- ===== Quadro (pan com o fundo, zoom com a roda) ===== -->
 <div
   #stage
-  class="relative min-h-0 flex-1 touch-none select-none overflow-hidden bg-[radial-gradient(circle,_rgb(255_255_255/0.07)_1px,_transparent_1px)]"
+  class="relative min-h-0 flex-1 touch-none select-none overflow-hidden bg-[radial-gradient(circle,_rgb(232_201_122/0.09)_1px,_transparent_1px)]"
   [class]="panning() ? 'cursor-grabbing' : 'cursor-default'"
   [style.background-size]="grid().size"
   [style.background-position]="grid().position"
@@ -53,7 +53,7 @@
           [attr.y1]="draft.from.y"
           [attr.x2]="draft.to.x"
           [attr.y2]="draft.to.y"
-          stroke="#a9c7ff"
+          stroke="#e8c97a"
           stroke-width="2"
           stroke-dasharray="6 4"
         />

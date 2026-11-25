@@ -59,7 +59,7 @@ export interface DropPointerDown {
         <!-- Anel de seleção (losango) -->
         @if (selectedId() === d.id) {
           <span
-            class="pointer-events-none absolute inset-[6%] rotate-45 border-astral-400 shadow-[0_0_12px_rgb(122_167_255/0.7)]"
+            class="pointer-events-none absolute inset-[6%] rotate-45 border-astral-400 shadow-[0_0_12px_rgb(232_201_122/0.7)]"
             [style.border-width.px]="ui(2.5)"
           ></span>
         }

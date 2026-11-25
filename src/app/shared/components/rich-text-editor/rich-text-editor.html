@@ -1,5 +1,5 @@
 <!-- ===== Barra de formatação (some no modo só leitura) ===== -->
-<div class="flex shrink-0 items-center gap-0.5 overflow-x-auto border-b border-white/5 bg-ink-900/60 px-2 py-1.5" [class.hidden]="!editable()">
+<div class="flex shrink-0 items-center gap-0.5 overflow-x-auto border-b border-astral-500/30 bg-ink-900/60 px-2 py-1.5" [class.hidden]="!editable()">
   @for (group of toolbar; track $index; let last = $last) {
     @for (btn of group; track btn.icon) {
       <button
@@ -21,8 +21,8 @@
   }
 </div>
 
-<!-- ===== Página ===== -->
-<div class="min-h-0 flex-1 overflow-y-auto">
+<!-- ===== Página (de pergaminho nos documentos) ===== -->
+<div class="min-h-0 flex-1 overflow-y-auto" [class.page]="paper()">
   <div class="mx-auto max-w-3xl px-6 py-8 sm:px-10">
     <!-- Conteúdo projetado (ex.: título do documento) -->
     <ng-content />

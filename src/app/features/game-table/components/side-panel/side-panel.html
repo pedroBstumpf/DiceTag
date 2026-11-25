@@ -1,17 +1,18 @@
 <!-- ===== Abas ===== -->
-<nav class="grid shrink-0 auto-cols-fr grid-flow-col gap-1 border-b border-white/5 p-1.5">
+<!-- Aba ativa = filete dourado embaixo (abas do kit) -->
+<nav class="grid shrink-0 auto-cols-fr grid-flow-col gap-1 border-b border-astral-500/30 px-1.5 pt-1.5">
   @for (t of tabs(); track t.id) {
     <button
       type="button"
-      class="relative flex flex-col items-center gap-0.5 rounded-lg py-1.5 text-[11px] font-medium transition-colors"
-      [class]="tab() === t.id ? 'bg-astral-500/20 text-astral-300' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'"
+      class="relative -mb-px flex flex-col items-center gap-0.5 border-b-2 py-1.5 text-[11px] font-medium transition-colors"
+      [class]="tab() === t.id ? 'border-astral-400 text-astral-300' : 'border-transparent text-slate-400 hover:text-slate-200'"
       (click)="selectTab(t.id)"
     >
       <mat-icon class="!text-[20px]">{{ t.icon }}</mat-icon>
       {{ t.label }}
       <!-- Mensagem nova no chat -->
       @if (t.id === 'chat' && chatUnread()) {
-        <span class="absolute right-2.5 top-1.5 size-2 rounded-full bg-astral-400 shadow-[0_0_6px_rgb(122_167_255)]"></span>
+        <span class="absolute right-2.5 top-1.5 size-2 rounded-full bg-astral-400 shadow-[0_0_6px_rgb(232_201_122)]"></span>
       }
     </button>
   }

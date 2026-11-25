@@ -13,8 +13,8 @@ export const appConfig: ApplicationConfig = {
     // Rotas com scroll restaurado e parâmetros de rota como inputs
     provideRouter(routes, withComponentInputBinding(), withInMemoryScrolling({ scrollPositionRestoration: 'top' })),
 
-    // <mat-icon> usa a fonte Material Symbols Sharp por padrão
-    { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-sharp' } },
+    // <mat-icon> usa a fonte Material Symbols Rounded por padrão (traço fino, peso 300)
+    { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
 
     // Avisos (snackbar) curtos e discretos
     { provide: MAT_SNACK_BAR_DEFAULT_OPTIONS, useValue: { duration: 3000, horizontalPosition: 'center', verticalPosition: 'bottom' } },

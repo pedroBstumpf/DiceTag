@@ -34,8 +34,8 @@
       class="glass absolute bottom-3 right-3 z-10 flex w-80 max-w-[calc(100vw-24px)] flex-col overflow-hidden rounded-xl shadow-xl shadow-black/40 animate-fade-in"
       [class]="panels.scenes ? 'top-[60px]' : 'top-3'"
     >
-      <header class="flex h-10 shrink-0 items-center justify-between border-b border-white/5 pl-4 pr-1">
-        <h2 class="font-display text-sm tracking-wide text-star-300">Painel da mesa</h2>
+      <header class="flex h-10 shrink-0 items-center justify-between border-b border-astral-500/30 pl-4 pr-1">
+        <h2 class="inscription text-xs font-semibold text-star-400">Painel da mesa</h2>
         <button mat-icon-button class="!size-8 !p-1" matTooltip="Esconder painel" (click)="session.togglePanel('side')">
           <mat-icon class="!text-[18px]">right_panel_close</mat-icon>
         </button>
@@ -129,7 +129,7 @@
     <!-- Modo imersivo: reabre todas as barras de uma vez (o mesmo que a tecla "\") -->
     <button
       type="button"
-      class="glass absolute right-3 top-3 z-30 flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs text-slate-300 opacity-60 transition-opacity hover:text-white hover:opacity-100"
+      class="glass-sm absolute right-3 top-3 z-30 flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs text-slate-300 opacity-60 transition-opacity hover:text-white hover:opacity-100"
       matTooltip="Mostrar todas as barras (tecla \)"
       matTooltipPosition="left"
       (click)="session.toggleImmersive()"
@@ -141,7 +141,7 @@
   @if (!panels.scenes) {
     <button
       type="button"
-      class="glass absolute left-1/2 top-0 z-30 flex h-6 w-16 -translate-x-1/2 items-center justify-center rounded-b-lg border-t-0 text-slate-400 opacity-50 transition-opacity hover:text-white hover:opacity-100"
+      class="glass-sm absolute left-1/2 top-0 z-30 flex h-6 w-16 -translate-x-1/2 items-center justify-center rounded-b-lg border-t-0 text-slate-400 opacity-50 transition-opacity hover:text-white hover:opacity-100"
       matTooltip="Mostrar cenas"
       (click)="session.togglePanel('scenes')"
     >
@@ -151,7 +151,7 @@
   @if (!panels.tools) {
     <button
       type="button"
-      class="glass absolute left-0 top-1/2 z-30 flex h-16 w-6 -translate-y-1/2 items-center justify-center rounded-r-lg border-l-0 text-slate-400 opacity-50 transition-opacity hover:text-white hover:opacity-100"
+      class="glass-sm absolute left-0 top-1/2 z-30 flex h-16 w-6 -translate-y-1/2 items-center justify-center rounded-r-lg border-l-0 text-slate-400 opacity-50 transition-opacity hover:text-white hover:opacity-100"
       matTooltip="Mostrar ferramentas"
       matTooltipPosition="right"
       (click)="session.togglePanel('tools')"
@@ -162,7 +162,7 @@
   @if (!panels.side) {
     <button
       type="button"
-      class="glass absolute right-0 top-1/2 z-30 flex h-16 w-6 -translate-y-1/2 items-center justify-center rounded-l-lg border-r-0 text-slate-400 opacity-50 transition-opacity hover:text-white hover:opacity-100"
+      class="glass-sm absolute right-0 top-1/2 z-30 flex h-16 w-6 -translate-y-1/2 items-center justify-center rounded-l-lg border-r-0 text-slate-400 opacity-50 transition-opacity hover:text-white hover:opacity-100"
       matTooltip="Mostrar painel da mesa"
       matTooltipPosition="left"
       (click)="session.togglePanel('side')"
@@ -173,7 +173,7 @@
   @if (!panels.actions) {
     <button
       type="button"
-      class="glass absolute bottom-0 left-1/2 z-30 flex h-6 w-16 -translate-x-1/2 items-center justify-center rounded-t-lg border-b-0 text-slate-400 opacity-50 transition-opacity hover:text-white hover:opacity-100"
+      class="glass-sm absolute bottom-0 left-1/2 z-30 flex h-6 w-16 -translate-x-1/2 items-center justify-center rounded-t-lg border-b-0 text-slate-400 opacity-50 transition-opacity hover:text-white hover:opacity-100"
       matTooltip="Mostrar barra de ações"
       matTooltipPosition="above"
       (click)="session.togglePanel('actions')"

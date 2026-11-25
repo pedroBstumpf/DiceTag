@@ -17,7 +17,7 @@ export interface TokenPointerDown {
 
 /** Cor do círculo de tokens sem imagem, por tipo de ficha. */
 const NO_IDS: ReadonlySet<string> = new Set();
-const INITIAL_BG ={ character: '#3462d6', npc: '#7c4dcc' } as Record<string, string>;
+const INITIAL_BG ={ character: '#8a6a2a', npc: '#8c5a3c' } as Record<string, string>;
 /**
  * Deslize até a posição recebida do servidor. A duração acompanha o intervalo das rajadas de
  * movimento (`BURST_MS` = 100 ms em `TableSessionService`): cada posição nova chega quando o
@@ -90,7 +90,7 @@ export class TokensLayer {
   readonly textOn = readableTextOn;
 
   initialBg(token: ResolvedToken): string {
-    return INITIAL_BG[token.entry.kind] ?? '#3462d6';
+    return INITIAL_BG[token.entry.kind] ?? '#8a6a2a';
   }
 
   onDown(event: PointerEvent, token: ResolvedToken, mode: TokenPointerDown['mode']): void {

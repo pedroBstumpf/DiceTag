@@ -62,6 +62,6 @@ export class LevelPips {
 
   pipClass(n: number): string {
     if (n > this.size()) return 'bg-white/10 ring-1 ring-white/20 hover:bg-white/25';
-    return this.negative() ? 'bg-red-400 shadow-[0_0_6px_rgb(248_113_113)]' : 'bg-astral-300 shadow-[0_0_6px_rgb(122_167_255)]';
+    return this.negative() ? 'bg-red-400 shadow-[0_0_6px_rgb(248_113_113)]' : 'bg-astral-300 shadow-[0_0_6px_rgb(232_201_122)]';
   }
 }

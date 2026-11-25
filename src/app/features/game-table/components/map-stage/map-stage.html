@@ -44,7 +44,8 @@
             (load)="onImageLoad(img)"
           />
         } @else {
-          <div class="absolute inset-0 rounded-sm border border-astral-300/10 bg-ink-900/70" [class.invisible]="plane.depth < 0"></div>
+          <!-- Cena sem mapa: papel quadriculado = folha de pergaminho -->
+          <div class="page absolute inset-0 rounded-sm border border-astral-600/60 shadow-[0_0_80px_rgb(0_0_0/0.6)]" [class.invisible]="plane.depth < 0"></div>
         }
       } @else if (blobs.url(plane.blobId); as url) {
         <img
@@ -79,13 +80,15 @@
       @if (plane.focused) {
         <!-- 2. Grade -->
         @if (scene()?.showGrid ?? true) {
+          <!-- Linhas douradas sobre o mapa; cor de tinta sépia sobre o pergaminho (cena sem mapa) -->
           <div
             class="pointer-events-none absolute inset-0"
             [style.background-size]="gridSize() + 'px ' + gridSize() + 'px'"
+            [style.--grid-line]="src() ? 'rgb(232 201 122 / 0.2)' : 'rgb(107 74 48 / 0.24)'"
             style="
               background-image:
-                linear-gradient(to right, rgb(169 199 255 / 0.16) 1px, transparent 1px),
-                linear-gradient(to bottom, rgb(169 199 255 / 0.16) 1px, transparent 1px);
+                linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+                linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
             "
           ></div>
         }
@@ -184,12 +187,12 @@
               [attr.y1]="r.from.y"
               [attr.x2]="r.to.x"
               [attr.y2]="r.to.y"
-              stroke="#a9c7ff"
+              stroke="#e8c97a"
               [attr.stroke-width]="3 / scale()"
               [attr.stroke-dasharray]="10 / scale() + ' ' + 6 / scale()"
             />
-            <circle [attr.cx]="r.from.x" [attr.cy]="r.from.y" [attr.r]="5 / scale()" fill="#a9c7ff" />
-            <circle [attr.cx]="r.to.x" [attr.cy]="r.to.y" [attr.r]="5 / scale()" fill="#a9c7ff" />
+            <circle [attr.cx]="r.from.x" [attr.cy]="r.from.y" [attr.r]="5 / scale()" fill="#e8c97a" />
+            <circle [attr.cx]="r.to.x" [attr.cy]="r.to.y" [attr.r]="5 / scale()" fill="#e8c97a" />
           </svg>
         }
 
@@ -231,7 +234,7 @@
   <!-- 9. Interface: rótulo da régua (fora do mundo: sempre reto, na tela) -->
   @if (rulerLabelPos(); as pos) {
     <span
-      class="glass pointer-events-none absolute whitespace-nowrap rounded-md px-2 py-1 text-xs font-semibold text-star-300"
+      class="glass-sm pointer-events-none absolute whitespace-nowrap rounded-md px-2 py-1 font-mono text-xs font-medium tabular-nums text-astral-300"
       [style.left.px]="pos.x + 12"
       [style.top.px]="pos.y + 12"
     >
@@ -249,7 +252,7 @@
   <!-- 9. Interface: efeito de uma ação "na mão", esperando o arraste -->
   @if (session.armedFx(); as armed) {
     <div class="pointer-events-none absolute inset-x-0 top-16 flex justify-center px-4">
-      <div class="glass flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-slate-200 animate-fade-in">
+      <div class="glass-sm flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-slate-200 animate-fade-in">
         <span class="size-3 rounded-full" [style.background]="armed.color" [style.box-shadow]="'0 0 10px ' + armed.color"></span>
         <strong class="text-star-300">{{ armed.action }}</strong>
         arraste no mapa para lançar o efeito · Esc cancela
@@ -262,7 +265,7 @@
     @let level = session.mapLevels()[session.currentLevel()];
     <div class="pointer-events-none absolute bottom-28 left-1/2 -translate-x-1/2">
       @if (level) {
-        <div class="glass flex items-center gap-2 rounded-full px-3 py-1 text-xs text-slate-300 animate-fade-in">
+        <div class="glass-sm flex items-center gap-2 rounded-full px-3 py-1 text-xs text-slate-300 animate-fade-in">
           <mat-icon class="!size-4 !text-[16px] text-astral-300">layers</mat-icon>
           <span class="font-display text-star-300">{{ level.name }}</span>
           <span class="text-slate-500">{{ session.currentLevel() + 1 }}/{{ session.levelCount() }}</span>

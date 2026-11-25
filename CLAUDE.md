@@ -112,9 +112,9 @@ Configuração relevante do `angular.json` (produção):
 
 ```
 src/
-├── index.html                  # fontes: Chakra Petch, Tektur, Material Symbols Sharp
+├── index.html                  # fontes: Cinzel, EB Garamond, Inter, JetBrains Mono, Material Symbols Rounded
 ├── styles.scss                 # tema Material (M3) + overrides + base + estilos do editor (.prose-editor)
-├── styles/tailwind.css         # Tailwind 4: tokens (@theme static), animações, utilitário .glass
+├── styles/tailwind.css         # Tailwind 4: tokens (@theme static), texturas, animações, utilitários glass/page/leather
 └── app/
     ├── app.ts / app.config.ts / app.routes.ts
     ├── core/                   # regras e dados — sem UI
@@ -269,7 +269,7 @@ Rotas (`app.routes.ts`, todas lazy):
   porque o Tailwind 4 escaneia os `.ts` — escreva a classe completa, nunca concatene partes.
 - **Comentários em PT-BR**: JSDoc no topo de cada classe/serviço; `// --- Seção ---` para agrupar.
 - **Textos da interface em PT-BR.**
-- **Ícones:** `<mat-icon>` usa a fonte **Material Symbols Sharp** (configurado em `app.config.ts`).
+- **Ícones:** `<mat-icon>` usa a fonte **Material Symbols Rounded**, peso 300 (configurado em `app.config.ts`).
   Use nomes de ícone do Material Symbols. Classe `.icon-filled` deixa o ícone preenchido.
 - **Templates tipados (strict):** indexar `Record` com valor vindo de `let-` de `ng-template` dá erro TS7053.
   Solução padrão do projeto: método helper tipado no componente (`metaOf(item)`), não `$any`.
@@ -332,29 +332,58 @@ Rotas (`app.routes.ts`, todas lazy):
 
 ## 6. Design system
 
-**Tema:** espaço/universo expansivo — preto, azul e branco. Estética angular, inspirada em runas.
+**Tema:** "o grimório do cartógrafo" (o mesmo visual do Worldbuilder's Dream) — um livro antigo de capa de couro.
+Regra **60/30/10**: couro escuro com filetes dourados nas barras e painéis (60%), pergaminho no texto e nas páginas de
+leitura (30%) e **ouro só no destaque** (10%: ação principal — um botão primário por contexto —, item ativo, seleção,
+foco). Painéis opacos com sombra quente; **nada de vidro fosco** (`backdrop-blur`).
 
-Tokens (`src/styles/tailwind.css`), use sempre por nome:
+Tokens (`src/styles/tailwind.css`), use sempre por nome. **Os nomes antigos ficaram** (para não mexer em ~1.500 classes)
+e agora valem as cores do kit:
 
 | Token | Uso |
 |---|---|
-| `ink-950 … ink-600` | Superfícies (preto azulado). 950 = fundo, 900/850 = painéis, 800/700 = elevação, 600 = bordas fortes |
-| `astral-300 … 600` | Azul principal: ações, foco, seleção, item ativo |
-| `star-300 … 500` | Branco estelar: títulos e realces |
-| `slate-*` (Tailwind) | Texto secundário (cinza frio) |
+| `ink-950 … ink-600` | **Couro** (superfícies). 950 = fundo, 900/850 = painéis, 800/700 = elevação e campos, 600 = trilhos e bordas fortes |
+| `astral-300 … 600` | **Ouro**: ações, foco, seleção, item ativo. 300 = hover/foco, 400 = destaque, 500 = filetes, 600 = ouro sobre pergaminho |
+| `star-300 … 500` | **Pergaminho**: títulos e realces |
+| `slate-*`, `white` (Tailwind) | Trocados por tons de pergaminho envelhecido (texto secundário e realces translúcidos ficam quentes) |
+| `red-*`, `emerald-*` (Tailwind) | Trocados por **lacre** (erro) e **musgo** (sucesso) |
+| `couro-*`, `pergaminho-*`, `ouro-*`, `lacre`, `lacre-claro`, `musgo`, `tinta`, `bronze`, `cobre`, `latao` | Nomes do kit, para código novo |
 
-- **Fontes:** `font-display` = **Tektur** (títulos), `font-sans` = **Chakra Petch** (todo o texto).
-- **Cantos retos:** raios do Tailwind reduzidos no `@theme`; botões Material com 6px.
-- **Utilitário `.glass`:** fundo translúcido + blur + borda azul sutil. Usar em barras, submenus e popovers sobre o mapa.
-- **Utilitários da ficha** (`tailwind.css`): `sheet-card` (card), `sheet-title` (título do card), `sheet-label`
+Variáveis CSS (`:root` em `tailwind.css`): `--rule` (borda dourada a 40%), `--rule-inner` (filete interno), `--rule-strong`,
+`--divider`, `--accent-glow`, `--texture-leather`, `--texture-parchment` (ruído procedural em SVG) e `--vignette-page`.
+Com `prefers-contrast: more`, as texturas somem e os filetes ficam sólidos.
+
+- **Fontes:** `font-display` = **Cinzel** (títulos, inscrições), `font-book` = **EB Garamond** (nomes, títulos de janela,
+  texto de leitura e documentos), `font-sans` = **Inter** (interface), `font-mono` = **JetBrains Mono** (medidas, como o
+  rótulo da régua). Utilitário `inscription` = Cinzel em caixa-alta com 0,08em (títulos de barra e de seção).
+- **Cantos:** 6px nos controles (`rounded-lg`, botões Material), 10px nos painéis (`rounded-xl`).
+- **Utilitário `glass`** (o nome ficou do visual antigo): **painel de couro**, 95% opaco, textura, borda `--rule` e filete
+  interno a 4px (`outline` com `outline-offset: -4px`). Usar em barras, submenus e popovers sobre o mapa e na
+  `FloatingWindow`. `glass-sm` = o mesmo sem o filete interno, para peças pequenas (abas das bordas, pílulas, rótulos).
+  `leather` = só o couro (fundo + textura), para barras fixas da página (barra lateral, cabeçalho, explorador), com a borda à parte.
+- **Utilitário `page`:** folha de pergaminho (texto em couro, vinheta, fibras). Usado nos **documentos** do Worldbuild
+  (`RichTextEditor` com `[paper]="true"`; `.page .prose-editor` troca as cores do texto) e na **cena sem mapa** (papel
+  quadriculado, com a grade em sépia; sobre mapas a grade é dourada).
+- **Utilitário `divider-gem`:** divisor com losango dourado no meio (`<div class="divider-gem"><i></i></div>`).
+- **Ferramenta ligada** (barra de ferramentas, vista isométrica): fundo de ouro sólido com ícone em couro
+  (`bg-astral-400 text-ink-950`). **Abas** (painel da mesa, ficha): filete dourado embaixo da aba ativa.
+- **Foco visível:** anel ouro-300 de 2px, a 2px do controle (ouro-700 no pergaminho), na camada `base` do Tailwind
+  (`outline-none` e os anéis próprios dos campos continuam valendo). Seleção de texto em ouro.
+- **Utilitários da ficha** (`tailwind.css`): `sheet-card` (card), `sheet-title` (título do card, inscrição dourada), `sheet-label`
   (rótulo de campo em caixa alta) e `sheet-input` (campo de texto). A ficha usa container queries
   (`@container` + `@2xl:`/`@xl:`), porque o tamanho que importa é o da janela, não o da tela.
-- **Fundo:** campo de estrelas e nebulosas só em CSS no `body` (sem imagens).
-- **Animações:** `animate-fade-in` (entrada de painéis/janelas), `animate-ping-once` (ping no mapa),
-  `animate-eq` (barras de equalizador do som tocando).
+- **Fundo:** couro com textura e uma luz quente de lamparina, só em CSS no `body` (sem imagens).
+- **Animações:** `animate-fade-in` (entrada de painéis/janelas: sobe 6px e cresce de 98%, 200ms), `animate-ping-once`
+  (ping no mapa), `animate-eq` (barras de equalizador do som tocando), `animate-halo` (halo dourado pulsando). Anime só
+  `transform` e `opacity`.
 - **Interface dentro do mapa** (tokens, paredes, marcadores): tamanhos em px de tela convertidos com
-  `ui(px) = px / scale`; textos com mínimo legível `legible(mundo, mínimoTela)`.
-- Material: primary = `astral-400`, superfícies = `ink-*`, snackbar/menu/dialog escuros (overrides em `styles.scss`).
+  `ui(px) = px / scale`; textos com mínimo legível `legible(mundo, mínimoTela)`. Cores fixas da interface do mapa
+  (régua, paredes, contorno da visão, brilho da seleção) em ouro; a névoa é um preto quente (couro-950).
+  As **paletas de dados** (etiquetas, notas, pincel, barras Corpo/Mente/Espírito, cores dos efeitos) não mudaram: são
+  guardadas nas fichas e servem para distinguir as coisas.
+- Material: primary = ouro (`ouro-400`, texto em `couro-950`), superfícies = couro, texto = pergaminho (overrides em
+  `styles.scss`). Diálogo e menu = painel de couro com filete dourado; dica (tooltip) em Cinzel caixa-alta; aviso
+  (snackbar) com filete dourado à esquerda.
 - Logo: `public/images/zehenia-banner.jpg` (banner 1024×572) e `zehenia-emblem.png` (monograma "Z", 96px);
   `public/favicon.png` (o mesmo "Z", 64px). Na barra lateral o nome aparece em duas linhas ("Crônicas de" / "Zehenia").
 
@@ -791,7 +820,7 @@ Tokens (`src/styles/tailwind.css`), use sempre por nome:
 ### Chat (`TableState.chat`)
 - `ChatMessage { author, role, userId, at, text? | roll? }`; guarda as últimas `MAX_CHAT_MESSAGES` (300).
 - Texto em nome da conta ("Mestre" no papel de mestre); rolagens em nome do personagem/NPC que agiu.
-- Aba à esquerda de Fichas, aberta por padrão; ponto azul quando chega mensagem com outra aba aberta.
+- Aba à esquerda de Fichas, aberta por padrão; ponto dourado quando chega mensagem com outra aba aberta.
   Enter envia, Shift+Enter quebra linha; o mestre pode limpar o chat.
 
 ### Efeitos especiais (ferramenta `fx`, tecla E)
@@ -920,7 +949,7 @@ Na mesa, janelas "Token" usam o id `token:<id da colocação>` e fecham sozinhas
 
 ### Layout da mesa (`game-table.html`) — camadas da página
 0. `MapStage` ocupa a tela inteira.
-1. Barras sobrepostas com `.glass`: topo (cenas), esquerda (ferramentas + submenus), direita (painel 320px), baixo (ações).
+1. Barras sobrepostas com `glass` (painel de couro): topo (cenas), esquerda (ferramentas + submenus), direita (painel 320px), baixo (ações).
 2. Camada de janelas (`pointer-events-none`; janelas com `pointer-events-auto`) acima das barras.
 3. Abas nas bordas para reabrir barras escondidas e, no modo imersivo (`session.immersive()`), o botão
    "Sair do modo imersivo" no canto superior direito (`toggleImmersive`: reabre todas de uma vez).

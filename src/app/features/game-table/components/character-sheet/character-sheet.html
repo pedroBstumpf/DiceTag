@@ -1,11 +1,12 @@
 @if (data(); as d) {
   <!-- ===== Abas da ficha ===== -->
-  <nav class="flex shrink-0 gap-1 overflow-x-auto border-b border-white/5 bg-ink-900/60 px-2 py-1.5">
+  <!-- Aba ativa = filete dourado embaixo (abas do kit) -->
+  <nav class="flex shrink-0 gap-1 overflow-x-auto border-b border-astral-500/30 bg-ink-900/60 px-2 pt-1.5">
     @for (t of tabs(); track t.id) {
       <button
         type="button"
-        class="flex h-8 shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors"
-        [class]="tab() === t.id ? 'bg-astral-500/20 text-astral-300' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'"
+        class="flex h-9 shrink-0 items-center gap-1.5 border-b-2 px-3 text-xs font-medium transition-colors"
+        [class]="tab() === t.id ? 'border-astral-400 text-astral-300' : 'border-transparent text-slate-400 hover:text-slate-200'"
         (click)="selectTab(t.id)"
       >
         <mat-icon class="!size-4 !text-[16px]">{{ t.icon }}</mat-icon>

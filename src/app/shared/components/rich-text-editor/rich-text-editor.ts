@@ -35,6 +35,8 @@ export class RichTextEditor {
   readonly placeholder = input('Comece a escrever…');
   /** false = só leitura: sem barra de formatação e sem edição. */
   readonly editable = input(true);
+  /** true = a página é uma folha de pergaminho (documentos); false = texto sobre o couro (anotações). */
+  readonly paper = input(false);
   /** HTML a cada alteração. */
   readonly contentChange = output<string>();
 
