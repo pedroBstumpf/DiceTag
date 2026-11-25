@@ -7,6 +7,7 @@
         <app-explorer
           [worldSwitcher]="!service.online()"
           [folderWindows]="true"
+          [startView]="explorerStart()"
           (opened)="open($event)"
           (removed)="windows.closeMany($event)"
           (hide)="explorerOpen.set(false)"

@@ -12,7 +12,7 @@ import { EmptyState } from '../../shared/components/empty-state/empty-state';
 import { FloatingWindow } from '../../shared/components/floating-window/floating-window';
 import { WindowManagerService } from '../../shared/services/window-manager.service';
 import { DocumentEditor } from './components/document-editor/document-editor';
-import { Explorer } from './components/explorer/explorer';
+import { EXPLORER_VIEWS, Explorer, ExplorerView } from './components/explorer/explorer';
 import { ImageViewer } from './components/image-viewer/image-viewer';
 import { CharacterSheetView } from '../game-table/components/character-sheet/character-sheet';
 import { BlobUrlService } from '../game-table/services/blob-url.service';
@@ -38,6 +38,7 @@ const URL_CREATABLE_TYPES: readonly WorldItemType[] = ['document', 'timeline', '
  *   ?abrir=<id>                    → abre um item existente
  *   ?servidor=<id do mundo>        → abre um mundo do servidor
  *   ?local=1                       → abre o mundo guardado neste navegador
+ *   ?aba=files|document|timeline|npc|race|item|image → abre o explorador nessa aba
  *
  * Com a conta do dono, sem nenhum dos dois, a página vai ao último mundo do servidor usado: é lá que
  * ficam os mundos das mesas. Sem servidor ou sem mundos nele, abre o deste navegador.
@@ -83,10 +84,14 @@ export class Worldbuild {
   readonly servidor = input<string>();
   /** Pede o mundo deste navegador, mesmo com a conta do dono. */
   readonly local = input<string>();
+  /** Aba do explorador pedida (barra lateral: "Documentos", "NPCs"…). */
+  readonly aba = input<string>();
 
   // --- Estado da página ----------------------------------------------------
   /** Explorador visível (no mobile começa escondido). */
   readonly explorerOpen = signal(!this.layout.isMobile());
+  /** Aba que o explorador deve mostrar (objeto novo a cada pedido; ver `Explorer.startView`). */
+  readonly explorerStart = signal<{ view: ExplorerView } | null>(null);
   private readonly workspace = viewChild<ElementRef<HTMLElement>>('workspace');
   /** O servidor não tem mundo para abrir (ou não respondeu): fica o deste navegador. */
   private readonly noServerWorld = signal(false);
@@ -135,6 +140,20 @@ export class Worldbuild {
       untracked(() => this.service.saveDesk(list));
     });
 
+    // Aba pedida pela URL: mostra o explorador nela e limpa a URL (pedir a mesma aba de novo funciona).
+    // Espera o mundo ser decidido: limpar antes cancelaria a navegação que escolhe o mundo do servidor.
+    effect(() => {
+      const view = this.aba() as ExplorerView | undefined;
+      if (!view || this.resolving()) return;
+      untracked(() => {
+        if (EXPLORER_VIEWS.includes(view)) {
+          this.explorerStart.set({ view });
+          this.explorerOpen.set(true);
+        }
+        this.router.navigate([], { queryParams: { aba: null }, queryParamsHandling: 'merge', replaceUrl: true });
+      });
+    });
+
     // Executa as ações pedidas pela URL assim que os dados estiverem carregados
     effect(() => {
       const type = this.novo();
@@ -151,7 +170,7 @@ export class Worldbuild {
         if (openId && this.service.byId().has(openId)) this.open(openId);
 
         // Limpa a URL para não repetir a ação ao recarregar
-        this.router.navigate([], { queryParams: { novo: null, abrir: null }, queryParamsHandling: 'merge', replaceUrl: true });
+        this.router.navigate([], { queryParams: { novo: null, abrir: null, aba: null }, queryParamsHandling: 'merge', replaceUrl: true });
       });
     });
   }

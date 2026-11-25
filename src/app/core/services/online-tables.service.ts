@@ -51,7 +51,8 @@ export class OnlineTablesService {
     this.tables.set([]);
   }
 
-  async create(data: Omit<NewGameTable, 'worldId'>): Promise<OnlineTable> {
+  /** Cria a mesa no mundo pedido (`worldId`) ou, sem ele, no primeiro mundo do dono (regra do servidor). */
+  async create(data: Omit<NewGameTable, 'worldId'> & { worldId?: string }): Promise<OnlineTable> {
     const { table } = await this.api.post<{ table: OnlineTable }>('/tables', data);
     this.tables.update((list) => [table, ...list]);
     return table;

@@ -46,6 +46,13 @@ export class ServerWorldsService {
     return this.pending;
   }
 
+  /** Cria um mundo no servidor (só o dono; o servidor confere o limite de mundos) e o põe na lista. */
+  async create(name: string): Promise<ServerWorldRef> {
+    const { world } = await this.api.post<{ world: ServerWorldRef }>('/worlds', { name });
+    this.worlds.update((list) => [...list, { id: world.id, name: world.name }]);
+    return world;
+  }
+
   /** Espera a lista estar pronta, sem buscar de novo se já há uma busca feita. */
   ensure(): Promise<void> {
     return this.pending ?? this.load();

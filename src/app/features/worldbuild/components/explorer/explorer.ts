@@ -1,5 +1,5 @@
 import { NgTemplateOutlet } from '@angular/common';
-import { Component, computed, inject, input, output, signal } from '@angular/core';
+import { Component, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
@@ -13,7 +13,7 @@ import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
 import { WorldbuildService, byTreeOrder } from '../../services/worldbuild.service';
 
 /** Abas do explorador: árvore de arquivos ou a lista de um tipo de item. */
-type ExplorerView = 'files' | Exclude<WorldItemType, 'folder'>;
+export type ExplorerView = 'files' | Exclude<WorldItemType, 'folder'>;
 
 /** Aba de lista: tipo listado, textos e o que o botão "Novo" faz. */
 interface ListView {
@@ -32,6 +32,9 @@ const LIST_VIEWS: ListView[] = [
   { id: 'document', label: 'Documentos', newLabel: 'Novo documento', empty: 'Nenhum documento ainda.' },
   { id: 'image', label: 'Mapas', newLabel: 'Enviar mapa / imagem', empty: 'Nenhum mapa ainda. Envie imagens ou solte arquivos na árvore.' },
 ];
+
+/** Abas que podem ser pedidas de fora (ex.: `?aba=` da página do Worldbuild, vindo da barra lateral). */
+export const EXPLORER_VIEWS: readonly ExplorerView[] = ['files', ...LIST_VIEWS.map((v) => v.id)];
 
 /**
  * Explorador do worldbuild: árvore de pastas e itens.
@@ -158,6 +161,15 @@ export class Explorer {
     ...LIST_VIEWS.map((v) => ({ id: v.id, icon: WORLD_ITEM_META[v.id as WorldItemType].icon, label: v.label })),
   ];
   readonly view = signal<ExplorerView>('files');
+  /**
+   * Aba pedida de fora. Um objeto novo a cada pedido, para a mesma aba poder ser pedida de novo
+   * depois de o usuário trocar de aba à mão.
+   */
+  readonly startView = input<{ view: ExplorerView } | null>(null);
+  private readonly applyStartView = effect(() => {
+    const start = this.startView();
+    if (start) untracked(() => this.view.set(start.view));
+  });
   /** Aba de lista aberta (null = árvore de arquivos). */
   readonly listView = computed(() => LIST_VIEWS.find((v) => v.id === this.view()) ?? null);
 

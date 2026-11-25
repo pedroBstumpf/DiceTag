@@ -19,7 +19,7 @@ organizar toda a atmosfera de uma campanha.
 | Área | Status |
 |---|---|
 | Landing page (banner com logo, atalhos, mural de notícias vazio) | Pronto |
-| Barra lateral global (navegação, **mundos** do usuário, atalhos para as **mesas** — até 6 + "Ver todas" —, conta) | Pronto |
+| Barra lateral global (páginas, grupos que abrem e fecham — **Mesas de jogo**, **Worldbuild**, **Mundos** —, cada um com o "+" de criar, e conta) | Pronto |
 | **Mundos**: até 2 Worldbuilds separados por usuário; cada mesa se passa num mundo | Pronto |
 | **Só por convite**: um dono (e-mail e senha, criado no terminal) e convidados (nome da mesa + senha, criados por link de uso único; entram de qualquer aparelho); sem cadastro | Pronto |
 | **Arquivos**: biblioteca do dono (imagens e sons, em pastas) numa única pasta do computador, com o servidor preso a ela | Pronto |
@@ -250,7 +250,7 @@ http/routes/frontend.ts   # entrega o app compilado (FRONTEND_DIR): lista fixa d
 
 Rotas (`app.routes.ts`, todas lazy):
 - Abertas: `entrar` · `convite` · `redefinir-senha`. O resto exige conta (`accountGuard`); Home, Arquivos, Worldbuild e `mesa/:id` são só do dono (`ownerGuard`).
-- `''` (Shell) → `''` Home · `mesas` Tables · `arquivos` Library · `worldbuild` Worldbuild do mundo aberto (aceita `?novo=<tipo>`, `?abrir=<id>`, `?servidor=<id do mundo>` e `?local=1`) · `redefinir-senha` recuperação de senha.
+- `''` (Shell) → `''` Home · `mesas` Tables · `arquivos` Library · `worldbuild` Worldbuild do mundo aberto (aceita `?novo=<tipo>`, `?abrir=<id>`, `?servidor=<id do mundo>`, `?local=1` e `?aba=<aba do explorador>`) · `redefinir-senha` recuperação de senha.
 - `mesa/:id` → GameTablePage (tela cheia, **fora** do Shell)
 - `mesa-online/:id` → a mesma GameTablePage com `data: { online: true }` (mesa do servidor)
 - `**` → redireciona para `''`
@@ -471,7 +471,21 @@ Com `prefers-contrast: more`, as texturas somem e os filetes ficam sólidos.
 - `WorldbuildService` carrega sempre o **mundo aberto** (`activeId`): trocar de mundo grava as pendências na chave antiga.
 - Página Worldbuild: seletor no cabeçalho do explorador (`Explorer.worldSwitcher`): trocar, criar (até 2), renomear,
   excluir. **Excluir** apaga itens e Blobs e só é permitido se **nenhuma mesa** se passa no mundo e se sobrar outro.
-  Na mesa, o explorador não troca de mundo (é o da mesa). Barra lateral: seção "Mundo" lista os mundos (abre o Worldbuild).
+  Na mesa, o explorador não troca de mundo (é o da mesa). Barra lateral: grupo "Mundos" lista os mundos (abre o Worldbuild) e cria um mundo no servidor.
+
+### Barra lateral (`layout/sidebar`)
+- Páginas soltas (dono: Início, Arquivos) e três **grupos que abrem e fecham** (quais estão abertos fica em
+  `localStorage dicetag.sidebarGroups`; padrão: todos abertos). Com a barra recolhida, o ícone do grupo expande a barra e o abre.
+  - **Mesas de jogo:** mesas online (`OnlineTablesService`, carregadas pela barra quando há conta; abrem `/mesa-online/:id`) e,
+    para o dono, as deste navegador ("Neste navegador", `/mesa/:id`); até 6 + "Ver todas" / "Gerenciar mesas e convites" (`/mesas`).
+    "+" (dono) = campo de nome ali mesmo (Enter cria, Esc cancela): mesa online no mundo que o Worldbuild abriria
+    (`ServerWorldsService.preferred`).
+  - **Worldbuild** (dono): os tipos de item (Pastas e arquivos, Documentos, Linhas do tempo, NPCs, Raças, Itens, Mapas) do mundo
+    que o Worldbuild mostra ("em <mundo>"). Clique = `/worldbuild?aba=<tipo>` (o explorador abre nessa aba: `Explorer.startView`,
+    `EXPLORER_VIEWS`); "+" = `?novo=<tipo>` (Mapas: abre a aba, onde fica o envio). Na página do Worldbuild, mantém o mundo aberto
+    (`queryParamsHandling: merge`). O `?aba=` só é limpo depois de o mundo ser decidido (antes, cancelaria a navegação dele).
+  - **Mundos** (dono): mundos do servidor e os deste navegador com conteúdo; "+" = campo de nome → `ServerWorldsService.create`
+    (`POST /worlds`; desabilitado no limite de `MAX_WORLDS`) e abre o mundo novo.
 
 ### Linha do tempo (mapa mental)
 - Eventos são cartões livres no quadro (`x`/`y` = canto superior esquerdo; tamanho fixo `TIMELINE_CARD`),

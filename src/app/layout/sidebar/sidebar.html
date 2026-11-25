@@ -17,9 +17,9 @@
     }
   </a>
 
-  <nav class="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto overflow-x-hidden px-3 py-3">
-    <!-- ===== Páginas ===== -->
-    <ul class="flex flex-col gap-1">
+  <nav class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden px-3 py-3">
+    <!-- ===== Páginas soltas ===== -->
+    <ul class="flex flex-col gap-1" [class.hidden]="!links().length">
       @for (link of links(); track link.route) {
         <li>
           <a
@@ -40,84 +40,199 @@
       }
     </ul>
 
-    <!-- ===== Mundos do usuário (cada um é um Worldbuild) ===== -->
-    @if (account.isOwner()) {
-      <section>
-        @if (expanded()) {
-          <h4 class="mb-2 px-3 text-[11px] font-semibold uppercase tracking-widest text-slate-500">Mundo</h4>
-        } @else {
-          <hr class="mx-3 mb-3 border-white/5" />
+    <!-- ===== Grupos: cabeçalho (abre e fecha) + lista + criar ===== -->
+    <!-- Cabeçalho comum: ícone, nome, contagem, "+" (opcional) e a seta. Barra recolhida: só o ícone. -->
+    <ng-template #groupHeader let-id="id" let-icon="icon" let-label="label" let-count="count" let-add="add" let-addLabel="addLabel" let-addDisabled="addDisabled">
+      <div class="group/head flex h-10 items-center rounded-xl text-slate-300 transition-colors hover:bg-white/5">
+        <button
+          type="button"
+          class="flex h-full min-w-0 flex-1 items-center gap-3 px-3 text-left"
+          [matTooltip]="expanded() ? '' : label"
+          matTooltipPosition="right"
+          [attr.aria-expanded]="isOpen(id)"
+          (click)="toggleGroup(id)"
+        >
+          <mat-icon class="shrink-0 text-astral-400">{{ icon }}</mat-icon>
+          @if (expanded()) {
+            <span class="inscription min-w-0 flex-1 truncate text-xs font-semibold text-white">{{ label }}</span>
+            @if (count !== null) {
+              <span class="font-mono text-[11px] tabular-nums text-slate-600">{{ count }}</span>
+            }
+            <mat-icon class="!size-5 shrink-0 !text-[20px] text-slate-600 transition-transform" [class.rotate-180]="isOpen(id)">expand_more</mat-icon>
+          }
+        </button>
+        @if (expanded() && add) {
+          <button
+            type="button"
+            class="mr-1 grid size-8 shrink-0 place-items-center rounded-lg text-astral-300 transition-colors hover:bg-astral-400 hover:text-ink-950 disabled:pointer-events-none disabled:opacity-40"
+            [matTooltip]="addLabel"
+            [attr.aria-label]="addLabel"
+            [disabled]="addDisabled"
+            (click)="add()"
+          >
+            <mat-icon class="!size-5 !text-[20px]">add</mat-icon>
+          </button>
         }
-        <ul class="flex flex-col gap-1">
-          @for (world of worldLinks(); track world.id) {
-            @let active = isOpenWorld(world);
-            @if (world.firstLocal && expanded()) {
-              <li class="mt-2 px-3 text-[11px] uppercase tracking-widest text-slate-600">Neste navegador</li>
+      </div>
+    </ng-template>
+
+    <!-- Campo de nome para criar (mesa ou mundo): Enter cria, Esc cancela -->
+    <ng-template #createField let-placeholder="placeholder" let-hint="hint">
+      <li class="px-1 py-1">
+        <input
+          appAutoFocus
+          class="sheet-input w-full"
+          maxlength="60"
+          [placeholder]="placeholder"
+          [attr.aria-label]="placeholder"
+          [value]="draftName()"
+          [disabled]="busy()"
+          (input)="onDraftInput($event)"
+          (keydown.enter)="submitCreate()"
+          (keydown.escape)="cancelCreate()"
+          (blur)="draftName().trim() ? null : cancelCreate()"
+        />
+        <p class="mt-1 px-1 text-[11px] text-slate-600">{{ hint }}</p>
+      </li>
+    </ng-template>
+
+    <!-- ===== Mesas de jogo ===== -->
+    <section>
+      <ng-container
+        [ngTemplateOutlet]="groupHeader"
+        [ngTemplateOutletContext]="{
+          id: 'tables',
+          icon: 'groups',
+          label: 'Mesas de jogo',
+          count: tableCount(),
+          add: account.isOwner() ? startTable : null,
+          addLabel: 'Nova mesa',
+          addDisabled: busy(),
+        }"
+      />
+      @if (isOpen('tables')) {
+        <ul class="mt-1 flex flex-col gap-0.5 border-l border-astral-500/25 pl-2 ml-5 animate-fade-in">
+          @if (creating() === 'table') {
+            <ng-container
+              [ngTemplateOutlet]="createField"
+              [ngTemplateOutletContext]="{ placeholder: 'Nome da nova mesa', hint: newTableWorld() ? 'No mundo ' + newTableWorld() + '. Enter cria, Esc cancela.' : 'Enter cria, Esc cancela.' }"
+            />
+          }
+          @for (table of tableLinks(); track table.id) {
+            @if (table.firstLocal) {
+              <li class="mt-2 px-2 text-[10px] uppercase tracking-widest text-slate-600">Neste navegador</li>
             }
             <li>
-              <button
-                type="button"
-                [matTooltip]="expanded() ? '' : world.name"
-                matTooltipPosition="right"
-                class="flex h-10 w-full items-center gap-3 rounded-xl px-3 text-left text-sm transition-colors hover:bg-white/5 hover:text-white"
-                [class]="active ? '!bg-ink-700 !text-astral-300 shadow-[inset_3px_0_0_var(--color-astral-400)]' : 'text-slate-300'"
-                (click)="openWorld(world)"
-              >
-                <mat-icon class="shrink-0 text-sky-300">public</mat-icon>
-                @if (expanded()) {
-                  <span class="truncate">{{ world.name }}</span>
-                }
-              </button>
-            </li>
-          }
-        </ul>
-      </section>
-    }
-
-    <!-- ===== Mesas do usuário (atalhos para abrir) ===== -->
-    @if (account.isOwner()) {
-      <section>
-        @if (expanded()) {
-          <h4 class="mb-2 px-3 text-[11px] font-semibold uppercase tracking-widest text-slate-500">Mesas</h4>
-        } @else {
-          <hr class="mx-3 mb-3 border-white/5" />
-        }
-        <ul class="flex flex-col gap-1">
-          @for (table of recentTables(); track table.id) {
-            <li>
               <a
-                [routerLink]="['/mesa', table.id]"
-                [matTooltip]="expanded() ? '' : table.name"
-                matTooltipPosition="right"
-                class="flex h-10 items-center gap-3 rounded-xl px-3 text-sm text-slate-300 transition-colors hover:bg-white/5 hover:text-white"
+                [routerLink]="table.route"
+                routerLinkActive="!bg-ink-700 !text-astral-300 shadow-[inset_3px_0_0_var(--color-astral-400)]"
+                class="flex h-9 items-center gap-2.5 rounded-lg px-2 text-sm text-slate-300 transition-colors hover:bg-white/5 hover:text-white"
                 (click)="layout.closeMobile()"
               >
-                <span class="grid size-6 shrink-0 place-items-center">
-                  <span class="size-2.5 rounded-full" [style.background]="table.accent"></span>
-                </span>
-                @if (expanded()) {
-                  <span class="truncate">{{ table.name }}</span>
-                }
+                <span class="size-2.5 shrink-0 rotate-45 rounded-[2px]" [style.background]="table.accent"></span>
+                <span class="truncate">{{ table.name }}</span>
               </a>
             </li>
           } @empty {
-            @if (expanded()) {
-              <li>
-                <button type="button" class="flex h-10 w-full items-center gap-3 rounded-xl px-3 text-sm text-astral-300 hover:bg-white/5" (click)="createTable()">
-                  <mat-icon class="shrink-0">add</mat-icon>
-                  <span class="truncate">Criar mesa</span>
+            @if (creating() !== 'table') {
+              <li class="px-2 py-1.5 text-xs text-slate-600">Nenhuma mesa ainda.</li>
+            }
+          }
+          <li>
+            <a routerLink="/mesas" class="flex h-8 items-center gap-1.5 px-2 text-xs text-slate-600 hover:text-white" (click)="layout.closeMobile()">
+              {{ hiddenTables() > 0 ? 'Ver todas (+' + hiddenTables() + ')' : 'Gerenciar mesas e convites' }}
+              <mat-icon class="!size-4 !text-[16px]">arrow_forward</mat-icon>
+            </a>
+          </li>
+        </ul>
+      }
+    </section>
+
+    <!-- ===== Worldbuild: os tipos de item do mundo aberto ===== -->
+    @if (account.isOwner()) {
+      <section>
+        <ng-container
+          [ngTemplateOutlet]="groupHeader"
+          [ngTemplateOutletContext]="{ id: 'worldbuild', icon: 'auto_stories', label: 'Worldbuild', count: null, add: null }"
+        />
+        @if (isOpen('worldbuild')) {
+          <ul class="mt-1 flex flex-col gap-0.5 border-l border-astral-500/25 pl-2 ml-5 animate-fade-in">
+            @if (worldbuildWorld(); as worldName) {
+              <li class="truncate px-2 pb-1 font-book text-[13px] italic text-slate-600">em {{ worldName }}</li>
+            }
+            @for (type of worldbuildTypes; track type.view) {
+              <li class="group/row flex items-center rounded-lg transition-colors hover:bg-white/5">
+                <button
+                  type="button"
+                  class="flex h-9 min-w-0 flex-1 items-center gap-2.5 px-2 text-left text-sm text-slate-300 group-hover/row:text-white"
+                  (click)="openWorldbuildTab(type)"
+                >
+                  <mat-icon class="!size-[18px] shrink-0 !text-[18px]" [class]="type.color">{{ type.icon }}</mat-icon>
+                  <span class="truncate">{{ type.label }}</span>
+                </button>
+                <button
+                  type="button"
+                  class="mr-0.5 grid size-7 shrink-0 place-items-center rounded-md text-astral-300 opacity-60 transition hover:bg-astral-400 hover:text-ink-950 hover:opacity-100 focus-visible:opacity-100 group-hover/row:opacity-100"
+                  [matTooltip]="type.createLabel"
+                  matTooltipPosition="right"
+                  [attr.aria-label]="type.createLabel"
+                  (click)="createWorldbuildItem(type)"
+                >
+                  <mat-icon class="!size-[18px] !text-[18px]">{{ type.create ? 'add' : 'upload' }}</mat-icon>
                 </button>
               </li>
             }
-          }
-          @if (expanded() && hiddenTables() > 0) {
-            <li>
-              <a routerLink="/mesas" class="flex h-8 items-center px-3 text-xs text-slate-500 hover:text-slate-300" (click)="layout.closeMobile()">
-                Ver todas (+{{ hiddenTables() }})
-              </a>
-            </li>
-          }
-        </ul>
+          </ul>
+        }
+      </section>
+    }
+
+    <!-- ===== Mundos (cada um é um Worldbuild separado) ===== -->
+    @if (account.isOwner()) {
+      <section>
+        <ng-container
+          [ngTemplateOutlet]="groupHeader"
+          [ngTemplateOutletContext]="{
+            id: 'worlds',
+            icon: 'public',
+            label: 'Mundos',
+            count: worldLinks().length,
+            add: startWorld,
+            addLabel: canCreateWorld() ? 'Novo mundo' : 'Limite de ' + maxWorlds + ' mundos atingido',
+            addDisabled: busy() || !canCreateWorld(),
+          }"
+        />
+        @if (isOpen('worlds')) {
+          <ul class="mt-1 flex flex-col gap-0.5 border-l border-astral-500/25 pl-2 ml-5 animate-fade-in">
+            @if (creating() === 'world') {
+              <ng-container
+                [ngTemplateOutlet]="createField"
+                [ngTemplateOutletContext]="{ placeholder: 'Nome do novo mundo', hint: 'Até ' + maxWorlds + ' mundos. Enter cria, Esc cancela.' }"
+              />
+            }
+            @for (world of worldLinks(); track world.id) {
+              @let active = isOpenWorld(world);
+              @if (world.firstLocal) {
+                <li class="mt-2 px-2 text-[10px] uppercase tracking-widest text-slate-600">Neste navegador</li>
+              }
+              <li>
+                <button
+                  type="button"
+                  class="flex h-9 w-full items-center gap-2.5 rounded-lg px-2 text-left text-sm transition-colors hover:bg-white/5 hover:text-white"
+                  [class]="active ? '!bg-ink-700 !text-astral-300 shadow-[inset_3px_0_0_var(--color-astral-400)]' : 'text-slate-300'"
+                  (click)="openWorld(world)"
+                >
+                  <mat-icon class="!size-[18px] shrink-0 !text-[18px] text-astral-400">travel_explore</mat-icon>
+                  <span class="truncate">{{ world.name }}</span>
+                </button>
+              </li>
+            } @empty {
+              @if (creating() !== 'world') {
+                <li class="px-2 py-1.5 text-xs text-slate-600">Nenhum mundo ainda.</li>
+              }
+            }
+          </ul>
+        }
       </section>
     }
   </nav>
