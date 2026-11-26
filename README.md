@@ -244,5 +244,7 @@ servidor pelo menu da mesa online.
 - **Commits** no padrão Conventional Commits, em português: `feat(mesa): …`, `fix(servidor): …`, com o corpo explicando o que mudou.
 - **Versões** seguem o [SemVer](https://semver.org/lang/pt-BR/), com uma versão só para o projeto: `package.json` e
   `server/package.json` andam juntos. Cada versão publicada ganha uma **tag anotada** (`v0.2.0`) e uma entrada no
-  [`CHANGELOG.md`](CHANGELOG.md).
+  [`CHANGELOG.md`](CHANGELOG.md). O GitHub Desktop só envia as tags criadas nele: as criadas no terminal vão com
+  `git push origin --tags` (Git Bash), e cada uma vira um Release no GitHub com o texto do CHANGELOG.
+- **Nada direto na `main`**, nem ajustes pequenos: até um ajuste visual passa por uma branch e um merge.
 - **Antes de mesclar:** `npx ng test --watch=false` e `npm run build` na raiz; `npm run check` em `server/`.

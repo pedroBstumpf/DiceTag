@@ -7,6 +7,31 @@ pode trazer mudanças incompatíveis. Como versionar e organizar as branches: `R
 
 ## [Não publicado]
 
+## [0.6.0] — 2026-11-26
+
+O app ganha nome e visual novos, backup automático e contas de convidado com senha.
+
+### Adicionado
+- **Backup automático no Google Drive:** o `Iniciar mesa` copia o banco (cifrado), os arquivos da mesa (cifrados) e a
+  biblioteca para a pasta do Google Drive para computador, ao abrir, a cada hora e ao fechar. `npm run restaurar` monta
+  e confere uma cópia numa pasta nova. A chave fica só no `segredos.env`, que não vai para a nuvem.
+- **Convidado com nome e senha:** o convite pede um nome (o login, único) e uma senha; o amigo entra de qualquer aparelho
+  pela página Entrar ("E-mail ou nome"). O link de retorno define uma senha nova. Convidados antigos criam a senha pelo
+  menu da conta, e a conta pode trocar a senha.
+- **Barra lateral com grupos** que abrem e fecham: Mesas de jogo (online e deste navegador), Worldbuild (atalhos por tipo
+  de item) e Mundos, cada um com o "+" de criar.
+- Guia para instalar, testar o backup e o Tailscale e jogar com os amigos (`docs/GUIA-DA-MESA.md`).
+
+### Mudado
+- **Novo nome exibido: Game Master's Dream**, com logo nova. Caminhos e arquivos continuam com `zehenia`, para não perder dados.
+- **Visual do grimório do cartógrafo:** couro escuro com filetes dourados, pergaminho nas páginas de leitura, ouro só no
+  destaque e texto em branco puro.
+
+### Corrigido
+- Na mesa online, tokens movidos por outra pessoa deslizam em vez de pular, e a névoa acompanha o movimento sem saltos.
+- Sem o servidor (só o `ng serve`), a barra lateral escondia o Worldbuild, os mundos e as mesas deste navegador.
+- Convidado antigo com nome inválido ou repetido ficava sem como criar a senha.
+
 ## [0.5.0] — 2026-11-05
 
 ### Adicionado
@@ -96,7 +121,8 @@ A mesa online passa a funcionar de verdade entre duas máquinas.
   mesa de jogo (mapa em camadas, vista isométrica, névoa, tokens, desenhos, efeitos), fichas de
   personagem e NPC, automações, rolagens, chat e sons.
 
-[Não publicado]: https://github.com/pedroBStumpf/DiceTag/compare/v0.5.0...HEAD
+[Não publicado]: https://github.com/pedroBStumpf/DiceTag/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/pedroBStumpf/DiceTag/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/pedroBStumpf/DiceTag/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/pedroBStumpf/DiceTag/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/pedroBStumpf/DiceTag/compare/v0.2.0...v0.3.0
