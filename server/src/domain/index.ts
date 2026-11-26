@@ -49,7 +49,7 @@ export {
 export { baseTagId, levelUpText, manaCost, studyGain, trainStudy, withPowers, type TagLevels } from '../../../src/app/features/game-table/utils/dice';
 export { movePathBlocked } from '../../../src/app/features/game-table/utils/walls';
 export { doorSeen, wallsToSegments, type Segment } from '../../../src/app/features/game-table/utils/visibility';
-export { decodeMask, type ExploredMask } from '../../../src/app/features/game-table/utils/fog-memory';
+export { decodeMask, nextExplored, type ExploredMask } from '../../../src/app/features/game-table/utils/fog-memory';
 export { applyRace, type RaceChoice } from '../../../src/app/features/game-table/utils/race';
 export type { Point } from '../../../src/app/core/models/geometry.model';
 

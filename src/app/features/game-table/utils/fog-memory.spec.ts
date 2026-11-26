@@ -1,4 +1,4 @@
-import { createMask, decodeMask, encodeMask, isExploredAt, markPolygons, maskFits } from './fog-memory';
+import { createMask, decodeMask, encodeMask, isExploredAt, markPolygons, maskFits, nextExplored } from './fog-memory';
 
 const square = (x: number, y: number, size: number) => [
   { x, y },
@@ -50,5 +50,23 @@ describe('fog-memory', () => {
     const mask = createMask(2100, 1400);
     expect(maskFits(mask, 2100, 1400)).toBe(true);
     expect(maskFits(mask, 4000, 3000)).toBe(false);
+  });
+
+  it('nextExplored: soma ao que já foi visto e devolve null quando nada muda', () => {
+    const size = { w: 1000, h: 1000 };
+    const first = nextExplored(undefined, size, [square(0, 0, 100)]);
+    expect(first).not.toBeNull();
+    const second = nextExplored(first!, size, [square(500, 500, 100)]);
+    const mask = decodeMask(second!);
+    expect(isExploredAt(mask, { x: 50, y: 50 })).toBe(true);
+    expect(isExploredAt(mask, { x: 550, y: 550 })).toBe(true);
+    expect(nextExplored(second!, size, [square(520, 520, 20)])).toBeNull();
+  });
+
+  it('nextExplored: mapa de outro tamanho recomeça a memória', () => {
+    const old = nextExplored(undefined, { w: 1000, h: 1000 }, [square(0, 0, 100)])!;
+    const fresh = decodeMask(nextExplored(old, { w: 8000, h: 8000 }, [])!);
+    expect(isExploredAt(fresh, { x: 50, y: 50 })).toBe(false);
+    expect(maskFits(fresh, 8000, 8000)).toBe(true);
   });
 });

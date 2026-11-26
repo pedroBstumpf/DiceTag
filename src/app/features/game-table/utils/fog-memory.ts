@@ -92,6 +92,17 @@ export function markPolygons(mask: ExploredMask, polygons: Point[][]): boolean {
   return changed;
 }
 
+/**
+ * Memória nova da cena depois de somar as áreas visíveis agora, ou null se nada mudou.
+ * Mapa de outro tamanho (máscara que não serve) = a memória recomeça. Usada pelo navegador
+ * (mesa local) e pelo servidor (mesa online), para os dois marcarem igual.
+ */
+export function nextExplored(current: ExploredData | undefined, size: { w: number; h: number }, polygons: Point[][]): ExploredData | null {
+  const saved = current ? decodeMask(current) : null;
+  const mask = saved && maskFits(saved, size.w, size.h) ? saved : createMask(size.w, size.h);
+  return markPolygons(mask, polygons) || mask !== saved ? encodeMask(mask) : null;
+}
+
 // --- Serialização --------------------------------------------------------------
 
 export function encodeMask(mask: ExploredMask): ExploredData {

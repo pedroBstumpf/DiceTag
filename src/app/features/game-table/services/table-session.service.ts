@@ -68,7 +68,7 @@ import {
 import { inventoryRow, itemTagId, itemTagLevel, quantityOf } from '../utils/inventory';
 import { SheetData, SheetStore } from '../../../core/services/sheet-store';
 import { FxDrawing, buildFx, seededRandom } from '../utils/effects';
-import { createMask, decodeMask, encodeMask, markPolygons, maskFits } from '../utils/fog-memory';
+import { decodeMask, nextExplored } from '../utils/fog-memory';
 import { Segment, doorSeen, wallsToSegments } from '../utils/visibility';
 import { movePathBlocked } from '../utils/walls';
 import {
@@ -908,6 +908,17 @@ export class TableSessionService extends SheetStore {
       const polys = this.visionPolygons();
       const size = this.worldSize();
       if (polys.length && size && this.fogMemory()) untracked(() => this.markExplored(polys, size));
+    });
+
+    // Mesa online: quem marca a memória é o servidor, com a visão oficial dos jogadores; ele não
+    // lê a imagem do mapa, então o mestre informa o tamanho dela (uma vez por mapa).
+    effect(() => {
+      const size = this.worldSize();
+      const scene = this.activeScene();
+      if (!this.online() || this.role() !== 'gm' || !size || !scene || size.sceneId !== scene.id) return;
+      if (scene.mapSize?.w !== size.w || scene.mapSize?.h !== size.h) {
+        untracked(() => this.dispatch('setMapSize', { sceneId: scene.id, w: size.w, h: size.h }));
+      }
     });
 
     // Jogador na mesa online: busca de novo a Lore quando o que ele pode ver do mundo muda
@@ -2143,16 +2154,15 @@ export class TableSessionService extends SheetStore {
     if (sceneId) this.dispatch('setExplored', { sceneId });
   }
 
-  /** Soma as áreas visíveis à memória da cena (só grava se algo novo foi visto). */
+  /** Mesa local: soma as áreas visíveis à memória da cena (só grava se algo novo foi visto). */
   private markExplored(polygons: Point[][], size: { sceneId: string; w: number; h: number }): void {
-    // Mesa online: a memória é gravada pelo mestre (o jogador não pode alterá-la no servidor)
-    if (this.online() && this.role() !== 'gm') return;
+    // Mesa online: o servidor marca a memória (com a visão dos jogadores, mesmo sem o mestre na cena)
+    if (this.online()) return;
     const scene = this.activeScene();
     if (!scene || scene.id !== size.sceneId) return;
-    const current = scene.explored ? decodeMask(scene.explored) : null;
     // Mapa trocado (outro tamanho): a memória recomeça
-    const mask = current && maskFits(current, size.w, size.h) ? current : createMask(size.w, size.h);
-    if (markPolygons(mask, polygons) || mask !== current) this.dispatch('setExplored', { sceneId: scene.id, explored: encodeMask(mask) });
+    const explored = nextExplored(scene.explored, size, polygons);
+    if (explored) this.dispatch('setExplored', { sceneId: scene.id, explored });
   }
 
   /** Abre ou fecha uma porta (a visão é recalculada automaticamente). */

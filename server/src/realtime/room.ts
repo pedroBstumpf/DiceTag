@@ -1,5 +1,5 @@
 import type { WebSocket } from 'ws';
-import { applyCommand, normalizeState, type TableCommand, type TableRole, type TableState, type Viewer } from '../domain';
+import { applyCommand, nextExplored, normalizeState, type TableCommand, type TableRole, type TableState, type Viewer } from '../domain';
 import type { TokenBucket } from '../lib/limiter';
 import { COMMAND_RULES, type RuleContext, type RuleResult } from './command-rules';
 import { COMMAND_SCHEMAS } from './command-schemas';
@@ -41,6 +41,10 @@ const SAVE_DEBOUNCE_MS = 500;
 const PLAYER_SYNC_MS = 30;
 /** Edições seguidas no Worldbuild (digitação do mestre) viram um aviso só aos jogadores. */
 const WORLD_NOTICE_MS = 1500;
+/** Memória da névoa: movimentos seguidos viram uma marcação só (a máscara vai inteira ao mestre). */
+const EXPLORE_MS = 200;
+/** Autor dos comandos que a própria sala aplica (memória da névoa). */
+const ROOM_AUTHOR = 'servidor';
 
 export interface RoomStore {
   load(tableId: string): { state: unknown; version: number } | null;
@@ -76,6 +80,7 @@ export class Room {
   private saveTimer: NodeJS.Timeout | null = null;
   private syncTimer: NodeJS.Timeout | null = null;
   private worldTimer: NodeJS.Timeout | null = null;
+  private exploreTimer: NodeJS.Timeout | null = null;
   private closed = false;
   private readonly vision: VisionCache;
   /** Cena dos jogadores calculada para a versão atual (uma vez para todos). */
@@ -146,7 +151,33 @@ export class Room {
       if (c.role === 'gm' && c !== origin) this.send(c, { t: 'cmd', version: this.version, type: command.type, payload: command.payload, by });
     }
     this.schedulePlayerSync();
+    this.scheduleExplore();
     return true;
+  }
+
+  // --- Memória da névoa ---------------------------------------------------------------
+
+  /** Marca a memória da névoa pouco depois de uma mudança (movimentos seguidos = uma vez só). */
+  private scheduleExplore(): void {
+    if (this.exploreTimer || this.closed) return;
+    this.exploreTimer = setTimeout(() => {
+      this.exploreTimer = null;
+      this.explore();
+    }, EXPLORE_MS);
+  }
+
+  /**
+   * Soma à memória da cena aberta o que os jogadores enxergam agora (SPEC.md §1): com as posições
+   * oficiais, mesmo sem o mestre na cena ou com a aba dele em segundo plano. Precisa do tamanho do
+   * mapa (`mapSize`, informado pelo mestre). A gravação é um `setExplored` comum, que chega ao
+   * mestre como comando e aos jogadores no estado; ele não muda a visão, então não se realimenta.
+   */
+  explore(): void {
+    const view = this.playerScene();
+    const scene = view?.scene;
+    if (!view?.fog.enabled || !scene?.mapSize || scene.fog?.memory === false || !view.fog.polygons.length) return;
+    const explored = nextExplored(scene.explored, scene.mapSize, view.fog.polygons);
+    if (explored) this.apply({ type: 'setExplored', payload: { sceneId: scene.id, explored } }, ROOM_AUTHOR);
   }
 
   // --- O que cada um vê ---------------------------------------------------------------
@@ -265,5 +296,6 @@ export class Room {
     if (this.saveTimer) clearTimeout(this.saveTimer);
     if (this.syncTimer) clearTimeout(this.syncTimer);
     if (this.worldTimer) clearTimeout(this.worldTimer);
+    if (this.exploreTimer) clearTimeout(this.exploreTimer);
   }
 }

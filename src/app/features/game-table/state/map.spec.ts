@@ -1,7 +1,7 @@
 import { ChatMessage, MAX_CHAT_MESSAGES, Scene, Stroke, TableState } from '../../../core/models/table-session.model';
 import { addChatMessage, clearChat } from './chat';
 import { addStroke, eraseStrokes, restoreStrokes, strokesToErase } from './drawings';
-import { addWall, removeWall, setDoorOpen, setExplored, setFog, setFogMemory, updateWall } from './fog';
+import { addWall, removeWall, setDoorOpen, setExplored, setFog, setFogMemory, setMapSize, updateWall } from './fog';
 import { addNote, removeNote, updateNote } from './notes';
 
 const scene = (extra: Partial<Scene> = {}): Scene => ({ id: 'a', name: 'a', gridSize: 70, showGrid: true, ...extra });
@@ -14,6 +14,13 @@ describe('comandos: névoa e paredes', () => {
     expect(s.scenes[0].fog).toEqual({ enabled: true, memory: false });
     s = setFogMemory(s, { sceneId: 'a', memory: true });
     expect(s.scenes[0].fog).toEqual({ enabled: true, memory: true });
+  });
+
+  it('setMapSize grava o tamanho do mapa; o mesmo tamanho não muda nada', () => {
+    const s = setMapSize(table(), { sceneId: 'a', w: 800, h: 600 });
+    expect(s.scenes[0].mapSize).toEqual({ w: 800, h: 600 });
+    expect(setMapSize(s, { sceneId: 'a', w: 800, h: 600 })).toBe(s);
+    expect(setMapSize(s, { sceneId: 'x', w: 1, h: 1 })).toBe(s);
   });
 
   it('setExplored sem máscara esquece as áreas exploradas', () => {
