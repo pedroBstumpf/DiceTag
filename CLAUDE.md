@@ -667,8 +667,9 @@ Com `prefers-contrast: more`, as texturas somem e os filetes ficam sólidos.
   desce os itens dela.
 - **Grade:** escondida (menu da cena: "Remover grade") = tokens e paredes se movem livres; visível = alinham (Shift = livre).
   Não há botão nem atalho de grade na barra de ferramentas.
-- **Papel (`role`)**: alternado manualmente na barra de ações (Mestre/Jogador, `session.setRole`) — não há permissões
-  reais ainda. As regras de acesso às fichas já usam o papel + a conta (`canEdit`, `canOpen`…; ver "Ficha de NPC").
+- **Papel (`role`)**: na mesa local, alternado manualmente na barra de ações (Mestre/Jogador, `session.setRole`), sem
+  permissões reais; na mesa online, vem da conta (dono = mestre, convite = jogador) e o servidor confere cada comando.
+  As regras de acesso às fichas usam o papel + a conta (`canEdit`, `canOpen`…; ver "Ficha de NPC").
 - **O que o jogador não vê/faz:** ferramenta **Névoa** (`ToolDef.gmOnly`, `toolAllowed`; sem atalhos F/W; trocar para
   jogador sai dela), **cenas** da barra superior (fica só voltar, título da mesa e os botões de painel, imersivo e tela
   cheia), abas **Sons** e **Ações** do painel direito, **mover/redimensionar/remover tokens** que não pode editar
@@ -1030,9 +1031,9 @@ repositórios por domínio, servidor autoritativo (névoa, rolagens, permissões
 
 - Inventário sem peso; "Dar para" e compra passam uma unidade por vez; relações por nome livre (sem vínculo com
   fichas da mesa).
-- Permissões de NPC dependem do papel escolhido na mesa; com backend, "jogador" deve vir da conta e do convite.
-  A lista de jogadores para o controle do NPC vem dos donos dos personagens (`session.players`).
-- Efeitos e chat ainda são locais (sem multiplayer, outros jogadores não veem); efeitos não saem do token automaticamente.
+- A lista de jogadores para o controle do NPC vem dos donos dos personagens (`session.players`), não dos membros da mesa.
+- Efeitos não saem do token automaticamente. (Na mesa online, efeitos, pings, sons e chat já chegam a todos; na mesa
+  local, só a própria tela os vê.)
 - Persistir janelas abertas, visibilidade das barras e pincel por mesa.
 - Imagens de token substituídas durante a sessão só liberam a URL antiga ao sair da mesa (`BlobUrlService`).
 - Névoa: visão só por token; portas sem tranca nem permissão (qualquer papel abre/fecha).
