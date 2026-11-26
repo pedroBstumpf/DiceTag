@@ -1,4 +1,4 @@
-import { Component, computed, inject, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, output } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { TableRole, TableTool } from '../../../../core/models/table-session.model';
@@ -44,6 +44,7 @@ export function toolAllowed(tool: ToolDef, role: TableRole): boolean {
  * Ferramentas com opções (ex.: Névoa) abrem um submenu ao lado da barra.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-tool-bar',
   imports: [MatIconModule, MatTooltipModule, DrawMenu, FogMenu, FxMenu, LevelsMenu],
   templateUrl: './tool-bar.html',

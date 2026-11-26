@@ -1,4 +1,4 @@
-import { Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { MatIcon } from '@angular/material/icon';
 
 /**
@@ -6,6 +6,7 @@ import { MatIcon } from '@angular/material/icon';
  * espaço para ações (botões projetados via <ng-content>).
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-empty-state',
   imports: [MatIcon],
   host: { class: 'flex flex-col items-center justify-center gap-3 px-6 py-12 text-center' },

@@ -1,4 +1,4 @@
-import { Component, computed, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import {
@@ -43,6 +43,7 @@ const OUTCOME_GUIDE: Record<DiceKind, { outcome: RollOutcome; range: string }[]>
  * fixo + tags dos temas do dono), ícone e efeito especial lançado ao usar.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-entry-window',
   imports: [MatIconModule, MatTooltipModule, FxPicker],
   templateUrl: './entry-window.html',

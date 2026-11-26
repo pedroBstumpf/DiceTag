@@ -1,4 +1,4 @@
-import { Component, computed, inject, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, output, signal } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -31,6 +31,7 @@ function groupByTheme(tags: SheetTagOption[]): ThemeGroup[] {
  * Nada é salvo: ao abrir de novo, começa do zero.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-quick-roll',
   imports: [MatIconModule, MatTooltipModule, AutoFocus],
   templateUrl: './quick-roll.html',

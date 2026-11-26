@@ -1,4 +1,4 @@
-import { Component, computed, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { Tag } from '../../../../core/models/tag.model';
 import { SheetStore } from '../../../../core/services/sheet-store';
@@ -32,6 +32,7 @@ export function parseEquippedWindow(id: string): { sheetId: string; inventoryId:
  * Quem edita a ficha também edita o cartão aqui; os demais só veem.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-equipped-item-window',
   imports: [MatIconModule, ItemCardView],
   host: { class: 'block h-full overflow-y-auto p-4' },

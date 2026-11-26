@@ -1,4 +1,4 @@
-import { Component, DestroyRef, ElementRef, computed, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, ElementRef, inject, input, output, signal, untracked, viewChild } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { Point, Rect } from '../../../../core/models/geometry.model';
@@ -123,6 +123,7 @@ interface Plane {
  * Acima do mundo fica a interface (popover de anotação, avisos).
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-map-stage',
   imports: [MatIconModule, MatTooltipModule, DrawingsLayer, NotesLayer, DropsLayer, FogLayer, TokensLayer, DoorsLayer, WallsLayer, FxLayer, NotePopover],
   templateUrl: './map-stage.html',

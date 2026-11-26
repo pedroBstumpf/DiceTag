@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
@@ -17,6 +17,7 @@ import { OnlineTables } from './online-tables/online-tables';
 
 /** Página "Minhas mesas": lista, cria e exclui mesas do usuário; abaixo, as mesas online (servidor). */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-tables',
   imports: [DatePipe, RouterLink, MatButtonModule, MatIconModule, MatMenuModule, MatTooltipModule, EmptyState, OnlineTables, HostPanel],
   templateUrl: './tables.html',

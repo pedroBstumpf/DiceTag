@@ -1,4 +1,4 @@
-import { Component, computed, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { WORLD_ITEM_META, WorldItem } from '../../../../core/models/world-item.model';
 import { WorldbuildService } from '../../services/worldbuild.service';
@@ -9,6 +9,7 @@ import { WorldbuildService } from '../../services/worldbuild.service';
  * abre outra janela de pasta. Serve para organizar visualmente o mundo na mesa de trabalho.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-folder-view',
   imports: [MatIconModule],
   host: { class: 'block h-full overflow-y-auto p-3' },

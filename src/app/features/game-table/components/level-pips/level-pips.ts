@@ -1,4 +1,4 @@
-import { Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { SHEET_MAX_LEVEL } from '../../../../core/models/table-session.model';
 
 /**
@@ -9,6 +9,7 @@ import { SHEET_MAX_LEVEL } from '../../../../core/models/table-session.model';
  * que cresce do centro para a esquerda); o número aparece sem sinal.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-level-pips',
   host: { class: 'inline-flex shrink-0 items-center gap-0.5', role: 'radiogroup', '[attr.aria-label]': 'label()' },
   template: `

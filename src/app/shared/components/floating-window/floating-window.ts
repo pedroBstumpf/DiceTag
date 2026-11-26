@@ -1,4 +1,4 @@
-import { Component, DestroyRef, ElementRef, computed, inject, input, model, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, ElementRef, inject, input, model, output } from '@angular/core';
 import { MatIconButton } from '@angular/material/button';
 import { MatIcon } from '@angular/material/icon';
 import { MatTooltip } from '@angular/material/tooltip';
@@ -30,6 +30,7 @@ const HEADER_HEIGHT = 44;
  *   </app-floating-window>
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-floating-window',
   imports: [MatIcon, MatIconButton, MatTooltip],
   templateUrl: './floating-window.html',

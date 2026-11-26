@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { BRUSH_COLORS, BRUSH_OPACITIES, BRUSH_WIDTHS } from '../../../../core/models/table-session.model';
@@ -9,6 +9,7 @@ import { Brush, TableSessionService } from '../../services/table-session.service
  * cor, espessura, opacidade, borracha e limpar os desenhos da cena.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-draw-menu',
   imports: [MatIconModule, MatTooltipModule],
   host: { class: 'glass block w-60 rounded-xl p-3 shadow-xl shadow-black/40' },

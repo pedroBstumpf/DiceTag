@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
@@ -18,6 +18,7 @@ import { TableSessionService } from '../../services/table-session.service';
  * Aceita envio de vários arquivos de áudio pelo botão ou arrastando para a aba.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-sound-list',
   imports: [MatButtonModule, MatIconModule, MatMenuModule, MatTooltipModule, AutoFocus],
   templateUrl: './sound-list.html',

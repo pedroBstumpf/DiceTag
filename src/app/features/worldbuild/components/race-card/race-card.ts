@@ -1,4 +1,4 @@
-import { Component, computed, effect, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { STATUS_BARS, StatusBarId, StatusMods } from '../../../../core/models/table-session.model';
@@ -12,6 +12,7 @@ type RaceImageField = 'maleBlobId' | 'femaleBlobId';
  * Carrega o arquivo do serviço (cancelado se a imagem mudar antes de terminar).
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-race-image',
   imports: [MatIconModule, MatTooltipModule],
   host: { class: 'flex flex-col gap-1.5' },
@@ -94,6 +95,7 @@ export class RaceImage {
  * ao máximo das barras.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-race-card',
   imports: [MatIconModule, RaceImage],
   host: { class: 'block h-full overflow-y-auto p-5' },

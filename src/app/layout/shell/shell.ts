@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { MatIconButton } from '@angular/material/button';
 import { MatIcon } from '@angular/material/icon';
 import { RouterLink, RouterOutlet } from '@angular/router';
@@ -10,6 +10,7 @@ import { Sidebar } from '../sidebar/sidebar';
  * No mobile, exibe uma barra superior compacta com o botão do menu.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-shell',
   imports: [RouterOutlet, RouterLink, Sidebar, MatIcon, MatIconButton],
   templateUrl: './shell.html',

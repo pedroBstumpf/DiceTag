@@ -1,4 +1,4 @@
-import { Component, computed, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -15,6 +15,7 @@ import { TokenEditor } from '../token-editor/token-editor';
  * tokens dele; NPC altera só este token (inclusive a visão). Imagem e velocidade valem sempre para a ficha.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-token-window',
   imports: [MatButtonModule, MatIconModule, MatTooltipModule, TokenEditor],
   host: { class: 'flex h-full flex-col overflow-y-auto p-5' },

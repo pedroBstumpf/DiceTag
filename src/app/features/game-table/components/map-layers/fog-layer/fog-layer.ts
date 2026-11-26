@@ -1,4 +1,4 @@
-import { Component, DestroyRef, ElementRef, effect, inject, input, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, effect, ElementRef, inject, input, viewChild } from '@angular/core';
 import { Point } from '../../../../../core/models/geometry.model';
 import { fogFadeProgress, shouldFadeFog } from '../../../utils/fog-fade';
 import { ExploredMask, isCellExplored } from '../../../utils/fog-memory';
@@ -33,6 +33,7 @@ interface FogFrame {
  * movimento que chega em rajadas sem andar aos saltos.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-fog-layer',
   host: { class: 'pointer-events-none absolute left-0 top-0' },
   template: `<canvas #canvas class="absolute left-0 top-0" [style.width.px]="width()" [style.height.px]="height()"></canvas>`,

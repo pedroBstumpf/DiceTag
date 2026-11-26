@@ -1,4 +1,4 @@
-import { Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
@@ -8,6 +8,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
  * nativo do sistema (o menu continua aberto até clicar fora).
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-color-picker',
   imports: [MatMenuModule, MatTooltipModule],
   host: { class: 'inline-flex' },

@@ -1,4 +1,4 @@
-import { Component, computed, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
@@ -19,6 +19,7 @@ import { TableSessionService } from '../../services/table-session.service';
  * Cada pasta é um botão que abre a lista das cenas dela; cenas fora de pastas viram abas.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-scene-bar',
   imports: [RouterLink, MatButtonModule, MatIconModule, MatMenuModule, MatTooltipModule, AutoFocus],
   templateUrl: './scene-bar.html',

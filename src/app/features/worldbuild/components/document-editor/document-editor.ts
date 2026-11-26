@@ -1,4 +1,4 @@
-import { Component, computed, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { RichTextEditor } from '../../../../shared/components/rich-text-editor/rich-text-editor';
 import { WorldbuildService } from '../../services/worldbuild.service';
@@ -8,6 +8,7 @@ import { WorldbuildService } from '../../services/worldbuild.service';
  * Salva automaticamente a cada alteração (o serviço agrupa as gravações).
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-document-editor',
   imports: [MatIconModule, RichTextEditor],
   templateUrl: './document-editor.html',

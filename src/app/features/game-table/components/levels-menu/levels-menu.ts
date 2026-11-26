@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -16,6 +16,7 @@ import { LevelView, TableSessionService, levelOf } from '../../services/table-se
  * baixo: tokens nela parecem voar). Também sobe/desce o token selecionado.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-levels-menu',
   imports: [MatIconModule, MatMenuModule, MatTooltipModule, AutoFocus],
   host: { class: 'glass block w-72 rounded-xl p-3 shadow-xl shadow-black/40' },

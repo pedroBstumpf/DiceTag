@@ -1,4 +1,4 @@
-import { Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { FX_COLORS, FX_KINDS, FixedFx } from '../../../../core/models/table-session.model';
@@ -12,6 +12,7 @@ import { FxPicker } from '../fx-picker/fx-picker';
  * (lista abaixo: quem lançou e o mestre removem).
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-fx-menu',
   imports: [MatIconModule, MatTooltipModule, FxPicker],
   host: { class: 'glass block max-h-[calc(100dvh-8rem)] w-64 overflow-y-auto rounded-xl p-3 shadow-xl shadow-black/40' },

@@ -1,4 +1,4 @@
-import { Component, ElementRef, computed, effect, inject, input, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, input, signal, viewChild } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { fitRect, zoomAt } from '../../../../shared/utils/viewport';
@@ -12,6 +12,7 @@ const MAX_SCALE = 8;
  * e navegação arrastando. Ideal para mapas grandes.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-image-viewer',
   imports: [MatIconModule, MatTooltipModule],
   templateUrl: './image-viewer.html',

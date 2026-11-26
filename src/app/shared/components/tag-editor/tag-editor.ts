@@ -1,4 +1,4 @@
-import { Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { TAG_COLORS, Tag } from '../../../core/models/tag.model';
@@ -12,6 +12,7 @@ import { ColorPicker } from '../color-picker/color-picker';
  * O botão de adicionar fica com quem usa (cabeçalhos diferentes): chame `add()`.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-tag-editor',
   imports: [MatIconModule, MatTooltipModule, ColorPicker],
   host: { class: 'flex flex-col gap-1.5' },
