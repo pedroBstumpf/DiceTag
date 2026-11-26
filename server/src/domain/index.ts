@@ -31,6 +31,7 @@ export { clampLevelIn } from '../../../src/app/features/game-table/state/levels'
 export { findDrop } from '../../../src/app/features/game-table/state/drops';
 export { inventoryHolder } from '../../../src/app/features/game-table/state/inventory';
 export { worldItemRefs } from '../../../src/app/features/game-table/state/lore';
+export { applySheetPatch, type SheetPatch } from '../../../src/app/features/game-table/state/sheets';
 export { equippedTagLevels, quantityOf, type ItemSources } from '../../../src/app/features/game-table/utils/inventory';
 export { resolveToken, type ResolvedToken } from '../../../src/app/features/game-table/state/tokens';
 export {
@@ -67,6 +68,7 @@ export {
   SHEET_THEME_COUNT,
   STATUS_BARS,
   defaultToken,
+  hasSheet,
   isDown,
   normalizeSheet,
   withStatusBars,

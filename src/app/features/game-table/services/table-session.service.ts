@@ -84,6 +84,7 @@ import {
 import { findDrop } from '../state/drops';
 import { inventoryHolder, unitNeedsImageCopy } from '../state/inventory';
 import { worldItemRefs } from '../state/lore';
+import { sheetPatchOf } from '../state/sheets';
 import { NO_SELECTION, TokenSelection, keepOnly, selectMany, selectOne, toggleInSelection, without } from '../utils/selection';
 import { TableCommand, TableCommandPayload, TableCommandType, applyCommand } from '../state/commands';
 import {
@@ -1464,15 +1465,21 @@ export class TableSessionService extends SheetStore {
   updateSheet(id: string, patch: Partial<CharacterSheet>): void {
     const placementId = tokenSheetPlacement(id);
     if (placementId) {
-      const current = this.sheetData(id)?.sheet;
-      if (current) this.dispatch('updatePlacement', { placementId, patch: { sheet: { ...current, ...patch } } });
+      // Token com cópia própria: só os campos alterados (patchSheet). Token antigo, que ainda usa a
+      // ficha do NPC: a primeira alteração grava a cópia inteira (o comando não conhece o bestiário).
+      if (this.findPlacement(placementId)?.sheet) this.dispatch('patchSheet', { sheetId: id, patch: sheetPatchOf(patch) });
+      else {
+        const current = this.sheetData(id)?.sheet;
+        if (current) this.dispatch('updatePlacement', { placementId, patch: { sheet: { ...current, ...patch } } });
+      }
       return;
     }
     const entry = this.entryById().get(id);
     if (!entry) return;
     const base = this.worldNpcOf(entry);
     if (base) this.worldServiceOf(entry).update(base.id, { sheet: { ...npcSheetOf(base), ...patch } });
-    else this.updateEntry(id, { sheet: { ...this.sheetOf(entry), ...patch } });
+    // Só os campos alterados: quem aplica junta com a ficha atual (duas pessoas não se apagam)
+    else this.dispatch('patchSheet', { sheetId: id, patch: sheetPatchOf(patch) });
     // Item desequipado ou fora do inventário sai das ações que usavam as etiquetas dele
     if (patch.inventory) this.pruneItemTags(id);
   }

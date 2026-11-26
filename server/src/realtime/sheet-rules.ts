@@ -1,6 +1,7 @@
 import {
   STATUS_BARS,
   applyRace,
+  applySheetPatch,
   canEditStatusMax,
   canSeeLoreItem,
   controlsNpc,
@@ -12,19 +13,21 @@ import {
   type CharacterStudy,
   type InventoryEntry,
   type RaceChoice,
+  type SheetPatch,
   type TokenBar,
   type TokenSettings,
   type WorldItem,
 } from '../domain';
 import type { RuleContext, RuleResult } from './command-rules';
-import type { SheetInput } from './command-schemas';
+import type { SheetInput, ValidPayload } from './command-schemas';
 import type { WorldView } from './world';
 
 /**
  * Fichas editadas por JOGADORES (o mestre edita tudo e não passa por aqui).
  *
- * O cliente grava a ficha inteira (comandos por campo ficam para a ligação do front, SPEC.md §1),
- * então o servidor compara com a gravada e não confia no que só ele ou o mestre definem:
+ * A ficha chega inteira (`updateEntry`/`updatePlacement`, ex.: a primeira cópia de um token) ou
+ * por campo (`patchSheet`, juntado à gravada antes de conferir). O servidor compara com a gravada
+ * e não confia no que só ele ou o mestre definem:
  * - raça: o cliente só escolhe a referência; o servidor aplica a Raça do mundo (`applyRace`, a
  *   mesma função do front) e grava nomes, rótulos, `appliedRaces` e máximos das barras;
  * - SN dos estudos e máximo das barras de status: só o mestre (`canEditStatusMax`); as três
@@ -90,6 +93,33 @@ export function playerSheetChange(ctx: RuleContext, before: SheetBefore, next: S
     bars = next.bars;
   }
   return { ok: true, payload: { ...(sheet && { sheet }), ...(bars !== before.bars && { bars }) } };
+}
+
+/** Campos que a troca de raça reescreve (vão juntos no patch final, para todos verem a mesma ficha). */
+const RACE_FIELDS = ['race', 'subrace', 'raceRef', 'subraceRef', 'appliedRaces', 'labels'] as const;
+
+/** Pedido de alteração por campo (`patchSheet`), como chega do cliente (já validado). */
+type SheetPatchInput = ValidPayload<'patchSheet'>;
+
+/**
+ * Ficha por campo (`patchSheet`) de um JOGADOR: junta o patch à ficha gravada, passa pelas mesmas
+ * regras da ficha inteira (`playerSheetChange`) e devolve só os campos pedidos, com os valores
+ * conferidos. Trocar a raça leva junto tudo o que a raça reescreve (nome, rótulos, o que ela
+ * aplicou) e, se mudou o máximo das barras de status, as barras. `bars` do cliente é ignorado.
+ */
+export function playerSheetPatch(ctx: RuleContext, before: SheetBefore, p: SheetPatchInput): RuleResult<SheetPatchInput> {
+  const merged = applySheetPatch(before.sheet, p.patch as SheetPatch);
+  const change = playerSheetChange(ctx, before, { sheet: merged });
+  if (!change.ok) return change;
+  const sheet = change.payload.sheet as Record<string, unknown>;
+  const keys = new Set<string>(Object.keys(p.patch));
+  if (keys.has('raceRef') || keys.has('subraceRef')) for (const field of RACE_FIELDS) keys.add(field);
+  const patch: Record<string, unknown> = {};
+  for (const key of keys) patch[key] = sheet[key] === undefined ? null : sheet[key];
+  return {
+    ok: true,
+    payload: { sheetId: p.sheetId, patch: patch as SheetPatchInput['patch'], ...(change.payload.bars && { bars: change.payload.bars }) },
+  };
 }
 
 /** Raça do mundo pronta para `applyRace` (null se não existe ou não é uma Raça). */
