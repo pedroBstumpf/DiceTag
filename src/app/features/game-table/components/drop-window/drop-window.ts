@@ -1,4 +1,4 @@
-import { Component, computed, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -22,6 +22,7 @@ export const DROP_WINDOW = 'drop:';
  * (no mapa: alça de tamanho e Delete no item selecionado).
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-drop-window',
   imports: [MatIconModule, MatTooltipModule, ItemCardView, ColorPicker],
   host: { class: 'block h-full overflow-y-auto p-4' },

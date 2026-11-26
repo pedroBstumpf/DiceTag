@@ -1,6 +1,6 @@
 import { CdkDrag, CdkDragPlaceholder, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
 import { NgTemplateOutlet } from '@angular/common';
-import { Component, computed, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { NotePage, isFixedNotePage } from '../../../../core/models/table-session.model';
@@ -17,6 +17,7 @@ import { TableSessionService } from '../../services/table-session.service';
  * movidas nem renomeadas. As criadas na ficha vêm depois e podem ser arrastadas.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-sheet-notes',
   imports: [NgTemplateOutlet, CdkDropList, CdkDrag, CdkDragPlaceholder, MatIconModule, MatTooltipModule, RichTextEditor],
   templateUrl: './sheet-notes.html',

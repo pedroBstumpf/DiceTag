@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
@@ -16,6 +16,7 @@ interface PickerData {
  * usa os envia à mesa pelo caminho de sempre, e é essa cópia, sem metadados, que os jogadores recebem.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-library-picker',
   imports: [MatButtonModule, MatDialogModule, MatIconModule, MatProgressSpinnerModule],
   templateUrl: './library-picker.html',

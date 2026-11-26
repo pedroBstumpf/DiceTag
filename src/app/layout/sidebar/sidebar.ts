@@ -1,5 +1,5 @@
 import { NgTemplateOutlet } from '@angular/common';
-import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { filter, map } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
@@ -81,6 +81,7 @@ const WORLDBUILD_TYPES: WorldbuildType[] = [
  * um novo, e a área da conta. Recolhível no desktop (só ícones) e gaveta no mobile.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-sidebar',
   imports: [NgTemplateOutlet, RouterLink, RouterLinkActive, MatButtonModule, MatIconModule, MatMenuModule, MatTooltipModule, AutoFocus],
   templateUrl: './sidebar.html',

@@ -1,4 +1,4 @@
-import { Component, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MapNote, NOTE_COLORS } from '../../../../core/models/table-session.model';
@@ -11,6 +11,7 @@ import { TableSessionService } from '../../services/table-session.service';
  * Mais leve que uma janela flutuante e sem os atalhos de teclado de um menu.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-note-popover',
   imports: [MatIconModule, MatTooltipModule, AutoFocus],
   host: {

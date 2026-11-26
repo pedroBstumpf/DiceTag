@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { Component, inject, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, output, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { BrowserCopyService, CopyImportResult } from '../../../core/services/browser-copy.service';
@@ -14,6 +14,7 @@ import { BrowserCopy, COPY_EXTENSION, CopyContents, CopyWorld, copyContents, rea
  * substitui itens de mesmo id, e reenviar uma mesa cria outra igual.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-copy-import',
   imports: [DatePipe, MatButtonModule, MatIconModule],
   templateUrl: './copy-import.html',

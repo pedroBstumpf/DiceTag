@@ -1,4 +1,4 @@
-import { Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import {
@@ -33,6 +33,7 @@ export interface TokenEditorValue {
  * decide onde gravar (ficha ou token colocado, conforme a regra de vínculo).
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-token-editor',
   imports: [MatIconModule, MatTooltipModule, ColorPicker, TagEditor],
   templateUrl: './token-editor.html',

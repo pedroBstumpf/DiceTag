@@ -1,4 +1,4 @@
-import { Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { DEFAULT_FX, FX_COLORS, FX_GROUPS, FX_KINDS, FxGroup, FxStyle } from '../../../../core/models/table-session.model';
@@ -9,6 +9,7 @@ import { DEFAULT_FX, FX_COLORS, FX_GROUPS, FX_KINDS, FxGroup, FxStyle } from '..
  * e na configuração das automações.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-fx-picker',
   imports: [MatIconModule, MatTooltipModule],
   host: { class: 'flex flex-col gap-3' },

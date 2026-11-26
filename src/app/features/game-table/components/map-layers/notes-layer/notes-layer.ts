@@ -1,4 +1,4 @@
-import { Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MapNote } from '../../../../../core/models/table-session.model';
@@ -16,6 +16,7 @@ export interface NotePointerDown {
  * mover e abrir a edição é roteado pelo map-stage.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-notes-layer',
   imports: [MatIconModule, MatTooltipModule],
   host: { class: 'pointer-events-none absolute left-0 top-0' },

@@ -1,5 +1,5 @@
 import { NgTemplateOutlet } from '@angular/common';
-import { Component, computed, effect, inject, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, output, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
@@ -29,6 +29,7 @@ type PanelTab = 'chat' | 'sheets' | 'lore' | 'sounds' | 'automations';
  * Fichas, lore e automações abrem numa janela flutuante.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-side-panel',
   imports: [NgTemplateOutlet, MatButtonModule, MatIconModule, MatMenuModule, MatTooltipModule, AutoFocus, SoundList, ChatPanel, Explorer],
   templateUrl: './side-panel.html',

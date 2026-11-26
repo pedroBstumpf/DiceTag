@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { RouterLink } from '@angular/router';
@@ -26,6 +26,7 @@ interface FeatureCard {
  * (mesas, worldbuild, mundos) e o mural de notícias e anúncios.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-home',
   imports: [RouterLink, DatePipe, MatButtonModule, MatIconModule, EmptyState],
   templateUrl: './home.html',

@@ -1,4 +1,4 @@
-import { Component, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { TokenBar, isDown } from '../../../../../core/models/table-session.model';
 import { readableTextOn } from '../../../../../shared/utils/color';
@@ -33,6 +33,7 @@ const GLIDE = 'transition-[left,top] duration-100 ease-linear motion-reduce:tran
  * Elementos de interface usam tamanho mínimo legível independente do zoom.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-tokens-layer',
   imports: [MatTooltipModule],
   templateUrl: './tokens-layer.html',

@@ -1,4 +1,4 @@
-import { DestroyRef, Component, ElementRef, computed, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, ElementRef, inject, input, signal, untracked, viewChild } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -44,6 +44,7 @@ const URL_CREATABLE_TYPES: readonly WorldItemType[] = ['document', 'timeline', '
  * ficam os mundos das mesas. Sem servidor ou sem mundos nele, abre o deste navegador.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-worldbuild',
   imports: [
     MatButtonModule,

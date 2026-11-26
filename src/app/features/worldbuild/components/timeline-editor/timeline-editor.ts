@@ -1,4 +1,4 @@
-import { Component, ElementRef, afterNextRender, computed, inject, input, output, signal, viewChild } from '@angular/core';
+import { afterNextRender, ChangeDetectionStrategy, Component, computed, ElementRef, inject, input, output, signal, viewChild } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -54,6 +54,7 @@ const HANDLE_CLASS: Record<CardSide, string> = {
  * Salva automaticamente (o serviço agrupa as gravações).
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-timeline-editor',
   imports: [MatButtonModule, MatIconModule, MatTooltipModule, AutoFocus],
   templateUrl: './timeline-editor.html',

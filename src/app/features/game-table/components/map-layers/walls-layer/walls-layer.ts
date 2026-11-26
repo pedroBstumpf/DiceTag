@@ -1,4 +1,4 @@
-import { Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { Point } from '../../../../../core/models/geometry.model';
 import { Wall } from '../../../../../core/models/table-session.model';
 import { wallHandles } from '../../../utils/walls';
@@ -16,6 +16,7 @@ export type WallDraft =
  * roteado pelo map-stage.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-walls-layer',
   host: { class: 'pointer-events-none absolute left-0 top-0' },
   template: `

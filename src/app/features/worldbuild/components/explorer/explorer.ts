@@ -1,5 +1,5 @@
 import { NgTemplateOutlet } from '@angular/common';
-import { Component, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
@@ -51,6 +51,7 @@ export const EXPLORER_VIEWS: readonly ExplorerView[] = ['files', ...LIST_VIEWS.m
  * jogadores (`revealed`); o jogador vê só as pastas reveladas (`visible`), em só leitura.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-explorer',
   imports: [NgTemplateOutlet, AutoFocus, MatButtonModule, MatIconModule, MatMenuModule, MatTooltipModule],
   templateUrl: './explorer.html',

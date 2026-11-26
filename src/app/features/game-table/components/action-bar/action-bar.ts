@@ -1,5 +1,5 @@
 import { CdkConnectedOverlay, CdkOverlayOrigin, ConnectedPosition } from '@angular/cdk/overlay';
-import { Component, computed, inject, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, output, signal } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -19,6 +19,7 @@ const SLOT_COUNT = 10;
  * À direita, a ação padrão "Rolar" (QuickRoll): rolagem básica com modificador na hora.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-action-bar',
   imports: [CdkOverlayOrigin, CdkConnectedOverlay, MatIconModule, MatMenuModule, MatTooltipModule, QuickRoll],
   templateUrl: './action-bar.html',

@@ -1,5 +1,5 @@
 import { NgTemplateOutlet } from '@angular/common';
-import { Component, Directive, ElementRef, Renderer2, computed, effect, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, Directive, effect, ElementRef, inject, input, Renderer2, signal } from '@angular/core';
 import { Point } from '../../../../../core/models/geometry.model';
 import { FxStyle } from '../../../../../core/models/table-session.model';
 import { FxInstance } from '../../../services/table-session.service';
@@ -44,6 +44,7 @@ export class FxPartAttrs {
  * Também desenha a mira enquanto o usuário arrasta.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-fx-layer',
   imports: [NgTemplateOutlet, FxPartAttrs],
   host: { class: 'pointer-events-none absolute left-0 top-0' },

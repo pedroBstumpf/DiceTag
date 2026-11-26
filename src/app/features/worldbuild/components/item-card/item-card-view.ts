@@ -1,4 +1,4 @@
-import { Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { Tag } from '../../../../core/models/tag.model';
 import { TagEditor } from '../../../../shared/components/tag-editor/tag-editor';
@@ -12,6 +12,7 @@ export const ITEM_TAG_COLOR = '#22c55e';
  * o item do worldbuild (ItemCard) ou a cópia do item no inventário da ficha.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-item-card-view',
   imports: [MatIconModule, TagEditor],
   host: { class: 'block' },

@@ -1,4 +1,4 @@
-import { Component, computed, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { Tag } from '../../../../core/models/tag.model';
 import { ItemCardView } from '../../../worldbuild/components/item-card/item-card-view';
@@ -10,6 +10,7 @@ import { TableSessionService } from '../../services/table-session.service';
  * do item (imagem, nome e etiquetas). Quem criou e o mestre editam; os demais só veem.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-table-item-window',
   imports: [MatIconModule, ItemCardView],
   host: { class: 'block h-full overflow-y-auto p-4' },

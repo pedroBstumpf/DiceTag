@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { Component, ElementRef, effect, inject, untracked, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, ElementRef, inject, untracked, viewChild } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ROLL_OUTCOMES, RollResult } from '../../../../core/models/table-session.model';
@@ -14,6 +14,7 @@ import { characterModifier, formatModifier } from '../../utils/dice';
  * Enter envia; Shift+Enter quebra a linha.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-chat-panel',
   imports: [DatePipe, MatIconModule, MatTooltipModule],
   host: { class: 'flex h-full min-h-0 flex-col' },

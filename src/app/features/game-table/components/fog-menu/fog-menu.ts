@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { TableSessionService, WallMode } from '../../services/table-session.service';
@@ -17,6 +17,7 @@ const WALL_MODES: { id: WallMode; icon: string; label: string; hint: string }[] 
  * liga/desliga a névoa na cena, escolhe o modo de parede e a visibilidade das paredes.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-fog-menu',
   imports: [MatIconModule, MatTooltipModule],
   host: { class: 'glass block w-64 rounded-xl p-2 shadow-xl shadow-black/40' },

@@ -1,4 +1,4 @@
-import { Component, computed, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -44,6 +44,7 @@ interface ItemOption {
  * A caixa à esquerda de cada item marca se ele está equipado (personagens e NPCs).
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-sheet-inventory',
   imports: [MatIconModule, MatMenuModule, MatTooltipModule, AutoFocus, ItemCardView],
   templateUrl: './sheet-inventory.html',

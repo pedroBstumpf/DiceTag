@@ -1,4 +1,4 @@
-import { Component, DestroyRef, computed, effect, inject, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, untracked } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -13,6 +13,7 @@ const POLL_MS = 3000;
  * internet pelo Tailscale Funnel e tira de novo, e o que fazer quando ainda falta algo.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-host-panel',
   imports: [MatButtonModule, MatIconModule, MatTooltipModule],
   templateUrl: './host-panel.html',

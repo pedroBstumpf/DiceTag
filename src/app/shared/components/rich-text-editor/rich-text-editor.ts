@@ -1,4 +1,4 @@
-import { Component, DestroyRef, ElementRef, afterNextRender, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
+import { afterNextRender, ChangeDetectionStrategy, Component, DestroyRef, effect, ElementRef, inject, input, output, signal, untracked, viewChild } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { Editor } from '@tiptap/core';
@@ -24,6 +24,7 @@ interface ToolbarButton {
  * com o HTML. O conteúdo projetado (ex.: campo de título) fica acima do texto.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-rich-text-editor',
   imports: [MatIconModule, MatTooltipModule],
   templateUrl: './rich-text-editor.html',

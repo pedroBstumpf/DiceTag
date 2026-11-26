@@ -1,4 +1,4 @@
-import { Component, computed, effect, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
 import { Tag } from '../../../../core/models/tag.model';
 import { WorldbuildService } from '../../services/worldbuild.service';
 import { ItemCardView } from './item-card-view';
@@ -9,6 +9,7 @@ import { ItemCardView } from './item-card-view';
  * O visual fica no ItemCardView (também usado pelo inventário da ficha).
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-item-card',
   imports: [ItemCardView],
   host: { class: 'block h-full overflow-y-auto p-5' },

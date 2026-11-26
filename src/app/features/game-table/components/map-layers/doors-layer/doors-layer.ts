@@ -1,4 +1,4 @@
-import { Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { DoorWall } from '../../../../../core/models/table-session.model';
@@ -10,6 +10,7 @@ import { DoorWall } from '../../../../../core/models/table-session.model';
  * de tamanho constante na tela, que abre/fecha a porta.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-doors-layer',
   imports: [MatIconModule, MatTooltipModule],
   host: { class: 'pointer-events-none absolute left-0 top-0' },

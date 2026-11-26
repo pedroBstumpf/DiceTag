@@ -1,4 +1,4 @@
-import { Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { Point } from '../../../../../core/models/geometry.model';
 import { Stroke } from '../../../../../core/models/table-session.model';
 
@@ -11,6 +11,7 @@ export type StrokeDraft = Omit<Stroke, 'id'>;
  * Não recebe ponteiro — desenhar e apagar é roteado pelo map-stage.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-drawings-layer',
   host: { class: 'pointer-events-none absolute left-0 top-0' },
   template: `

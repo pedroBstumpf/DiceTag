@@ -1,4 +1,4 @@
-import { Component, computed, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { DROP_COLOR, DROP_SIZE, DroppedItem } from '../../../../../core/models/table-session.model';
@@ -22,6 +22,7 @@ export interface DropPointerDown {
  * redimensionar e abrir o cartão é roteado pelo map-stage.
  */
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-drops-layer',
   imports: [MatIconModule, MatTooltipModule],
   host: { class: 'pointer-events-none absolute left-0 top-0' },
