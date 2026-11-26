@@ -625,7 +625,11 @@ export class TableSessionService extends SheetStore {
 
   /** Mestre: deixa a ficha ou o inventário de um token de NPC visível (só leitura) para os jogadores, ou não. */
   toggleTokenPublic(placementId: string, part: 'sheet' | 'inventory'): void {
-    this.dispatch('toggleTokenPublic', { placementId, part });
+    const token = this.findPlacement(placementId);
+    if (!token) return;
+    const current = part === 'sheet' ? token.sheetPublic : token.inventoryPublic;
+    // O comando leva o valor final (dois cliques simultâneos não se anulam)
+    this.dispatch('setTokenPublic', { placementId, part, value: !current });
   }
 
   /** Token colocado (em qualquer cena), sem resolver a ficha. */
@@ -1844,7 +1848,7 @@ export class TableSessionService extends SheetStore {
 
   /** Mestre: revela ou esconde dos jogadores uma pasta do mundo (e tudo dentro dela). */
   toggleLoreReveal(folderId: string): void {
-    this.dispatch('toggleLoreReveal', { folderId });
+    this.dispatch('setLoreReveal', { folderId, revealed: !this.revealedLore().has(folderId) });
   }
 
   /** O jogador pode ver este item da lore? (regra em `rules.canSeeLoreItem`; o mestre vê tudo) */
@@ -2147,7 +2151,8 @@ export class TableSessionService extends SheetStore {
   /** Abre ou fecha uma porta (a visão é recalculada automaticamente). */
   toggleDoor(doorId: string): void {
     const sceneId = this.activeSceneId();
-    if (sceneId && this.doors().some((d) => d.id === doorId)) this.dispatch('toggleDoor', { sceneId, doorId });
+    const door = this.doors().find((d) => d.id === doorId);
+    if (sceneId && door) this.dispatch('setDoorOpen', { sceneId, doorId, open: !door.open });
   }
 
   removeWall(wallId: string): void {

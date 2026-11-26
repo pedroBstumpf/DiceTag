@@ -9,7 +9,7 @@ import {
   TokenTag,
   TokenVision,
 } from '../../../core/models/table-session.model';
-import { mapPlacement, mapScene } from './helpers';
+import { findPlacement, mapPlacement, mapScene } from './helpers';
 
 /**
  * Tokens no mapa: comandos (colocar, mover, alterar, remover) e a regra de vínculo
@@ -123,11 +123,16 @@ export function removeToken(state: TableState, { placementId }: { placementId: s
   };
 }
 
-/** Mestre: alterna a ficha ou o inventário de um token de NPC como visível aos jogadores. */
-export function toggleTokenPublic(state: TableState, p: { placementId: string; part: 'sheet' | 'inventory' }): TableState {
-  return mapPlacement(state, p.placementId, (t) =>
-    p.part === 'sheet'
-      ? { ...t, sheetPublic: !t.sheetPublic || undefined }
-      : { ...t, inventoryPublic: !t.inventoryPublic || undefined },
-  );
+/**
+ * Mestre: deixa a ficha ou o inventário de um token de NPC visível aos jogadores (`value: true`) ou
+ * só do mestre. Leva o valor final, não "alternar"; desligado = campo ausente; já assim = estado igual.
+ */
+export function setTokenPublic(
+  state: TableState,
+  p: { placementId: string; part: 'sheet' | 'inventory'; value: boolean },
+): TableState {
+  const token = findPlacement(state.scenes, p.placementId);
+  const field = p.part === 'sheet' ? 'sheetPublic' : 'inventoryPublic';
+  if (!token || !!token[field] === p.value) return state;
+  return mapPlacement(state, p.placementId, (t) => ({ ...t, [field]: p.value || undefined }));
 }

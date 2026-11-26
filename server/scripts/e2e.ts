@@ -524,7 +524,7 @@ async function run(gm: Page, player: Page, cdp: Cdp): Promise<void> {
   const created = await gm.command('addEntry', { entry: { id: 'pc-ana', kind: 'character', name: 'Ana', createdAt: 1, ownerUserId: playerAccount.user.id, token: anaToken, sheet } });
   check(created.t === 'ack', 'mestre deu à personagem da jogadora um item do mundo', JSON.stringify(created));
   await player.command('placeToken', { sceneId: 'cena', placement: { id: 't-ana', entryId: 'pc-ana', x: 150, y: 150 } });
-  await gm.command('toggleLoreReveal', { folderId: 'pasta-publica' });
+  await gm.command('setLoreReveal', { folderId: 'pasta-publica', revealed: true });
 
   // As duas pessoas abrem a mesa de verdade
   await gm.goto(`${BASE}/mesa-online/${table.id}`);
