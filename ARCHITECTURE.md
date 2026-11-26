@@ -9,7 +9,8 @@ rolagens…) estão no [`CLAUDE.md`](CLAUDE.md); este documento explica o **esqu
 ## 1. Visão geral
 
 Aplicação **Angular 21** de página única, **standalone** e **zoneless** (sem zone.js): toda a
-reatividade vem de **signals**. As telas locais guardam os dados no **IndexedDB** do navegador (diagrama abaixo). A
+reatividade vem de **signals**, e todo componente é **OnPush** (só é conferido quando um signal, input ou evento dele
+muda; dado comum alterado depois de um `await` não aparece na tela). As telas locais guardam os dados no **IndexedDB** do navegador (diagrama abaixo). A
 **mesa online** e o mundo dela usam o servidor em `server/` (§11 e §12), pelo mesmo `TableSessionService` e pelo mesmo
 `WorldbuildService`, que trocam de origem sem as telas saberem.
 
@@ -51,19 +52,19 @@ src/
     ├── core/               # domínio e dados — sem UI
     │   ├── config/         # flags globais (APP_SETTINGS.requireAuth)
     │   ├── models/         # interfaces, constantes e funções de normalização do domínio
-    │   ├── services/       # serviços globais (storage, auth, mesas, layout, notícias, SheetStore)
+    │   ├── services/       # serviços globais (storage, auth, mesas, layout, notícias) e contratos (SheetStore, BlobReader)
     │   └── utils/          # newId()
     ├── shared/             # reutilizável por qualquer feature
     │   ├── components/     # FloatingWindow, EmptyState, ColorPicker, TagEditor, RichTextEditor
     │   ├── directives/     # AutoFocus
-    │   ├── services/       # WindowManagerService, QuickActionsService
+    │   ├── services/       # WindowManagerService, BlobUrlService
     │   └── utils/          # viewport.ts (pan/zoom puro)
     ├── layout/             # Shell (barra lateral + conteúdo) e Sidebar
     └── features/           # uma pasta por área do app (rotas lazy)
         ├── home/           # landing
         ├── auth/           # entrada do dono, convite e redefinir a senha
         ├── library/        # página Arquivos: biblioteca do dono
-        ├── tables/         # "Minhas mesas" + diálogo de criação
+        ├── tables/         # "Minhas mesas" + diálogo de criação + QuickActionsService (atalhos da Home)
         ├── worldbuild/     # Worldbuild do mundo aberto (o usuário tem até 2 mundos)
         └── game-table/     # mesa de jogo (a maior feature)
 ```
@@ -78,15 +79,22 @@ layout  ──► shared, core
 ```
 
 `core` não importa nada de `shared`, `layout` ou `features`, e `layout` não importa `features`.
-A regra **não é verificada automaticamente** e hoje tem três exceções conhecidas:
+A regra **é verificada a cada `npm run build`** por [`scripts/check-deps.mjs`](scripts/check-deps.mjs) (também
+`npm run check:deps`, e no CI). Uma feature usa outra só se estiver declarado ali (`FEATURE_DEPS`):
 
 | De → para | O que é importado | Por quê |
 |---|---|---|
-| `shared` → `features` | `QuickActionsService` importa `CreateTableDialog` | as ações rápidas (barra lateral e Home) abrem esses diálogos |
 | `game-table` → `worldbuild` | editores, `Explorer`, `ItemCardView`, `RaceCard`, diretiva `appWorldNpcSheet`, `WorldbuildService` | abrir a lore e os itens do mundo sem sair da mesa |
-| `worldbuild` → `game-table` | `CharacterSheetView` e `BlobUrlService` | a ficha base dos NPCs do bestiário é a mesma tela da mesa |
+| `home` → `tables` | `QuickActionsService` | os atalhos da página inicial abrem o "criar mesa" |
 
-As duas últimas formam um **ciclo** entre as features (ver o plano em [`SPEC.md`](SPEC.md)).
+E há **uma exceção conhecida** (`KNOWN_EXCEPTIONS`), que ainda forma um ciclo:
+
+| De → para | O que é importado | Por quê |
+|---|---|---|
+| `worldbuild` → `game-table` | `CharacterSheetView` (em `worldbuild.ts`) | a ficha base dos NPCs do bestiário é a mesma tela da mesa, que ainda usa o `TableSessionService` direto (plano em [`SPEC.md`](SPEC.md) §6) |
+
+Exceção nova precisa ser escrita na lista, com o motivo; exceção que deixa de existir também reprova o build, para
+sair da lista.
 
 ### Convenção de cada feature
 
@@ -157,7 +165,7 @@ preferência de interface (`dicetag.sidebarCollapsed`).
 | `WorldbuildService` | árvore de `WorldItem` do **mundo aberto** (`items`, `byId`, `worldItems`, `worldNpcs`, `worldRaces`) | `worldbuild:<userId>` (1º mundo) ou `worldbuild:<userId>:<worldId>` |
 | `LayoutService` | barra lateral recolhida / modo mobile | `localStorage dicetag.sidebarCollapsed` |
 | `NewsService` | notícias do mural (vazio por enquanto) | — |
-| `QuickActionsService` | atalhos globais (login, criar mesa, abrir worldbuild) — sem estado próprio | — |
+| `QuickActionsService` (`features/tables/services`) | atalhos da Home e de Minhas mesas (criar mesa, abrir worldbuild) — sem estado próprio | — |
 
 Arquivos binários (mapas, imagens, áudios, imagens de token) são gravados à parte pela `FileStore`
 (`core/services/file-store.ts`): `LocalFileStore` = IndexedDB, chaves `blob:<id>`; `ServerFileStore` = `/api/files`
@@ -169,13 +177,14 @@ Estes serviços existem **uma vez por página aberta** e morrem com ela:
 
 | Página | Provedores |
 |---|---|
-| `GameTablePage` | `TableSessionService`, `SheetStore → TableSessionService`, `SoundMixerService`, `BlobUrlService`, `WindowManagerService` |
-| `Worldbuild` | `WindowManagerService`, `BlobUrlService` |
+| `GameTablePage` | `TableSessionService`, `SheetStore → TableSessionService`, `SoundMixerService`, `BlobUrlService`, `BlobReader → TableSessionService`, `WindowManagerService` |
+| `Worldbuild` | `WindowManagerService`, `BlobUrlService`, `BlobReader → WorldbuildService` |
 
 - **`TableSessionService`** — o coração da mesa (ver §6). Estende `SheetStore`.
 - **`SoundMixerService`** — um `HTMLAudioElement` por som; estado "tocando" só na sessão.
-- **`BlobUrlService`** — cache de *object URLs* dos Blobs (imagens de token, mapas), liberados ao sair.
-  Mora em `game-table/services/`, mas também é fornecido pelo `Worldbuild` (é genérico; candidato a `shared/`).
+- **`BlobUrlService`** (`shared/services`) — cache de *object URLs* dos Blobs (imagens de token, mapas), liberados ao
+  sair. Lê pelo **`BlobReader`** (`core/services/blob-reader.ts`) que a página fornece: na mesa, a sessão (navegador ou
+  servidor); no Worldbuild, o mundo aberto.
 - **`WindowManagerService`** — lista de janelas abertas (`id`, geometria, z-index, minimizada, fixada).
 
 ---
@@ -285,14 +294,21 @@ fica em `state/`:
 | `entries.ts` | arquivos da mesa e volume mestre |
 | `tokens.ts` | colocar/mover/alterar/remover tokens e a **regra de vínculo** (`resolveToken`, `splitTokenPatch`) |
 | `inventory.ts` | itens que mudam de lugar (`transferItem`, `dropFromInventory`, `pickUpDrop`): um comando só, para nunca valerem pela metade com várias pessoas na mesa |
-| `fog.ts`, `drawings.ts`, `notes.ts`, `chat.ts`, `lore.ts` | névoa e paredes, desenhos, anotações, chat, pastas da Lore reveladas e itens da mesa |
+| `fog.ts`, `drawings.ts`, `notes.ts`, `chat.ts`, `lore.ts` | névoa, tamanho do mapa e paredes, desenhos, anotações, chat, pastas da Lore reveladas e itens da mesa |
+| `sheets.ts` | ficha por campo (`patchSheet`: só os campos alterados, `null` apaga; quem aplica junta com a ficha atual) |
+| `undo.ts` | desfazer/refazer: o comando que desfaz cada ação do mapa (`inverseOf`), gestos contínuos (`undoKey`) e as pilhas. Não é comando: o `dispatch` guarda o passo e o Ctrl+Z envia comandos comuns |
 | `npc-abilities.ts` | habilidades dos NPCs do bestiário: moram no NPC do mundo (`WorldItem.abilities`) e viram ações do NPC-referência na mesa (não é comando: o `TableSessionService` grava no `WorldbuildService`) |
 | `permissions.ts` | regras de acesso puras (`canEdit`, `sheetAccess`, `canSeeLoreItem`…), com quem olha (`Viewer`) como parâmetro |
 | `player-view.ts` | o que o jogador vê sob a névoa (`visibleTokensFor`, `visibleNotesFor`, `visibleDoorsFor`) |
 | `table-state.ts`, `helpers.ts` | estado vazio, `normalizeState` e auxiliares (`mapScene`, `mapPlacement`, `findPlacement`…) |
 
 Cada comando é `(estado, payload) → novo estado`, com payload serializável: ids, horários e sorteios
-já vêm prontos do serviço. Comando que não muda nada devolve o mesmo objeto, e o `dispatch` não grava.
+já vêm prontos do serviço. Comando que não muda nada devolve o mesmo objeto, e o `dispatch` não grava. O comando leva o
+valor final (`setDoorOpen { open }`, nunca "alternar"), para duas pessoas ao mesmo tempo chegarem ao mesmo estado.
+
+**Desfazer:** antes de aplicar, o `dispatch` calcula `inverseOf(estado, comando)`; se o comando mudou algo, o passo vai
+para a pilha da cena (`undoStacks`). Ctrl+Z aplica esses comandos (sem gerar passo novo) e guarda o caminho de volta
+para o Ctrl+Y (`inverseOfAll`).
 
 Regras com dono único: vínculo dos tokens (`state/tokens.ts`), quem age (`actor`), permissões
 (`state/permissions.ts`) e transferência de itens (`state/inventory.ts`; o serviço só duplica a imagem antes).
@@ -363,7 +379,9 @@ tokens + paredes da camada em foco
    └─► visionSources (computed, igualdade por valor)
          └─► computeVisibilityPolygon (utils/visibility.ts) por token
                ├─► FogLayer redesenha o <canvas> (agrupado em requestAnimationFrame)
-               └─► markPolygons (utils/fog-memory.ts) → Scene.explored (persistido)
+               └─► nextExplored (utils/fog-memory.ts) → Scene.explored (persistido)
+                     mesa local: pelo navegador; mesa online: pela sala do servidor (Room.explore),
+                     com a visão dos jogadores e o tamanho do mapa que o mestre informa (Scene.mapSize)
 ```
 
 Mudar o volume de um som ou o nome de uma ficha não muda as origens de visão, então nada disso recalcula.

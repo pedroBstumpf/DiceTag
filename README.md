@@ -36,9 +36,13 @@ A importação só acrescenta: o navegador de origem e o arquivo não mudam. Gua
 ```bash
 npm install
 npm start                    # http://localhost:4200
-npm run build                # build de produção em dist/
-npx ng test --watch=false    # testes das funções puras (utils/)
+npm run build                # confere as camadas (scripts/check-deps.mjs) e faz o build de produção em dist/
+npm run check:deps           # só a conferência das camadas (features → shared → core)
+npx ng test --watch=false    # testes das funções puras (utils/, state/) e da sessão da mesa
 ```
+
+A cada envio ao GitHub, o Actions (`.github/workflows/verificacao.yml`) roda o build e os testes do front e o
+`npm run check` do servidor, no Windows.
 
 > Requer Node.js 20.19+ ou 22.12+.
 
@@ -46,8 +50,8 @@ npx ng test --watch=false    # testes das funções puras (utils/)
 
 O back-end fica em [`server/`](server/README.md), com instruções completas para preparar, abrir e testar.
 Resumo: `cd server && npm install && npm run setup && npm run seed`, depois `npm run dev` (porta 3000).
-O `npm start` do front repassa `/api` e `/ws` para ele (`proxy.conf.json`). As telas ainda usam o
-IndexedDB: a ligação com o servidor é a próxima etapa.
+O `npm start` do front repassa `/api` e `/ws` para ele (`proxy.conf.json`). A mesa online e o mundo dela usam o
+servidor; as mesas "Neste navegador" ainda usam o IndexedDB (o destino delas é uma decisão pendente, `SPEC.md` §6).
 
 ## Estrutura
 
@@ -70,7 +74,7 @@ src/
     │   ├── components/        # floating-window (janela arrastável), empty-state, color-picker,
     │   │                      # tag-editor (etiquetas), rich-text-editor (Tiptap)
     │   ├── directives/        # auto-focus
-    │   ├── services/          # quick-actions, window-manager (janelas)
+    │   ├── services/          # window-manager (janelas), blob-url (imagens)
     │   └── utils/             # viewport (pan/zoom puro)
     ├── layout/
     │   ├── shell/             # barra lateral + área de conteúdo
@@ -79,12 +83,13 @@ src/
         ├── home/              # landing: banner, atalhos, notícias
         ├── auth/              # entrada do dono e página do convite
         ├── library/           # página Arquivos (imagens e sons)
-        ├── tables/            # "Minhas mesas" + diálogo de criação
+        ├── tables/            # "Minhas mesas" + diálogo de criação + atalhos da página inicial
         ├── game-table/        # a mesa de jogo (rota /mesa/:id, tela cheia)
         │   ├── components/    # map-stage (orquestrador), map-layers/ (desenhos, notas, névoa,
         │   │                  # tokens, paredes), barras, submenus, ficha de personagem (abas),
         │   │                  # janelas de NPC e token, mixer
-        │   ├── services/      # table-session (estado + vínculo de tokens), sound-mixer, blob-url
+        │   ├── services/      # table-session (estado + vínculo de tokens), sound-mixer
+        │   ├── state/         # comandos puros da mesa, permissões, visão, ficha por campo, desfazer
         │   └── utils/         # geometria, visão (ray casting), simplificação de traços
         └── worldbuild/        # explorador de pastas (com seletor de mundo) + janelas flutuantes
             ├── components/    # explorer, document-editor, timeline-editor, image-viewer, item-card, race-card
@@ -199,8 +204,14 @@ onde os tokens enxergam — e as áreas já exploradas continuam reveladas, escu
 Na de **Mestre** fica semitransparente, com o contorno das áreas visíveis.
 
 ### Desenho e anotações
-Pincel com cores, espessuras, opacidade, borracha e Ctrl+Z. Anotações são marcadores no mapa com título,
+Pincel com cores, espessuras, opacidade e borracha. Anotações são marcadores no mapa com título,
 texto, cor e opção "só o mestre vê".
+
+### Desfazer e refazer
+**Ctrl+Z** desfaz e **Ctrl+Y** (ou Ctrl+Shift+Z) refaz o que se faz no mapa: colocar, mover, redimensionar e tirar
+tokens, paredes e portas, desenhos, anotações, itens no chão e efeitos fixos. Cada pessoa desfaz só o que ela fez, na
+cena aberta, até 100 passos; arrastar um token é um passo só. Vale também na mesa online. Rolagens, chat, compras,
+fichas, cenas e camadas não são desfeitos.
 
 ### Itens no mapa
 Itens podem ser **largados no chão**: o mestre arrasta um item da aba Lore (ou de "Itens da mesa") até o mapa, e

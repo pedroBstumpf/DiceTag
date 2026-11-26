@@ -31,7 +31,8 @@ organizar toda a atmosfera de uma campanha.
 | Sons: **mixer** com faixas simultâneas, volume/repetição por faixa e volume mestre | Pronto |
 | **Tokens** (imagem, tamanho, visão, barras e etiquetas com cor/nível; vínculo personagem/NPC; WASD com velocidade configurável) | Pronto |
 | **Névoa de guerra + paredes + portas** (visão por ray casting, por papel, memória de áreas exploradas) | Pronto |
-| **Pincel** (desenho livre, borracha, Ctrl+Z) e **anotações** no mapa | Pronto |
+| **Pincel** (desenho livre, borracha) e **anotações** no mapa | Pronto |
+| **Desfazer/refazer** (Ctrl+Z / Ctrl+Y) das ações do mapa, como comandos (valem na mesa online) | Pronto |
 | **Itens no mapa** (largar da Lore ou do inventário; abrir o cartão; pegar com personagem ou NPC) | Pronto |
 | **Ficha de personagem** (abas Ficha, Inventário, Anotações, Habilidades; cards Básico, Status, Relações, 3 Temas) | Pronto |
 | **Ficha de NPC** (igual à de personagem, sem Anotações nem Relações; controle por jogador; ficha/inventário públicos; **loja em Eiros**) | Pronto |
@@ -42,7 +43,9 @@ organizar toda a atmosfera de uma campanha.
 | **Cópia do navegador** (arquivo `.zehenia`): leva mundos, mesas e imagens de um endereço ou navegador para o servidor | Pronto; testado com uma cópia de dados reais |
 | **Mesa online**: conta do servidor, convites, mesa ligada à sala (WebSocket), Worldbuild e bestiário no servidor, sons, pings e efeitos em tempo real | Pronto (testado com dois navegadores: `npm run e2e` em `server/`) |
 | **Recuperação de senha** da conta do servidor (por e-mail ou por `npm run reset-link`) e remoção de metadados (EXIF) das imagens enviadas | Pronto |
-| Front-end usando o servidor em tudo (contas e mesas locais substituídas) | Não iniciado: as duas coisas convivem |
+| **Mesa online robusta**: comandos com o valor final, ficha por campo, memória da névoa marcada pelo servidor | Pronto |
+| **Qualidade**: OnPush em todos os componentes, camadas verificadas no build, CI no GitHub (Windows) | Pronto |
+| Front-end usando o servidor em tudo (contas e mesas locais substituídas) | Não iniciado: as duas coisas convivem (decisão pendente, SPEC §6) |
 
 Fora da mesa online, as telas guardam tudo **no navegador (IndexedDB)**. A **mesa online** (seção "Mesas online" em Minhas
 mesas) usa a conta, as mesas, os convites, a sala e o mundo do servidor.
@@ -103,8 +106,12 @@ Configuração relevante do `angular.json` (produção):
 - `optimization.styles.inlineCritical: false` → nenhum CSS/`onload` inline no `index.html` (a CSP do servidor, que
   entrega o app no jeito leve, só aceita scripts de arquivo).
 - Budgets: inicial 800kB aviso / 1.5MB erro; estilo por componente 6kB / 12kB.
-  O aviso subiu para **850kB** porque o CSS global do Tailwind cresce com cada tela nova (inicial hoje ~841kB,
-  dos quais ~88kB de CSS). Evite importar coisas pesadas fora das rotas lazy.
+  O aviso subiu para **850kB** quando o CSS global do Tailwind crescia com cada tela nova; desde que os diálogos de conta
+  e de nova mesa passaram a carregar só quando abertos, o inicial está em ~676kB (o CSS, ~109kB, só ~18kB comprimido, e
+  ~70% dele são as classes do Tailwind usadas nos templates). Evite importar coisas pesadas fora das rotas lazy.
+- **`npm run build` roda antes o `scripts/check-deps.mjs`** (`prebuild`; também `npm run check:deps`): reprova import que
+  quebra a regra de camadas (ver §5). O GitHub Actions (`.github/workflows/verificacao.yml`) roda build e testes do
+  front e o `npm run check` do servidor a cada push.
 
 ---
 
@@ -134,6 +141,7 @@ src/
     │   │   ├── storage.service.ts      # wrapper chave/valor do IndexedDB (get/set/delete)
     │   │   ├── auth.service.ts         # contas locais + visitante
     │   │   ├── sheet-store.ts          # SheetStore: contrato da fonte de dados da ficha + inventário em comum
+    │   │   ├── blob-reader.ts          # BlobReader: quem lê os arquivos da página (mesa: a sessão; Worldbuild: o mundo)
     │   │   ├── file-store.ts           # FileStore (put/get/remove/copy por id) + LocalFileStore (IndexedDB, blob:<id>)
     │   │   ├── server-file-store.ts    # ServerFileStore: arquivos da mesa online em /api/files
     │   │   ├── game-tables.service.ts  # CRUD de mesas (excluir apaga table-state e blobs)
@@ -163,7 +171,7 @@ src/
     │   ├── directives/auto-focus.directive.ts
     │   ├── services/
     │   │   ├── window-manager.service.ts  # abre/fecha/foca janelas (fornecido por página)
-    │   │   └── quick-actions.service.ts   # ações globais: login, criar mesa, abrir worldbuild
+    │   │   └── blob-url.service.ts        # object URLs com cache (imagens), lidas pelo BlobReader da página
     │   └── utils/viewport.ts           # pan/zoom puro (zoomAt, fitRect, screenToWorld) + spec
     ├── layout/
     │   ├── shell/              # barra lateral + área de conteúdo (todas as páginas exceto a mesa)
@@ -175,6 +183,7 @@ src/
         ├── auth/reset-password/ # página aberta pelo link de recuperação de senha
         ├── library/            # página Arquivos: imagens e sons, em pastas
         ├── tables/             # "Minhas mesas" + create-table-dialog + online-tables + host-panel (abrir a mesa) + copy-import (trazer uma cópia)
+        │                       # + services/quick-actions.service.ts (atalhos da Home e de Minhas mesas: criar mesa, abrir o Worldbuild)
         ├── worldbuild/
         │   ├── worldbuild.ts           # página: explorador (com seletor de mundo) + área de janelas
         │   ├── services/worldbuild.service.ts   # itens e mesa de trabalho do mundo aberto; migração de timelines antigas
@@ -190,11 +199,12 @@ src/
             ├── services/
             │   ├── table-session.service.ts  # FACHADA da mesa: signals, Blobs, sessão; toda mutação via dispatch + spec
             │   ├── table-room.ts             # conexão WebSocket com a sala da mesa online (seq, reconexão)
-            │   ├── sound-mixer.service.ts    # um HTMLAudioElement por som
-            │   └── blob-url.service.ts       # object URLs com cache (imagens de token)
+            │   └── sound-mixer.service.ts    # um HTMLAudioElement por som
             ├── state/                  # puro + specs: comandos (estado, payload) → estado, permissões, visão
             │   ├── commands.ts         # TABLE_COMMANDS, TableCommand, applyCommand (catálogo de comandos)
             │   ├── scenes.ts levels.ts entries.ts tokens.ts drops.ts inventory.ts fog.ts drawings.ts notes.ts chat.ts lore.ts
+            │   ├── sheets.ts           # ficha por campo (patchSheet, SheetPatch com null = apagar) + spec
+            │   ├── undo.ts             # desfazer/refazer: o comando que volta atrás, gestos, pilhas + spec
             │   ├── permissions.ts      # canEdit, sheetAccess, canSeeLoreItem… com Viewer { role, userId }
             │   ├── player-view.ts      # o que o jogador vê sob a névoa (tokens, anotações, portas)
             │   ├── sync.ts             # reconciliação da mesa online (confirmado + pendentes) e rajadas + spec
@@ -263,6 +273,12 @@ Rotas (`app.routes.ts`, todas lazy):
   Template em `.html` separado; templates muito curtos podem ser inline.
 - **Estado com signals** (`signal`, `computed`, `effect`, `input`, `model`, `output`, `viewChild`).
   Injeção com `inject()`. Sem `NgModule`, sem RxJS onde signal resolve.
+- **Todo componente é `ChangeDetectionStrategy.OnPush`.** Consequência: dado mostrado na tela tem de ser signal,
+  input ou vir de um evento do próprio componente. Um campo comum alterado depois de um `await`, `setTimeout` ou
+  `.then` **não atualiza a tela**: use um `signal`. Campos comuns só para controle interno (arraste, temporizador).
+- **Camadas:** `core` ← `shared` ← `layout`/`features`; uma feature só usa outra se estiver em `FEATURE_DEPS` de
+  `scripts/check-deps.mjs` (hoje: mesa → Worldbuild, Home → Minhas mesas). Exceção nova vai em `KNOWN_EXCEPTIONS`, com
+  o motivo, e é avisada ao dono do projeto. O `npm run build` reprova o resto.
 - **Controle de fluxo novo** no template: `@if`, `@for` (sempre com `track`), `@switch`, `@let`.
 - **Estilo com Tailwind** nas classes do template. Evitar `.scss` por componente. Estilos globais só em `styles.scss`.
 - **Classes do Tailwind dentro de strings TS** (ex.: `color: 'text-astral-300'` nos `*_META`) funcionam
@@ -283,6 +299,10 @@ Rotas (`app.routes.ts`, todas lazy):
   `TABLE_COMMANDS` e chamada pelo serviço com `this.dispatch('nome', payload)`. O payload é serializável: ids
   (`newId()`), horários e sorteios são gerados no serviço, nunca no comando. Nada de `state.update` direto.
   Blobs e o Worldbuild continuam no serviço. Comando sem efeito devolve o mesmo objeto.
+  O comando leva o **valor final**, nunca "alternar" (`setDoorOpen { open }`, não `toggleDoor`): dois cliques ao mesmo
+  tempo não se anulam. Alteração de ficha vai **por campo** (`patchSheet`, só os campos mudados; `null` apaga um campo,
+  porque `undefined` some no JSON). Ação nova do mapa que deva ter Ctrl+Z ganha o caso dela em `inverseOf`
+  (`state/undo.ts`), usando só comandos que já existem.
 - **Permissões e visibilidade novas** entram em `state/permissions.ts` ou `state/player-view.ts` (puras, com
   `Viewer`), nunca só no template: o servidor vai reaplicá-las.
 - **Front ↔ servidor:** arquivos de `state/`, `utils/` e `core/models/` usados por `server/src/domain` não podem
@@ -577,8 +597,12 @@ Com `prefers-contrast: more`, as texturas somem e os filetes ficam sólidos.
   `session.serverRoll` (aviso da página). O servidor soma temas e itens equipados (`equippedTagLevels`), gasta a Mana e
   treina os estudos (`realtime/rolls.ts`). O "Rolar" envia o que foi escolhido (`RollConfig` com os ids); só o modificador
   digitado e as etiquetas de status vão como número (são livres também na mesa local).
-- **Névoa do jogador:** usa os polígonos `vision` do servidor (`serverVision`), que não envia as paredes; só o mestre
-  grava a memória da névoa.
+- **Névoa do jogador:** usa os polígonos `vision` do servidor (`serverVision`), que não envia as paredes.
+- **Memória da névoa no servidor:** a sala (`Room.explore`, agrupado em 200 ms depois de cada mudança) soma à memória
+  da cena aberta o que os jogadores enxergam na camada deles, com as posições oficiais (`nextExplored` em
+  `utils/fog-memory.ts`, a mesma função da mesa local), e grava por um `setExplored` do "servidor". Funciona com o
+  mestre em outra cena ou com a aba dele em segundo plano. O servidor não lê a imagem do mapa: o mestre informa o
+  tamanho ao abrir a cena (`Scene.mapSize`, comando `setMapSize`, só do mestre). Na mesa local, quem marca é o navegador.
 - **Barra superior:** situação da conexão (Online, Reconectando…, Desconectado com o motivo na dica).
 - **Arquivos** (`FileStore`, SPEC §2): `SheetStore.files` é a `LocalFileStore` (IndexedDB) e o `connect` troca por
   uma `ServerFileStore` da mesa (mapas, camadas, tokens/fichas, sons, itens da mesa, imagens personalizadas do
@@ -601,8 +625,8 @@ Com `prefers-contrast: more`, as texturas somem e os filetes ficam sólidos.
   recebe só o som que está tocando, sem o nome. Param quando o último sai da mesa. Navegador bloqueou o som: aviso, e o
   primeiro clique libera. Cada máquina tem o próprio volume (botão na barra superior, `dicetag.soundVolume`).
 - **Fichas dos outros:** com `Viewer.shared` (mesa online), o personagem de outro jogador abre em só leitura.
-- **Limites:** ficha gravada inteira (duas pessoas editando a mesma ficha: vale a última); memória da névoa gravada pelo
-  cliente do mestre; depois de 5 tentativas de reconexão (cerca de 30 s), é preciso recarregar a página.
+- **Limites:** a ficha é gravada por campo, mas cada campo vai inteiro (duas pessoas mexendo no inventário ao mesmo
+  tempo: vale a última lista); depois de 5 tentativas de reconexão (cerca de 30 s), é preciso recarregar a página.
 
 ### Vista isométrica e camadas do mapa
 - `Scene.isometric` (mestre, botão na barra superior): a vista vira `matrix(...)` = escala × `isoMatrix()` (gira 45° e
@@ -639,7 +663,7 @@ Com `prefers-contrast: more`, as texturas somem e os filetes ficam sólidos.
   organização própria da mesa): o que o mestre cria, renomeia, move ou exclui ali (com confirmação) **muda o mundo**, e
   o que muda no Worldbuild aparece na mesa (mesmo `WorldbuildService`). Itens abrem nos mesmos editores.
 - **Lore x jogadores:** cada pasta tem um **olho** que vale **só nesta mesa** (`TableState.lore.revealed` = ids das pastas
-  do mundo, comando `toggleLoreReveal`; fechado por padrão). Revelar uma pasta revela tudo dentro dela, inclusive
+  do mundo, comando `setLoreReveal { folderId, revealed }`; fechado por padrão). Revelar uma pasta revela tudo dentro dela, inclusive
   subpastas (no explorador, o olho delas fica aceso e esmaecido). O jogador vê o explorador em **só leitura**
   (`Explorer` `readonly` + filtro `visible`; pastas reveladas aparecem na raiz) e só abre o que está em pasta revelada
   (`canSeeLoreItem`, que sobe pelos `parentId`); abre em só leitura (`readonly` em DocumentEditor/RichTextEditor
@@ -676,12 +700,15 @@ Com `prefers-contrast: more`, as texturas somem e os filetes ficam sólidos.
   (`canEdit`: NPC só com controle; `MapStage.canMoveToken`, sem alça) e **criar ações pela barra de baixo** (cria na
   aba Habilidades da própria ficha).
 - Estado de sessão **não persistido**: ferramenta ativa, papel, visibilidade das barras, janelas abertas,
-  tokens selecionados, pincel, modo de parede, sons tocando, pilha de desfazer dos desenhos, efeitos na tela, tokens copiados (Ctrl+C).
+  tokens selecionados, pincel, modo de parede, sons tocando, pilhas de desfazer/refazer, efeitos na tela, tokens copiados (Ctrl+C).
 
 ### Ficha de personagem (`CharacterSheetView`, `TableEntry.sheet`)
 - Personagens jogadores (`character`) e NPCs (ver "Ficha de NPC"). Dados em `CharacterSheet { race, subrace, labels,
   relations, themes, inventory, notes, eiros }`, lidos sempre por `session.sheetOf(entry)` (preenche padrões: **3 temas** e as **páginas fixas** das anotações) e
-  gravados por `updateSheet(entryId, patch)`.
+  gravados por `updateSheet(entryId, patch)`, que manda só os campos alterados (comando `patchSheet`, `state/sheets.ts`;
+  quem aplica junta com a ficha atual). NPC-referência grava no bestiário; token de NPC antigo, ainda sem cópia própria,
+  recebe a primeira cópia inteira (`updatePlacement`). No servidor, o patch do jogador é juntado à ficha gravada e passa
+  pelas mesmas regras da ficha inteira (`playerSheetPatch` em `realtime/sheet-rules.ts`).
 - **Aba Ficha** — cards em grade (container query):
   - **Básico:** imagem (= token), nome, raça, sub-raça, jogador dono ("Vincular à minha conta") e **rótulos** (texto livre, Enter adiciona).
     **Raça e sub-raça** são listas com as Raças do mundo aberto (na mesa, o mundo dela). Escolher aplica (`applyRace`, puro em `utils/race.ts` + spec):
@@ -940,7 +967,19 @@ Com `prefers-contrast: more`, as texturas somem e os filetes ficam sólidos.
 
 ### Desenhos e anotações
 - `Scene.drawings: Stroke { points (simplificados com RDP), color, width, opacity }`. Borracha remove os
-  traços tocados ao soltar. **Ctrl+Z** desfaz a última ação de desenho da cena (pilha só na sessão, máx. 100).
+  traços tocados ao soltar. Ctrl+Z / Ctrl+Y desfazem e refazem, como o resto do mapa (ver "Desfazer e refazer").
+
+### Desfazer e refazer (Ctrl+Z / Ctrl+Y ou Ctrl+Shift+Z) — `state/undo.ts` + spec
+- Cada ação do mapa guarda o **comando que a desfaz** (`inverseOf`, com o estado de antes); desfazer é enviar esse
+  comando, então na mesa online ele passa pelas regras do servidor como qualquer outro. O refazer é o desfazer do
+  desfazer (`inverseOfAll`). Pilhas por cena e por pessoa, só na sessão (`UNDO_LIMIT` = 100); ação nova apaga o refazer.
+- Guardado no `dispatch` do `TableSessionService`, só quando o comando muda algo. Gestos contínuos (arrastar, WASD,
+  mover parede ou anotação) viram um passo só (`undoKey`, a menos de `UNDO_MERGE_MS` = 800 ms um do outro): desfazer
+  volta ao começo. Colar e apagar vários tokens = um passo (`historyStep`; `removeTokens`).
+- Cobre: tokens (colocar, mover, tamanho/camada/opções, tirar, liberar ficha/inventário), o token da ficha
+  (`updateEntry` só com `token`), paredes e portas, desenhos, anotações, itens no chão e efeitos fixos.
+- Não cobre: rolagens, chat, compras e transferências, fichas, cenas e camadas, nem remoções que apagam imagens (token de
+  NPC ou item no chão com imagem própria). Campo que não existia antes da alteração não tem como voltar e fica de fora.
 - `Scene.notes: MapNote { x, y, title, text, color, gmOnly }`. Clique com a ferramenta Anotação cria;
   marcadores arrastáveis com Anotação ou Selecionar; clique abre o popover; Esc fecha.
 
@@ -948,7 +987,7 @@ Com `prefers-contrast: more`, as texturas somem e os filetes ficam sólidos.
 `V` selecionar · `M` mover mapa · `R` régua · `P` ping · `D` desenhar · `F` névoa · `W` parede (névoa em modo linha) ·
 `N` anotação · `E` efeitos especiais · `+`/`-` zoom · `1`–`0` ações · `\` modo imersivo · `Delete` remove os tokens selecionados (ou o
 item no chão selecionado, ou a parede selecionada, no modo editar) · `Esc` cancela parede/fecha anotação/desarma efeito de ação/limpa seleção · `Enter` finaliza parede ·
-`Ctrl+Z` desfaz desenho · **`Ctrl+C`/`Ctrl+V`** copia os tokens selecionados / cola sob o mouse · **`WASD`/setas** movem os tokens selecionados (nesse caso W/D não trocam de ferramenta) ·
+**`Ctrl+Z`** desfaz a última ação do mapa · **`Ctrl+Y`/`Ctrl+Shift+Z`** refaz · **`Ctrl+C`/`Ctrl+V`** copia os tokens selecionados / cola sob o mouse · **`WASD`/setas** movem os tokens selecionados (nesse caso W/D não trocam de ferramenta) ·
 **Shift + clique** soma/tira um token da seleção · arrastar no fundo (Selecionar) = caixa de seleção ·
 **`PageUp`/`PageDown`** (mestre, isométrica) sobem/descem o token selecionado ou a camada em foco.
 Botão do meio do mouse sempre move o mapa; roda do mouse = zoom no cursor.
@@ -987,7 +1026,7 @@ O `MapStage` recebe `insets` para enquadrar o mapa só na área livre entre as b
 - Na ferramenta Selecionar, token ou anotação sob o cursor tem prioridade; o fundo desenha a caixa de seleção
   (o mapa se move com o botão do meio ou a ferramenta Mover).
 - Mutações de cena passam pelo `TableSessionService` (`moveToken`, `updateToken`, `addWall`, `removeWall`,
-  `addStroke`, `eraseStrokes`, `undoDrawing`, `addNote`…), que as aplica como comandos de `state/` (`dispatch`),
+  `addStroke`, `eraseStrokes`, `undo`/`redo`, `addNote`…), que as aplica como comandos de `state/` (`dispatch`),
   sempre com o debounce de persistência.
 - Teclas que dependem da ferramenta/seleção (Enter, Esc, Delete, WASD/setas) chegam via `MapStage.handleKey`;
   soltar tecla e perder o foco via `handleKeyUp` / `stopKeyMove`.
@@ -1026,8 +1065,9 @@ API; serão trocados por repositórios por domínio fornecidos por injeção de 
 ## 10. Pendências e próximos passos sugeridos
 
 As decisões para o back-end e o multiplayer estão no **`SPEC.md`**: sincronização por comandos e conflitos,
-repositórios por domínio, servidor autoritativo (névoa, rolagens, permissões) e outras pendências
-(exportar/importar, arquivos esquecidos ao excluir mesa, ciclo entre features, OnPush).
+repositórios por domínio, servidor autoritativo (névoa, rolagens, permissões) e outras pendências. O que ficou
+**guardado para depois** está no `SPEC.md` §6 (testes reais na máquina principal, destino das mesas e contas locais,
+exportar a mesa do servidor, a ficha fora de `game-table`…).
 
 - Inventário sem peso; "Dar para" e compra passam uma unidade por vez; relações por nome livre (sem vínculo com
   fichas da mesa).
@@ -1038,13 +1078,15 @@ repositórios por domínio, servidor autoritativo (névoa, rolagens, permissões
 - Imagens de token substituídas durante a sessão só liberam a URL antiga ao sair da mesa (`BlobUrlService`).
 - Névoa: visão só por token; portas sem tranca nem permissão (qualquer papel abre/fecha).
 - Paredes bloqueiam o movimento só pelo centro do token (o corpo do token pode encostar/sobrepor a parede).
-- Ctrl+Z cobre só desenhos (não tokens, paredes ou anotações).
+- Ctrl+Z não cobre fichas, cenas, camadas nem remoções que apagam imagens; desfazer o "colar" de um token de NPC com
+  imagens próprias deixa as cópias das imagens sem uso.
 - **Terminar de ligar o front ao servidor:** a mesa online e o mundo dela já usam o servidor; contas e mesas locais
-  continuam em paralelo (decidir se ficam na versão publicada). Fichas por campo em vez de gravadas inteiras (SPEC §1).
+  continuam em paralelo (decidir se ficam na versão publicada, SPEC §6).
 - Mundos: limite fixo de 2 por usuário; trocar o mundo de uma mesa já criada ainda não é possível.
 - Mural de notícias alimentado por API/CMS (`NewsService.posts`).
 - Testes de componentes (hoje têm testes as funções puras de `utils/` e `state/`, as regras da ficha no modelo, a
-  `FxLayer` e a fachada `TableSessionService`, num teste de integração).
+  `FxLayer` e a fachada `TableSessionService`, num teste de integração). Com o OnPush, um teste de tela pegaria o
+  componente que não atualiza.
 
 ---
 
