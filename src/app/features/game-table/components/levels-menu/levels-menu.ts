@@ -4,7 +4,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MAX_MAP_LEVELS } from '../../../../core/models/table-session.model';
 import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
-import { BlobUrlService } from '../../services/blob-url.service';
+import { BlobUrlService } from '../../../../shared/services/blob-url.service';
 import { LevelView, TableSessionService, levelOf } from '../../services/table-session.service';
 
 /**

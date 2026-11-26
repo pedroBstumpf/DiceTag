@@ -16,7 +16,7 @@ export class QuickActionsService {
 
   /** Fluxo completo de criação de mesa. */
   async createTable(): Promise<void> {
-    const { CreateTableDialog } = await import('../../features/tables/create-table-dialog/create-table-dialog');
+    const { CreateTableDialog } = await import('../create-table-dialog/create-table-dialog');
     const table = await firstValueFrom(CreateTableDialog.open(this.dialog).afterClosed());
     if (!table) return;
 

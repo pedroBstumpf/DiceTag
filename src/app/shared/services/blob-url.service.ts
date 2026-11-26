@@ -1,20 +1,18 @@
 import { DestroyRef, Injectable, WritableSignal, inject, signal } from '@angular/core';
-import { WorldbuildService } from '../../worldbuild/services/worldbuild.service';
-import { TableSessionService } from './table-session.service';
+import { BlobReader } from '../../core/services/blob-reader';
 
 /**
  * URLs temporárias (object URLs) para arquivos guardados, com cache.
- * Usado pelas imagens de token: vários tokens da mesma ficha compartilham
+ * Usado pelas imagens de token e de ficha: vários tokens da mesma ficha compartilham
  * a mesma URL, e o arquivo é lido só uma vez.
  *
- * Na mesa, lê pela sessão (`getBlob`: no navegador ou, na mesa online, no servidor); no
- * Worldbuild (sem sessão), de onde o mundo aberto guarda as imagens.
- * Fornecido na página da mesa: ao sair dela, todas as URLs são liberadas.
+ * Lê pelo `BlobReader` que a página fornece (na mesa, a sessão: navegador ou, na mesa online,
+ * o servidor; no Worldbuild, o mundo aberto). Fornecido por página: ao sair dela, todas as URLs
+ * são liberadas.
  */
 @Injectable()
 export class BlobUrlService {
-  private readonly worldbuild = inject(WorldbuildService);
-  private readonly session = inject(TableSessionService, { optional: true });
+  private readonly reader = inject(BlobReader);
   private readonly cache = new Map<string, WritableSignal<string | null>>();
 
   constructor() {
@@ -33,8 +31,7 @@ export class BlobUrlService {
     if (!url) {
       const created = signal<string | null>(null);
       this.cache.set(blobId, created);
-      const read = this.session ? this.session.getBlob(blobId) : this.worldbuild.getBlob(blobId);
-      read.then((blob) => {
+      this.reader.getBlob(blobId).then((blob) => {
         if (blob) created.set(URL.createObjectURL(blob));
       });
       url = created;

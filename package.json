@@ -5,7 +5,9 @@
     "mesa": "npm --prefix server run mesa --",
     "ng": "ng",
     "start": "ng serve",
+    "prebuild": "node scripts/check-deps.mjs",
     "build": "ng build",
+    "check:deps": "node scripts/check-deps.mjs",
     "watch": "ng build --watch --configuration development",
     "test": "ng test"
   },

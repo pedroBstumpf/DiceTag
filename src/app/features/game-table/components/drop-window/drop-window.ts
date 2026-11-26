@@ -6,7 +6,7 @@ import { DROP_COLOR, NPC_TOKEN_SHEET, TOKEN_COLORS } from '../../../../core/mode
 import { ColorPicker } from '../../../../shared/components/color-picker/color-picker';
 import { ItemCardView } from '../../../worldbuild/components/item-card/item-card-view';
 import { WorldbuildService } from '../../../worldbuild/services/worldbuild.service';
-import { BlobUrlService } from '../../services/blob-url.service';
+import { BlobUrlService } from '../../../../shared/services/blob-url.service';
 import { PickupCandidate, TableSessionService } from '../../services/table-session.service';
 import { inventoryRow, itemOrigin } from '../../utils/inventory';
 import { itemSources } from '../sheet-inventory/sheet-inventory';

@@ -9,7 +9,7 @@ import { newId } from '../../../../core/utils/id';
 import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
 import { ItemCardView } from '../../../worldbuild/components/item-card/item-card-view';
 import { WorldbuildService } from '../../../worldbuild/services/worldbuild.service';
-import { BlobUrlService } from '../../services/blob-url.service';
+import { BlobUrlService } from '../../../../shared/services/blob-url.service';
 import { SheetStore } from '../../../../core/services/sheet-store';
 import { TableSessionService } from '../../services/table-session.service';
 import { CardItem, InventoryRow, ItemSource, ItemSources, inventoryRow, itemOrigin } from '../../utils/inventory';

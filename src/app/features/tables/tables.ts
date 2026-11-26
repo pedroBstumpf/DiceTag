@@ -11,7 +11,7 @@ import { BrowserCopyService } from '../../core/services/browser-copy.service';
 import { ServerAccountService } from '../../core/services/server-account.service';
 import { GameTablesService } from '../../core/services/game-tables.service';
 import { EmptyState } from '../../shared/components/empty-state/empty-state';
-import { QuickActionsService } from '../../shared/services/quick-actions.service';
+import { QuickActionsService } from './services/quick-actions.service';
 import { HostPanel } from './host-panel/host-panel';
 import { OnlineTables } from './online-tables/online-tables';
 

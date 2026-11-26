@@ -29,7 +29,7 @@ import { LibraryPicker } from '../../../../shared/components/library-picker/libr
 import { newId } from '../../../../core/utils/id';
 import { TagEditor } from '../../../../shared/components/tag-editor/tag-editor';
 import { readableTextOn } from '../../../../shared/utils/color';
-import { BlobUrlService } from '../../services/blob-url.service';
+import { BlobUrlService } from '../../../../shared/services/blob-url.service';
 import { SheetStore } from '../../../../core/services/sheet-store';
 import { TableSessionService } from '../../services/table-session.service';
 import { LevelPips } from '../level-pips/level-pips';

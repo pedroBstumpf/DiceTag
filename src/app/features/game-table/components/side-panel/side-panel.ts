@@ -8,7 +8,7 @@ import { WorldItem } from '../../../../core/models/world-item.model';
 import { ITEM_DRAG_TYPE, ItemDragData, TABLE_ENTRY_META, TableEntry, TableEntryKind, hasSheet } from '../../../../core/models/table-session.model';
 import { AutoFocus } from '../../../../shared/directives/auto-focus.directive';
 import { Explorer } from '../../../worldbuild/components/explorer/explorer';
-import { BlobUrlService } from '../../services/blob-url.service';
+import { BlobUrlService } from '../../../../shared/services/blob-url.service';
 import { TableSessionService } from '../../services/table-session.service';
 import { TOKEN_DRAG_TYPE } from '../map-layers/tokens-layer/tokens-layer';
 import { ChatPanel } from '../chat-panel/chat-panel';
