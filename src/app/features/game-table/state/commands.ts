@@ -19,6 +19,7 @@ import {
   setActiveScene,
   updateScene,
 } from './scenes';
+import { patchSheet } from './sheets';
 import { moveToken, moveTokens, placeToken, removeToken, setTokenPublic, updatePlacement } from './tokens';
 
 /**
@@ -50,6 +51,8 @@ export const TABLE_COMMANDS = {
   addEntry,
   updateEntry,
   removeEntry,
+  // Ficha por campo (personagem, NPC da mesa, cópia do token de NPC)
+  patchSheet,
   setSoundMaster,
   setSoundPlaying,
   stopAllSounds,

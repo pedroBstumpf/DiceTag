@@ -6,6 +6,7 @@ import {
   defaultToken,
   findDrop,
   findPlacement,
+  hasSheet,
   inventoryHolder,
   isDown,
   levelOf,
@@ -14,6 +15,7 @@ import {
   ownsCharacter,
   quantityOf,
   sheetAccess,
+  tokenSheetPlacement,
   visibleDropsFor,
   visibleTokensFor,
   wallsBlockMovement,
@@ -25,7 +27,7 @@ import {
   type Viewer,
 } from '../domain';
 import type { ValidPayload } from './command-schemas';
-import { playerSheetChange } from './sheet-rules';
+import { playerSheetChange, playerSheetPatch } from './sheet-rules';
 import type { PlayerScene } from './vision';
 import type { WorldView } from './world';
 
@@ -221,6 +223,25 @@ export const COMMAND_RULES: { [K in TableCommandType]: Rule<K> } = {
     if (!change.ok) return change;
     const { sheet, bars } = change.payload;
     return allow({ ...p, patch: { ...patch, ...(sheet && { sheet }), ...(bars && { token: { ...(patch.token ?? token), bars } }) } });
+  },
+  patchSheet: (p, ctx) => {
+    const placementId = tokenSheetPlacement(p.sheetId);
+    if (placementId) {
+      const placement = findPlacement(ctx.state.scenes, placementId);
+      const entry = placement && entryOf(ctx.state, placement.entryId);
+      if (!placement || entry?.kind !== 'npc') return deny('Ficha não encontrada.');
+      if (isGm(ctx)) return allow(p);
+      if (!canEditPlacement(ctx.state, placementId, ctx.viewer)) return deny(NOT_ALLOWED);
+      // Cópia da ficha no token (NPC que o jogador controla): mesmas regras da ficha
+      const before = { sheet: normalizeSheet(placement.sheet ?? entry.sheet), bars: placement.bars ?? ctx.world.tokenOf(entry).bars };
+      return playerSheetPatch(ctx, before, p);
+    }
+    const entry = entryOf(ctx.state, p.sheetId);
+    if (!entry || !hasSheet(entry.kind)) return deny('Ficha não encontrada.');
+    if (isGm(ctx)) return allow(p);
+    if (!canEditEntry(ctx.state, entry, ctx.viewer)) return deny(NOT_ALLOWED);
+    // Junta à ficha gravada e confere como a ficha inteira (raça, SN, máximo das barras, itens)
+    return playerSheetPatch(ctx, { sheet: normalizeSheet(entry.sheet), bars: ctx.world.tokenOf(entry).bars }, p);
   },
   removeEntry: (p, ctx) => {
     if (isGm(ctx)) return allow(p);

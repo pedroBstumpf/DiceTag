@@ -416,6 +416,46 @@ describe('ficha: regras do servidor para o jogador', () => {
     expect(updateSheet(withItem({ itemId: 'reliquia' }), gm).ok).toBe(true);
   });
 
+  describe('por campo (patchSheet)', () => {
+    const patch = (p: object, sheetId = 'pc-ana', viewer = ana) => run('patchSheet', { sheetId, patch: p }, viewer);
+
+    it('leva só os campos alterados; ficha de outra conta ou de NPC alheio é recusada', () => {
+      const result = patch({ eiros: 12 });
+      expect(result.ok).toBe(true);
+      expect(result.payload.patch).toEqual({ eiros: 12 });
+      expect(patch({ eiros: 12 }, 'pc-bia').ok).toBe(false);
+      expect(patch({ eiros: 12 }, 'npc-orc').ok).toBe(false);
+      expect(patch({ eiros: 12 }, 'npc:t-orc').ok).toBe(false);
+      expect(patch({ eiros: 12 }, 'npc:t-orc', gm).ok).toBe(true);
+      expect(patch({ eiros: 12 }, 'nao-existe', gm).reason).toMatch(/Ficha/);
+    });
+
+    it('mesmas regras da ficha inteira: SN, itens e campos desconhecidos', () => {
+      expect(patch({ studies: [{ id: 'study-1', text: 'Esgrima', sa: 1, sn: 9 }] }).reason).toMatch(/SN/);
+      expect(patch({ studies: [{ id: 'study-1', text: 'Esgrima', sa: 1, sn: 5 }] }).ok).toBe(true);
+      expect(patch({ inventory: [{ id: 'linha', itemId: 'reliquia' }] }).ok).toBe(false);
+      expect(patch({ inventory: [{ id: 'linha', itemId: 'espada' }] }).ok).toBe(true);
+      expect(patch({ admin: true }, 'pc-ana', gm).ok).toBe(false);
+    });
+
+    it('raça: o servidor aplica e manda junto tudo o que ela reescreve, com as barras', () => {
+      const result = patch({ raceRef: { id: 'elfo' } });
+      expect(result.ok).toBe(true);
+      expect(result.payload.patch).toMatchObject({ race: 'Elfo', raceRef: { id: 'elfo' }, labels: ['A', 'Visão no escuro'] });
+      expect(result.payload.bars.find((b: { id: string }) => b.id === 'status-mind').max).toBe(26);
+      // Barras mandadas pelo jogador são ignoradas
+      expect(run('patchSheet', { sheetId: 'pc-ana', patch: { eiros: 1 }, bars: bars().map((b) => ({ ...b, max: 99 })) }).payload.bars).toBeUndefined();
+    });
+
+    it('tirar a raça escolhida chega como null (apagar o campo)', () => {
+      const elf = { ...table(), entries: table().entries.map((e) => (e.id === 'pc-ana' ? { ...e, sheet: { ...e.sheet!, raceRef: { id: 'elfo' }, race: 'Elfo' } } : e)) };
+      const result = run('patchSheet', { sheetId: 'pc-ana', patch: { raceRef: null } }, ana, elf);
+      expect(result.ok).toBe(true);
+      expect(result.payload.patch.raceRef).toBeNull();
+      expect(result.payload.patch.race).toBe('');
+    });
+  });
+
   it('token novo do jogador leva só a posição (ficha, barras e liberações vêm da ficha de origem)', () => {
     const placement = { id: 't-pet', entryId: 'npc-pet', x: 1, y: 1, bars: bars(), sheet: sheet(['forjada']), size: 6, sheetPublic: true };
     expect(run('placeToken', { sceneId: 's1', placement }).payload.placement).toEqual({ id: 't-pet', entryId: 'npc-pet', x: 1, y: 1 });

@@ -91,23 +91,29 @@ const statusMods = z.partialRecord(z.enum(STATUS_BARS.map((s) => s.id) as [strin
 const appliedRace = z.strictObject({ labels: z.array(text(100)).max(50), mods: statusMods });
 const raceRef = z.strictObject({ id });
 
+const appliedRaces = z.strictObject({ race: appliedRace.optional(), subrace: appliedRace.optional() });
+const sheetFields = {
+  race: text(100),
+  subrace: text(100),
+  raceRef: raceRef.optional(),
+  subraceRef: raceRef.optional(),
+  appliedRaces: appliedRaces.optional(),
+  labels: z.array(text(100)).max(50),
+  relations: z.array(relation).max(100),
+  themes: z.array(theme).max(SHEET_THEME_COUNT),
+  inventory: z.array(inventoryEntry).max(500),
+  notes: z.array(notePage).max(100),
+  // Número, não inteiro: o preço de um item (abaixo) pode ter centavos e sai dos Eiros na compra
+  eiros: z.number().min(0).max(1e9),
+  studies: z.array(study).max(SHEET_STUDY_COUNT),
+};
+
 /** Ficha (personagem, NPC e cópia de token de NPC). Campos ausentes recebem o padrão em `normalizeSheet`. */
-export const sheetSchema = z
-  .strictObject({
-    race: text(100),
-    subrace: text(100),
-    raceRef: raceRef.optional(),
-    subraceRef: raceRef.optional(),
-    appliedRaces: z.strictObject({ race: appliedRace.optional(), subrace: appliedRace.optional() }).optional(),
-    labels: z.array(text(100)).max(50),
-    relations: z.array(relation).max(100),
-    themes: z.array(theme).max(SHEET_THEME_COUNT),
-    inventory: z.array(inventoryEntry).max(500),
-    notes: z.array(notePage).max(100),
-    // Número, não inteiro: o preço de um item (abaixo) pode ter centavos e sai dos Eiros na compra
-    eiros: z.number().min(0).max(1e9),
-    studies: z.array(study).max(SHEET_STUDY_COUNT),
-  })
+export const sheetSchema = z.strictObject(sheetFields).partial();
+
+/** Campos alterados de uma ficha (`patchSheet`); `null` apaga os campos opcionais (raça escolhida). */
+export const sheetPatchSchema = z
+  .strictObject({ ...sheetFields, raceRef: raceRef.nullable(), subraceRef: raceRef.nullable(), appliedRaces: appliedRaces.nullable() })
   .partial();
 
 /** Ficha como chega do cliente (já validada; fichas antigas podem não ter todos os campos). */
@@ -270,6 +276,8 @@ export const COMMAND_SCHEMAS = {
   addEntry: z.strictObject({ entry: entrySchema }),
   updateEntry: z.strictObject({ entryId: id, patch: z.strictObject(entryFields).partial() }),
   removeEntry: z.strictObject({ entryId: id }),
+  // `bars`: só o servidor define (raça que muda o máximo); a regra ignora o que o jogador mandar
+  patchSheet: z.strictObject({ sheetId: sheetRef, patch: sheetPatchSchema, bars: z.array(barSchema).max(20).optional() }),
   setSoundMaster: z.strictObject({ volume: z.number().min(0).max(1) }),
   setSoundPlaying: z.strictObject({ entryId: id, playing: z.boolean(), startedAt: timestamp }),
   stopAllSounds: z.strictObject({}),

@@ -18,6 +18,8 @@ const DEFAULT_BUDGET = 16 * KB;
 const COMMAND_BUDGETS: Partial<Record<TableCommandType, number>> = {
   addEntry: MAX_MESSAGE_BYTES,
   updateEntry: MAX_MESSAGE_BYTES,
+  // Alterar as anotações leva o caderno inteiro (páginas em texto rico), como a ficha inteira levava
+  patchSheet: MAX_MESSAGE_BYTES,
   placeToken: MAX_MESSAGE_BYTES,
   updatePlacement: MAX_MESSAGE_BYTES,
   addScene: MAX_MESSAGE_BYTES,
