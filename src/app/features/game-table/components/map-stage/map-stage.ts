@@ -885,7 +885,7 @@ export class MapStage {
     }
 
     if ((event.key === 'Delete' || event.key === 'Backspace') && group.length) {
-      for (const t of group) this.session.removeToken(t.placement.id);
+      this.session.removeTokens(group.map((t) => t.placement.id));
       return true;
     }
     if (event.key === 'Escape' && selected) {

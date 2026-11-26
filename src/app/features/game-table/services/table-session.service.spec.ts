@@ -249,16 +249,43 @@ describe('TableSessionService (fachada)', () => {
     expect(saved.chat?.[0].text).toBe('olá');
   });
 
-  it('desenho: Ctrl+Z desfaz o traço e depois a borracha', async () => {
+  it('desenho: Ctrl+Z desfaz a borracha e depois o traço; Ctrl+Y refaz', async () => {
     await session.addScene();
     session.addStroke({ points: [], color: '#fff', width: 4, opacity: 1 });
     session.addStroke({ points: [], color: '#000', width: 4, opacity: 1 });
     session.eraseStrokes([session.drawings()[0].id]);
     expect(session.drawings().map((d) => d.color)).toEqual(['#000']);
-    expect(session.undoDrawing()).toBe(true);
+    expect(session.undo()).toBe(true);
     expect(session.drawings().map((d) => d.color)).toEqual(['#fff', '#000']);
-    expect(session.undoDrawing()).toBe(true);
+    expect(session.undo()).toBe(true);
     expect(session.drawings().map((d) => d.color)).toEqual(['#fff']);
+    expect(session.redo()).toBe(true);
+    expect(session.drawings().map((d) => d.color)).toEqual(['#fff', '#000']);
+  });
+
+  it('Ctrl+Z geral: mover e tirar tokens, portas e anotações; ação nova apaga o refazer', async () => {
+    await session.addScene();
+    const pc = session.addEntry('character');
+    const token = session.placeToken(pc.id, { x: 100, y: 100 })!;
+    session.moveToken(token.id, { x: 300, y: 300 });
+    const note = session.addNote({ x: 5, y: 5 })!;
+    session.removeTokens([token.id]);
+    expect(session.scenes()[0].tokens).toEqual([]);
+
+    expect(session.undo()).toBe(true); // volta o token
+    expect(session.scenes()[0].tokens?.[0]).toMatchObject({ id: token.id });
+    expect(session.undo()).toBe(true); // tira a anotação
+    expect(session.scenes()[0].notes).toEqual([]);
+    expect(session.redo()).toBe(true); // a anotação volta
+    expect(session.scenes()[0].notes?.[0].id).toBe(note.id);
+    session.addNote({ x: 9, y: 9 });
+    expect(session.redo()).toBe(false);
+    expect(session.undo()).toBe(true);
+    expect(session.undo()).toBe(true);
+    expect(session.undo()).toBe(true); // o token volta para onde foi colocado
+    expect(session.scenes()[0].tokens?.[0]).toMatchObject({ x: 100, y: 100 });
+    expect(session.undo()).toBe(true); // e sai do mapa
+    expect(session.undo()).toBe(false);
   });
 
   it('estudos: falha crítica no 2d12 tira 1 SA; 3d6 não treina', () => {

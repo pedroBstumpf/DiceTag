@@ -85,6 +85,7 @@ import { findDrop } from '../state/drops';
 import { inventoryHolder, unitNeedsImageCopy } from '../state/inventory';
 import { worldItemRefs } from '../state/lore';
 import { sheetPatchOf } from '../state/sheets';
+import { EMPTY_UNDO, UndoEntry, UndoStacks, extendLastUndo, inverseOf, inverseOfAll, recordUndo, undoKey } from '../state/undo';
 import { NO_SELECTION, TokenSelection, keepOnly, selectMany, selectOne, toggleInSelection, without } from '../utils/selection';
 import { TableCommand, TableCommandPayload, TableCommandType, applyCommand } from '../state/commands';
 import {
@@ -101,7 +102,7 @@ import {
   startSync,
 } from '../state/sync';
 import { RoomIdentity, RoomMessage, RoomRoll, RoomEvent, RoomStatus, TableRoom } from './table-room';
-import { RemovedStroke, strokesToErase } from '../state/drawings';
+import { strokesToErase } from '../state/drawings';
 import { findPlacement, levelOf, tokenSheetPlacement, uniqueName } from '../state/helpers';
 import { clampLevelIn, levelCountOf } from '../state/levels';
 import * as rules from '../state/permissions';
@@ -189,9 +190,6 @@ export interface Brush {
   /** Borracha: arrastar remove os traços tocados. */
   eraser: boolean;
 }
-
-/** Ação de desenho que pode ser desfeita (Ctrl+Z). */
-type DrawAction = { kind: 'add'; strokeId: string } | { kind: 'erase'; removed: RemovedStroke[] };
 
 /** Omit que preserva cada membro de uma união (ex.: Wall sem o id). */
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
@@ -540,8 +538,12 @@ export class TableSessionService extends SheetStore {
   readonly selectedWallId = signal<string | null>(null);
   /** Pincel da ferramenta Desenhar. */
   readonly brush = signal<Brush>({ color: BRUSH_COLORS[0], width: BRUSH_WIDTHS[1], opacity: 1, eraser: false });
-  /** Pilha de desfazer dos desenhos, por cena (só nesta sessão). */
-  private readonly drawHistory = new Map<string, DrawAction[]>();
+  /** Desfazer/refazer das ações do mapa, por cena (só nesta sessão; ver "Desfazer e refazer"). */
+  private readonly undoStacks = new Map<string, UndoStacks>();
+  /** Passo de várias ações (`historyStep`): 'open' = o primeiro comando abre o passo, 'extend' = os outros entram nele. */
+  private historyBatch: 'open' | 'extend' | null = null;
+  /** Aplicando um desfazer/refazer: esses comandos não viram passos novos. */
+  private replayingHistory = false;
   /** Paredes visíveis: durante a ferramenta Névoa ou, para o mestre, sempre (se ligado). */
   readonly wallsVisible = computed(
     () => this.tool() === 'fog' || (this.showWallsAlways() && this.role() === 'gm'),
@@ -2077,6 +2079,13 @@ export class TableSessionService extends SheetStore {
     this.selection.update((sel) => without(sel, [placementId]));
   }
 
+  /** Remove vários tokens do mapa de uma vez (Delete com o grupo selecionado) = um Ctrl+Z só. */
+  removeTokens(placementIds: readonly string[]): void {
+    this.historyStep(() => {
+      for (const id of placementIds) this.removeToken(id);
+    });
+  }
+
   // --- Copiar e colar tokens (Ctrl+C / Ctrl+V) -----------------------------
 
   /**
@@ -2112,10 +2121,13 @@ export class TableSessionService extends SheetStore {
         level: this.currentLevel(),
       }),
     );
-    for (const placement of pasted) {
-      this.dispatch('placeToken', { sceneId, placement });
-      if (placement.sheet?.inventory.some((i) => i.blobId)) void this.cloneTokenInventoryBlobs(placement.id);
-    }
+    // Colar o grupo = um Ctrl+Z só
+    this.historyStep(() => {
+      for (const placement of pasted) {
+        this.dispatch('placeToken', { sceneId, placement });
+        if (placement.sheet?.inventory.some((i) => i.blobId)) void this.cloneTokenInventoryBlobs(placement.id);
+      }
+    });
     this.selection.set(selectMany(NO_SELECTION, pasted.map((t) => t.id), false));
     return pasted;
   }
@@ -2186,7 +2198,6 @@ export class TableSessionService extends SheetStore {
     if (!sceneId) return;
     const created: Stroke = { ...stroke, id: newId() };
     this.dispatch('addStroke', { sceneId, stroke: created });
-    this.pushDrawAction(sceneId, { kind: 'add', strokeId: created.id });
   }
 
   /** Remove traços da cena ativa (borracha ou limpar tudo) — pode ser desfeito. */
@@ -2195,31 +2206,70 @@ export class TableSessionService extends SheetStore {
     const removed = strokesToErase(scene?.drawings ?? [], ids);
     if (!scene || !removed.length) return;
     this.dispatch('eraseStrokes', { sceneId: scene.id, strokeIds: ids });
-    this.pushDrawAction(scene.id, { kind: 'erase', removed });
   }
 
   clearDrawings(): void {
     this.eraseStrokes(this.drawings().map((s) => s.id));
   }
 
-  /** Desfaz a última ação de desenho da cena ativa. Retorna false se não havia nada. */
-  undoDrawing(): boolean {
-    const scene = this.activeScene();
-    const action = scene && this.drawHistory.get(scene.id)?.pop();
-    if (!scene || !action) return false;
+  // --- Desfazer e refazer (Ctrl+Z / Ctrl+Y) --------------------------------
+  // Cada ação do mapa guarda o comando que a desfaz (state/undo.ts), numa pilha por cena e por
+  // pessoa (só nesta sessão). Desfazer = enviar esse comando, que o servidor confere como qualquer outro.
 
-    if (action.kind === 'add') this.dispatch('eraseStrokes', { sceneId: scene.id, strokeIds: [action.strokeId] });
-    // Recoloca os traços apagados nas posições originais (mantém a ordem de sobreposição)
-    else this.dispatch('restoreStrokes', { sceneId: scene.id, removed: action.removed });
+  /** Desfaz a última ação do mapa na cena ativa. Retorna false se não havia nada. */
+  undo(): boolean {
+    return this.stepHistory('done');
+  }
+
+  /** Refaz a última ação desfeita na cena ativa. Retorna false se não havia nada. */
+  redo(): boolean {
+    return this.stepHistory('undone');
+  }
+
+  /** Aplica o passo do topo de uma pilha e o põe na outra, já pronto para voltar. */
+  private stepHistory(from: keyof UndoStacks): boolean {
+    const sceneId = this.activeSceneId();
+    const stacks = sceneId ? this.undoStacks.get(sceneId) : undefined;
+    const entry = stacks?.[from].at(-1);
+    if (!sceneId || !stacks || !entry) return false;
+    // O caminho de volta é calculado antes de aplicar (com o estado de agora)
+    const back = inverseOfAll(this.state(), entry.commands);
+    this.replayingHistory = true;
+    try {
+      for (const command of entry.commands) this.run(command);
+    } finally {
+      this.replayingHistory = false;
+    }
+    const to: keyof UndoStacks = from === 'done' ? 'undone' : 'done';
+    const moved: UndoEntry[] = back.length ? [{ commands: back, key: null, at: 0 }] : [];
+    this.undoStacks.set(sceneId, { [from]: stacks[from].slice(0, -1), [to]: [...stacks[to], ...moved] } as unknown as UndoStacks);
+    // Token que deixou de existir (desfazer o "colocar") sai da seleção
+    this.selection.update((sel) => without(sel, [...sel.ids].filter((id) => !this.findPlacement(id))));
     return true;
   }
 
-  private pushDrawAction(sceneId: string, action: DrawAction): void {
-    const stack = this.drawHistory.get(sceneId) ?? [];
-    stack.push(action);
-    // Limite simples para não crescer sem fim numa sessão longa
-    if (stack.length > 100) stack.shift();
-    this.drawHistory.set(sceneId, stack);
+  /** Guarda o desfazer de uma ação nova (dentro de `historyStep`, junta ao passo aberto). */
+  private recordHistory(command: TableCommand, inverse: TableCommand[]): void {
+    const sceneId = this.activeSceneId();
+    if (!sceneId) return;
+    const stacks = this.undoStacks.get(sceneId) ?? EMPTY_UNDO;
+    if (this.historyBatch === 'extend') {
+      this.undoStacks.set(sceneId, extendLastUndo(stacks, inverse));
+      return;
+    }
+    if (this.historyBatch === 'open') this.historyBatch = 'extend';
+    this.undoStacks.set(sceneId, recordUndo(stacks, { commands: inverse, key: undoKey(command), at: Date.now() }));
+  }
+
+  /** Várias ações que a pessoa fez de uma vez (colar ou apagar vários tokens) = um Ctrl+Z só. */
+  private historyStep<T>(fn: () => T): T {
+    const outer = this.historyBatch;
+    if (!outer) this.historyBatch = 'open';
+    try {
+      return fn();
+    } finally {
+      if (!outer) this.historyBatch = null;
+    }
   }
 
   // --- Anotações -----------------------------------------------------------
@@ -2263,14 +2313,21 @@ export class TableSessionService extends SheetStore {
    * na tela na hora e vai para o servidor, que o confirma (`ack`) ou recusa (`nack`).
    */
   private dispatch<K extends TableCommandType>(type: K, payload: TableCommandPayload<K>): void {
+    this.run({ type, payload } as TableCommand);
+  }
+
+  /** Corpo do `dispatch` (o desfazer/refazer aplica comandos já montados por aqui). */
+  private run(command: TableCommand): void {
+    // Desfazer: calculado com o estado de ANTES; só guardado se o comando mudou algo
+    const inverse = this.replayingHistory ? null : inverseOf(this.state(), command);
     if (this.room) {
       // Antes do estado inicial chegar não há o que alterar
       if (!this.sync) return;
-      const command = { type, payload } as TableCommand;
       const seq = this.room.nextSeq();
       const next = localCommand(this.sync, seq, command);
       if (next === this.sync) return;
       this.applySync(next);
+      if (inverse) this.recordHistory(command, inverse);
       // Rajada (um comando por quadro): vai agrupada; os demais vão na hora, depois das rajadas, na ordem
       const key = burstKey(command);
       if (key) {
@@ -2285,9 +2342,10 @@ export class TableSessionService extends SheetStore {
       this.sendToRoom(seq, command);
       return;
     }
-    const next = applyCommand(this.state(), { type, payload } as Parameters<typeof applyCommand>[1]);
+    const next = applyCommand(this.state(), command);
     if (next === this.state()) return;
     this.state.set(next);
+    if (inverse) this.recordHistory(command, inverse);
     clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => this.flush(), 300);
   }

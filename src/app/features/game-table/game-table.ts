@@ -392,9 +392,11 @@ export class GameTablePage {
     const target = event.target as HTMLElement;
     if (target.closest('input, textarea, [contenteditable="true"]')) return;
 
-    // Ctrl+Z: desfaz o último traço da cena (fora de campos de texto)
-    if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === 'z') {
-      if (this.session.undoDrawing()) event.preventDefault();
+    // Ctrl+Z desfaz a última ação do mapa na cena; Ctrl+Y ou Ctrl+Shift+Z refaz (fora de campos de texto)
+    const key = event.key.toLowerCase();
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && (key === 'z' || key === 'y')) {
+      const redo = key === 'y' || event.shiftKey;
+      if (redo ? this.session.redo() : this.session.undo()) event.preventDefault();
       return;
     }
     // Ctrl+C / Ctrl+V: copia o token selecionado / cola uma cópia sob o mouse (inclusive em outra cena)
@@ -410,7 +412,6 @@ export class GameTablePage {
       return;
     }
 
-    const key = event.key.toLowerCase();
     // Ferramentas do mestre (Névoa, paredes) não têm atalho no papel de jogador
     const tool = TABLE_TOOLS.find((t) => t.key.toLowerCase() === key && toolAllowed(t, this.session.role()));
 
