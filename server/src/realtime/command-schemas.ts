@@ -279,7 +279,7 @@ export const COMMAND_SCHEMAS = {
   moveToken: move,
   moveTokens: z.strictObject({ moves: z.array(move).min(1).max(200) }),
   removeToken: z.strictObject({ placementId: id }),
-  toggleTokenPublic: z.strictObject({ placementId: id, part: z.enum(['sheet', 'inventory']) }),
+  setTokenPublic: z.strictObject({ placementId: id, part: z.enum(['sheet', 'inventory']), value: z.boolean() }),
   // Itens no mapa
   addDrop: z.strictObject({ sceneId: id, drop }),
   moveDrop: z.strictObject({ dropId: id, x: coord, y: coord }),
@@ -296,7 +296,7 @@ export const COMMAND_SCHEMAS = {
   setExplored: z.strictObject({ sceneId: id, explored: explored.optional() }),
   addWall: z.strictObject({ sceneId: id, wall }),
   updateWall: z.strictObject({ sceneId: id, wall }),
-  toggleDoor: z.strictObject({ sceneId: id, doorId: id }),
+  setDoorOpen: z.strictObject({ sceneId: id, doorId: id, open: z.boolean() }),
   removeWall: z.strictObject({ sceneId: id, wallId: id }),
   // Desenhos e anotações
   addStroke: z.strictObject({ sceneId: id, stroke }),
@@ -313,7 +313,7 @@ export const COMMAND_SCHEMAS = {
   addChatMessage: z.strictObject({ message: chatMessage }),
   clearChat: z.strictObject({}),
   // Lore e itens da mesa
-  toggleLoreReveal: z.strictObject({ folderId: id }),
+  setLoreReveal: z.strictObject({ folderId: id, revealed: z.boolean() }),
   addTableItem: z.strictObject({ item: tableItem }),
   updateTableItem: z.strictObject({ itemId: id, patch: z.strictObject(tableItemFields).partial() }),
 } satisfies Record<TableCommandType, z.ZodType>;

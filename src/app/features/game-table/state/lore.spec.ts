@@ -1,16 +1,19 @@
 import { TableState } from '../../../core/models/table-session.model';
-import { addTableItem, toggleLoreReveal, updateTableItem, worldItemRefs } from './lore';
+import { addTableItem, setLoreReveal, updateTableItem, worldItemRefs } from './lore';
 import { normalizeState } from './table-state';
 
 const empty = (): TableState => ({ scenes: [], activeSceneId: null, entries: [] });
 
 describe('comandos: lore da mesa', () => {
   it('revelar e esconder uma pasta do mundo', () => {
-    let s = toggleLoreReveal(empty(), { folderId: 'f' });
-    s = toggleLoreReveal(s, { folderId: 'g' });
+    let s = setLoreReveal(empty(), { folderId: 'f', revealed: true });
+    s = setLoreReveal(s, { folderId: 'g', revealed: true });
     expect(s.lore?.revealed).toEqual(['f', 'g']);
-    s = toggleLoreReveal(s, { folderId: 'f' });
+    // Revelar de novo (duas pessoas ao mesmo tempo) não esconde nem duplica
+    expect(setLoreReveal(s, { folderId: 'f', revealed: true })).toBe(s);
+    s = setLoreReveal(s, { folderId: 'f', revealed: false });
     expect(s.lore?.revealed).toEqual(['g']);
+    expect(setLoreReveal(s, { folderId: 'f', revealed: false })).toBe(s);
   });
 
   it('mesas antigas (pastas e nomes próprios da aba Lore) abrem sem nada revelado', () => {

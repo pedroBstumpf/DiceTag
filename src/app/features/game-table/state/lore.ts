@@ -8,10 +8,14 @@ import { EMPTY_LORE } from './table-state';
 
 // --- Pastas reveladas --------------------------------------------------------
 
-/** Mestre: revela ou esconde dos jogadores uma pasta do mundo (e tudo dentro dela). */
-export function toggleLoreReveal(state: TableState, { folderId }: { folderId: string }): TableState {
-  const revealed = (state.lore ?? EMPTY_LORE).revealed;
-  const next = revealed.includes(folderId) ? revealed.filter((id) => id !== folderId) : [...revealed, folderId];
+/**
+ * Mestre: revela (`revealed: true`) ou esconde dos jogadores uma pasta do mundo (e tudo dentro dela).
+ * Leva o valor final, não "alternar"; pasta já assim = estado igual.
+ */
+export function setLoreReveal(state: TableState, { folderId, revealed }: { folderId: string; revealed: boolean }): TableState {
+  const current = (state.lore ?? EMPTY_LORE).revealed;
+  if (current.includes(folderId) === revealed) return state;
+  const next = revealed ? [...current, folderId] : current.filter((id) => id !== folderId);
   return { ...state, lore: { revealed: next } };
 }
 

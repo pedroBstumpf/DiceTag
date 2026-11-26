@@ -151,7 +151,7 @@ describe('comandos em tempo real', () => {
     const b = await openSocket(port, tableId, player.cookie);
     await a.next('welcome');
     await b.next('welcome');
-    a.ws.send(JSON.stringify({ t: 'cmd', seq: 1, type: 'toggleLoreReveal', payload: { folderId: 'pasta' } }));
+    a.ws.send(JSON.stringify({ t: 'cmd', seq: 1, type: 'setLoreReveal', payload: { folderId: 'pasta', revealed: true } }));
     await a.next('ack');
 
     await put(item('doc', 'document', 'pasta', 'Crônica'));

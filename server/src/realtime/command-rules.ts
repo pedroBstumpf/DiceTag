@@ -290,7 +290,7 @@ export const COMMAND_RULES: { [K in TableCommandType]: Rule<K> } = {
     return allow(p);
   },
   removeToken: (p, ctx) => (isGm(ctx) || canEditPlacement(ctx.state, p.placementId, ctx.viewer) ? allow(p) : deny(NOT_ALLOWED)),
-  toggleTokenPublic: gmOnly(),
+  setTokenPublic: gmOnly(),
 
   // Itens no mapa: do mestre (largar/pegar pelo jogador vira um comando atômico do servidor — SPEC §1)
   addDrop: (p, ctx) => {
@@ -358,7 +358,7 @@ export const COMMAND_RULES: { [K in TableCommandType]: Rule<K> } = {
     return walls.some((w) => w.id === p.wall.id) ? deny('Parede já existe.') : allow(p);
   },
   updateWall: gmOnly(),
-  toggleDoor: (p, ctx) => {
+  setDoorOpen: (p, ctx) => {
     const door = sceneOf(ctx.state, p.sceneId)?.walls?.find((w) => w.id === p.doorId);
     if (door?.kind !== 'door') return deny('Porta não encontrada.');
     return inActiveScene(ctx, p.sceneId) ? allow(p) : deny(NOT_ALLOWED);
@@ -429,7 +429,7 @@ export const COMMAND_RULES: { [K in TableCommandType]: Rule<K> } = {
   clearChat: gmOnly(),
 
   // Lore e itens da mesa
-  toggleLoreReveal: gmOnly(),
+  setLoreReveal: gmOnly(),
   addTableItem: (p, ctx) => {
     const items = ctx.state.items ?? [];
     if (ctx.full || items.length >= LIMITS.tableItems) return deny(FULL);

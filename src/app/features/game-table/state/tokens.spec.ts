@@ -8,8 +8,8 @@ import {
   placeToken,
   removeToken,
   resolveToken,
+  setTokenPublic,
   splitTokenPatch,
-  toggleTokenPublic,
   updatePlacement,
 } from './tokens';
 
@@ -132,13 +132,17 @@ describe('comandos: tokens', () => {
     expect(moveTokens(before, { moves: [] })).toBe(before);
   });
 
-  it('updatePlacement mescla campos e toggleTokenPublic alterna (desligado = ausente)', () => {
+  it('updatePlacement mescla campos e setTokenPublic define o valor final (desligado = ausente)', () => {
     let s = updatePlacement(table(), { placementId: 't2', patch: { name: 'Chefe' } });
     expect(findPlacement(s.scenes, 't2')?.name).toBe('Chefe');
-    s = toggleTokenPublic(s, { placementId: 't2', part: 'inventory' });
+    s = setTokenPublic(s, { placementId: 't2', part: 'inventory', value: true });
     expect(findPlacement(s.scenes, 't2')?.inventoryPublic).toBe(true);
-    s = toggleTokenPublic(s, { placementId: 't2', part: 'inventory' });
+    // Dois "ligar" seguidos (duas pessoas ao mesmo tempo) não se anulam
+    expect(setTokenPublic(s, { placementId: 't2', part: 'inventory', value: true })).toBe(s);
+    s = setTokenPublic(s, { placementId: 't2', part: 'inventory', value: false });
     expect(findPlacement(s.scenes, 't2')?.inventoryPublic).toBeUndefined();
+    expect(findPlacement(s.scenes, 't2')?.sheetPublic).toBeUndefined();
+    expect(setTokenPublic(s, { placementId: 'nada', part: 'sheet', value: true })).toBe(s);
   });
 
   it('removeToken tira o token do mapa', () => {

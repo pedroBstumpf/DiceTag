@@ -1,13 +1,13 @@
 import { TableState } from '../../../core/models/table-session.model';
 import { addChatMessage, clearChat } from './chat';
 import { addEntry, removeEntry, setSoundMaster, setSoundPlaying, stopAllSounds, updateEntry } from './entries';
-import { addWall, removeWall, setExplored, setFog, setFogMemory, toggleDoor, updateWall } from './fog';
+import { addWall, removeWall, setDoorOpen, setExplored, setFog, setFogMemory, updateWall } from './fog';
 import { addStroke, eraseStrokes, restoreStrokes } from './drawings';
 import { addDrop, moveDrop, removeDrop, setDropQuantity, updateDrop } from './drops';
 import { addFixedFx, clearFixedFx, removeFixedFx } from './fixed-fx';
 import { dropFromInventory, pickUpDrop, transferItem } from './inventory';
 import { addLevel, removeLevel, renameLevel, setLevelImage, setPlayerLevel } from './levels';
-import { addTableItem, toggleLoreReveal, updateTableItem } from './lore';
+import { addTableItem, setLoreReveal, updateTableItem } from './lore';
 import { addNote, removeNote, updateNote } from './notes';
 import {
   addScene,
@@ -19,7 +19,7 @@ import {
   setActiveScene,
   updateScene,
 } from './scenes';
-import { moveToken, moveTokens, placeToken, removeToken, toggleTokenPublic, updatePlacement } from './tokens';
+import { moveToken, moveTokens, placeToken, removeToken, setTokenPublic, updatePlacement } from './tokens';
 
 /**
  * Catálogo de comandos da mesa: toda alteração do `TableState` é um destes nomes + um payload.
@@ -59,7 +59,7 @@ export const TABLE_COMMANDS = {
   moveToken,
   moveTokens,
   removeToken,
-  toggleTokenPublic,
+  setTokenPublic,
   // Itens largados no mapa
   addDrop,
   moveDrop,
@@ -76,7 +76,7 @@ export const TABLE_COMMANDS = {
   setExplored,
   addWall,
   updateWall,
-  toggleDoor,
+  setDoorOpen,
   removeWall,
   // Desenhos e anotações
   addStroke,
@@ -93,7 +93,7 @@ export const TABLE_COMMANDS = {
   addChatMessage,
   clearChat,
   // Lore da mesa (pastas reveladas) e itens criados na mesa
-  toggleLoreReveal,
+  setLoreReveal,
   addTableItem,
   updateTableItem,
 } as const;

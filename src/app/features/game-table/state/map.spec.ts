@@ -1,7 +1,7 @@
 import { ChatMessage, MAX_CHAT_MESSAGES, Scene, Stroke, TableState } from '../../../core/models/table-session.model';
 import { addChatMessage, clearChat } from './chat';
 import { addStroke, eraseStrokes, restoreStrokes, strokesToErase } from './drawings';
-import { addWall, removeWall, setExplored, setFog, setFogMemory, toggleDoor, updateWall } from './fog';
+import { addWall, removeWall, setDoorOpen, setExplored, setFog, setFogMemory, updateWall } from './fog';
 import { addNote, removeNote, updateNote } from './notes';
 
 const scene = (extra: Partial<Scene> = {}): Scene => ({ id: 'a', name: 'a', gridSize: 70, showGrid: true, ...extra });
@@ -26,10 +26,13 @@ describe('comandos: névoa e paredes', () => {
     s = addWall(s, { sceneId: 'a', wall: { id: 'd', kind: 'door', points: [], open: false } });
     s = updateWall(s, { sceneId: 'a', wall: { id: 'w', kind: 'circle', cx: 1, cy: 1, r: 5 } });
     expect(s.scenes[0].walls?.[0].kind).toBe('circle');
-    s = toggleDoor(s, { sceneId: 'a', doorId: 'd' });
+    s = setDoorOpen(s, { sceneId: 'a', doorId: 'd', open: true });
     expect(s.scenes[0].walls?.[1]).toMatchObject({ open: true });
+    // Abrir de novo (duas pessoas ao mesmo tempo) não fecha: estado igual
+    expect(setDoorOpen(s, { sceneId: 'a', doorId: 'd', open: true })).toBe(s);
     // Só portas abrem e fecham
-    expect(toggleDoor(s, { sceneId: 'a', doorId: 'w' }).scenes[0].walls?.[0]).toEqual(s.scenes[0].walls?.[0]);
+    expect(setDoorOpen(s, { sceneId: 'a', doorId: 'w', open: true })).toBe(s);
+    expect(setDoorOpen(s, { sceneId: 'a', doorId: 'd', open: false }).scenes[0].walls?.[1]).toMatchObject({ open: false });
     expect(removeWall(s, { sceneId: 'a', wallId: 'w' }).scenes[0].walls?.map((w) => w.id)).toEqual(['d']);
   });
 });

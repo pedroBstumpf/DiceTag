@@ -152,10 +152,10 @@ describe('permissões no servidor', () => {
       ['setActiveScene', { sceneId: 's2' }],
       ['setFog', { sceneId: 's1', enabled: true }],
       ['removeWall', { sceneId: 's1', wallId: 'w1' }],
-      ['toggleLoreReveal', { folderId: 'x' }],
+      ['setLoreReveal', { folderId: 'x', revealed: true }],
       ['clearChat', {}],
       ['setExplored', { sceneId: 's1' }],
-      ['toggleTokenPublic', { placementId: 't-orc', part: 'sheet' }],
+      ['setTokenPublic', { placementId: 't-orc', part: 'sheet', value: true }],
     ] as const) {
       expect(run(type, payload).ok, type).toBe(false);
       expect(run(type, payload, gm).ok, type).toBe(true);

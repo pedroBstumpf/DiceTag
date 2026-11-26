@@ -27,11 +27,16 @@ export function updateWall(state: TableState, p: { sceneId: string; wall: Wall }
   return mapScene(state, p.sceneId, (sc) => ({ ...sc, walls: (sc.walls ?? []).map((w) => (w.id === p.wall.id ? p.wall : w)) }));
 }
 
-/** Abre ou fecha uma porta. */
-export function toggleDoor(state: TableState, p: { sceneId: string; doorId: string }): TableState {
+/**
+ * Abre ou fecha uma porta. Leva o valor final (não "alternar"): dois cliques ao mesmo tempo, de
+ * duas pessoas, terminam no mesmo estado em vez de se anularem. Porta já assim = estado igual.
+ */
+export function setDoorOpen(state: TableState, p: { sceneId: string; doorId: string; open: boolean }): TableState {
+  const door = state.scenes.find((sc) => sc.id === p.sceneId)?.walls?.find((w) => w.id === p.doorId);
+  if (door?.kind !== 'door' || !!door.open === p.open) return state;
   return mapScene(state, p.sceneId, (sc) => ({
     ...sc,
-    walls: (sc.walls ?? []).map((w) => (w.id === p.doorId && w.kind === 'door' ? { ...w, open: !w.open } : w)),
+    walls: (sc.walls ?? []).map((w) => (w.id === p.doorId ? { ...w, open: p.open } : w)),
   }));
 }
 
