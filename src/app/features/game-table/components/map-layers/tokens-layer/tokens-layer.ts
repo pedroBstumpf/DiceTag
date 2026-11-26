@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, input, output } from '@angu
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { TokenBar, isDown } from '../../../../../core/models/table-session.model';
 import { readableTextOn } from '../../../../../shared/utils/color';
-import { BlobUrlService } from '../../../services/blob-url.service';
+import { BlobUrlService } from '../../../../../shared/services/blob-url.service';
 import { ResolvedToken } from '../../../services/table-session.service';
 
 /** Tipo de dado arrastado do painel lateral para o mapa (id da ficha). */

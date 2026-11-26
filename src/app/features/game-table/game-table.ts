@@ -32,7 +32,8 @@ import { SceneBar } from './components/scene-bar/scene-bar';
 import { SidePanel } from './components/side-panel/side-panel';
 import { TABLE_TOOLS, ToolBar, toolAllowed } from './components/tool-bar/tool-bar';
 import { TokenWindow } from './components/token-window/token-window';
-import { BlobUrlService } from './services/blob-url.service';
+import { BlobUrlService } from '../../shared/services/blob-url.service';
+import { BlobReader } from '../../core/services/blob-reader';
 import { SheetStore } from '../../core/services/sheet-store';
 import { SoundMixerService } from './services/sound-mixer.service';
 import { TableSessionService, tokenSheetPlacement } from './services/table-session.service';
@@ -115,7 +116,9 @@ const PANEL_SPACE = { top: 60, left: 76, right: 344, bottom: 100 };
     // As fichas da mesa leem e gravam pela sessão
     { provide: SheetStore, useExisting: TableSessionService },
     SoundMixerService,
+    // Imagens da página: lidas pela sessão (navegador ou, na mesa online, o servidor)
     BlobUrlService,
+    { provide: BlobReader, useExisting: TableSessionService },
     WindowManagerService,
   ],
   templateUrl: './game-table.html',

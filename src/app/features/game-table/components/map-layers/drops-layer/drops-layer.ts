@@ -3,7 +3,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { DROP_COLOR, DROP_SIZE, DroppedItem } from '../../../../../core/models/table-session.model';
 import { WorldbuildService } from '../../../../worldbuild/services/worldbuild.service';
-import { BlobUrlService } from '../../../services/blob-url.service';
+import { BlobUrlService } from '../../../../../shared/services/blob-url.service';
 import { TableSessionService } from '../../../services/table-session.service';
 import { InventoryRow, inventoryRow, quantityOf } from '../../../utils/inventory';
 

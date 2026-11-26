@@ -4,7 +4,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { NPC_TOKEN_SHEET } from '../../../../core/models/table-session.model';
-import { BlobUrlService } from '../../services/blob-url.service';
+import { BlobUrlService } from '../../../../shared/services/blob-url.service';
 import { TableSessionService } from '../../services/table-session.service';
 import { TokenEditor } from '../token-editor/token-editor';
 

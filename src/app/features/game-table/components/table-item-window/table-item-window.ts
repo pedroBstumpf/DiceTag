@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input } from '@an
 import { MatIconModule } from '@angular/material/icon';
 import { Tag } from '../../../../core/models/tag.model';
 import { ItemCardView } from '../../../worldbuild/components/item-card/item-card-view';
-import { BlobUrlService } from '../../services/blob-url.service';
+import { BlobUrlService } from '../../../../shared/services/blob-url.service';
 import { TableSessionService } from '../../services/table-session.service';
 
 /**

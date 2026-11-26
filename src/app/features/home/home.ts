@@ -10,7 +10,7 @@ import { ServerWorldsService } from '../../core/services/server-worlds.service';
 import { WorldsService } from '../../core/services/worlds.service';
 import { NewsService } from '../../core/services/news.service';
 import { EmptyState } from '../../shared/components/empty-state/empty-state';
-import { QuickActionsService } from '../../shared/services/quick-actions.service';
+import { QuickActionsService } from '../tables/services/quick-actions.service';
 
 /** Cartão de atalho exibido abaixo da capa. */
 interface FeatureCard {

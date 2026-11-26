@@ -5,7 +5,7 @@ import { Point, Rect } from '../../../../core/models/geometry.model';
 import { DROP_SIZE, ITEM_DRAG_TYPE, ItemDragData, METERS_PER_SQUARE, Wall } from '../../../../core/models/table-session.model';
 import { newId } from '../../../../core/utils/id';
 import { Viewport, fitRect, zoomAt } from '../../../../shared/utils/viewport';
-import { BlobUrlService } from '../../services/blob-url.service';
+import { BlobUrlService } from '../../../../shared/services/blob-url.service';
 import { ResolvedToken, TableSessionService } from '../../services/table-session.service';
 import { distanceToPolyline, sizeFromHandle, snapToCorner, snapTokenCenter } from '../../utils/geometry';
 import { isRadialFx } from '../../utils/effects';

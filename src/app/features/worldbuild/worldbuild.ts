@@ -15,7 +15,8 @@ import { DocumentEditor } from './components/document-editor/document-editor';
 import { EXPLORER_VIEWS, Explorer, ExplorerView } from './components/explorer/explorer';
 import { ImageViewer } from './components/image-viewer/image-viewer';
 import { CharacterSheetView } from '../game-table/components/character-sheet/character-sheet';
-import { BlobUrlService } from '../game-table/services/blob-url.service';
+import { BlobUrlService } from '../../shared/services/blob-url.service';
+import { BlobReader } from '../../core/services/blob-reader';
 import { ItemCard } from './components/item-card/item-card';
 import { RaceCard } from './components/race-card/race-card';
 import { FolderView } from './components/folder-view/folder-view';
@@ -62,8 +63,8 @@ const URL_CREATABLE_TYPES: readonly WorldItemType[] = ['document', 'timeline', '
     CharacterSheetView,
     WorldNpcSheet,
   ],
-  // BlobUrlService: imagens da ficha dos NPCs do bestiário
-  providers: [WindowManagerService, BlobUrlService],
+  // BlobUrlService: imagens da ficha dos NPCs do bestiário, lidas do mundo aberto
+  providers: [WindowManagerService, BlobUrlService, { provide: BlobReader, useExisting: WorldbuildService }],
   templateUrl: './worldbuild.html',
   host: { class: 'block h-full' },
 })

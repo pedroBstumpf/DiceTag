@@ -4,7 +4,7 @@ import { Tag } from '../../../../core/models/tag.model';
 import { SheetStore } from '../../../../core/services/sheet-store';
 import { ItemCardView } from '../../../worldbuild/components/item-card/item-card-view';
 import { WorldbuildService } from '../../../worldbuild/services/worldbuild.service';
-import { BlobUrlService } from '../../services/blob-url.service';
+import { BlobUrlService } from '../../../../shared/services/blob-url.service';
 import { TableSessionService } from '../../services/table-session.service';
 import { inventoryRow, itemOrigin } from '../../utils/inventory';
 import { itemSources } from '../sheet-inventory/sheet-inventory';
