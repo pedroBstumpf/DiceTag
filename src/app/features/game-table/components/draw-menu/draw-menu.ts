@@ -84,7 +84,7 @@ import { Brush, TableSessionService } from '../../services/table-session.service
         <mat-icon class="!size-4 !text-[16px]">delete_sweep</mat-icon>
       </button>
     </div>
-    <p class="pt-2 text-[11px] text-slate-500">Ctrl+Z desfaz o último traço.</p>
+    <p class="pt-2 text-[11px] text-slate-500">Ctrl+Z desfaz e Ctrl+Y refaz (traços e o resto do mapa).</p>
   `,
 })
 export class DrawMenu {
