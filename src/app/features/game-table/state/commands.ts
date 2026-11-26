@@ -1,7 +1,7 @@
 import { TableState } from '../../../core/models/table-session.model';
 import { addChatMessage, clearChat } from './chat';
 import { addEntry, removeEntry, setSoundMaster, setSoundPlaying, stopAllSounds, updateEntry } from './entries';
-import { addWall, removeWall, setDoorOpen, setExplored, setFog, setFogMemory, updateWall } from './fog';
+import { addWall, removeWall, setDoorOpen, setExplored, setFog, setFogMemory, setMapSize, updateWall } from './fog';
 import { addStroke, eraseStrokes, restoreStrokes } from './drawings';
 import { addDrop, moveDrop, removeDrop, setDropQuantity, updateDrop } from './drops';
 import { addFixedFx, clearFixedFx, removeFixedFx } from './fixed-fx';
@@ -77,6 +77,7 @@ export const TABLE_COMMANDS = {
   setFog,
   setFogMemory,
   setExplored,
+  setMapSize,
   addWall,
   updateWall,
   setDoorOpen,

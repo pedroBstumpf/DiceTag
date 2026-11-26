@@ -126,6 +126,29 @@ describe('comandos em tempo real', () => {
     b.ws.close();
   });
 
+  it('memória da névoa: a sala marca o que os jogadores enxergam, depois que o mestre informa o tamanho do mapa', async () => {
+    const a = await openSocket(port, tableId, gm.cookie);
+    await a.next('welcome');
+    const send = (seq: number, type: string, payload: unknown) => a.ws.send(JSON.stringify({ t: 'cmd', seq, type, payload }));
+    send(1, 'addScene', { scene: { ...scene, fog: { enabled: true } } });
+    send(2, 'addEntry', { entry: { id: 'pc', kind: 'character', name: 'Ana', createdAt: 1, ownerUserId: player.id } });
+    send(3, 'placeToken', { sceneId: 's1', placement: { id: 't-pc', entryId: 'pc', x: 100, y: 100 } });
+    for (let i = 0; i < 3; i++) await a.next('ack');
+    // Sem o tamanho do mapa a sala não marca nada; com ele, marca e avisa o mestre
+    send(4, 'setMapSize', { sceneId: 's1', w: 2100, h: 1400 });
+    await a.next('ack');
+    const marked = await a.next('cmd');
+    expect(marked).toMatchObject({ type: 'setExplored', by: 'servidor' });
+    expect(marked.payload.explored).toMatchObject({ cell: 10, cols: 210, rows: 140 });
+    // Jogador não informa o tamanho do mapa (poderia apagar a memória)
+    const b = await openSocket(port, tableId, player.cookie);
+    await b.next('welcome');
+    b.ws.send(JSON.stringify({ t: 'cmd', seq: 1, type: 'setMapSize', payload: { sceneId: 's1', w: 10, h: 10 } }));
+    expect((await b.next('nack')).reason).toMatch(/mestre/);
+    a.ws.close();
+    b.ws.close();
+  });
+
   it('o estado é gravado e volta ao reconectar', async () => {
     const a = await openSocket(port, tableId, gm.cookie);
     await a.next('welcome');

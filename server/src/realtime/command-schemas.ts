@@ -226,6 +226,9 @@ const chatMessage = z.strictObject({
 const tableItemFields = { name: text(200), tags: z.array(tagSchema).max(50).optional(), description: text(20_000).optional(), blobId: id.optional() };
 const tableItem = z.strictObject({ id, ...tableItemFields, ownerUserId: accountId.optional(), createdAt: timestamp });
 
+/** Lado do mapa em px (imagens de até 20.000 px; a máscara da névoa limita as células). */
+const mapSide = z.int().min(1).max(20_000);
+
 const scene = z.strictObject({
   id,
   name: text(100),
@@ -235,6 +238,7 @@ const scene = z.strictObject({
   tokens: z.array(placement).max(500).optional(),
   fog: z.strictObject({ enabled: z.boolean(), memory: z.boolean().optional() }).optional(),
   explored: explored.optional(),
+  mapSize: z.strictObject({ w: mapSide, h: mapSide }).optional(),
   walls: z.array(wall).max(5000).optional(),
   drawings: z.array(stroke).max(3000).optional(),
   notes: z.array(note).max(500).optional(),
@@ -302,6 +306,7 @@ export const COMMAND_SCHEMAS = {
   setFog: z.strictObject({ sceneId: id, enabled: z.boolean() }),
   setFogMemory: z.strictObject({ sceneId: id, memory: z.boolean() }),
   setExplored: z.strictObject({ sceneId: id, explored: explored.optional() }),
+  setMapSize: z.strictObject({ sceneId: id, w: mapSide, h: mapSide }),
   addWall: z.strictObject({ sceneId: id, wall }),
   updateWall: z.strictObject({ sceneId: id, wall }),
   setDoorOpen: z.strictObject({ sceneId: id, doorId: id, open: z.boolean() }),

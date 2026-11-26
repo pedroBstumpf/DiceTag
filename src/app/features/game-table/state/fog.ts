@@ -17,6 +17,13 @@ export function setExplored(state: TableState, p: { sceneId: string; explored?: 
   return patchScene(state, p.sceneId, { explored: p.explored });
 }
 
+/** Mestre: tamanho do mapa da cena (o servidor precisa dele para a memória da névoa). Igual = estado igual. */
+export function setMapSize(state: TableState, p: { sceneId: string; w: number; h: number }): TableState {
+  const scene = state.scenes.find((sc) => sc.id === p.sceneId);
+  if (!scene || (scene.mapSize?.w === p.w && scene.mapSize?.h === p.h)) return state;
+  return patchScene(state, p.sceneId, { mapSize: { w: p.w, h: p.h } });
+}
+
 /** Acrescenta uma parede (já com id e camada). */
 export function addWall(state: TableState, p: { sceneId: string; wall: Wall }): TableState {
   return mapScene(state, p.sceneId, (sc) => ({ ...sc, walls: [...(sc.walls ?? []), p.wall] }));

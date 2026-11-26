@@ -22,6 +22,12 @@ export interface Scene {
   fog?: { enabled: boolean; memory?: boolean };
   /** Áreas já vistas pelos tokens (memória da névoa). */
   explored?: ExploredData;
+  /**
+   * Tamanho do mapa (px da imagem; cena sem mapa = o papel quadriculado), informado pelo mestre
+   * ao abrir a cena. Na mesa online o servidor marca a memória da névoa e precisa dele (não lê
+   * a imagem). Ausente = ainda não informado.
+   */
+  mapSize?: { w: number; h: number };
   /** Paredes que bloqueiam a visão quando a névoa está ativa. Padrão: []. */
   walls?: Wall[];
   /** Desenhos livres (pincel). Padrão: []. */

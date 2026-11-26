@@ -370,8 +370,10 @@ export const COMMAND_RULES: { [K in TableCommandType]: Rule<K> } = {
   // Névoa e paredes: do mestre; portas, qualquer um na cena aberta
   setFog: gmOnly(),
   setFogMemory: gmOnly(),
-  // Memória da névoa gravada pelo jogador revelaria o mapa: até o servidor calcular a visão, só o mestre
+  // Na mesa online quem marca a memória é a sala (Room.explore); o mestre só a esquece
   setExplored: gmOnly(),
+  // Tamanho do mapa, informado pelo mestre ao abrir a cena (a sala precisa dele para a memória)
+  setMapSize: gmOnly(),
   addWall: (p, ctx) => {
     if (!isGm(ctx)) return deny(ONLY_GM);
     const walls = sceneOf(ctx.state, p.sceneId)?.walls ?? [];
