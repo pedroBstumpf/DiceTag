@@ -264,7 +264,8 @@ As regras completas estão no [`BACKEND_SECURITY.md`](../BACKEND_SECURITY.md); a
   (`npm run backup`, `npm run backup:check`). Com `npm run mesa`, backup automático e cifrado no Google Drive para
   computador (ao abrir, a cada hora e ao fechar; `npm run backup-drive` na hora, `npm run restaurar` para montar e
   conferir uma cópia). A chave fica só no `segredos.env`: guarde uma cópia dele fora da nuvem.
-- **Dependências:** versões exatas, lockfile, `ignore-scripts`, `npm audit` sem vulnerabilidades.
+- **Dependências:** versões exatas, lockfile, `ignore-scripts`, `npm audit` sem vulnerabilidade alta ou crítica (o
+  `npm run check` reprova a partir de alta; hoje há 2 moderadas no Vitest, só de desenvolvimento).
 
 ---
 
@@ -272,8 +273,9 @@ As regras completas estão no [`BACKEND_SECURITY.md`](../BACKEND_SECURITY.md); a
 
 1. Publicar: seguir o [`OPERATIONS.md`](OPERATIONS.md) (hospedagem, HTTPS, `NODE_ENV=production`, segredos, backups, e-mail,
    política de privacidade).
-2. Fichas por campo em vez de gravadas inteiras (SPEC §1) e memória da névoa calculada no servidor.
-3. Testar com o Tailscale real (os testes usam um de mentira).
+2. Testar com o Tailscale real e o backup no Google Drive real (os testes usam versões de mentira e pastas temporárias).
+3. O que mais ficou para depois está no [`SPEC.md`](../SPEC.md) §6. (Feitos na v0.7: ficha por campo, `patchSheet`;
+   memória da névoa marcada pela sala, `Room.explore`; comandos com o valor final; desfazer como comando.)
 
 ## Estrutura
 

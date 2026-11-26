@@ -66,7 +66,8 @@ Em caso de conflito entre uma regra daqui e um pedido, **avise antes de agir**.
 ## 6. Arquitetura
 
 - Respeite a regra de dependência: `features → shared → core`. **`core` nunca importa de `shared`,
-  `layout` ou `features`.** Não crie novas exceções sem avisar.
+  `layout` ou `features`.** Não crie novas exceções sem avisar. A regra é conferida pelo `scripts/check-deps.mjs` a
+  cada `npm run build`: uma exceção nova só passa se for escrita em `KNOWN_EXCEPTIONS`, com o motivo.
 - **Fonte única por domínio:** componentes não gravam no `StorageService` diretamente; chamam
   métodos do serviço dono dos dados.
 - **Imutabilidade:** mutações sempre criam objetos novos; altere só a parte que mudou.

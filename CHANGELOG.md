@@ -7,6 +7,26 @@ pode trazer mudanças incompatíveis. Como versionar e organizar as branches: `R
 
 ## [Não publicado]
 
+### Adicionado
+- **Desfazer e refazer no mapa:** Ctrl+Z desfaz e Ctrl+Y (ou Ctrl+Shift+Z) refaz tokens (colocar, mover, tamanho,
+  tirar), paredes e portas, desenhos, anotações, itens no chão e efeitos fixos. Cada pessoa desfaz o que ela fez, na
+  cena aberta; arrastar é um passo só. Vale na mesa online (o servidor confere como qualquer outra ação).
+- Verificação automática no GitHub (Actions) a cada envio: build e testes do front e `npm run check` do servidor.
+
+### Mudado
+- **Memória da névoa marcada pelo servidor** na mesa online, com a visão dos jogadores: funciona com o mestre em outra
+  cena ou com a aba dele em segundo plano. O mestre informa o tamanho do mapa ao abrir a cena.
+- **Ficha gravada por campo:** duas pessoas mexendo em partes diferentes da mesma ficha não apagam mais a alteração uma
+  da outra.
+- Portas, liberações de ficha do token e pastas da Lore guardam o valor final: dois cliques ao mesmo tempo não se anulam.
+
+### Desempenho
+- Todos os componentes passam a ser OnPush: o Angular confere só o que mudou.
+
+### Interno
+- `npm run build` reprova import que quebra as camadas do app (`scripts/check-deps.mjs`); o `BlobUrlService` foi para
+  `shared` e o `QuickActionsService` para `features/tables`.
+
 ## [0.6.0] — 2026-11-26
 
 O app ganha nome e visual novos, backup automático e contas de convidado com senha.
