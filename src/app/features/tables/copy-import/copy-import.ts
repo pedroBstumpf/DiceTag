@@ -28,7 +28,7 @@ export class CopyImport {
   readonly accept = COPY_EXTENSION;
   readonly progress = this.copies.progress;
   /** A importação terminou: a lista de mesas já foi atualizada. */
-  readonly imported = output<void>();
+  readonly imported = output();
 
   readonly copy = signal<BrowserCopy | null>(null);
   readonly contents = signal<CopyContents | null>(null);

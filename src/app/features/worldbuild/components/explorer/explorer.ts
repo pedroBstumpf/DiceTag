@@ -74,7 +74,7 @@ export class Explorer {
   /** Itens removidos (para fechar janelas abertas). */
   readonly removed = output<string[]>();
   /** Pedido para esconder o painel. */
-  readonly hide = output<void>();
+  readonly hide = output();
   /** Mostra o botão "Esconder painel" (falso quando o explorador está numa janela, ex.: na mesa). */
   readonly hideable = input(true);
   /** Mostra o seletor de mundos no cabeçalho (página do Worldbuild; na mesa o mundo é o da mesa). */
