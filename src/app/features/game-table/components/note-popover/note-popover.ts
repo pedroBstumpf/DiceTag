@@ -86,7 +86,7 @@ export class NotePopover {
   private readonly session = inject(TableSessionService);
 
   readonly note = input.required<MapNote>();
-  readonly closed = output<void>();
+  readonly closed = output();
 
   readonly colors = NOTE_COLORS;
 

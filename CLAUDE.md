@@ -80,6 +80,10 @@ npm install                  # .npmrc usa legacy-peer-deps=true (contorna erro d
 npm start                    # http://localhost:4200
 npm run build                # SEMPRE rodar após alterações para validar (deve terminar sem erros)
 npx ng test --watch=false    # testes Vitest (*.spec.ts), uma execução (usa bastante memória: vários processos)
+npm run test:ci              # o mesmo, com cobertura em coverage/ (o CI usa este)
+npm run lint                 # ESLint (typescript-eslint strict + angular-eslint com a11y); dívida antiga em eslint-suppressions.json
+npm run lint:prune           # depois de corrigir código antigo: tira do eslint-suppressions.json o que não vale mais
+npm run typecheck            # tsc do app e dos specs, sem gerar arquivos
 
 # Servidor (pasta server/) — guia completo em server/README.md
 npm install && npm run setup # dependências + .env com segredos aleatórios (nunca versionar o .env)
@@ -314,8 +318,10 @@ Rotas (`app.routes.ts`, todas lazy):
 - **Código em `server/`** segue o [`BACKEND_SECURITY.md`](BACKEND_SECURITY.md): rota nova nasce protegida (só
   `config: PUBLIC` a abre), consultas com o dono/participação no SQL, todo payload com `strictObject` e limites,
   eventos de segurança por `audit()`.
-- **Commits:** um por feature/fase, em branch separada da `main`, no formato Conventional Commits em PT-BR
-  (`feat(mesa): …`, `fix(mesas): …`), com corpo explicando o que mudou.
+- **Commits:** em branch `<tipo>/<nº da issue>-<descrição>` a partir da `main`, no formato Conventional Commits em PT-BR
+  (`feat(mesa): …`, `fix(mesas): …`), com corpo explicando o que mudou. O hook `commit-msg` (husky + commitlint) recusa
+  mensagens fora do formato e o `pre-commit` roda o ESLint nos arquivos alterados. Merge na `main` só por PR com
+  **squash** (fluxo em `CONTRIBUTING.md`). Código novo não pode entrar no `eslint-suppressions.json`.
 
 ### Armadilhas já resolvidas (não reintroduzir)
 

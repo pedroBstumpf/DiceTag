@@ -59,7 +59,7 @@ export class RaceImage {
   readonly icon = input.required<string>();
   readonly blobId = input<string | undefined>();
   readonly picked = output<File>();
-  readonly cleared = output<void>();
+  readonly cleared = output();
 
   readonly src = signal<string | null>(null);
 

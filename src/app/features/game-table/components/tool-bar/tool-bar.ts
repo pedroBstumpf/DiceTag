@@ -54,8 +54,8 @@ export class ToolBar {
   /** Ferramentas do papel atual (a Névoa some no papel de jogador). */
   readonly tools = computed(() => TABLE_TOOLS.filter((t) => !t.gmOnly || this.session.role() === 'gm'));
 
-  readonly zoomIn = output<void>();
-  readonly zoomOut = output<void>();
-  readonly fit = output<void>();
-  readonly hide = output<void>();
+  readonly zoomIn = output();
+  readonly zoomOut = output();
+  readonly fit = output();
+  readonly hide = output();
 }

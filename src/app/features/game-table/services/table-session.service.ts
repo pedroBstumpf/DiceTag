@@ -1078,7 +1078,7 @@ export class TableSessionService extends SheetStore {
   private sendBursts(): void {
     clearTimeout(this.burstTimer);
     this.burstTimer = undefined;
-    if (!this.room || !this.sync) return this.bursts.clear();
+    if (!this.room || !this.sync) return void this.bursts.clear();
     for (const { seqs, commands } of this.bursts.values()) {
       const command = mergeBurst(commands);
       const seq = this.room.nextSeq();
@@ -1499,7 +1499,7 @@ export class TableSessionService extends SheetStore {
 
   updateStatus(id: string, patch: { bars?: TokenBar[]; tags?: TokenTag[] }): void {
     const placementId = tokenSheetPlacement(id);
-    if (!placementId) return this.updateEntryToken(id, patch);
+    if (!placementId) return void this.updateEntryToken(id, patch);
     // Token de NPC: barras e etiquetas são só dele
     this.dispatch('updatePlacement', { placementId, patch: { ...patch, ...(patch.bars && { bars: withStatusBars(patch.bars) }) } });
   }
@@ -2035,7 +2035,7 @@ export class TableSessionService extends SheetStore {
     const cloned = await this.cloneInventoryBlobs(inventory);
     const sheet = this.findPlacement(placementId)?.sheet;
     // Se o token sumiu no meio, apaga as cópias; senão, troca só as imagens (ids iguais)
-    if (!sheet) return this.deleteInventoryBlobs(cloned.filter((c, i) => c.blobId !== inventory[i].blobId));
+    if (!sheet) return void this.deleteInventoryBlobs(cloned.filter((c, i) => c.blobId !== inventory[i].blobId));
     const byId = new Map(cloned.map((c) => [c.id, c.blobId]));
     this.dispatch('updatePlacement', {
       placementId,
@@ -2144,7 +2144,7 @@ export class TableSessionService extends SheetStore {
   addWall(wall: DistributiveOmit<Wall, 'id'>): void {
     const sceneId = this.activeSceneId();
     const level = this.currentLevel();
-    const created = { ...wall, id: newId(), ...(level > 0 && { level }) } as Wall;
+    const created = { ...wall, id: newId(), ...(level > 0 && { level }) };
     if (sceneId) this.dispatch('addWall', { sceneId, wall: created });
   }
 

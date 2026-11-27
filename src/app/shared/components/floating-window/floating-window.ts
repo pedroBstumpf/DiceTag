@@ -67,8 +67,8 @@ export class FloatingWindow {
   /** Fixada: não pode ser movida nem redimensionada. */
   readonly pinned = model(false);
 
-  readonly closed = output<void>();
-  readonly focused = output<void>();
+  readonly closed = output();
+  readonly focused = output();
 
   /** Classes que dependem do estado (borda ativa, maximizada, mobile). */
   protected readonly stateClass = computed(() =>

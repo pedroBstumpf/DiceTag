@@ -12,7 +12,7 @@ O doc 05 §7 sugere `ubuntu-latest` e deploys automáticos para staging e produ�
 ## Decisão
 
 - Os jobs de qualidade rodam em **`windows-latest`**, o sistema onde a mesa roda.
-- CodeQL e a checagem do título do PR rodam em `ubuntu-latest` (não dependem do SO e são mais rápidos).
+- Lint/typecheck, CodeQL, Gitleaks e a checagem do título do PR rodam em `ubuntu-latest` (não dependem do SO e são mais rápidos).
 - Não há `deploy-staging.yml` nem `deploy-production.yml`. "Produção" = o dono atualiza a `main` (ou uma tag) no
   computador da mesa e roda `npm run mesa`. O substituto do staging é `npm run e2e` + `npm run smoke` antes da release.
 - Releases continuam com SemVer e tags `vX.Y.Z`; release-please entra no backlog (V13).
@@ -20,5 +20,5 @@ O doc 05 §7 sugere `ubuntu-latest` e deploys automáticos para staging e produ�
 ## Consequências
 
 - CI um pouco mais lento (runners Windows), em troca de pegar problemas reais do ambiente da mesa.
-- Os checks obrigatórios da `main` são: `Front-end (build e testes)`, `Servidor (tipos, testes e audit)`, `Qualidade
-  (lint e formatação)`, `CodeQL` e `Título do PR`.
+- Os checks obrigatórios da `main` são: `Qualidade (lint)`, `Front-end (build e testes)`, `Servidor (tipos, testes e
+  audit)`, `CodeQL`, `Gitleaks` e `Título do PR`.

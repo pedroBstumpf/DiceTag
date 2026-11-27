@@ -31,6 +31,6 @@ jobs:
             chore
             revert
           requireScope: false
-          # Descrição em pt-BR, começando em minúscula
-          subjectPattern: ^[a-zà-ú0-9].+$
-          subjectPatternError: 'A descrição "{subject}" deve começar com letra minúscula (ex.: "feat(mesa): adicionar portas trancadas").'
+          # Descrição em pt-BR em minúscula, sem ponto final; nome próprio no começo é permitido (OnPush, Ctrl+Z)
+          subjectPattern: ^(?![A-ZÀ-Ú][a-zà-ú]+(\s|$)).+[^.]$
+          subjectPatternError: 'A descrição "{subject}" deve começar com minúscula e não terminar com ponto (ex.: "feat(mesa): adicionar portas trancadas").'
