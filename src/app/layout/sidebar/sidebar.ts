@@ -126,6 +126,8 @@ export class Sidebar {
     this.owner()
       ? [
           { label: 'Início', icon: 'home', route: '/' },
+          // Só com a conta do servidor: o painel usa as mesas online
+          ...(this.account.isOwner() ? [{ label: 'Painel do Mestre', icon: 'shield_person', route: '/mestre' }] : []),
           { label: 'Arquivos', icon: 'perm_media', route: '/arquivos' },
         ]
       : [],

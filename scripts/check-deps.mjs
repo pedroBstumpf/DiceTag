@@ -27,6 +27,8 @@ const FEATURE_DEPS = {
   'game-table': ['worldbuild'],
   // Os atalhos da página inicial abrem o "criar mesa" (QuickActionsService)
   home: ['tables'],
+  // O Painel do Mestre reaproveita o "Abrir para os jogadores" (HostPanel) de Minhas mesas
+  gm: ['tables'],
 };
 
 /** Imports fora da regra, aceitos por enquanto: "arquivo => alvo" (caminhos a partir de src/app). */

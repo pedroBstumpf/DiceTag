@@ -33,6 +33,19 @@ export interface InviteRecord {
   targetUserId: string | null;
 }
 
+/** Resumo de uma mesa para o Painel do Mestre: só contagens e datas, nada do conteúdo da partida. */
+export interface GmTableSummary extends MemberTable {
+  worldName: string;
+  /** Jogadores (convidados) na mesa. */
+  players: number;
+  /** Convites novos ainda válidos (não vencidos nem usados; links de retorno não contam). */
+  pendingInvites: number;
+  /** Cenas no último estado gravado (0 = mesa nunca aberta). */
+  scenes: number;
+  /** Última gravação do estado (null = mesa nunca aberta). */
+  stateUpdatedAt: number | null;
+}
+
 export type TablePatch = Partial<Pick<TableRecord, 'name' | 'system' | 'description' | 'maxPlayers' | 'accent'>>;
 
 /** Condição SQL: a conta do parâmetro é mestre da mesa `game_tables.id`. */
@@ -87,6 +100,44 @@ export class TablesRepository {
       )
       .all(userId) as unknown as (TableRow & { role: TableRole })[];
     return rows.map((r) => ({ ...toTable(r), role: r.role }));
+  }
+
+  /**
+   * Painel do Mestre: as mesas em que a conta é mestre, com as contagens de cada uma numa consulta só.
+   * O papel é conferido no próprio SQL (JOIN com `table_members`, role = 'gm').
+   */
+  gmOverview(userId: string, now: number): GmTableSummary[] {
+    const rows = this.db
+      .prepare(
+        `SELECT t.id, t.owner_id, t.world_id, t.name, t.system, t.description, t.max_players, t.accent, t.created_at,
+                w.name AS world_name,
+                (SELECT COUNT(*) FROM table_members p WHERE p.table_id = t.id AND p.role = 'player') AS players,
+                (SELECT COUNT(*) FROM table_invites i
+                   WHERE i.table_id = t.id AND i.target_user_id IS NULL AND i.expires_at > ? AND i.uses < i.max_uses) AS pending_invites,
+                COALESCE(json_array_length(s.state, '$.scenes'), 0) AS scenes,
+                s.updated_at AS state_updated_at
+         FROM game_tables t
+         JOIN table_members m ON m.table_id = t.id AND m.user_id = ? AND m.role = 'gm'
+         JOIN worlds w ON w.id = t.world_id
+         LEFT JOIN table_states s ON s.table_id = t.id
+         ORDER BY t.created_at DESC`,
+      )
+      .all(now, userId) as unknown as (TableRow & {
+      world_name: string;
+      players: number;
+      pending_invites: number;
+      scenes: number;
+      state_updated_at: number | null;
+    })[];
+    return rows.map((r) => ({
+      ...toTable(r),
+      role: 'gm' as const,
+      worldName: r.world_name,
+      players: Number(r.players),
+      pendingInvites: Number(r.pending_invites),
+      scenes: Number(r.scenes),
+      stateUpdatedAt: r.state_updated_at === null ? null : Number(r.state_updated_at),
+    }));
   }
 
   /** Altera a mesa se a conta for mestre dela (false = não é). */
