@@ -17,6 +17,11 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "@angular-devkit/*"
         update-types: ["version-update:semver-major"]
+      # Andam junto com o major do Angular (o Angular 21 exige o TypeScript 5.9): sobem no mesmo `ng update`
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "angular-eslint"
+        update-types: ["version-update:semver-major"]
     commit-message: { prefix: "build(deps)" }
     labels: ["dependencies", "area:front"]
   - package-ecosystem: npm
@@ -28,6 +33,12 @@ updates:
         patterns: ["fastify", "@fastify/*"]
       tooling:
         patterns: ["typescript", "vitest*", "@vitest/*", "@types/*", "tsx", "esbuild"]
+    ignore:
+      # O TypeScript acompanha o do front; os tipos do Node acompanham o Node usado (24, ver .nvmrc)
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     commit-message: { prefix: "build(deps)" }
     labels: ["dependencies", "area:back"]
   - package-ecosystem: github-actions
