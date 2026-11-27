@@ -242,11 +242,28 @@ Pendências conhecidas, em ordem sugerida. Nenhuma bloqueia o uso com os amigos.
 | # | Item | Por que importa | O que fazer |
 |---|---|---|---|
 | 1 | **Testes reais na máquina principal** | Tailscale Funnel e backup no Google Drive só foram testados com versões de mentira e pastas temporárias | Seguir o `docs/GUIA-DA-MESA.md` §3–4 (backup, `npm run restaurar`, abrir para os jogadores) e jogar uma sessão |
-| 2 | **Destino das mesas e contas locais** (navegador) | Hoje há dois caminhos de código: "Neste navegador" (IndexedDB, contas de mentira, dados que o navegador pode apagar) e o servidor | Decidir: manter como modo offline de preparação ou remover (recomendado: remover, levando os dados pela cópia `.zehenia`). Removendo, os repositórios do §2 viram uma implementação só e o `AuthService` local sai |
+| 2 | **Remover as mesas e contas locais** (navegador) — **decidido: sai** (2026-11-27) | Hoje há dois caminhos de código: "Neste navegador" (IndexedDB, contas de mentira, dados que o navegador pode apagar) e o servidor | Remover o modo local, levando os dados pela cópia `.zehenia` antes. Os repositórios do §2 viram uma implementação só e o `AuthService` local sai. Feito na máquina de desenvolvimento |
 | 3 | **Tailscale embutido** (ponte `tsnet`) | Tiraria a instalação do Tailscale | Desenho em `docs/superpowers/specs/2026-11-06-tailscale-embutido-design.md`, pausado até a máquina principal |
 | 4 | **Exportar uma mesa do servidor** | A cópia `.zehenia` só leva o que está no navegador | Rota do dono que monta o arquivo com a mesa e os arquivos dela |
 | 5 | **Arquivos esquecidos** | Excluir mesa não apaga imagens das camadas, do inventário e das cópias de ficha dos tokens; desfazer o "colar" de token de NPC com imagens deixa as cópias | Varredura de arquivos sem referência no servidor (e no IndexedDB) |
 | 6 | **A ficha fora de `game-table`** | Última exceção da regra de camadas | A `CharacterSheetView` (e inventário, anotações) passar a usar só o `SheetStore`, com as operações da mesa (ações, janelas, rolagens) num contrato próprio; depois, mover para uma feature de fichas |
-| 7 | **Funcionalidades em aberto** | — | Peso no inventário; trocar o mundo de uma mesa; mais de 2 mundos; mural de notícias; trancas nas portas; Ctrl+Z da ficha |
+| 7 | **Funcionalidades em aberto** | — | **Ctrl+Z da ficha** (prioridade: o dono do projeto esperava que já existisse); **mais de 2 mundos** por usuário (vai ser feito); mural de notícias; trancas nas portas. **Descartados** (2026-11-27): peso no inventário e trocar o mundo de uma mesa já criada |
 | 8 | **Testes de componentes** | Com o OnPush, pegariam a tela que deixa de atualizar | Começar pelas camadas do mapa e pela ficha |
 | 9 | **Dependências de desenvolvimento** | `npm audit` aponta 2 alertas moderados no Vitest do servidor (só desenvolvimento) | Atualizar o Vitest quando houver versão compatível, com autorização do dono do projeto |
+| 10 | **Modo Streamer** (futuro, feature grande) | Uma terceira visão da partida, para transmitir | Ver §6.1. **Só anotado**: não começar sem o dono do projeto pedir |
+
+### 6.1 Modo Streamer (ideia anotada em 2026-11-27, não iniciada)
+
+Uma **terceira visão** do jogo, além da do mestre e da do jogador, pensada para transmissão (stream):
+
+- O mestre cria a visão do streamer, que **abre sozinha em outra aba** do navegador.
+- A aba mostra **só o mapa**, sem barras nem painéis, e **foca automaticamente nos eventos**: quando um personagem
+  rola um dado, quando um item é posto no mapa e quando outras coisas acontecem, a câmera vai até lá e mostra o que
+  importa.
+- **Rolagens** aparecem com o resultado na tela e depois o chat some.
+- O mestre **controla tudo durante a partida** por um **painel do Modo Streamer** dentro do app (o que a visão
+  acompanha, o que mostra e quando).
+
+Pontos a decidir quando a feature começar (spec → plano): o que a visão enxerga sob a névoa (provavelmente o mesmo
+que os jogadores: um `Viewer` próprio em `state/player-view.ts` e `server/src/realtime/projection.ts`), como a aba
+se autentica na mesa online sem uma conta de jogador, e quais eventos geram foco (lista configurável no painel).

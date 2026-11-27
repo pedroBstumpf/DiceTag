@@ -45,7 +45,7 @@ organizar toda a atmosfera de uma campanha.
 | **Recuperação de senha** da conta do servidor (por e-mail ou por `npm run reset-link`) e remoção de metadados (EXIF) das imagens enviadas | Pronto |
 | **Mesa online robusta**: comandos com o valor final, ficha por campo, memória da névoa marcada pelo servidor | Pronto |
 | **Qualidade**: OnPush em todos os componentes, camadas verificadas no build, CI no GitHub (Windows) | Pronto |
-| Front-end usando o servidor em tudo (contas e mesas locais substituídas) | Não iniciado: as duas coisas convivem (decisão pendente, SPEC §6) |
+| Front-end usando o servidor em tudo (contas e mesas locais substituídas) | Não iniciado: as duas coisas convivem. **Decidido: o modo local sai** (SPEC §6) |
 
 Fora da mesa online, as telas guardam tudo **no navegador (IndexedDB)**. A **mesa online** (seção "Mesas online" em Minhas
 mesas) usa a conta, as mesas, os convites, a sala e o mundo do servidor.
@@ -1085,8 +1085,10 @@ repositórios por domínio, servidor autoritativo (névoa, rolagens, permissões
 **guardado para depois** está no `SPEC.md` §6 (testes reais na máquina principal, destino das mesas e contas locais,
 exportar a mesa do servidor, a ficha fora de `game-table`…).
 
-- Inventário sem peso; "Dar para" e compra passam uma unidade por vez; relações por nome livre (sem vínculo com
-  fichas da mesa).
+- "Dar para" e compra passam uma unidade por vez; relações por nome livre (sem vínculo com fichas da mesa).
+  Peso no inventário e trocar o mundo de uma mesa já criada foram **descartados** pelo dono do projeto.
+- **Modo Streamer** (terceira visão, só mapa, foco automático nos eventos, controlada por um painel do mestre):
+  **só anotado** no `SPEC.md` §6.1. Não começar sem o dono do projeto pedir.
 - A lista de jogadores para o controle do NPC vem dos donos dos personagens (`session.players`), não dos membros da mesa.
 - Efeitos não saem do token automaticamente. (Na mesa online, efeitos, pings, sons e chat já chegam a todos; na mesa
   local, só a própria tela os vê.)
@@ -1095,10 +1097,11 @@ exportar a mesa do servidor, a ficha fora de `game-table`…).
 - Névoa: visão só por token; portas sem tranca nem permissão (qualquer papel abre/fecha).
 - Paredes bloqueiam o movimento só pelo centro do token (o corpo do token pode encostar/sobrepor a parede).
 - Ctrl+Z não cobre fichas, cenas, camadas nem remoções que apagam imagens; desfazer o "colar" de um token de NPC com
-  imagens próprias deixa as cópias das imagens sem uso.
+  imagens próprias deixa as cópias das imagens sem uso. **Ctrl+Z da ficha é prioridade** (o dono do projeto esperava
+  que já existisse).
 - **Terminar de ligar o front ao servidor:** a mesa online e o mundo dela já usam o servidor; contas e mesas locais
-  continuam em paralelo (decidir se ficam na versão publicada, SPEC §6).
-- Mundos: limite fixo de 2 por usuário; trocar o mundo de uma mesa já criada ainda não é possível.
+  continuam em paralelo. **Decidido: o modo local sai** (SPEC §6).
+- Mundos: limite fixo de 2 por usuário — **vai passar a mais de 2** (decidido).
 - Mural de notícias alimentado por API/CMS (`NewsService.posts`).
 - Testes de componentes (hoje têm testes as funções puras de `utils/` e `state/`, as regras da ficha no modelo, a
   `FxLayer` e a fachada `TableSessionService`, num teste de integração). Com o OnPush, um teste de tela pegaria o
