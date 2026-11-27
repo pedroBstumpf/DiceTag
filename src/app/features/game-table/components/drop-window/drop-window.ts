@@ -120,7 +120,7 @@ export class DropWindow {
   /** Id do item largado. */
   readonly dropId = input.required<string>();
   /** O item saiu do mapa (pego ou removido): fechar a janela. */
-  readonly closed = output<void>();
+  readonly closed = output();
 
   readonly drop = computed(() => this.session.dropById(this.dropId())?.drop ?? null);
   /** O item como o cartão o mostra (personalização de quem largou ou o original). */

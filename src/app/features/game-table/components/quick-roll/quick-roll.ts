@@ -42,7 +42,7 @@ export class QuickRoll {
   private readonly snackBar = inject(MatSnackBar);
 
   /** Rolou ou foi fechado (quem abriu esconde o painel). */
-  readonly done = output<void>();
+  readonly done = output();
 
   readonly diceKinds = DICE_KINDS;
   readonly dice = signal<DiceKind>('2d12');

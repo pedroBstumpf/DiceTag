@@ -25,7 +25,7 @@ export type SheetPatch = { [K in keyof CharacterSheet]?: CharacterSheet[K] | nul
 export function sheetPatchOf(patch: Partial<CharacterSheet>): SheetPatch {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(patch)) out[key] = value === undefined ? null : value;
-  return out as SheetPatch;
+  return out;
 }
 
 /** Ficha com os campos do patch aplicados (`null` apaga o campo). */

@@ -82,7 +82,7 @@ ruleset() {
         "required_status_checks": [
           { "context": "Front-end (build e testes)" },
           { "context": "Servidor (tipos, testes e audit)" },
-          { "context": "Qualidade (lint e formatação)" },
+          { "context": "Qualidade (lint)" },
           { "context": "CodeQL" },
           { "context": "Gitleaks" },
           { "context": "Título do PR" } ] } }

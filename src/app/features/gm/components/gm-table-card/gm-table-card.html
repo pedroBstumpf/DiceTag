@@ -1,0 +1,173 @@
+@let t = table();
+<article class="glass flex flex-col gap-4 rounded-xl p-4 animate-fade-in">
+  <!-- ===== Cabeçalho: nome, sistema, mundo e ações principais ===== -->
+  <header class="flex flex-wrap items-start gap-3">
+    <span class="mt-1 size-3 shrink-0 rounded-full" [style.background-color]="t.accent" aria-hidden="true"></span>
+    <div class="min-w-48 flex-1">
+      <h3 class="font-book text-xl text-star-300">{{ t.name }}</h3>
+      <p class="text-sm text-slate-400">{{ t.system || 'Sem sistema' }} · mundo <span class="text-slate-200">{{ t.worldName }}</span></p>
+      @if (t.description) {
+        <p class="mt-1 text-sm whitespace-pre-line text-slate-300">{{ t.description }}</p>
+      }
+    </div>
+    <div class="flex flex-wrap items-center gap-2">
+      <a mat-flat-button [routerLink]="['/mesa-online', t.id]">
+        <mat-icon>play_arrow</mat-icon>
+        Abrir mesa
+      </a>
+      <button mat-icon-button [matMenuTriggerFor]="more" matTooltip="Mais ações" aria-label="Mais ações da mesa">
+        <mat-icon>more_vert</mat-icon>
+      </button>
+      <mat-menu #more="matMenu">
+        <button mat-menu-item (click)="startEdit()">
+          <mat-icon>edit</mat-icon>
+          Editar dados da mesa
+        </button>
+        <a mat-menu-item routerLink="/worldbuild" [queryParams]="{ servidor: t.worldId }">
+          <mat-icon>public</mat-icon>
+          Preparar o mundo da mesa
+        </a>
+        <button mat-menu-item [disabled]="busy() || t.pendingInvites === 0" (click)="revokeInvites()">
+          <mat-icon>link_off</mat-icon>
+          Cancelar convites pendentes
+        </button>
+        <button mat-menu-item class="!text-lacre-claro" [disabled]="busy()" (click)="remove()">
+          <mat-icon class="!text-lacre-claro">delete</mat-icon>
+          Excluir mesa
+        </button>
+      </mat-menu>
+    </div>
+  </header>
+
+  <!-- ===== Informações (só contagens) ===== -->
+  <dl class="grid grid-cols-2 gap-2 sm:grid-cols-5">
+    <div class="rounded-lg bg-ink-950/60 px-3 py-2">
+      <dt class="sheet-label">Jogadores</dt>
+      <dd class="font-mono text-lg text-slate-100">{{ t.players }}/{{ t.maxPlayers }}</dd>
+    </div>
+    <div class="rounded-lg bg-ink-950/60 px-3 py-2">
+      <dt class="sheet-label">Convites pendentes</dt>
+      <dd class="font-mono text-lg text-slate-100">{{ t.pendingInvites }}</dd>
+    </div>
+    <div class="rounded-lg bg-ink-950/60 px-3 py-2">
+      <dt class="sheet-label">Cenas</dt>
+      <dd class="font-mono text-lg text-slate-100">{{ t.scenes }}</dd>
+    </div>
+    <div class="rounded-lg bg-ink-950/60 px-3 py-2">
+      <dt class="sheet-label">Na mesa agora</dt>
+      <dd class="font-mono text-lg" [class.text-musgo]="t.online > 0" [class.text-slate-100]="t.online === 0">{{ t.online }}</dd>
+    </div>
+    <div class="col-span-2 rounded-lg bg-ink-950/60 px-3 py-2 sm:col-span-1">
+      <dt class="sheet-label">Última gravação</dt>
+      <dd class="text-sm text-slate-100">{{ t.stateUpdatedAt ? (t.stateUpdatedAt | date: 'dd/MM/yyyy HH:mm') : 'Nunca aberta' }}</dd>
+    </div>
+  </dl>
+
+  <!-- ===== Convidar e jogadores ===== -->
+  <div class="flex flex-wrap gap-2">
+    <button mat-stroked-button [disabled]="busy() || t.players >= t.maxPlayers" (click)="createInvite()">
+      <mat-icon>person_add</mat-icon>
+      {{ t.players >= t.maxPlayers ? 'Mesa cheia' : 'Convidar jogador' }}
+    </button>
+    <button mat-stroked-button [disabled]="busy()" [attr.aria-expanded]="members() !== null" (click)="toggleMembers()">
+      <mat-icon>groups</mat-icon>
+      {{ members() ? 'Esconder jogadores' : 'Jogadores' }}
+    </button>
+  </div>
+
+  @if (invite(); as inv) {
+    <div class="flex flex-col gap-2 rounded-lg border border-astral-500/30 bg-ink-950/60 p-3" role="status">
+      <p class="text-sm text-slate-300">
+        Link de uso único, válido até {{ inv.expiresAt | date: 'dd/MM/yyyy HH:mm' }}. Ele aparece só agora: copie e envie.
+      </p>
+      <div class="flex items-center gap-2">
+        <code class="min-w-0 flex-1 truncate rounded-lg bg-ink-950 px-2 py-1 text-sm text-slate-100">{{ inv.link }}</code>
+        <button mat-icon-button matTooltip="Copiar link" aria-label="Copiar link do convite" (click)="copyInvite()">
+          <mat-icon>content_copy</mat-icon>
+        </button>
+      </div>
+      @if (inviteIsLocal()) {
+        <p class="text-sm text-star-300">A mesa ainda não está aberta na internet: este link só funciona neste computador.</p>
+      }
+    </div>
+  }
+
+  @if (members() !== null) {
+    @if (players().length === 0) {
+      <p class="text-sm text-slate-400">Nenhum jogador ainda. Gere um convite e envie o link.</p>
+    } @else {
+      <ul class="flex flex-col divide-y divide-white/5 rounded-lg bg-ink-950/60">
+        @for (m of players(); track m.userId) {
+          <li class="flex flex-wrap items-center gap-2 px-3 py-2">
+            <span class="min-w-32 flex-1 text-slate-100">
+              {{ m.name }}
+              <span class="ml-1 font-mono text-xs text-slate-600">#{{ shortId(m.userId) }}</span>
+            </span>
+            <span class="text-xs text-slate-400">desde {{ m.joinedAt | date: 'dd/MM/yyyy' }}</span>
+            <button mat-button [disabled]="busy()" matTooltip="Para quem trocou de aparelho ou esqueceu a senha" (click)="accessLink(m)">
+              <mat-icon>key</mat-icon>
+              Link de retorno
+            </button>
+            <button mat-button class="!text-lacre-claro" [disabled]="busy()" (click)="removeMember(m)">
+              <mat-icon>person_remove</mat-icon>
+              Tirar da mesa
+            </button>
+          </li>
+        }
+      </ul>
+    }
+  }
+
+  <!-- ===== Editar dados da mesa ===== -->
+  @if (form(); as f) {
+    <form class="flex flex-col gap-3 border-t border-white/5 pt-4" (submit)="$event.preventDefault(); save()">
+      <h4 class="inscription text-sm text-astral-300">Editar dados da mesa</h4>
+      <div class="grid gap-3 sm:grid-cols-2">
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>Nome</mat-label>
+          <input matInput required maxlength="60" [value]="f.name" (input)="setField('name', textOf($event))" />
+        </mat-form-field>
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>Sistema</mat-label>
+          <input matInput maxlength="60" list="gm-systems" [value]="f.system" (input)="setField('system', textOf($event))" />
+          <datalist id="gm-systems">
+            @for (s of systems; track s) {
+              <option [value]="s"></option>
+            }
+          </datalist>
+        </mat-form-field>
+        <mat-form-field subscriptSizing="dynamic" class="sm:col-span-2">
+          <mat-label>Descrição</mat-label>
+          <textarea matInput rows="3" maxlength="400" [value]="f.description" (input)="setField('description', textOf($event))"></textarea>
+          <mat-hint align="end">{{ f.description.length }}/400</mat-hint>
+        </mat-form-field>
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>Limite de jogadores</mat-label>
+          <input matInput type="number" min="1" max="20" [value]="f.maxPlayers" (input)="setField('maxPlayers', numberOf($event))" />
+          <mat-hint>De 1 a 20. Não pode ser menor que os jogadores atuais.</mat-hint>
+        </mat-form-field>
+        <fieldset class="flex flex-col gap-2">
+          <legend class="sheet-label">Cor de destaque</legend>
+          <div class="flex flex-wrap gap-2">
+            @for (c of accents; track c) {
+              <button
+                type="button"
+                class="size-8 rounded-full border-2"
+                [class.border-astral-300]="f.accent === c"
+                [class.border-transparent]="f.accent !== c"
+                [style.background-color]="c"
+                [attr.aria-pressed]="f.accent === c"
+                [attr.aria-label]="'Cor ' + c"
+                (click)="setField('accent', c)"
+              ></button>
+            }
+          </div>
+        </fieldset>
+      </div>
+      <div class="flex justify-end gap-2">
+        <button mat-button type="button" (click)="form.set(null)">Cancelar</button>
+        <button mat-flat-button type="submit" [disabled]="busy() || !canSave()">Salvar alterações</button>
+      </div>
+    </form>
+  }
+</article>

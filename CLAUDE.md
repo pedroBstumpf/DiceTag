@@ -80,6 +80,10 @@ npm install                  # .npmrc usa legacy-peer-deps=true (contorna erro d
 npm start                    # http://localhost:4200
 npm run build                # SEMPRE rodar após alterações para validar (deve terminar sem erros)
 npx ng test --watch=false    # testes Vitest (*.spec.ts), uma execução (usa bastante memória: vários processos)
+npm run test:ci              # o mesmo, com cobertura em coverage/ (o CI usa este)
+npm run lint                 # ESLint (typescript-eslint strict + angular-eslint com a11y); dívida antiga em eslint-suppressions.json
+npm run lint:prune           # depois de corrigir código antigo: tira do eslint-suppressions.json o que não vale mais
+npm run typecheck            # tsc do app e dos specs, sem gerar arquivos
 
 # Servidor (pasta server/) — guia completo em server/README.md
 npm install && npm run setup # dependências + .env com segredos aleatórios (nunca versionar o .env)
@@ -260,7 +264,7 @@ http/routes/frontend.ts   # entrega o app compilado (FRONTEND_DIR): lista fixa d
 
 Rotas (`app.routes.ts`, todas lazy):
 - Abertas: `entrar` · `convite` · `redefinir-senha`. O resto exige conta (`accountGuard`); Home, Arquivos, Worldbuild e `mesa/:id` são só do dono (`ownerGuard`).
-- `''` (Shell) → `''` Home · `mesas` Tables · `arquivos` Library · `worldbuild` Worldbuild do mundo aberto (aceita `?novo=<tipo>`, `?abrir=<id>`, `?servidor=<id do mundo>`, `?local=1` e `?aba=<aba do explorador>`) · `redefinir-senha` recuperação de senha.
+- `''` (Shell) → `''` Home · `mesas` Tables · `mestre` Painel do Mestre (dono) · `arquivos` Library · `worldbuild` Worldbuild do mundo aberto (aceita `?novo=<tipo>`, `?abrir=<id>`, `?servidor=<id do mundo>`, `?local=1` e `?aba=<aba do explorador>`) · `redefinir-senha` recuperação de senha.
 - `mesa/:id` → GameTablePage (tela cheia, **fora** do Shell)
 - `mesa-online/:id` → a mesma GameTablePage com `data: { online: true }` (mesa do servidor)
 - `**` → redireciona para `''`
@@ -314,8 +318,10 @@ Rotas (`app.routes.ts`, todas lazy):
 - **Código em `server/`** segue o [`BACKEND_SECURITY.md`](BACKEND_SECURITY.md): rota nova nasce protegida (só
   `config: PUBLIC` a abre), consultas com o dono/participação no SQL, todo payload com `strictObject` e limites,
   eventos de segurança por `audit()`.
-- **Commits:** um por feature/fase, em branch separada da `main`, no formato Conventional Commits em PT-BR
-  (`feat(mesa): …`, `fix(mesas): …`), com corpo explicando o que mudou.
+- **Commits:** em branch `<tipo>/<nº da issue>-<descrição>` a partir da `main`, no formato Conventional Commits em PT-BR
+  (`feat(mesa): …`, `fix(mesas): …`), com corpo explicando o que mudou. O hook `commit-msg` (husky + commitlint) recusa
+  mensagens fora do formato e o `pre-commit` roda o ESLint nos arquivos alterados. Merge na `main` só por PR com
+  **squash** (fluxo em `CONTRIBUTING.md`). Código novo não pode entrar no `eslint-suppressions.json`.
 
 ### Armadilhas já resolvidas (não reintroduzir)
 
@@ -497,7 +503,7 @@ Com `prefers-contrast: more`, as texturas somem e os filetes ficam sólidos.
 - **Quem vê o quê:** `owner()` = conta do dono **ou** `ServerAccountService.localOnly` (sem servidor, só o `ng serve`: sem conta,
   tudo neste navegador — a mesma regra do `ownerGuard`). Sem servidor, o "+" cria a mesa (`GameTablesService`, no mundo aberto)
   e o mundo (`WorldsService`) neste navegador.
-- Páginas soltas (dono: Início, Arquivos) e três **grupos que abrem e fecham** (quais estão abertos fica em
+- Páginas soltas (dono: Início, **Painel do Mestre** — só com a conta do servidor —, Arquivos) e três **grupos que abrem e fecham** (quais estão abertos fica em
   `localStorage dicetag.sidebarGroups`; padrão: todos abertos). Com a barra recolhida, o ícone do grupo expande a barra e o abre.
   - **Mesas de jogo:** mesas online (`OnlineTablesService`, carregadas pela barra quando há conta; abrem `/mesa-online/:id`) e,
     para o dono, as deste navegador ("Neste navegador", `/mesa/:id`); até 6 + "Ver todas" / "Gerenciar mesas e convites" (`/mesas`).
@@ -568,6 +574,16 @@ Com `prefers-contrast: more`, as texturas somem e os filetes ficam sólidos.
   unidades, ADS, reservados e ocultos; atalhos não são seguidos) e `--permission` do Node. Tipo conferido pelos bytes; cada seção aceita o seu.
 - Os jogadores nunca recebem estes arquivos: `LibraryPicker` (mapa da cena, sons, imagem da ficha) devolve um `File`, enviado à mesa pelo
   caminho de sempre, e essa cópia vai sem metadados.
+
+### Painel do Mestre (`features/gm`, rota `mestre`, ADR-0007)
+- Tela única do dono: `HostPanel` (abrir para os jogadores), criar mesa (nome + mundo) e um `GmTableCard` por mesa com
+  jogadores/limite, convites pendentes, cenas, quem está na sala agora e a última gravação, mais as ações: abrir, convidar
+  (link mostrado uma vez), jogadores (link de retorno, tirar da mesa), editar dados (`PATCH /tables/:id`), cancelar
+  convites, preparar o mundo e excluir (confirmação nomeando a mesa).
+- Resumo por `GET /api/gm/overview` (`GmService`; servidor: `routes/gm.ts`, `TablesRepository.gmOverview`,
+  `RealtimeHub.presence`): só o dono, papel conferido no SQL, só contagens e datas (nada de fichas, chat ou mapa),
+  `Cache-Control: no-store`. As ações usam as rotas de `/api/tables`, que conferem o papel: o painel não tem poderes próprios.
+- Sem o servidor (só `ng serve`), mostra o aviso de que o painel usa as mesas online. `gm` → `tables` em `FEATURE_DEPS`.
 
 ### Mesa online (servidor) — `OnlineTables`, rota `mesa-online/:id`
 - **Conta** (`ServerAccountService`, `core/`): a do dono ou a do convidado, com sessão por cookie HttpOnly (o token nunca

@@ -3,7 +3,7 @@
 - **Data:** 2026-11-27
 - **Base:** `main` em `b79d71b` (versão 0.6.0)
 - **Padrões:** `docs/standards/` v1.0.0 (README, 01-FRONTEND, 02-BACKEND, 03-DATABASE, 04-SECURITY-TESTING-QA, 05-VERSIONING-WORKFLOW)
-- **Linha de base medida:** `npm run build` ✅ · `ng test` ✅ 40 arquivos / 339 testes · `server: npm run check` ✅ 10 arquivos / 275 testes · `npm audit` do servidor: 2 moderadas (dev, `@vitest/mocker`), 0 altas
+- **Linha de base medida:** `npm run build` ✅ · `npm audit` do front: **6 altas** (todas de ferramentas de dev, corrigidas no PR 3) · `ng test` ✅ 40 arquivos / 339 testes · `server: npm run check` ✅ 10 arquivos / 275 testes · `npm audit` do servidor: 2 moderadas (dev, `@vitest/mocker`), 0 altas
 
 Legenda: ✅ atende · ⚠️ atende em parte · ❌ não atende · 🔀 divergência intencional (ver ADR).
 Nível: **DEVE** / **DEVERIA** / **PODE** (RFC 2119, como nos padrões). Esforço: P (< 2h) · M (½–1 dia) · G (> 1 dia).
@@ -124,7 +124,7 @@ Material e CI no Windows.
 | S6 | Cookie de sessão `__Host-` HttpOnly Secure SameSite | DEVE | ✅ | `security/cookie.ts` | — |
 | S7 | Convites/links de uso único, alta entropia, hash | DEVE | ✅ | 192 bits, hash, 7 dias (convite) / 30 min (senha) | — |
 | S8 | Lockfiles commitados, `npm ci` | DEVE | ✅ | Dois lockfiles, CI com `npm ci` | — |
-| S9 | `npm audit --audit-level=high` no CI | DEVE | ⚠️ | Só no servidor; falta no front | P |
+| S9 | `npm audit --audit-level=high` no CI | DEVE | ⚠️ | Só no servidor; o front tinha 6 altas (dev) — corrigidas e gate adicionado no PR 3 | P |
 | S10 | Dependabot | DEVE | ❌ | Ausente | P |
 | S11 | SBOM por release, licenças | DEVERIA | ❌ | Ausente | P |
 | S12 | Secret scanning + push protection + gitleaks | DEVE | ❌ | Ativar no GitHub; `gitleaks` no CI | P |
@@ -136,7 +136,7 @@ Material e CI no Windows.
 | S18 | Testes unitários do domínio | DEVE | ✅ | `utils/` e `state/` com specs; 614 testes no total | — |
 | S19 | Testes de componente (Testing Library) | DEVERIA | ❌ | Nenhum (`CLAUDE.md` §10) | G |
 | S20 | E2E Playwright + axe | DEVE | ⚠️ | E2E próprio com dois navegadores (`npm run e2e`), fora do CI, sem axe | M |
-| S21 | Cobertura ≥ 80% (domínio ≥ 90%), não pode cair | DEVE | ❌ | Não medida | P (medir) |
+| S21 | Cobertura ≥ 80% (domínio ≥ 90%), não pode cair | DEVE | ⚠️ | Medida no PR 3: front 75% das linhas dos arquivos com teste (72% statements); arquivos sem spec não entram. Próximo passo: `coverage.include` em todo `src/` e limite que não pode cair | M |
 | S22 | Gates: format, lint, typecheck, test, build, e2e, audit, CodeQL, secrets | DEVE | ⚠️ | build + test + typecheck/audit (servidor) | M |
 | S23 | Observabilidade: alertas, SLO | DEVE | 🔀 | Mesa caseira, liga quando joga: logs + auditoria bastam. ADR-0001 | — |
 | S24 | Rollback em minutos | DEVE | ✅ | Backup antes de migrar + `npm run restaurar`; voltar à tag anterior | — |

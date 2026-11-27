@@ -12,7 +12,7 @@ import { Segment } from './visibility';
 /** Move a parede inteira. */
 export function translateWall(wall: Wall, dx: number, dy: number): Wall {
   if (wall.kind === 'circle') return { ...wall, cx: wall.cx + dx, cy: wall.cy + dy };
-  return { ...wall, points: wall.points.map((p) => ({ x: p.x + dx, y: p.y + dy })) } as Wall;
+  return { ...wall, points: wall.points.map((p) => ({ x: p.x + dx, y: p.y + dy })) };
 }
 
 /** Pontos editáveis da parede (alças). */
@@ -23,7 +23,7 @@ export function wallHandles(wall: Wall): Point[] {
 /** Move uma alça da parede para `p` (círculo: a alça define o raio). */
 export function moveWallHandle(wall: Wall, index: number, p: Point): Wall {
   if (wall.kind === 'circle') return { ...wall, r: Math.max(1, Math.hypot(p.x - wall.cx, p.y - wall.cy)) };
-  return { ...wall, points: wall.points.map((q, i) => (i === index ? { x: p.x, y: p.y } : q)) } as Wall;
+  return { ...wall, points: wall.points.map((q, i) => (i === index ? { x: p.x, y: p.y } : q)) };
 }
 
 /** Distância do ponto até a parede (para clicar nela). */

@@ -63,6 +63,18 @@ export class OnlineTablesService {
     return (await this.api.get<{ table: OnlineTable }>(`/tables/${encodeURIComponent(id)}`)).table;
   }
 
+  /** Altera os dados da mesa (só o mestre): nome, sistema, descrição, limite de jogadores e cor. */
+  async update(id: string, patch: Partial<Pick<GameTable, 'name' | 'system' | 'description' | 'maxPlayers' | 'accent'>>): Promise<OnlineTable> {
+    const { table } = await this.api.patch<{ table: OnlineTable }>(`/tables/${encodeURIComponent(id)}`, patch);
+    this.tables.update((list) => list.map((t) => (t.id === id ? table : t)));
+    return table;
+  }
+
+  /** Cancela todos os convites ainda não usados da mesa (só o mestre). Links já enviados deixam de valer. */
+  revokeInvites(id: string): Promise<void> {
+    return this.api.delete(`/tables/${encodeURIComponent(id)}/invites`);
+  }
+
   /** Exclui a mesa (só o dono): o servidor apaga estado, membros, convites e arquivos. */
   async remove(id: string): Promise<void> {
     await this.api.delete(`/tables/${encodeURIComponent(id)}`);
