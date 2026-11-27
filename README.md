@@ -259,3 +259,20 @@ servidor pelo menu da mesa online.
   `git push origin --tags` (Git Bash), e cada uma vira um Release no GitHub com o texto do CHANGELOG.
 - **Nada direto na `main`**, nem ajustes pequenos: até um ajuste visual passa por uma branch e um merge.
 - **Antes de mesclar:** `npx ng test --watch=false` e `npm run build` na raiz; `npm run check` em `server/`.
+
+## Padrões e decisões
+
+O projeto segue os padrões base em [`docs/standards/`](docs/standards/README.md). O estado atual contra eles está na
+[auditoria](docs/audit/2026-11-27-auditoria-padroes.md) e as divergências intencionais, nos [ADRs](docs/adr/README.md).
+
+| Item | Escolha | ADR |
+|---|---|---|
+| Renderização | CSR (SPA), entregue pelo próprio servidor | — |
+| Hospedagem | Windows do Mestre + Tailscale Funnel | [0001](docs/adr/0001-hospedagem-windows-tailscale.md) |
+| Back-end | Fastify 5 + zod, monólito | [0002](docs/adr/0002-backend-fastify.md) |
+| Banco | SQLite (`node:sqlite`) | [0003](docs/adr/0003-banco-sqlite.md) |
+| Autenticação | Própria: convite + senha + cookie `__Host-` | [0004](docs/adr/0004-autenticacao-propria.md) |
+| Estado | Signals + services; mesa por comandos puros | — |
+| Biblioteca de UI | Angular Material + CDK | [0005](docs/adr/0005-ui-angular-material.md) |
+| CI / ambientes | GitHub Actions no Windows; sem staging hospedado | [0006](docs/adr/0006-ci-windows-sem-staging.md) |
+| Painel do Mestre | Tela única do dono para mesas e convites | [0007](docs/adr/0007-painel-do-mestre.md) |
