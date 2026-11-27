@@ -1,0 +1,33 @@
+name: 🐛 Bug
+description: Algo não funciona como deveria
+labels: ["type:bug"]
+body:
+  - type: textarea
+    id: what
+    attributes: { label: "O que aconteceu?", description: Comportamento atual }
+    validations: { required: true }
+  - type: textarea
+    id: expected
+    attributes: { label: "O que era esperado?" }
+    validations: { required: true }
+  - type: textarea
+    id: steps
+    attributes:
+      label: Passos para reproduzir
+      value: |
+        1.
+        2.
+        3.
+    validations: { required: true }
+  - type: input
+    id: env
+    attributes: { label: Ambiente, description: "mesa local ou online, Mestre ou jogador, navegador, versão do app" }
+  - type: textarea
+    id: evidence
+    attributes: { label: Evidências, description: "Prints, requestId, trechos do log (SEM senhas, convites, e-mails ou segredos)" }
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severidade
+      options: ["P0 - Mesa fora / perda de dados", "P1 - Fluxo principal quebrado", "P2 - Problema com contorno", "P3 - Cosmético"]
+    validations: { required: true }
