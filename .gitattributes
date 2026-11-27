@@ -1,0 +1,3 @@
+# Os hooks do husky rodam no `sh`: com CRLF (o padrão do Git no Windows, core.autocrlf=true), o `\r` no fim de
+# cada linha quebra os comandos. Ficam sempre com LF, em qualquer máquina.
+/.husky/** text eol=lf
