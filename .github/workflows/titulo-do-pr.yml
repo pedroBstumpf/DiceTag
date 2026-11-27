@@ -11,6 +11,9 @@ permissions:
 jobs:
   titulo:
     name: Título do PR
+    # O Dependabot escreve "build(deps): Bump …" (em inglês, com maiúscula) e não deixa mudar. Pulado, o check
+    # conta como aprovado na proteção da main; os outros checks continuam valendo para ele.
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
