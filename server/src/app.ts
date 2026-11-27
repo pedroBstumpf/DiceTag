@@ -9,6 +9,7 @@ import { devRoutes } from './http/routes/dev';
 import { fileRoutes } from './http/routes/files';
 import { frontendRoutes } from './http/routes/frontend';
 import { hostRoutes } from './http/routes/host';
+import { gmRoutes } from './http/routes/gm';
 import { libraryRoutes } from './http/routes/library';
 import { tableRoutes } from './http/routes/tables';
 import { worldRoutes } from './http/routes/worlds';
@@ -102,6 +103,7 @@ export async function buildApp(ctx: AppContext, options: BuildOptions = {}): Pro
   await http.register(async (api) => fileRoutes(api, ctx), { prefix: '/api' });
   await http.register(async (api) => libraryRoutes(api, ctx), { prefix: '/api' });
   await http.register(async (api) => hostRoutes(api, ctx), { prefix: '/api' });
+  await http.register(async (api) => gmRoutes(api, ctx, hub), { prefix: '/api' });
   if (config.DEV_TOOLS) await http.register(async (dev) => devRoutes(dev, config));
   // App Angular compilado (FRONTEND_DIR): o que não é da API cai no index.html (rotas do app)
   await http.register(async (front) => frontendRoutes(front, config));

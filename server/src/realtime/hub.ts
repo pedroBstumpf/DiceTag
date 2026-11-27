@@ -278,12 +278,17 @@ export class RealtimeHub {
     }
   }
 
-  /** A mesa foi excluída: fecha as conexões sem gravar. */
+  /** Quantas contas diferentes estão conectadas à sala agora (0 = sala fechada). */
+  presence(tableId: string): number {
+    return new Set([...(this.rooms.get(tableId)?.clients ?? [])].map((c) => c.userId)).size;
+  }
+
   /** A sala está aberta (na memória, com estado próprio): gravar direto no banco seria sobrescrito. */
   isOpen(tableId: string): boolean {
     return this.rooms.has(tableId);
   }
 
+  /** A mesa foi excluída: fecha as conexões sem gravar. */
   closeRoom(tableId: string): void {
     const room = this.rooms.get(tableId);
     if (!room) return;

@@ -1,0 +1,73 @@
+<div class="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 sm:px-8 sm:py-10">
+  <!-- ===== Cabeçalho e totais ===== -->
+  <header class="flex flex-wrap items-end justify-between gap-4">
+    <div>
+      <h1 class="font-display text-3xl text-slate-100">Painel do Mestre</h1>
+      <p class="mt-1 text-sm text-slate-400">Abra a mesa, convide jogadores e cuide de cada campanha num lugar só.</p>
+    </div>
+    @if (totals(); as t) {
+      <dl class="flex flex-wrap gap-2" aria-label="Resumo">
+        <div class="glass-sm rounded-lg px-3 py-1.5"><dt class="sheet-label">Mesas</dt><dd class="font-mono text-slate-100">{{ t.tables }}</dd></div>
+        <div class="glass-sm rounded-lg px-3 py-1.5"><dt class="sheet-label">Jogadores</dt><dd class="font-mono text-slate-100">{{ t.players }}</dd></div>
+        <div class="glass-sm rounded-lg px-3 py-1.5"><dt class="sheet-label">Convites</dt><dd class="font-mono text-slate-100">{{ t.pendingInvites }}</dd></div>
+        <div class="glass-sm rounded-lg px-3 py-1.5"><dt class="sheet-label">Online</dt><dd class="font-mono text-slate-100">{{ t.online }}</dd></div>
+      </dl>
+    }
+  </header>
+
+  <!-- ===== Abrir para os jogadores (Tailscale Funnel) ===== -->
+  <app-host-panel />
+
+  <!-- ===== Nova mesa ===== -->
+  <section class="glass flex flex-col gap-3 rounded-xl p-4" aria-labelledby="gm-new-table">
+    <h2 id="gm-new-table" class="inscription text-sm text-astral-300">Nova mesa</h2>
+    <form class="flex flex-wrap items-start gap-3" (submit)="$event.preventDefault(); create()">
+      <mat-form-field subscriptSizing="dynamic" class="min-w-56 flex-1">
+        <mat-label>Nome da mesa</mat-label>
+        <input matInput maxlength="60" [value]="newName()" (input)="newName.set(textOf($event))" />
+      </mat-form-field>
+      @if (worlds.worlds().length > 1) {
+        <mat-form-field subscriptSizing="dynamic" class="min-w-48">
+          <mat-label>Mundo</mat-label>
+          <mat-select [value]="newWorld() || worlds.preferred() || ''" (valueChange)="newWorld.set($event)">
+            @for (w of worlds.worlds(); track w.id) {
+              <mat-option [value]="w.id">{{ w.name }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+      }
+      <button mat-flat-button class="!h-14" type="submit" [disabled]="creating() || !newName().trim()">
+        <mat-icon>add</mat-icon>
+        Criar mesa
+      </button>
+    </form>
+  </section>
+
+  <!-- ===== Mesas ===== -->
+  <section class="flex flex-col gap-4" aria-labelledby="gm-tables">
+    <header class="flex items-center justify-between gap-2">
+      <h2 id="gm-tables" class="font-display text-2xl text-slate-100">Suas mesas</h2>
+      <button mat-icon-button [disabled]="gm.loading()" aria-label="Atualizar informações" (click)="reload()">
+        <mat-icon>refresh</mat-icon>
+      </button>
+    </header>
+
+    @if (!account.isOwner()) {
+      <app-empty-state icon="cloud_off" title="Painel indisponível sem o servidor" message="O Painel do Mestre usa as mesas online. Inicie a mesa com o Iniciar mesa.cmd (ou npm run mesa) e entre com a conta do dono." />
+    } @else if (error()) {
+      <div class="glass flex flex-wrap items-center gap-3 rounded-xl p-4" role="alert">
+        <mat-icon class="text-lacre-claro">error</mat-icon>
+        <p class="flex-1 text-sm text-slate-300">{{ error() }}</p>
+        <button mat-stroked-button (click)="reload()">Tentar de novo</button>
+      </div>
+    } @else if (gm.loading() && !gm.overview()) {
+      <div class="grid place-items-center py-10"><mat-spinner diameter="32" aria-label="Carregando as mesas" /></div>
+    } @else if (list().length === 0) {
+      <app-empty-state icon="casino" title="Nenhuma mesa ainda" message="Crie a primeira mesa acima e convide seus jogadores." />
+    } @else {
+      @for (t of list(); track t.id) {
+        <app-gm-table-card [table]="t" (changed)="reload()" />
+      }
+    }
+  </section>
+</div>
