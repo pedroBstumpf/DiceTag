@@ -1,1 +1,3 @@
-npx --no -- commitlint --edit "$1"
+# Chama o Node direto, sem o `npx`: o atalho do npx no Windows exige o bash, que o Git do GitHub Desktop não tem.
+# Confere o Conventional Commits (commitlint.config.mjs).
+node node_modules/@commitlint/cli/cli.js --edit "$1"
