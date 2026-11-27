@@ -250,15 +250,18 @@ servidor pelo menu da mesa online.
 
 ## Versões e branches
 
-- **`main`** é sempre a última versão estável: só recebe merges (`--no-ff`) de branches com os testes passando.
-- **Uma branch por assunto**, criada a partir da `main`: `feat/…`, `fix/…`, `chore/…`, `docs/…`.
-- **Commits** no padrão Conventional Commits, em português: `feat(mesa): …`, `fix(servidor): …`, com o corpo explicando o que mudou.
+Fluxo completo em [`CONTRIBUTING.md`](CONTRIBUTING.md) e no [doc 05 dos padrões](docs/standards/05-VERSIONING-WORKFLOW.md).
+
+- **`main`** é sempre a última versão estável e é protegida: só recebe PRs com os checks verdes, por **squash and merge**
+  (1 PR = 1 commit). Até um ajuste visual passa por uma issue, uma branch e um PR.
+- **Uma branch por issue**, criada a partir da `main`: `feat/<nº>-…`, `fix/<nº>-…`, `chore/<nº>-…`, `docs/<nº>-…`.
+- **Commits e títulos de PR** no padrão Conventional Commits, em português: `feat(mesa): …`, `fix(servidor): …`.
 - **Versões** seguem o [SemVer](https://semver.org/lang/pt-BR/), com uma versão só para o projeto: `package.json` e
   `server/package.json` andam juntos. Cada versão publicada ganha uma **tag anotada** (`v0.2.0`) e uma entrada no
   [`CHANGELOG.md`](CHANGELOG.md). O GitHub Desktop só envia as tags criadas nele: as criadas no terminal vão com
   `git push origin --tags` (Git Bash), e cada uma vira um Release no GitHub com o texto do CHANGELOG.
-- **Nada direto na `main`**, nem ajustes pequenos: até um ajuste visual passa por uma branch e um merge.
-- **Antes de mesclar:** `npx ng test --watch=false` e `npm run build` na raiz; `npm run check` em `server/`.
+- **Antes de pedir revisão:** `npx ng test --watch=false` e `npm run build` na raiz; `npm run check` em `server/`.
+- **Configuração do GitHub** (labels, proteção da `main`, squash, segurança, backlog da auditoria): `scripts/github-setup.sh`.
 
 ## Padrões e decisões
 

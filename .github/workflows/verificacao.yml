@@ -1,4 +1,4 @@
-# Verificação automática a cada envio ao GitHub (push em qualquer branch e pull requests):
+# Verificação automática em cada pull request e em cada push na main:
 # o mesmo que o README pede antes de mesclar — build e testes do front-end e `npm run check` do
 # servidor (tipos, testes e npm audit). Roda no Windows, o sistema em que a mesa roda de verdade.
 # O `npm run e2e` (dois navegadores, Tailscale de mentira) fica de fora: precisa do Chrome e de um
@@ -7,6 +7,7 @@ name: Verificação
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 # Só lê o repositório: a verificação não publica nada nem escreve no GitHub
@@ -24,8 +25,8 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: server/.nvmrc
           cache: npm
@@ -42,8 +43,8 @@ jobs:
       run:
         working-directory: server
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: server/.nvmrc
           cache: npm

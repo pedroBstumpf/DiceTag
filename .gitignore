@@ -34,6 +34,7 @@ yarn-error.log
 .sass-cache/
 /connect.lock
 /coverage
+/server/coverage
 /libpeerconnection.log
 testem.log
 /typings
@@ -47,6 +48,11 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+segredos.env
 *.db
 *.db-wal
 *.db-shm
