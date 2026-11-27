@@ -43,6 +43,13 @@ export const routes: Routes = [
         loadComponent: () => import('./features/tables/tables').then((m) => m.Tables),
       },
       {
+        // Painel do Mestre (ADR-0007): mesas, convites e jogadores num lugar só
+        path: 'mestre',
+        title: "Game Master's Dream — Painel do Mestre",
+        canActivate: [ownerGuard],
+        loadComponent: () => import('./features/gm/gm-panel').then((m) => m.GmPanel),
+      },
+      {
         path: 'arquivos',
         title: "Game Master's Dream — Arquivos",
         canActivate: [ownerGuard],
