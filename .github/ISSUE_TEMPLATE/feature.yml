@@ -1,0 +1,33 @@
+name: ✨ Feature / História
+description: Nova funcionalidade ou melhoria com valor para quem joga ou narra
+labels: ["type:feature"]
+body:
+  - type: textarea
+    id: story
+    attributes:
+      label: História
+      description: Como <Mestre / jogador>, quero <ação>, para <benefício>.
+    validations: { required: true }
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Critérios de aceite
+      description: Use Dado / Quando / Então. Inclua estados de erro e vazio e o comportamento na mesa online.
+      value: |
+        - [ ] Dado ..., quando ..., então ...
+    validations: { required: true }
+  - type: textarea
+    id: technical
+    attributes:
+      label: Notas técnicas
+      description: Impacto em comandos da mesa (TABLE_COMMANDS + esquema no servidor), API, banco, segurança, performance.
+  - type: checkboxes
+    id: impact
+    attributes:
+      label: Impactos
+      options:
+        - label: Altera contrato da API ou do WebSocket
+        - label: Requer migração de banco
+        - label: Envolve contas, senhas, convites ou dados pessoais (exige modelagem de ameaças)
+        - label: Muda o que o jogador vê (permissions.ts / player-view.ts / projection.ts)
+        - label: Precisa de flag (app-settings.ts)

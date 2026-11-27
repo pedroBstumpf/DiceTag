@@ -1,0 +1,15 @@
+name: 🧰 Tarefa / Dívida
+description: Manutenção, refatoração, dependências, CI ou documentação
+labels: ["type:chore"]
+body:
+  - type: textarea
+    id: what
+    attributes: { label: O que precisa ser feito, description: Inclua a regra do padrão (ex. doc 01 §5, F5 da auditoria) se houver }
+    validations: { required: true }
+  - type: textarea
+    id: done
+    attributes:
+      label: Pronto quando
+      value: |
+        - [ ]
+    validations: { required: true }

@@ -1,0 +1,18 @@
+# Projeto de uma pessoa: o dono revisa tudo. As linhas abaixo deixam explícito o que é sensível
+# (doc 05 §6: código sensível exige revisão do responsável).
+*                                   @pedroBstumpf
+
+# Segurança, contas e o túnel
+/server/src/security/               @pedroBstumpf
+/server/src/http/plugins/           @pedroBstumpf
+/server/src/http/routes/auth.ts     @pedroBstumpf
+/server/src/http/routes/host.ts     @pedroBstumpf
+/server/src/ops/                    @pedroBstumpf
+/server/scripts/lib/                @pedroBstumpf
+/server/src/db/migrations.ts        @pedroBstumpf
+/BACKEND_SECURITY.md                @pedroBstumpf
+
+# Processo
+/.github/                           @pedroBstumpf
+/docs/standards/                    @pedroBstumpf
+/docs/adr/                          @pedroBstumpf

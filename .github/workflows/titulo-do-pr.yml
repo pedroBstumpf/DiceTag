@@ -1,0 +1,36 @@
+# O título do PR vira a mensagem do squash na main: precisa seguir o Conventional Commits (doc 05 §5–6).
+name: Título do PR
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  titulo:
+    name: Título do PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: amannn/action-semantic-pull-request@66e72920af32222769c386d81f89656ebcb6d6d5 # v6.1.4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            perf
+            refactor
+            docs
+            style
+            test
+            build
+            ci
+            chore
+            revert
+          requireScope: false
+          # Descrição em pt-BR, começando em minúscula
+          subjectPattern: ^[a-zà-ú0-9].+$
+          subjectPatternError: 'A descrição "{subject}" deve começar com letra minúscula (ex.: "feat(mesa): adicionar portas trancadas").'
